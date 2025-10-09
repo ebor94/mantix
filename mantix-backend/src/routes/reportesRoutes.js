@@ -2,10 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const reportesController = require('../controllers/reportesController');
-const authMiddleware = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Apply auth middleware to all routes
-router.use(authMiddleware);
+router.use(auth);
 
 // Generate maintenance report
 router.get('/mantenimiento', reportesController.generateMaintenanceReport);
