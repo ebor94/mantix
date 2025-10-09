@@ -1,18 +1,20 @@
-// Main router file
+// ============================================
+// src/routes/index.js - Router Principal
+// ============================================
 const express = require('express');
 const router = express.Router();
 
-// Import all routes
+// Importar rutas
 const authRoutes = require('./authRoutes');
 const usuariosRoutes = require('./usuariosRoutes');
 const sedesRoutes = require('./sedesRoutes');
 const equiposRoutes = require('./equiposRoutes');
 const mantenimientosRoutes = require('./mantenimientosRoutes');
 const solicitudesRoutes = require('./solicitudesRoutes');
-const reportesRoutes = require('./reportesRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const reportesRoutes = require('./reportesRoutes');
 
-// Register all routes
+// Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
 router.use('/sedes', sedesRoutes);
