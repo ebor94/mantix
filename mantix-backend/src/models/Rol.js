@@ -1,13 +1,41 @@
-// Rol model
-class Rol {
-  constructor(data) {
-    this.id = data.id;
-    this.nombre = data.nombre;
-    this.descripcion = data.descripcion;
-    // Additional properties will be defined here
-  }
+// ============================================
+// src/models/Rol.js
+// ============================================
+module.exports = (sequelize, DataTypes) => {
+  const Rol = sequelize.define('Rol', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    nombre: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      unique: true
+    },
+    descripcion: {
+      type: DataTypes.TEXT
+    },
+    permisos: {
+      type: DataTypes.JSON
+    },
+    activo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    }
+  }, {
+    tableName: 'roles',
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at'
+  });
 
-  // Model methods will be implemented here
-}
+  Rol.associate = (models) => {
+    Rol.hasMany(models.Usuario, {
+      foreignKey: 'rol_id',
+      as: 'usuarios'
+    });
+  };
 
-module.exports = Rol;
+  return Rol;
+};
