@@ -1,20 +1,45 @@
-// Server entry point
+require('dotenv').config();
 const app = require('./src/app');
-const { PORT = 3000 } = require('./src/config/constants');
+const { sequelize } = require('./src/models');
+const logger = require('./src/utils/logger');
+const cronService = require('./src/services/cronService');
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Visit http://localhost:${PORT} to access the API`);
+const PORT = process.env.PORT || 3000;
+
+// Verificar conexión a la base de datos
+sequelize.authenticate()
+  .then(() => {
+    logger.info('✅ Conexión a la base de datos establecida correctamente');
+    
+    // Sincronizar modelos (solo en desarrollo)
+    if (process.env.NODE_ENV === 'development') {
+      return sequelize.sync({ alter: false });
+    }
+  })
+  .then(() => {
+    // Iniciar tareas programadas
+    cronService.start();
+    logger.info('✅ Tareas programadas iniciadas');
+    
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      logger.info(`🚀 Servidor Mantix corriendo en puerto ${PORT}`);
+      logger.info(`📚 Documentación API: http://localhost:${PORT}/api-docs`);
+      logger.info(`🌍 Ambiente: ${process.env.NODE_ENV}`);
+    });
+  })
+  .catch(err => {
+    logger.error('❌ Error al iniciar el servidor:', err);
+    process.exit(1);
+  });
+
+// Manejo de errores no capturados
+process.on('unhandledRejection', (err) => {
+  logger.error('❌ Unhandled Rejection:', err);
+  process.exit(1);
 });
 
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-  console.log('Server shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('Server shutting down gracefully');
-  process.exit(0);
+process.on('uncaughtException', (err) => {
+  logger.error('❌ Uncaught Exception:', err);
+  process.exit(1);
 });
