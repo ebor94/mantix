@@ -4,7 +4,7 @@ const { sequelize } = require('./src/models');
 const logger = require('./src/utils/logger');
 const cronService = require('./src/services/cronService');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3020;
 
 // Verificar conexión a la base de datos
 sequelize.authenticate()

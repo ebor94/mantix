@@ -21,11 +21,11 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:3020',
         description: 'Servidor de desarrollo'
       },
       {
-        url: 'http://localhost:3000/api',
+        url: 'http://localhost:3020/api',
         description: 'API de desarrollo'
       }
     ],
