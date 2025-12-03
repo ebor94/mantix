@@ -336,9 +336,10 @@ const loadCatalogos = async () => {
   try {
     const [sedesRes, estadosRes] = await Promise.all([
       api.get('/sedes'),
-      api.get('/estados')
+      api.get('/estados?tipo=mantenimiento')
     ])
-    sedes.value = sedesRes.data
+    sedes.value = sedesRes
+    console.log('Sedes cargadas:', sedesRes)
     estados.value = estadosRes.data
   } catch (error) {
     console.error('Error al cargar catálogos:', error)

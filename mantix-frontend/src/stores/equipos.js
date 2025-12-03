@@ -11,6 +11,7 @@ export const useEquiposStore = defineStore('equipos', {
   state: () => ({
     equipos: [],
     equipoActual: null,
+    periodicidadEquipo: null,
     loading: false,
     filters: {
       categoria_id: null,
@@ -113,7 +114,7 @@ export const useEquiposStore = defineStore('equipos', {
       this.loading = true
       try {
         const response = await api.get(`/equipos/${id}`)
-        console.log('Respuesta completa API equipo:', response)
+      //  console.log('Respuesta completa API equipo:', response)
         
         // El interceptor ya extrae response.data
         // Así que response ya es el objeto del equipo directamente
@@ -128,7 +129,7 @@ export const useEquiposStore = defineStore('equipos', {
           this.equipoActual = null
         }
         
-        console.log('Equipo actual guardado:', this.equipoActual)
+       // console.log('Equipo actual guardado:', this.equipoActual)
         return this.equipoActual
       } catch (error) {
         console.error('Error al cargar equipo:', error)
@@ -139,6 +140,39 @@ export const useEquiposStore = defineStore('equipos', {
         this.loading = false
       }
     },
+
+        // Obtener un equipo por ID
+    async fetchPeriodicidad(id) {
+      this.loading = true
+      try {
+        const response = await api.get(`/periodicidades/${id}`)
+      //  console.log('Respuesta completa API equipo:', response)
+        
+        // El interceptor ya extrae response.data
+        // Así que response ya es el objeto del equipo directamente
+        if (response && response.id) {
+          // Si response tiene un 'id', es el equipo directamente
+          this.periodicidadEquipo = response
+        } else if (response.data && response.data.id) {
+          // Si response.data tiene un 'id', el equipo está ahí
+          this.periodicidadEquipo = response.data
+        } else {
+          console.error('Formato de respuesta inesperado:', response)
+          this.periodicidadEquipo = null
+        }
+        
+       // console.log('periodicidadEquipo actual guardado:', this.periodicidadEquipo)
+        return this.periodicidadEquipo
+      } catch (error) {
+        console.error('Error al cargar periodicidadEquipo:', error)
+        toast.error('Error al cargar periodicidad de Equipo')
+        this.equipoActual = null
+        return null
+      } finally {
+        this.loading = false
+      }
+    },
+
 
     // Crear nuevo equipo
     async crearEquipo(data) {

@@ -42,7 +42,7 @@ export const useSolicitudesStore = defineStore('solicitudes', {
 
     solicitudesCerradas: (state) => {
       return state.solicitudes.filter(s => 
-        s.estado?.nombre === 'Cerrada' || s.estado?.nombre === 'Rechazada'
+        s.estado?.nombre === 'Resuelta' || s.estado?.nombre === 'Rechazada'
       )
     },
 

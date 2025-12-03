@@ -331,18 +331,22 @@ const handleSubmit = async () => {
     formData.append('hora_ejecucion', form.value.hora_ejecucion)
     formData.append('ejecutado_por', form.value.ejecutado_por)
     formData.append('tiempo_empleado', form.value.tiempo_empleado)
-    formData.append('observaciones', form.value.observaciones)
+    formData.append('observaciones', form.value.observaciones || '')
     formData.append('checklist', JSON.stringify(form.value.checklist))
     formData.append('materiales', JSON.stringify(form.value.materiales))
     
-    form.value.evidencias.forEach((img, index) => {
-      formData.append(`evidencias`, img.file)
+    // Agregar evidencias
+    form.value.evidencias.forEach((img) => {
+      formData.append('evidencias', img.file)
     })
 
     await mantenimientosStore.ejecutarMantenimiento(props.mantenimiento.id, formData)
+    
+    emit('close')
     emit('success')
   } catch (error) {
     console.error('Error al ejecutar mantenimiento:', error)
+    // El toast ya se muestra en el store
   } finally {
     loading.value = false
   }

@@ -58,7 +58,7 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="text-sm font-medium text-gray-600">Solicitante</label>
-                <p class="text-gray-900 font-semibold mt-1">{{ solicitud.solicitante }}</p>
+                <p class="text-gray-900 font-semibold mt-1">{{ solicitud.solicitante.nombre }} {{ solicitud.solicitante.apellido }}</p>
               </div>
               
               <div>

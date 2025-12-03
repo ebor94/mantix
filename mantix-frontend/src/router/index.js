@@ -65,6 +65,7 @@ const routes = [
     component: () => import('@/views/ReportesView.vue'),
     meta: { requiresAuth: true }
   }, 
+  
 /*   {
     path: '/configuracion',
     name: 'Configuracion',
@@ -75,7 +76,43 @@ const routes = [
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue')
+  },
+{
+  path: '/planes',
+  name: 'Planes',
+  component: () => import('@/views/PlanesView.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'Planes de Mantenimiento'
   }
+},
+{
+  path: '/planes/:id',
+  name: 'PlanDetalle',
+  component: () => import('@/views/PlanDetalleView.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'Detalle del Plan'
+  }
+},
+{
+  path: '/tipos-mantenimiento',
+  name: 'tiposMantenimiento',
+  component: () => import('@/views/TiposMantenimientoView.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'tipos de Mantenimiento'
+  }
+},
+{
+  path: '/proveedores',
+  name: 'proveedores',
+  component: () => import('@/views/ProveedoresView.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'Proveedores'
+  }
+}
 ]
 
 const router = createRouter({

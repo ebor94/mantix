@@ -6,7 +6,8 @@ import api from './api'
 
 export const dashboardService = {
   async getKPIs(params = {}) {
-    const response = await api.get('/dashboard/kpis', { params })
+    const response = await api.get('/dashboard/kpis?mes=10&anio=2025', { params })
+    console.log('Respuesta de KPIs:', response)
     return response.data
   },
 

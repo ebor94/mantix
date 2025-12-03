@@ -63,7 +63,7 @@
         <div class="card bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600">Cerradas</p>
+              <p class="text-sm font-medium text-gray-600">Resuelta</p>
               <p class="text-2xl font-bold text-gray-900">{{ solicitudesCerradas.length }}</p>
             </div>
             <div class="h-12 w-12 bg-gray-500 rounded-xl flex items-center justify-center">
@@ -301,7 +301,7 @@ const currentSolicitudes = computed(() => {
     case 'asignadas':
       data = solicitudesAsignadas.value
       break
-    case 'cerradas':
+    case 'Resuelta':
       data = solicitudesCerradas.value
       break
     default:
@@ -400,7 +400,7 @@ const loadData = async () => {
 const loadCatalogos = async () => {
   try {
     const sedesRes = await api.get('/sedes')
-    sedes.value = sedesRes.data
+    sedes.value = sedesRes
   } catch (error) {
     console.error('Error al cargar catálogos:', error)
   }

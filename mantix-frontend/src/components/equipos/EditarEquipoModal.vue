@@ -318,13 +318,13 @@ const handleSubmit = async () => {
 const loadCatalogos = async () => {
   try {
     const [catRes, sedesRes, respRes] = await Promise.all([
-      api.get('/categorias'),
+      api.get('/categorias-mantenimiento?activo=true'),
       api.get('/sedes'),
       api.get('/usuarios?rol=tecnico')
     ])
-    categorias.value = catRes.data
-    sedes.value = sedesRes.data
-    responsables.value = respRes.data || []
+   categorias.value = catRes.data || []
+    sedes.value = sedesRes || []
+    responsables.value = respRes || []
   } catch (error) {
     console.error('Error al cargar catálogos:', error)
   }

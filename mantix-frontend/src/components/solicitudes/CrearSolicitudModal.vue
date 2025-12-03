@@ -275,7 +275,7 @@ const handleSubmit = async () => {
 const loadSedes = async () => {
   try {
     const response = await api.get('/sedes')
-    sedes.value = response.data
+    sedes.value = response
   } catch (error) {
     console.error('Error al cargar sedes:', error)
   }

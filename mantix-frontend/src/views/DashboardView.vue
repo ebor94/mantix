@@ -105,7 +105,7 @@
             <div class="flex items-center justify-between">
               <span class="text-sm text-gray-600">Tiempo promedio de respuesta</span>
               <span class="text-lg font-bold text-primary-600">
-                {{ estadisticasSolicitudes?.tiempo_promedio_respuesta?.toFixed(1) || 0 }} hrs
+                {{ formatTiempoRespuesta(estadisticasSolicitudes?.tiempo_promedio_respuesta) }} hrs
               </span>
             </div>
           </div>
@@ -266,7 +266,17 @@ const { kpis, cumplimientoSede, cumplimientoCategoria, estadisticasSolicitudes, 
 const { mantenimientosHoy } = storeToRefs(mantenimientosStore)
 
 const activityFilter = ref('all')
-
+const formatTiempoRespuesta = (tiempo) => {
+  if (!tiempo && tiempo !== 0) return '0.0';
+  
+  // Convertir a número si es string
+  const tiempoNumero = typeof tiempo === 'string' ? parseFloat(tiempo) : tiempo;
+  
+  // Verificar que sea un número válido
+  if (isNaN(tiempoNumero)) return '0.0';
+  
+  return tiempoNumero.toFixed(1);
+};
 // Datos del gráfico de barras
 const cumplimientoSedeData = computed(() => ({
   labels: cumplimientoSede.value.map(s => s.codigo),

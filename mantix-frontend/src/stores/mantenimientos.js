@@ -1,8 +1,8 @@
 // ============================================
-// src/stores/mantenimientos.js - Store de Mantenimientos
+// src/stores/mantenimientos.js - Store de Mantenimientos ACTUALIZADO
 // ============================================
 import { defineStore } from 'pinia'
-import api from '@/services/api'
+import api from '../services/api'
 import { useToast } from 'vue-toastification'
 
 const toast = useToast()
@@ -48,7 +48,7 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
 
       if (state.filters.search) {
         const search = state.filters.search.toLowerCase()
-        filtered = filtered.filter(m => 
+        filtered = filtered.filter(m =>
           m.actividad?.nombre?.toLowerCase().includes(search) ||
           m.actividad?.sede?.nombre?.toLowerCase().includes(search)
         )
@@ -63,12 +63,29 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
   },
 
   actions: {
+        async fetchMantenimiento(id) {
+      this.loading = true
+      try {
+        const response = await api.get(`/mantenimientos/${id}`)
+        this.mantenimientoActual = response.data // ✅ Guardar en mantenimientoActual
+        console.log('Mantenimiento detalle cargado:', this.mantenimientoActual)
+        return response.data
+      } catch (error) {
+        console.error('Error al cargar mantenimiento:', error)
+        toast.error('Error al cargar el mantenimiento')
+        this.mantenimientoActual = null
+        return null
+      } finally {
+        this.loading = false
+      }
+    },
     // Obtener mantenimientos programados
     async fetchMantenimientos(params = {}) {
       this.loading = true
       try {
         const response = await api.get('/mantenimientos', { params })
         this.mantenimientos = response.data
+        console.log('Mantenimientos cargados:', this.mantenimientos)
         this.pagination.total = response.total || response.data.length
         return response.data
       } catch (error) {
@@ -86,6 +103,7 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/dia/hoy')
         this.mantenimientosHoy = response.data
+        console.log('Mantenimientos de hoy cargados:', this.mantenimientosHoy)
         return response.data
       } catch (error) {
         console.error('Error al cargar mantenimientos de hoy:', error)
@@ -102,6 +120,7 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/proximos')
         this.mantenimientosProximos = response.data
+        console.log('Mantenimientos próximos cargados:', this.mantenimientosProximos)
         return response.data
       } catch (error) {
         console.error('Error al cargar mantenimientos próximos:', error)
@@ -118,6 +137,7 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/atrasados')
         this.mantenimientosAtrasados = response.data
+        console.log('Mantenimientos atrasados cargados:', this.mantenimientosAtrasados)
         return response.data
       } catch (error) {
         console.error('Error al cargar mantenimientos atrasados:', error)
@@ -128,38 +148,126 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       }
     },
 
-    // Obtener detalle de mantenimiento
-    async fetchMantenimiento(id) {
-      this.loading = true
-      try {
-        const response = await api.get(`/mantenimientos/${id}`)
-        this.mantenimientoActual = response.data
-        return response.data
-      } catch (error) {
-        console.error('Error al cargar mantenimiento:', error)
-        toast.error('Error al cargar el mantenimiento')
-        return null
-      } finally {
-        this.loading = false
-      }
-    },
 
-    // Registrar ejecución de mantenimiento
-    async ejecutarMantenimiento(id, data) {
+
+    // ✅ ACTUALIZADO: Registrar ejecución de mantenimiento
+    async ejecutarMantenimiento(id, formData) {
       this.loading = true
       try {
-        const response = await api.post(`/mantenimientos/${id}/ejecutar`, data)
+        const horaInicio = formData.get('hora_ejecucion')
+        const tiempoEmpleado = parseInt(formData.get('tiempo_empleado'))
+
+        // Calcular hora_fin correctamente
+        const [hora, minuto] = horaInicio.split(':')
+        const fechaInicio = new Date()
+        fechaInicio.setHours(parseInt(hora), parseInt(minuto), 0, 0)
+        const fechaFin = new Date(fechaInicio.getTime() + (tiempoEmpleado * 60 * 1000)) // Agregar milisegundos
+        const horaFin = fechaFin.getHours().toString().padStart(2, '0') + ':' +
+          fechaFin.getMinutes().toString().padStart(2, '0')
+
+
+        // Preparar checklist
+        const checklist = JSON.parse(formData.get('checklist')).map((item, index) => ({
+          actividad: item.actividad,
+          completada: item.completado,
+          observacion: '',
+          orden: index + 1
+        }))
+
+        // Preparar materiales
+        const materialesRaw = JSON.parse(formData.get('materiales'))
+        const materiales = materialesRaw
+          .filter(m => m.nombre && m.cantidad)
+          .map(m => ({
+            descripcion: m.nombre,
+            cantidad: m.cantidad,
+            unidad: 'unidad',
+            costo_unitario: 0,
+            observacion: ''
+          }))
+
+        // Datos de ejecución
+        const ejecucionData = {
+          fecha_ejecucion: formData.get('fecha_ejecucion'),
+          hora_inicio: horaInicio,
+          hora_fin: horaFin,
+          trabajo_realizado: formData.get('observaciones') || 'Mantenimiento ejecutado',
+          observaciones: formData.get('observaciones'),
+          nombre_recibe: formData.get('ejecutado_por'),
+          checklist: checklist,
+          materiales: materiales
+        }
+
+        console.log('Enviando datos de ejecución:', ejecucionData)
+
+        // PASO 2: Registrar ejecución principal (incluye checklist y materiales)
+        const response = await api.post(`/mantenimientos/${id}/ejecucion`, ejecucionData)
+
+        if (!response.success) {
+          throw new Error(response.message || 'Error al registrar la ejecución')
+        }
+
+        const mantenimientoEjecutadoId = response.data.id
+
+        console.log('Ejecución registrada. ID:', mantenimientoEjecutadoId)
+
+        // PASO 3: Subir evidencias fotográficas
+        const evidenciasFiles = formData.getAll('evidencias')
+
+        if (evidenciasFiles && evidenciasFiles.length > 0) {
+          console.log(`Subiendo ${evidenciasFiles.length} evidencias...`)
+
+          for (let i = 0; i < evidenciasFiles.length; i++) {
+            const file = evidenciasFiles[i]
+
+            // Determinar tipo según orden (primeras = antes, últimas = después)
+            let tipo = 'durante'
+            if (i === 0) tipo = 'antes'
+            if (i === evidenciasFiles.length - 1) tipo = 'despues'
+
+            const evidenciaFormData = new FormData()
+            evidenciaFormData.append('mantenimiento_ejecutado_id', mantenimientoEjecutadoId)
+            evidenciaFormData.append('tipo', tipo)
+            evidenciaFormData.append('descripcion', `Evidencia ${tipo} del mantenimiento`)
+            evidenciaFormData.append('file', file)
+
+            try {
+              // Usar fetch directo para multipart/form-data
+              const token = localStorage.getItem('token')
+              const uploadResponse = await fetch(
+                `${import.meta.env.VITE_API_URL || 'http://localhost:3020/api'}/ejecucion-evidencias`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: evidenciaFormData
+                }
+              )
+
+              if (!uploadResponse.ok) {
+                console.error(`Error al subir evidencia ${i + 1}`)
+              } else {
+                console.log(`Evidencia ${i + 1} subida exitosamente`)
+              }
+            } catch (uploadError) {
+              console.error(`Error al subir evidencia ${i + 1}:`, uploadError)
+            }
+          }
+        }
+
         toast.success('Mantenimiento ejecutado correctamente')
-        
-        // Actualizar lista
+
+        // Actualizar listas
         await this.fetchMantenimientos()
         await this.fetchMantenimientosHoy()
-        
+
         return response.data
+
       } catch (error) {
         console.error('Error al ejecutar mantenimiento:', error)
-        toast.error('Error al ejecutar el mantenimiento')
-        return null
+        toast.error(error.response?.data?.message || 'Error al ejecutar el mantenimiento')
+        throw error
       } finally {
         this.loading = false
       }
@@ -171,10 +279,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.put(`/mantenimientos/${id}/reprogramar`, data)
         toast.success('Mantenimiento reprogramado correctamente')
-        
+
         // Actualizar lista
         await this.fetchMantenimientos()
-        
+
         return response.data
       } catch (error) {
         console.error('Error al reprogramar mantenimiento:', error)

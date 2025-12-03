@@ -111,7 +111,8 @@ import {
   DocumentTextIcon,
   CpuChipIcon,
   ChartPieIcon,
-  CogIcon
+  CogIcon,
+    CalendarDaysIcon, // ✅ Nuevo icono para Planes
 } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
@@ -123,11 +124,17 @@ const isMobile = ref(false)
 
 const menuItems = computed(() => [
   { name: 'Dashboard', path: '/dashboard', icon: ChartBarIcon },
+  { name: 'Planes', path: '/planes', icon: CalendarDaysIcon },
   { name: 'Mantenimientos', path: '/mantenimientos', icon: WrenchIcon },
   { name: 'Solicitudes R-275', path: '/solicitudes', icon: DocumentTextIcon },
   { name: 'Equipos', path: '/equipos', icon: CpuChipIcon },
   { name: 'Reportes', path: '/reportes', icon: ChartPieIcon },
-  { name: 'Configuración', path: '/configuracion', icon: CogIcon }
+  { name: 'tipos de mantenimiento', path: '/tipos-mantenimiento', icon: WrenchIcon },
+  { name: 'proveedores', path: 'proveedores', icon: WrenchIcon },
+ // { name: 'Configuración', path: '/configuracion', icon: CogIcon },
+
+
+  
 ])
 
 const userName = computed(() => authStore.userName || 'Usuario')

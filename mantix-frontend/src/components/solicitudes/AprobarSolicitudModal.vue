@@ -32,7 +32,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium text-gray-600">Solicitante:</span>
-            <span class="text-sm font-semibold text-gray-900">{{ solicitud.solicitante }}</span>
+            <span class="text-sm font-semibold text-gray-900">{{ solicitud.solicitante.nombre }} {{ solicitud.solicitante.apellido }}</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium text-gray-600">Prioridad:</span>
