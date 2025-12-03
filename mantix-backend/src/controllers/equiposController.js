@@ -1,17 +1,46 @@
-// Equipos controller
-const { Equipo, CategoriaMantenimiento, Sede, Usuario, Rol } = require('../models');
+// ============================================
+// src/controllers/equiposController.js
+// ============================================
+const { Equipo, CategoriaMantenimiento, Sede, Usuario, Rol, UsuarioCategoria } = require('../models');
 const { Op } = require('sequelize');
 
 const equiposController = {
-  // Get all equipos
+  // Get all equipos (FILTRADO POR CATEGORÍAS DEL USUARIO)
   async getAll(req, res, next) {
     try {
+      const usuarioId = req.usuario.id;
+      const usuario = await Usuario.findByPk(usuarioId);
+
+      let whereCondition = { activo: true };
+
+      // Si NO es super admin, filtrar por categorías permitidas
+      if (!usuario.es_super_admin) {
+        // Obtener las categorías a las que tiene acceso el usuario
+        const usuarioCategorias = await UsuarioCategoria.findAll({
+          where: { usuario_id: usuarioId },
+          attributes: ['categoria_id']
+        });
+
+        const categoriasIds = usuarioCategorias.map(uc => uc.categoria_id);
+
+        if (categoriasIds.length === 0) {
+          // Si no tiene categorías asignadas, devolver array vacío
+          return res.status(200).json([]);
+        }
+
+        // Filtrar equipos solo de las categorías permitidas
+        whereCondition.categoria_id = {
+          [Op.in]: categoriasIds
+        };
+      }
+
       const equipos = await Equipo.findAll({
+        where: whereCondition,
         include: [
           {
             model: CategoriaMantenimiento,
             as: 'categoria',
-            attributes: ['id', 'nombre', 'descripcion']
+            attributes: ['id', 'nombre', 'descripcion', 'color', 'icono']
           },
           {
             model: Sede,
@@ -38,10 +67,11 @@ const equiposController = {
     }
   },
 
-  // Get equipo by ID
+  // Get equipo by ID (CON VERIFICACIÓN DE PERMISOS)
   async getById(req, res, next) {
     try {
       const { id } = req.params;
+      const usuarioId = req.usuario.id;
 
       const equipo = await Equipo.findByPk(id, {
         include: [
@@ -74,13 +104,24 @@ const equiposController = {
         });
       }
 
+      // Verificar permisos (ya se hace en el middleware requireEquipoAccess, pero por si acaso)
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(equipo.categoria_id);
+        if (!tieneAcceso) {
+          return res.status(403).json({ 
+            error: 'No tienes permiso para ver este equipo' 
+          });
+        }
+      }
+
       res.status(200).json(equipo);
     } catch (error) {
       next(error);
     }
   },
 
-  // Create equipo
+  // Create equipo (CON VERIFICACIÓN DE PERMISOS)
   async create(req, res, next) {
     try {
       const {
@@ -101,6 +142,19 @@ const equiposController = {
         observaciones,
         activo
       } = req.body;
+
+      const usuarioId = req.usuario.id;
+
+      // Verificar que el usuario tenga acceso a la categoría donde quiere crear el equipo
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(categoria_id);
+        if (!tieneAcceso) {
+          return res.status(403).json({ 
+            error: 'No tienes permiso para crear equipos en esta categoría' 
+          });
+        }
+      }
 
       // Verificar si el código ya existe
       const codigoExistente = await Equipo.findOne({ where: { codigo } });
@@ -188,7 +242,7 @@ const equiposController = {
     }
   },
 
-  // Update equipo
+  // Update equipo (CON VERIFICACIÓN DE PERMISOS)
   async update(req, res, next) {
     try {
       const { id } = req.params;
@@ -211,12 +265,35 @@ const equiposController = {
         activo
       } = req.body;
 
+      const usuarioId = req.usuario.id;
+
       // Verificar si el equipo existe
       const equipo = await Equipo.findByPk(id);
       if (!equipo) {
         return res.status(404).json({ 
           error: 'Equipo no encontrado' 
         });
+      }
+
+      // Verificar permisos sobre el equipo actual
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(equipo.categoria_id);
+        if (!tieneAcceso) {
+          return res.status(403).json({ 
+            error: 'No tienes permiso para editar este equipo' 
+          });
+        }
+
+        // Si está cambiando de categoría, verificar permisos en la nueva categoría
+        if (categoria_id && categoria_id !== equipo.categoria_id) {
+          const tieneAccesoNuevaCategoria = await usuario.tieneAccesoCategoria(categoria_id);
+          if (!tieneAccesoNuevaCategoria) {
+            return res.status(403).json({ 
+              error: 'No tienes permiso para mover el equipo a esa categoría' 
+            });
+          }
+        }
       }
 
       // Si se está actualizando el código, verificar que no esté en uso
@@ -319,10 +396,11 @@ const equiposController = {
     }
   },
 
-  // Delete equipo
+  // Delete equipo (CON VERIFICACIÓN DE PERMISOS)
   async delete(req, res, next) {
     try {
       const { id } = req.params;
+      const usuarioId = req.usuario.id;
 
       // Verificar si el equipo existe
       const equipo = await Equipo.findByPk(id);
@@ -332,15 +410,24 @@ const equiposController = {
         });
       }
 
-      //  Aquí puedes agregar validaciones adicionales si el equipo tiene
-      //  registros de mantenimiento, documentos, etc.
-      //  Por ejemplo:
-       const mantenimientos = await equipo.countMantenimientos();
-       if (mantenimientos > 0) {
-         return res.status(400).json({ 
-           error: `No se puede eliminar el equipo porque tiene ${mantenimientos} registro(s) de mantenimiento` 
-         });
-       }
+      // Verificar permisos
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(equipo.categoria_id);
+        if (!tieneAcceso) {
+          return res.status(403).json({ 
+            error: 'No tienes permiso para eliminar este equipo' 
+          });
+        }
+      }
+
+      // Validar si tiene mantenimientos
+      const mantenimientos = await equipo.countMantenimientos();
+      if (mantenimientos > 0) {
+        return res.status(400).json({ 
+          error: `No se puede eliminar el equipo porque tiene ${mantenimientos} registro(s) de mantenimiento` 
+        });
+      }
 
       // Eliminar el equipo
       await equipo.destroy();
@@ -349,6 +436,60 @@ const equiposController = {
         message: 'Equipo eliminado exitosamente',
         id: parseInt(id)
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  // Obtener equipos por categoría
+  async getByCategoriaId(req, res, next) {
+    try {
+      const { categoriaId } = req.params;
+      const usuarioId = req.usuario.id;
+
+      // Verificar si el usuario tiene acceso a esta categoría
+      const usuario = await Usuario.findByPk(usuarioId);
+      
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(parseInt(categoriaId));
+        if (!tieneAcceso) {
+          return res.status(403).json({ 
+            error: 'No tienes permiso para ver equipos de esta categoría' 
+          });
+        }
+      }
+
+      const equipos = await Equipo.findAll({
+        where: { 
+          categoria_id: categoriaId,
+          activo: true 
+        },
+        include: [
+          {
+            model: CategoriaMantenimiento,
+            as: 'categoria',
+            attributes: ['id', 'nombre', 'descripcion', 'color', 'icono']
+          },
+          {
+            model: Sede,
+            as: 'sede',
+            attributes: ['id', 'codigo', 'nombre', 'ciudad']
+          },
+          {
+            model: Usuario,
+            as: 'responsable',
+            attributes: ['id', 'nombre', 'apellido', 'email'],
+            include: [{
+              model: Rol,
+              as: 'rol',
+              attributes: ['nombre']
+            }]
+          }
+        ],
+        order: [['codigo', 'ASC']]
+      });
+
+      res.status(200).json(equipos);
     } catch (error) {
       next(error);
     }

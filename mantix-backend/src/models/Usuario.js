@@ -40,6 +40,11 @@ module.exports = (sequelize, DataTypes) => {
     avatar: {
       type: DataTypes.STRING(255)
     },
+    es_super_admin: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Indica si el usuario tiene acceso total al sistema sin restricciones'
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
@@ -76,6 +81,54 @@ module.exports = (sequelize, DataTypes) => {
     return values;
   };
 
+  /**
+   * Verifica si el usuario tiene permiso sobre una categoría específica
+   * @param {number} categoriaId - ID de la categoría
+   * @returns {Promise<boolean>}
+   */
+  Usuario.prototype.tieneAccesoCategoria = async function(categoriaId) {
+    if (this.es_super_admin) {
+      return true;
+    }
+
+    const UsuarioCategoria = sequelize.models.UsuarioCategoria;
+    const permiso = await UsuarioCategoria.findOne({
+      where: {
+        usuario_id: this.id,
+        categoria_id: categoriaId
+      }
+    });
+
+    return permiso !== null;
+  };
+
+  /**
+   * Obtiene todas las categorías a las que el usuario tiene acceso
+   * @returns {Promise<Array>}
+   */
+  Usuario.prototype.obtenerCategoriasPermitidas = async function() {
+    if (this.es_super_admin) {
+      const CategoriaMantenimiento = sequelize.models.CategoriaMantenimiento;
+      return await CategoriaMantenimiento.findAll({
+        where: { activo: true }
+      });
+    }
+
+    const UsuarioCategoria = sequelize.models.UsuarioCategoria;
+    const CategoriaMantenimiento = sequelize.models.CategoriaMantenimiento;
+    
+    const categoriasPermitidas = await UsuarioCategoria.findAll({
+      where: { usuario_id: this.id },
+      include: [{
+        model: CategoriaMantenimiento,
+        as: 'categoria',
+        where: { activo: true }
+      }]
+    });
+
+    return categoriasPermitidas.map(uc => uc.categoria);
+  };
+
   Usuario.associate = (models) => {
     Usuario.belongsTo(models.Rol, {
       foreignKey: 'rol_id',
@@ -90,6 +143,19 @@ module.exports = (sequelize, DataTypes) => {
     Usuario.hasMany(models.Notificacion, {
       foreignKey: 'usuario_id',
       as: 'notificaciones'
+    });
+
+    // Relación con categorías permitidas - USAR STRING 'UsuarioCategoria'
+    Usuario.belongsToMany(models.CategoriaMantenimiento, {
+      through: 'UsuarioCategoria', // ← IMPORTANTE: usar string, no models.UsuarioCategoria
+      foreignKey: 'usuario_id',
+      otherKey: 'categoria_id',
+      as: 'categorias_permitidas'
+    });
+
+    Usuario.hasMany(models.UsuarioCategoria, {
+      foreignKey: 'usuario_id',
+      as: 'usuario_categorias'
     });
   };
 

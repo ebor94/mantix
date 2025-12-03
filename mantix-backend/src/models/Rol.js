@@ -17,8 +17,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT
     },
     permisos: {
-      type: DataTypes.JSON
+      type: DataTypes.JSON,
+      comment: 'Permisos generales del rol (ejemplo: {crear_equipos: true, editar_equipos: true})'
     },
+
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

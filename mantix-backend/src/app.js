@@ -8,17 +8,56 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const errorHandler = require('./middleware/errorHandler');
 const routes = require('./routes');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
-// Middlewares de seguridad
-app.use(helmet());
+// ✅ Crear carpeta de uploads FUERA de src
+// Si app.js está en /src, entonces __dirname es /src
+// Necesitamos subir un nivel con ../
+const uploadsPath = path.join(__dirname, '../uploads/evidencias');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log('✅ Carpeta uploads/evidencias creada en:', uploadsPath);
+}
+const pdfsPath = path.join(__dirname, '../uploads/pdfs');
+if (!fs.existsSync(pdfsPath)) {
+  fs.mkdirSync(pdfsPath, { recursive: true });
+  console.log('✅ Carpeta uploads/pdfs creada');
+}
+// ============================================
+// CORS
+// ============================================
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: true
+  origin: process.env.CORS_ORIGIN || ['http://localhost:8090', 'http://127.0.0.1:8090'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Content-Disposition']
 }));
 
+app.options('*', cors());
+
+// ============================================
+// HELMET
+// ============================================
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "http://localhost:3020", "http://localhost:8090"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", "http://localhost:3020", "http://localhost:8090"]
+    }
+  }
+}));
+
+// ============================================
 // Rate limiting
+// ============================================
 const limiter = rateLimit({
   windowMs: (process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
   max: process.env.RATE_LIMIT_MAX_REQUESTS || 100,
@@ -26,23 +65,38 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Middlewares de parsing
+// ============================================
+// Body Parsers
+// ============================================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
 
+// ============================================
 // Logging
+// ============================================
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Archivos estáticos
-app.use('/uploads', express.static('uploads'));
+// ============================================
+// Archivos estáticos - ✅ SUBIR UN NIVEL ../uploads
+// ============================================
+app.use('/uploads', (req, res, next) => {
+  console.log('📁 Solicitud de archivo estático:', req.url);
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(path.join(__dirname, '../uploads'))); // ✅ ../uploads
 
+// ============================================
 // Documentación Swagger
+// ============================================
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// ============================================
 // Health check
+// ============================================
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -51,10 +105,39 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ============================================
+// Test endpoint para uploads
+// ============================================
+app.get('/test-uploads', (req, res) => {
+  const uploadsDir = path.join(__dirname, '../uploads/evidencias'); // ✅ ../uploads
+  
+  try {
+    const files = fs.readdirSync(uploadsDir);
+    res.json({
+      success: true,
+      uploadsPath: uploadsDir,
+      files: files.map(f => ({
+        nombre: f,
+        url: `http://localhost:3020/uploads/evidencias/${f}`
+      }))
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      uploadsPath: uploadsDir
+    });
+  }
+});
+app.use('/uploads/pdfs', express.static(path.join(__dirname, '../uploads/pdfs')));
+// ============================================
 // Rutas principales
+// ============================================
 app.use('/api', routes);
 
+// ============================================
 // Ruta 404
+// ============================================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -62,7 +145,9 @@ app.use((req, res) => {
   });
 });
 
+// ============================================
 // Middleware de manejo de errores
+// ============================================
 app.use(errorHandler);
 
 module.exports = app;

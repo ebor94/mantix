@@ -77,40 +77,52 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   MantenimientoEjecutado.associate = (models) => {
+  // Relación con MantenimientoProgramado
+  if (models.MantenimientoProgramado) {
     MantenimientoEjecutado.belongsTo(models.MantenimientoProgramado, {
       foreignKey: 'mantenimiento_programado_id',
-      as: 'programado'
+      as: 'mantenimiento_programado'
     });
-    
+  }
+
+  // Relación con Usuario (ejecutor)
+  if (models.Usuario) {
     MantenimientoEjecutado.belongsTo(models.Usuario, {
       foreignKey: 'ejecutado_por_usuario_id',
-      as: 'usuario'
+      as: 'usuario_ejecutor'
     });
-    
-    // Only associate with Proveedor if it exists
-    // MantenimientoEjecutado.belongsTo(models.Proveedor, {
-    //   foreignKey: 'ejecutado_por_proveedor_id',
-    //   as: 'proveedor'
-    // });
-    
-    // Only associate with EjecucionChecklist if it exists
-    // MantenimientoEjecutado.hasMany(models.EjecucionChecklist, {
-    //   foreignKey: 'mantenimiento_ejecutado_id',
-    //   as: 'checklist'
-    // });
-    
-    // Only associate with EjecucionMaterial if it exists
-    // MantenimientoEjecutado.hasMany(models.EjecucionMaterial, {
-    //   foreignKey: 'mantenimiento_ejecutado_id',
-    //   as: 'materiales'
-    // });
-    
-    // Only associate with EjecucionEvidencia if it exists
-    // MantenimientoEjecutado.hasMany(models.EjecucionEvidencia, {
-    //   foreignKey: 'mantenimiento_ejecutado_id',
-    //   as: 'evidencias'
-    // });
-  };
+  }
+
+  // Relación con Proveedor (ejecutor externo)
+  if (models.Proveedor) {
+    MantenimientoEjecutado.belongsTo(models.Proveedor, {
+      foreignKey: 'ejecutado_por_proveedor_id',
+      as: 'proveedor_ejecutor'
+    });
+  }
+
+  // ✅ NUEVAS RELACIONES
+  if (models.EjecucionChecklist) {
+    MantenimientoEjecutado.hasMany(models.EjecucionChecklist, {
+      foreignKey: 'mantenimiento_ejecutado_id',
+      as: 'checklist'
+    });
+  }
+
+  if (models.EjecucionMaterial) {
+    MantenimientoEjecutado.hasMany(models.EjecucionMaterial, {
+      foreignKey: 'mantenimiento_ejecutado_id',
+      as: 'materiales'
+    });
+  }
+
+  if (models.EjecucionEvidencia) {
+    MantenimientoEjecutado.hasMany(models.EjecucionEvidencia, {
+      foreignKey: 'mantenimiento_ejecutado_id',
+      as: 'evidencias'
+    });
+  }
+};
 
   return MantenimientoEjecutado;
 };

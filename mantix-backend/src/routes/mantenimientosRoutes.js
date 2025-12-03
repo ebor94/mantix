@@ -330,7 +330,7 @@ router.put('/:id/reprogramar', mantenimientosController.reprogramar);
 
 /**
  * @swagger
- * /api/mantenimientos/{id}/ejecutar:
+ * /api/mantenimientos/{id}/ejecucion:
  *   post:
  *     summary: Registrar ejecución de mantenimiento
  *     description: Registra la ejecución de un mantenimiento programado, incluyendo trabajo realizado, checklist, materiales utilizados y evidencias.
@@ -513,6 +513,44 @@ router.put('/:id/reprogramar', mantenimientosController.reprogramar);
  *       '500':
  *         description: Error interno del servidor.
  */
-router.post('/:id/ejecutar', mantenimientosController.registrarEjecucion);
+router.post('/:id/ejecucion', mantenimientosController.registrarEjecucion);
+
+/**
+ * @swagger
+ * /api/mantenimientos/{id}/pdf:
+ *   get:
+ *     summary: Generar PDF del mantenimiento
+ *     tags: [Mantenimientos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: PDF generado exitosamente
+ *       404:
+ *         description: Mantenimiento no encontrado
+ */
+router.get('/:id/pdf', mantenimientosController.generarPDF);
+
+/**
+ * @swagger
+ * /api/mantenimientos/{id}/pdf/descargar:
+ *   get:
+ *     summary: Descargar PDF del mantenimiento
+ *     tags: [Mantenimientos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: PDF descargado
+ */
+router.get('/:id/pdf/descargar', mantenimientosController.descargarPDF);
 
 module.exports = router

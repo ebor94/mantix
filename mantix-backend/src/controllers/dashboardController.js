@@ -46,7 +46,7 @@ const dashboardController = {
         const totalEjecutados = await MantenimientoEjecutado.count({
           include: [{
             model: MantenimientoProgramado,
-            as: 'programado',
+            as: 'mantenimiento_programado',  // ✅ CORRECTO
             where: {
               fecha_programada: {
                 [Op.between]: [
@@ -105,7 +105,7 @@ const dashboardController = {
         const totalEjecutados = await MantenimientoEjecutado.count({
           include: [{
             model: MantenimientoProgramado,
-            as: 'programado',
+            as: 'mantenimiento_programado',  // ✅ CORRECTO
             where: {
               fecha_programada: {
                 [Op.between]: [
@@ -244,12 +244,12 @@ const dashboardController = {
         include: [
           {
             model: MantenimientoProgramado,
-            as: 'programado',
+            as: 'mantenimiento_programado',
             attributes: ['id', 'codigo', 'fecha_programada']
           },
           { 
             model: Usuario, 
-            as: 'usuario', 
+            as: 'usuario_ejecutor', 
             attributes: ['id', 'nombre', 'apellido'] 
           }
         ],
@@ -318,7 +318,7 @@ const dashboardController = {
         const totalEjecutados = await MantenimientoEjecutado.count({
           include: [{
             model: MantenimientoProgramado,
-            as: 'programado',
+            as: 'mantenimiento_programado',  // ✅ CORRECTO
             where: {
               fecha_programada: {
                 [Op.between]: [

@@ -212,5 +212,106 @@ module.exports = (sequelize, DataTypes) => {
     // });
   };
 
+  /**
+   * Método estático para obtener equipos según permisos del usuario
+   * @param {number} usuarioId - ID del usuario
+   * @param {object} models - Modelos de Sequelize
+   * @param {object} options - Opciones adicionales de consulta (where, include, etc.)
+   * @returns {Promise<Array>} - Lista de equipos permitidos
+   */
+  Equipo.obtenerPorPermisos = async function(usuarioId, models, options = {}) {
+    // Obtener el usuario
+    const usuario = await models.Usuario.findByPk(usuarioId);
+    
+    if (!usuario) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    // Si es super admin, retornar todos los equipos
+    if (usuario.es_super_admin) {
+      return await Equipo.findAll({
+        where: { activo: true, ...options.where },
+        include: options.include || [
+          { model: models.CategoriaMantenimiento, as: 'categoria' },
+          { model: models.Sede, as: 'sede' },
+          { 
+            model: models.Usuario, 
+            as: 'responsable',
+            include: [{ model: models.Rol, as: 'rol' }]
+          }
+        ],
+        order: options.order || [['created_at', 'DESC']]
+      });
+    }
+
+    // Para usuarios normales, obtener sus categorías permitidas
+    const categoriasPermitidas = await models.UsuarioCategoria.findAll({
+      where: { usuario_id: usuarioId },
+      attributes: ['categoria_id']
+    });
+
+    const categoriasIds = categoriasPermitidas.map(uc => uc.categoria_id);
+
+    if (categoriasIds.length === 0) {
+      return []; // Usuario sin categorías asignadas
+    }
+
+    // Retornar equipos de las categorías permitidas
+    return await Equipo.findAll({
+      where: { 
+        activo: true, 
+        categoria_id: categoriasIds,
+        ...options.where 
+      },
+      include: options.include || [
+        { model: models.CategoriaMantenimiento, as: 'categoria' },
+        { model: models.Sede, as: 'sede' },
+        { 
+          model: models.Usuario, 
+          as: 'responsable',
+          include: [{ model: models.Rol, as: 'rol' }]
+        }
+      ],
+      order: options.order || [['created_at', 'DESC']]
+    });
+  };
+
+  /**
+   * Método estático para verificar si un usuario tiene permiso sobre un equipo específico
+   * @param {number} equipoId - ID del equipo
+   * @param {number} usuarioId - ID del usuario
+   * @param {object} models - Modelos de Sequelize
+   * @returns {Promise<boolean>} - true si tiene permiso, false si no
+   */
+  Equipo.tienePermiso = async function(equipoId, usuarioId, models) {
+    const usuario = await models.Usuario.findByPk(usuarioId);
+    
+    if (!usuario) {
+      return false;
+    }
+
+    // Super admin tiene acceso a todo
+    if (usuario.es_super_admin) {
+      return true;
+    }
+
+    // Buscar el equipo
+    const equipo = await Equipo.findByPk(equipoId);
+    
+    if (!equipo) {
+      return false;
+    }
+
+    // Verificar si el usuario tiene permiso sobre la categoría del equipo
+    const permiso = await models.UsuarioCategoria.findOne({
+      where: {
+        usuario_id: usuarioId,
+        categoria_id: equipo.categoria_id
+      }
+    });
+
+    return permiso !== null;
+  };
+
   return Equipo;
 };

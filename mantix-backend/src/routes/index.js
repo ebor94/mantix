@@ -13,8 +13,18 @@ const mantenimientosRoutes = require('./mantenimientosRoutes');
 const solicitudesRoutes = require('./solicitudesRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const reportesRoutes = require('./reportesRoutes');
-
-// Montar rutas
+const estadoRoutes = require('./estadoRoutes');
+const categoriaMantenimientoRoutes = require('./categoriaMantenimientoRoutes');
+const planActividadRoutes = require('./planActividadRoutes');
+const periodicidadRoutes = require('./periodicidadRoutes');
+const programarMantenimientosRoutes = require('./programarMantenimientosRoutes');
+const ejecucionChecklistRoutes = require('./ejecucionChecklistRoutes');
+const ejecucionMaterialRoutes = require('./ejecucionMaterialRoutes');
+const ejecucionEvidenciaRoutes = require('./ejecucionEvidenciaRoutes');
+const planMantenimientoRoutes = require('./planMantenimientoRoutes');
+const notificacionesRoutes = require('./notificacionesRoutes'); 
+const proveedoresRoutes = require('./proveedoresRoutes');
+const tipoMantenimientoRoutes = require('./tipoMantenimientoRoutes');
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
 router.use('/sedes', sedesRoutes);
@@ -23,5 +33,16 @@ router.use('/mantenimientos', mantenimientosRoutes);
 router.use('/solicitudes', solicitudesRoutes);
 router.use('/reportes', reportesRoutes);
 router.use('/dashboard', dashboardRoutes);
-
+router.use('/categorias-mantenimiento', categoriaMantenimientoRoutes);
+router.use('/estados', estadoRoutes);
+router.use('/plan-actividades', planActividadRoutes);
+router.use('/periodicidades', periodicidadRoutes);
+router.use('/programar-mantenimientos', programarMantenimientosRoutes);
+router.use('/ejecucion-checklist', ejecucionChecklistRoutes);
+router.use('/ejecucion-materiales', ejecucionMaterialRoutes);
+router.use('/ejecucion-evidencias', ejecucionEvidenciaRoutes);
+router.use('/planes-mantenimiento', planMantenimientoRoutes);
+router.use('/notificaciones', notificacionesRoutes); 
+router.use('/proveedores', proveedoresRoutes); 
+router.use('/tipos-mantenimiento', tipoMantenimientoRoutes); 
 module.exports = router;
