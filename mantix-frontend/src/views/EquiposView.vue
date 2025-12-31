@@ -390,10 +390,11 @@ const loadCatalogos = async () => {
   console.log('Cargando catálogos...')
   try {
     // Comentamos categorías por ahora ya que la ruta no existe
-    // const catRes = await api.get('/categorias')
-    // categorias.value = catRes.data
-    categorias.value = []
-    console.log('Catálogos cargados (sin categorías por ahora)')
+     const catRes = await api.get('/categorias-mantenimiento?activo=true')
+     console.log('Catálogos cargados', catRes)
+     categorias.value = catRes.data
+
+    
   } catch (error) {
     console.error('Error al cargar catálogos:', error)
   }
