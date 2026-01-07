@@ -248,4 +248,324 @@ router.put('/:id', auth, requireEquipoAccess, equiposController.update);
  */
 router.delete('/:id', auth, requireEquipoAccess, equiposController.delete);
 
+/**
+ * @swagger
+ * /api/equipos/{equipoId}/historial-mantenimientos:
+ *   get:
+ *     summary: Obtener historial de mantenimientos de un equipo
+ *     description: Retorna el historial completo de mantenimientos programados y ejecutados de un equipo específico con filtros opcionales y paginación
+ *     tags:
+ *       - Equipos
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: equipoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID único del equipo
+ *         example: 6
+  *       - in: query
+ *         name: desde
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha inicial del rango de búsqueda (YYYY-MM-DD)
+ *         example: 2024-01-01
+ *       - in: query
+ *         name: hasta
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha final del rango de búsqueda (YYYY-MM-DD)
+ *         example: 2024-12-31
+ *       - in: query
+ *         name: limite
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Cantidad de registros por página
+ *         example: 20
+ *       - in: query
+ *         name: pagina
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *           minimum: 1
+ *         description: Número de página a consultar
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Historial obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     equipo_id:
+ *                       type: integer
+ *                       example: 6
+ *                     estadisticas:
+ *                       type: object
+ *                       properties:
+ *                         total_mantenimientos:
+ *                           type: integer
+ *                           example: 45
+ *                         completados:
+ *                           type: integer
+ *                           example: 38
+ *                         pendientes:
+ *                           type: integer
+ *                           example: 5
+ *                         reprogramados:
+ *                           type: integer
+ *                           example: 2
+ *                     paginacion:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                           example: 45
+ *                         pagina_actual:
+ *                           type: integer
+ *                           example: 1
+ *                         total_paginas:
+ *                           type: integer
+ *                           example: 3
+ *                         limite:
+ *                           type: integer
+ *                           example: 50
+ *                     mantenimientos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 123
+ *                           codigo:
+ *                             type: string
+ *                             example: MANT-2024-001
+ *                           fecha_programada:
+ *                             type: string
+ *                             format: date
+ *                             example: 2024-11-15
+ *                           hora_programada:
+ *                             type: string
+ *                             format: time
+ *                             example: 14:30:00
+ *                           prioridad:
+ *                             type: string
+ *                             enum: [baja, media, alta, critica]
+ *                             example: alta
+ *                           reprogramaciones:
+ *                             type: integer
+ *                             example: 0
+ *                           observaciones:
+ *                             type: string
+ *                             example: Mantenimiento preventivo trimestral
+ *                           estado:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               nombre:
+ *                                 type: string
+ *                                 example: Completado
+ *                               color:
+ *                                 type: string
+ *                                 example: #28a745
+ *                           actividad:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               nombre:
+ *                                 type: string
+ *                                 example: Revisión de sistema eléctrico
+ *                               equipo:
+ *                                 type: object
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   codigo:
+ *                                     type: string
+ *                                   nombre:
+ *                                     type: string
+ *                               categoria:
+ *                                 type: object
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   nombre:
+ *                                     type: string
+ *                               periodicidad:
+ *                                 type: object
+ *                                 properties:
+ *                                   nombre:
+ *                                     type: string
+ *                                     example: Trimestral
+ *                                   dias:
+ *                                     type: integer
+ *                                     example: 90
+ *                           ejecucion:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               fecha_ejecucion:
+ *                                 type: string
+ *                                 format: date
+ *                               duracion_real:
+ *                                 type: number
+ *                               costo_real:
+ *                                 type: number
+ *       400:
+ *         description: Parámetros inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: El ID del equipo debe ser un número válido
+ *       401:
+ *         description: No autorizado - Token inválido o ausente
+ *       403:
+ *         description: Acceso denegado - No tiene permisos para este equipo
+ *       404:
+ *         description: Equipo no encontrado
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Error al obtener el historial de mantenimientos
+ *                 error:
+ *                   type: string
+ */
+router.get('/:equipoId/historial-mantenimientos', auth, requireEquipoAccess, equiposController.historialMantenimientoEquipo);
+
+/**
+ * @swagger
+ * /api/equipos/{equipoId}/resumen-mantenimientos:
+ *   get:
+ *     summary: Obtener resumen estadístico de mantenimientos de un equipo
+ *     description: Retorna estadísticas consolidadas de todos los mantenimientos del equipo incluyendo totales, promedios y costos
+ *     tags:
+ *       - Equipos
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: equipoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID único del equipo
+ *         example: 6
+ *     responses:
+ *       200:
+ *         description: Resumen obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     equipo_id:
+ *                       type: integer
+ *                       example: 6
+ *                     resumen:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                           description: Total de mantenimientos programados
+ *                           example: 45
+ *                         duracion_promedio:
+ *                           type: number
+ *                           format: float
+ *                           description: Duración promedio en horas de los mantenimientos ejecutados
+ *                           example: 2.5
+ *                           nullable: true
+ *                         costo_total:
+ *                           type: number
+ *                           format: decimal
+ *                           description: Costo total acumulado de mantenimientos ejecutados
+ *                           example: 1500000.00
+ *                           nullable: true
+ *             examples:
+ *               example1:
+ *                 summary: Equipo con mantenimientos ejecutados
+ *                 value:
+ *                   success: true
+ *                   data:
+ *                     equipo_id: 6
+ *                     resumen:
+ *                       total: 45
+ *                       duracion_promedio: 2.5
+ *                       costo_total: 1500000.00
+ *               example2:
+ *                 summary: Equipo sin mantenimientos ejecutados
+ *                 value:
+ *                   success: true
+ *                   data:
+ *                     equipo_id: 6
+ *                     resumen:
+ *                       total: 10
+ *                       duracion_promedio: null
+ *                       costo_total: null
+ *       400:
+ *         description: Parámetros inválidos
+ *       401:
+ *         description: No autorizado - Token inválido o ausente
+ *       403:
+ *         description: Acceso denegado - No tiene permisos para este equipo
+ *       404:
+ *         description: Equipo no encontrado
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Error al obtener el resumen de mantenimientos
+ *                 error:
+ *                   type: string
+ */
+router.get('/:equipoId/resumen-mantenimientos', auth, requireEquipoAccess, equiposController.ResumenMantenimientos);
+
 module.exports = router;

@@ -2,3 +2,15 @@
 .env.example
 node_modules/
 tests/
+logs/
+*.log
+dist/
+coverage/  
+.vscode/
+.DS_Store
+npmrc
+.idea/
+*.iml
+.cache/
+*.tsbuildinfo
+ 

@@ -1,7 +1,8 @@
 // ============================================
 // src/controllers/equiposController.js
 // ============================================
-const { Equipo, CategoriaMantenimiento, Sede, Usuario, Rol, UsuarioCategoria } = require('../models');
+const { Equipo, CategoriaMantenimiento, Sede, Usuario, Rol, UsuarioCategoria, Proveedor } = require('../models');
+const { MantenimientoProgramado, PlanActividad, Estado, MantenimientoEjecutado } = require('../models');
 const { Op } = require('sequelize');
 
 const equiposController = {
@@ -493,6 +494,181 @@ const equiposController = {
     } catch (error) {
       next(error);
     }
+  },
+
+
+  async historialMantenimientoEquipo(req, res, next) {
+      try {
+    const { equipoId } = req.params;
+    const {            
+      desde, 
+      hasta, 
+      limite = 50, 
+      pagina = 1 
+    } = req.query;
+
+    // Construir filtros dinámicos
+    const whereClause = {};
+
+ 
+    
+    if (desde && hasta) {
+      whereClause.fecha_programada = { 
+        [Op.between]: [desde, hasta] 
+      };
+    } else if (desde) {
+      whereClause.fecha_programada = { [Op.gte]: desde };
+    } else if (hasta) {
+      whereClause.fecha_programada = { [Op.lte]: hasta };
+    }
+
+    // Filtros para plan_actividad
+    const actividadWhere = { equipo_id: equipoId };
+    //if (categoria) actividadWhere.categoria_id = categoria;
+   // if (tipoMantenimiento) actividadWhere.tipo_mantenimiento_id = tipoMantenimiento;
+
+    const offset = (pagina - 1) * limite;
+
+    const historial = await MantenimientoProgramado.findAndCountAll({
+      include: [
+        {
+          model: PlanActividad,
+          as: 'actividad',
+          where: actividadWhere,
+          include: [
+            {
+              model: Equipo,
+              as: 'equipo',
+              attributes: ['id', 'codigo', 'nombre', 'ubicacion_especifica', 'marca', 'modelo']
+            },     
+      
+      
+            {
+              model: Usuario,
+              as: 'responsable_usuario',
+              attributes: ['id', 'nombre', 'email'],
+              required: false
+            },
+            {
+              model: Proveedor,
+              as: 'responsable_proveedor',
+              attributes: ['id', 'nombre'],
+              required: false
+            },
+            {
+              model: Sede,
+              as: 'sede',
+              attributes: ['id', 'nombre', 'direccion']
+            }
+          ]
+        },
+        {
+          model: Estado,
+          as: 'estado',
+          attributes: ['id', 'nombre', 'color', 'tipo']
+        },
+        {
+          model: MantenimientoEjecutado,
+          as: 'ejecucion',
+          required: false,
+          attributes: [
+            'id', 
+            'fecha_ejecucion', 
+            'hora_inicio',
+            'hora_fin',
+            'duracion_horas', 
+            'nombre_recibe',
+            'ejecutado_por_proveedor_id', 
+            'ejecutado_por_usuario_id',
+            'observaciones',
+            'costo_real'
+          ]
+        }
+      ],
+      where: whereClause,
+      order: [['fecha_programada', 'DESC']],
+      limit: parseInt(limite),
+      offset: offset,
+      distinct: true // Importante para el count correcto con joins
+    });
+
+    // Calcular estadísticas del historial
+    const estadisticas = {
+      total_mantenimientos: historial.count,
+      completados: historial.rows.filter(m => m.estado?.nombre === 'Completado').length,
+      pendientes: historial.rows.filter(m => m.estado?.nombre === 'Pendiente').length,
+      reprogramados: historial.rows.filter(m => m.reprogramaciones > 0).length
+    };
+
+    res.json({
+      success: true,
+      data: {
+        equipo_id: parseInt(equipoId),
+        estadisticas,
+        paginacion: {
+          total: historial.count,
+          pagina_actual: parseInt(pagina),
+          total_paginas: Math.ceil(historial.count / limite),
+          limite: parseInt(limite)
+        },
+        mantenimientos: historial.rows
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al obtener historial:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el historial de mantenimientos',
+      error: error.message
+    });
+  }
+
+    },
+
+  async ResumenMantenimientos(req, res, next) {   
+    try {
+    const { equipoId } = req.params;
+
+    const resumen = await MantenimientoProgramado.findAll({
+      attributes: [
+        [sequelize.fn('COUNT', sequelize.col('MantenimientoProgramado.id')), 'total'],
+        [sequelize.fn('AVG', sequelize.col('ejecucion.duracion_real')), 'duracion_promedio'],
+        [sequelize.fn('SUM', sequelize.col('ejecucion.costo_real')), 'costo_total']
+      ],
+      include: [
+        {
+          model: PlanActividad,
+          as: 'actividad',
+          where: { equipo_id: equipoId },
+          attributes: []
+        },
+        {
+          model: MantenimientoEjecutado,
+          as: 'ejecucion',
+          required: false,
+          attributes: []
+        }
+      ],
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      data: {
+        equipo_id: parseInt(equipoId),
+        resumen: resumen[0]
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al obtener resumen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el resumen de mantenimientos',
+      error: error.message
+    });
+  }
   }
 };
 
