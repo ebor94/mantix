@@ -146,7 +146,7 @@ const handleLogin = async () => {
   const success = await authStore.login(form.value.email, form.value.password)
 
   if (success) {
-    router.push({ name: 'Dashboard' })
+    router.push({ name: 'Mantenimientos' })
   }
 }
 </script>
