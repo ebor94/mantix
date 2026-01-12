@@ -14,7 +14,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/mantenimientos',
     meta: { requiresAuth: true }
   },
   {
@@ -111,6 +111,15 @@ const routes = [
   meta: { 
     requiresAuth: true,
     title: 'Proveedores'
+  }
+},
+{
+  path: '/requisitos',
+  name: 'requisitos',
+  component: () => import('@/views/RequisitosView.vue'),
+  meta: { 
+    requiresAuth: true,
+    title: 'Requisitos de Mantenimiento'
   }
 }
 ]
