@@ -15,111 +15,113 @@ const { Op } = require('sequelize');
 
 const mantenimientoNovedadesController = {
   // Crear novedad
-  async create(req, res, next) {
-    try {
-      const {
-        mantenimiento_programado_id,
-        tipo_novedad,
-        descripcion,
-        motivo,
-        fecha_anterior,
-        fecha_nueva,
-        hora_anterior,
-        hora_nueva,
-        estado_anterior_id,
-        estado_nuevo_id,
-        prioridad_anterior,
-        prioridad_nueva,
-        adjuntos,
-        metadata,
-        es_visible_proveedor
-      } = req.body;
+ async create(req, res, next) {
+  try {
+    const {
+      mantenimiento_programado_id,
+      tipo_novedad,
+      descripcion,
+      motivo,
+      fecha_anterior,
+      fecha_nueva,
+      hora_anterior,
+      hora_nueva,
+      estado_anterior_id,
+      estado_nuevo_id,
+      prioridad_anterior,
+      prioridad_nueva,
+      adjuntos,
+      metadata,
+      es_visible_proveedor
+    } = req.body;
 
-      const usuario_registro_id = req.usuario.id;
+    // ✅ VALIDACIÓN Y LIMPIEZA DE DATOS
+    const datosLimpios = {
+      mantenimiento_programado_id,
+      tipo_novedad,
+      descripcion,
+      usuario_registro_id: req.usuario.id,
+      
+      // Limpiar strings vacíos y convertir a null
+      motivo: motivo?.trim() || null,
+      fecha_anterior: fecha_anterior && fecha_anterior !== '' ? fecha_anterior : null,
+      fecha_nueva: fecha_nueva && fecha_nueva !== '' ? fecha_nueva : null,
+      hora_anterior: hora_anterior && hora_anterior !== '' ? hora_anterior : null,
+      hora_nueva: hora_nueva && hora_nueva !== '' ? hora_nueva : null,
+      estado_anterior_id: estado_anterior_id || null,
+      estado_nuevo_id: estado_nuevo_id || null,
+      prioridad_anterior: prioridad_anterior || null,
+      prioridad_nueva: prioridad_nueva || null,
+      adjuntos: Array.isArray(adjuntos) ? adjuntos : [],
+      metadata: metadata || null,
+      es_visible_proveedor: es_visible_proveedor || false
+    };
 
-      // Verificar que el mantenimiento existe
-      const mantenimiento = await MantenimientoProgramado.findByPk(mantenimiento_programado_id);
-      if (!mantenimiento) {
-        return res.status(404).json({ 
-          error: 'Mantenimiento programado no encontrado' 
-        });
-      }
+    console.log('Datos limpios para crear novedad:', datosLimpios);
 
-      // Crear la novedad
-      const novedad = await MantenimientoNovedad.create({
-        mantenimiento_programado_id,
-        tipo_novedad,
-        descripcion,
-        motivo,
-        fecha_anterior,
-        fecha_nueva,
-        hora_anterior,
-        hora_nueva,
-        estado_anterior_id,
-        estado_nuevo_id,
-        prioridad_anterior,
-        prioridad_nueva,
-        usuario_registro_id,
-        adjuntos: adjuntos || [],
-        metadata,
-        es_visible_proveedor: es_visible_proveedor || false
-      });
+    // Crear novedad
+    const novedad = await MantenimientoNovedad.create(datosLimpios);
 
-      // Si es una reprogramación, actualizar contador en mantenimiento
-      if (tipo_novedad === 'reprogramacion') {
-        await mantenimiento.update({
-          reprogramaciones: (mantenimiento.reprogramaciones || 0) + 1,
-          ultimo_motivo_reprogramacion: motivo || descripcion,
-          fecha_programada: fecha_nueva || mantenimiento.fecha_programada,
-          hora_programada: hora_nueva || mantenimiento.hora_programada
-        });
-      }
-
-      // Si es cambio de estado, actualizar el estado
-      if (tipo_novedad === 'cambio_estado' && estado_nuevo_id) {
-        await mantenimiento.update({
-          estado_id: estado_nuevo_id
-        });
-      }
-
-      // Si es cambio de prioridad, actualizar la prioridad
-      if (tipo_novedad === 'cambio_prioridad' && prioridad_nueva) {
-        await mantenimiento.update({
-          prioridad: prioridad_nueva
-        });
-      }
-
-      // Cargar novedad con relaciones
-      const novedadCompleta = await MantenimientoNovedad.findByPk(novedad.id, {
-        include: [
-          { 
-            model: Usuario, 
-            as: 'usuario_registro', 
-            attributes: ['id', 'nombre', 'apellido', 'email'],
-            include: [{
-              model: Rol,
-              as: 'rol',
-              attributes: ['nombre']
-            }]
-          },
-          { 
-            model: Estado, 
-            as: 'estado_anterior', 
-            attributes: ['id', 'nombre', 'color', 'tipo'] 
-          },
-          { 
-            model: Estado, 
-            as: 'estado_nuevo', 
-            attributes: ['id', 'nombre', 'color', 'tipo'] 
-          }
-        ]
-      });
-
-      res.status(201).json(novedadCompleta);
-    } catch (error) {
-      next(error);
+    // Actualizar mantenimiento según tipo de novedad
+    const mantenimiento = await MantenimientoProgramado.findByPk(mantenimiento_programado_id);
+    
+    if (!mantenimiento) {
+      return res.status(404).json({ error: 'Mantenimiento no encontrado' });
     }
-  },
+
+    // Lógica de actualización según tipo
+    if (tipo_novedad === 'reprogramacion' && fecha_nueva) {
+      await mantenimiento.update({
+        fecha_programada: fecha_nueva,
+        hora_programada: hora_nueva || mantenimiento.hora_programada,
+        reprogramaciones: mantenimiento.reprogramaciones + 1,
+        ultimo_motivo_reprogramacion: motivo
+      });
+
+      // Actualizar estado a Reprogramado
+      const estadoReprogramado = await Estado.findOne({
+        where: { nombre: 'Reprogramado', tipo: 'mantenimiento' }
+      });
+      if (estadoReprogramado) {
+        await mantenimiento.update({ estado_id: estadoReprogramado.id });
+      }
+    }
+
+    if (tipo_novedad === 'cambio_estado' && estado_nuevo_id) {
+      await mantenimiento.update({ estado_id: estado_nuevo_id });
+    }
+
+    if (tipo_novedad === 'cambio_prioridad' && prioridad_nueva) {
+      await mantenimiento.update({ prioridad: prioridad_nueva });
+    }
+
+    // Obtener novedad con relaciones
+    const novedadCompleta = await MantenimientoNovedad.findByPk(novedad.id, {
+      include: [
+        {
+          model: Usuario,
+          as: 'usuario_registro',
+          attributes: ['id', 'nombre', 'apellido', 'email']
+        },
+        {
+          model: Estado,
+          as: 'estado_anterior',
+          attributes: ['id', 'nombre', 'color']
+        },
+        {
+          model: Estado,
+          as: 'estado_nuevo',
+          attributes: ['id', 'nombre', 'color']
+        }
+      ]
+    });
+
+    res.status(201).json(novedadCompleta);
+  } catch (error) {
+    console.error('Error al crear novedad:', error);
+    next(error);
+  }
+},
 
   // Listar novedades de un mantenimiento
   async getByMantenimientoId(req, res, next) {
@@ -253,67 +255,140 @@ const mantenimientoNovedadesController = {
 
   // Actualizar novedad
   async update(req, res, next) {
-    try {
-      const { id } = req.params;
-      const {
-        descripcion,
-        motivo,
-        fecha_nueva,
-        hora_nueva,
-        adjuntos,
-        metadata,
-        es_visible_proveedor
-      } = req.body;
+  try {
+    const { id } = req.params;
+    const {
+      descripcion,
+      motivo,
+      fecha_nueva,
+      hora_nueva,
+      estado_nuevo_id,
+      prioridad_nueva,
+      adjuntos,
+      metadata,
+      es_visible_proveedor
+    } = req.body;
 
-      const novedad = await MantenimientoNovedad.findByPk(id);
-      if (!novedad) {
-        return res.status(404).json({ 
-          error: 'Novedad no encontrada' 
+    const novedad = await MantenimientoNovedad.findByPk(id);
+    if (!novedad) {
+      return res.status(404).json({ 
+        error: 'Novedad no encontrada' 
+      });
+    }
+
+    // ✅ PREPARAR DATOS CON LIMPIEZA DE STRINGS VACÍOS
+    const datosActualizacion = {};
+    
+    // Campos de texto - limpiar y convertir vacíos a null
+    if (descripcion !== undefined) {
+      datosActualizacion.descripcion = descripcion?.trim() || null;
+    }
+    if (motivo !== undefined) {
+      datosActualizacion.motivo = motivo?.trim() || null;
+    }
+    
+    // Campos de fecha - convertir strings vacíos a null
+    if (fecha_nueva !== undefined) {
+      datosActualizacion.fecha_nueva = fecha_nueva && fecha_nueva !== '' ? fecha_nueva : null;
+    }
+    if (hora_nueva !== undefined) {
+      datosActualizacion.hora_nueva = hora_nueva && hora_nueva !== '' ? hora_nueva : null;
+    }
+    
+    // Campos numéricos - convertir strings vacíos y 0 a null
+    if (estado_nuevo_id !== undefined) {
+      datosActualizacion.estado_nuevo_id = estado_nuevo_id || null;
+    }
+    if (prioridad_nueva !== undefined) {
+      datosActualizacion.prioridad_nueva = prioridad_nueva || null;
+    }
+    
+    // Arrays - limpiar elementos vacíos
+    if (adjuntos !== undefined) {
+      datosActualizacion.adjuntos = Array.isArray(adjuntos) 
+        ? adjuntos.filter(a => a && a.trim() !== '') 
+        : [];
+    }
+    
+    // Metadata - validar JSON y convertir vacíos a null
+    if (metadata !== undefined) {
+      if (typeof metadata === 'string') {
+        datosActualizacion.metadata = metadata.trim() ? JSON.parse(metadata) : null;
+      } else {
+        datosActualizacion.metadata = metadata || null;
+      }
+    }
+    
+    // Boolean
+    if (es_visible_proveedor !== undefined) {
+      datosActualizacion.es_visible_proveedor = Boolean(es_visible_proveedor);
+    }
+
+    console.log('Datos de actualización limpios:', datosActualizacion);
+
+    // Actualizar novedad
+    await novedad.update(datosActualizacion);
+
+    // ✅ SI SE ACTUALIZA UNA REPROGRAMACIÓN, ACTUALIZAR EL MANTENIMIENTO
+    if (novedad.tipo_novedad === 'reprogramacion' && fecha_nueva) {
+      const mantenimiento = await MantenimientoProgramado.findByPk(novedad.mantenimiento_programado_id);
+      if (mantenimiento) {
+        await mantenimiento.update({
+          fecha_programada: fecha_nueva,
+          hora_programada: hora_nueva || mantenimiento.hora_programada,
+          ultimo_motivo_reprogramacion: motivo || mantenimiento.ultimo_motivo_reprogramacion
         });
       }
-
-      // Preparar datos para actualizar
-      const datosActualizacion = {};
-      if (descripcion !== undefined) datosActualizacion.descripcion = descripcion;
-      if (motivo !== undefined) datosActualizacion.motivo = motivo;
-      if (fecha_nueva !== undefined) datosActualizacion.fecha_nueva = fecha_nueva;
-      if (hora_nueva !== undefined) datosActualizacion.hora_nueva = hora_nueva;
-      if (adjuntos !== undefined) datosActualizacion.adjuntos = adjuntos;
-      if (metadata !== undefined) datosActualizacion.metadata = metadata;
-      if (es_visible_proveedor !== undefined) datosActualizacion.es_visible_proveedor = es_visible_proveedor;
-
-      await novedad.update(datosActualizacion);
-
-      const novedadActualizada = await MantenimientoNovedad.findByPk(id, {
-        include: [
-          { 
-            model: Usuario, 
-            as: 'usuario_registro', 
-            attributes: ['id', 'nombre', 'apellido', 'email'],
-            include: [{
-              model: Rol,
-              as: 'rol',
-              attributes: ['nombre']
-            }]
-          },
-          { 
-            model: Estado, 
-            as: 'estado_anterior', 
-            attributes: ['id', 'nombre', 'color', 'tipo'] 
-          },
-          { 
-            model: Estado, 
-            as: 'estado_nuevo', 
-            attributes: ['id', 'nombre', 'color', 'tipo'] 
-          }
-        ]
-      });
-
-      res.status(200).json(novedadActualizada);
-    } catch (error) {
-      next(error);
     }
-  },
+
+    // ✅ SI SE ACTUALIZA UN CAMBIO DE ESTADO, ACTUALIZAR EL MANTENIMIENTO
+    if (novedad.tipo_novedad === 'cambio_estado' && estado_nuevo_id) {
+      const mantenimiento = await MantenimientoProgramado.findByPk(novedad.mantenimiento_programado_id);
+      if (mantenimiento) {
+        await mantenimiento.update({ estado_id: estado_nuevo_id });
+      }
+    }
+
+    // ✅ SI SE ACTUALIZA UN CAMBIO DE PRIORIDAD, ACTUALIZAR EL MANTENIMIENTO
+    if (novedad.tipo_novedad === 'cambio_prioridad' && prioridad_nueva) {
+      const mantenimiento = await MantenimientoProgramado.findByPk(novedad.mantenimiento_programado_id);
+      if (mantenimiento) {
+        await mantenimiento.update({ prioridad: prioridad_nueva });
+      }
+    }
+
+    // Obtener novedad actualizada con relaciones
+    const novedadActualizada = await MantenimientoNovedad.findByPk(id, {
+      include: [
+        { 
+          model: Usuario, 
+          as: 'usuario_registro', 
+          attributes: ['id', 'nombre', 'apellido', 'email'],
+          include: [{
+            model: Rol,
+            as: 'rol',
+            attributes: ['nombre']
+          }]
+        },
+        { 
+          model: Estado, 
+          as: 'estado_anterior', 
+          attributes: ['id', 'nombre', 'color', 'tipo'] 
+        },
+        { 
+          model: Estado, 
+          as: 'estado_nuevo', 
+          attributes: ['id', 'nombre', 'color', 'tipo'] 
+        }
+      ]
+    });
+
+    res.status(200).json(novedadActualizada);
+  } catch (error) {
+    console.error('Error al actualizar novedad:', error);
+    next(error);
+  }
+},
 
   // Eliminar novedad
   async delete(req, res, next) {
