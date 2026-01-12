@@ -23,7 +23,10 @@ export const useEquiposStore = defineStore('equipos', {
       page: 1,
       limit: 20,
       total: 0
-    }
+    },
+    historialMantenimientos: [],
+    estadisticasHistorial: null,
+    loadingHistorial: false
   }),
 
   getters: {
@@ -257,6 +260,27 @@ export const useEquiposStore = defineStore('equipos', {
         limit: this.pagination.limit,
         ...this.filters
       })
+    },
+
+     async fetchHistorialMantenimientos(equipoId) {
+    this.loadingHistorial = true
+    this.error = null
+    try {
+      const response = await api.get(`/equipos/${equipoId}/historial-mantenimientos`)
+      
+      if (response.data?.success) {
+        this.historialMantenimientos = response.data.data.mantenimientos || []
+        this.estadisticasHistorial = response.data.data.estadisticas || null
+      }
+      
+      return response.data
+    } catch (error) {
+      this.error = error.response?.data?.error || 'Error al cargar historial'
+      toast.error(this.error)
+      throw error
+    } finally {
+      this.loadingHistorial = false
     }
+  }
   }
 })

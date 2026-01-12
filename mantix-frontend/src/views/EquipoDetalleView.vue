@@ -147,18 +147,83 @@
           </div>
 
           <!-- Historial de Mantenimientos -->
+         <!-- ✅ HISTORIAL DE MANTENIMIENTOS - ACTUALIZADO -->
           <div class="card">
-            <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <svg class="h-6 w-6 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                <svg class="h-6 w-6 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Historial de Mantenimientos
+              </h2>
+              
+              <!-- Filtros -->
+              <div v-if="historialMantenimientos.length > 0" class="flex items-center space-x-2">
+                <select v-model="filtroEstado" class="text-sm border border-gray-300 rounded-lg px-3 py-1">
+                  <option value="">Todos los estados</option>
+                  <option value="Programado">Programado</option>
+                  <option value="En Proceso">En Proceso</option>
+                  <option value="Ejecutado">Ejecutado</option>
+                  <option value="Reprogramado">Reprogramado</option>
+                  <option value="Cancelado">Cancelado</option>
+                  <option value="Atrasado">Atrasado</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Estadísticas del historial -->
+            <div v-if="estadisticasHistorial" class="grid grid-cols-4 gap-4 mb-6">
+              <div class="bg-blue-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-blue-600">{{ estadisticasHistorial.total_mantenimientos }}</p>
+                <p class="text-xs text-blue-700 font-medium">Total</p>
+              </div>
+              <div class="bg-green-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-green-600">{{ estadisticasHistorial.completados }}</p>
+                <p class="text-xs text-green-700 font-medium">Completados</p>
+              </div>
+              <div class="bg-yellow-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-yellow-600">{{ estadisticasHistorial.pendientes }}</p>
+                <p class="text-xs text-yellow-700 font-medium">Pendientes</p>
+              </div>
+              <div class="bg-orange-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-orange-600">{{ estadisticasHistorial.reprogramados }}</p>
+                <p class="text-xs text-orange-700 font-medium">Reprogramados</p>
+              </div>
+            </div>
+
+            <!-- Loading -->
+            <div v-if="loadingHistorial" class="text-center py-8">
+              <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+              <p class="text-gray-500 mt-2 text-sm">Cargando historial...</p>
+            </div>
+
+            <!-- Lista de mantenimientos -->
+            <div v-else-if="mantenimientosFiltrados.length > 0" class="space-y-3">
+              <MantenimientoHistorialCard
+                v-for="mantenimiento in mantenimientosFiltrados"
+                :key="mantenimiento.id"
+                :mantenimiento="mantenimiento"
+                @ver-detalle="verDetalleMantenimiento"
+              />
+
+              <!-- Paginación info -->
+              <div v-if="paginacionHistorial" class="text-center pt-4 border-t">
+                <p class="text-sm text-gray-600">
+                  Mostrando {{ mantenimientosFiltrados.length }} de {{ paginacionHistorial.total }} mantenimientos
+                </p>
+              </div>
+            </div>
+
+            <!-- Empty state -->
+            <div v-else class="text-center py-8 text-gray-500">
+              <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
-              Historial de Mantenimientos
-            </h2>
-            
-            <div class="text-center py-8 text-gray-500">
-              <p class="text-sm">Próximamente: Historial completo de mantenimientos</p>
+              <p class="text-sm font-medium">No hay mantenimientos registrados</p>
+              <p class="text-xs mt-1">Este equipo aún no tiene historial de mantenimientos</p>
             </div>
           </div>
+        
         </div>
 
         <!-- Sidebar -->
@@ -212,21 +277,27 @@
             </div>
           </div>
 
-          <!-- Estadísticas -->
+     <!-- ✅ ACTUALIZAR Estadísticas -->
           <div class="card bg-gradient-to-br from-primary-50 to-primary-100">
             <h3 class="text-lg font-bold text-gray-900 mb-4">Estadísticas</h3>
             <div class="space-y-3">
               <div class="flex items-center justify-between">
                 <span class="text-sm text-gray-600">Mantenimientos</span>
-                <span class="text-lg font-bold text-primary-600">0</span>
+                <span class="text-lg font-bold text-primary-600">
+                  {{ estadisticasHistorial?.total_mantenimientos || 0 }}
+                </span>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-sm text-gray-600">Último mantenimiento</span>
-                <span class="text-sm font-medium text-gray-900">N/A</span>
+                <span class="text-sm font-medium text-gray-900">
+                  {{ ultimoMantenimiento ? formatDate(ultimoMantenimiento.fecha_programada) : 'N/A' }}
+                </span>
               </div>
               <div class="flex items-center justify-between">
                 <span class="text-sm text-gray-600">Próximo mantenimiento</span>
-                <span class="text-sm font-medium text-gray-900">N/A</span>
+                <span class="text-sm font-medium text-gray-900">
+                  {{ proximoMantenimiento ? formatDate(proximoMantenimiento.fecha_programada) : 'N/A' }}
+                </span>
               </div>
             </div>
           </div>
@@ -245,7 +316,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useEquiposStore } from '@/stores/equipos'
 import { storeToRefs } from 'pinia'
@@ -253,6 +324,8 @@ import MainLayout from '@/components/common/MainLayout.vue'
 import Badge from '@/components/common/Badge.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import EditarEquipoModal from '@/components/equipos/EditarEquipoModal.vue'
+import MantenimientoHistorialCard from '@/components/equipos/MantenimientoHistorialCard.vue' // ✅ NUEVO
+import api from '@/services/api' // ✅ NUEVO
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 
@@ -265,6 +338,23 @@ const equiposStore = useEquiposStore()
 const { equipoActual: equipo, loading } = storeToRefs(equiposStore)
 
 const showEditarModal = ref(false)
+
+// ✅ NUEVAS REFERENCIAS PARA HISTORIAL
+const historialMantenimientos = ref([])
+const estadisticasHistorial = ref(null)
+const paginacionHistorial = ref(null)
+const loadingHistorial = ref(false)
+const filtroEstado = ref('')
+
+// ✅ COMPUTED PARA FILTRAR MANTENIMIENTOS
+const mantenimientosFiltrados = computed(() => {
+  if (!filtroEstado.value) {
+    return historialMantenimientos.value
+  }
+  return historialMantenimientos.value.filter(m => 
+    m.estado.nombre === filtroEstado.value
+  )
+})
 
 const formatDate = (date) => {
   if (!date) return 'N/A'
@@ -313,13 +403,61 @@ const handleSuccess = async () => {
   showEditarModal.value = false
   await loadEquipo()
 }
+// ✅ COMPUTED PARA ÚLTIMO Y PRÓXIMO MANTENIMIENTO
+const ultimoMantenimiento = computed(() => {
+  const ejecutados = historialMantenimientos.value.filter(m => 
+    m.estado.nombre === 'Ejecutado'
+  )
+  if (ejecutados.length === 0) return null
+  return ejecutados.sort((a, b) => 
+    new Date(b.fecha_programada) - new Date(a.fecha_programada)
+  )[0]
+})
+
+const proximoMantenimiento = computed(() => {
+  const pendientes = historialMantenimientos.value.filter(m => 
+    m.estado.nombre === 'Programado' || m.estado.nombre === 'Reprogramado'
+  )
+  if (pendientes.length === 0) return null
+  console.log('Mantenimientos pendientes:', pendientes)
+  return pendientes.sort((a, b) => 
+    new Date() - new Date(b.fecha_programada)
+  )[0]
+})
+
+// ✅ NUEVA FUNCIÓN PARA CARGAR HISTORIAL
+const loadHistorialMantenimientos = async () => {
+  loadingHistorial.value = true
+  try {
+    const response = await api.get(`/equipos/${route.params.id}/historial-mantenimientos`)
+    console.log('Respuesta historial mantenimientos:', response)
+    if (response.success) {
+      historialMantenimientos.value = response.data.mantenimientos || []
+      estadisticasHistorial.value = response.data.estadisticas || null
+      paginacionHistorial.value = response.data.paginacion || null
+    } else {
+      historialMantenimientos.value = []
+    }
+  } catch (error) {
+    console.error('Error al cargar historial:', error)
+    historialMantenimientos.value = []
+  } finally {
+    loadingHistorial.value = false
+  }
+}
+
+// ✅ FUNCIÓN PARA VER DETALLE DE MANTENIMIENTO
+const verDetalleMantenimiento = (mantenimiento) => {
+  router.push(`/mantenimientos/${mantenimiento.id}`)
+}
 
 const loadEquipo = async () => {
   const id = route.params.id
   console.log('Cargando equipo con ID:', id)
-  const result = await equiposStore.fetchEquipo(id)
-  console.log('Resultado de fetchEquipo:', result)
-  console.log('equipoActual en store:', equipo.value)
+  await equiposStore.fetchEquipo(id)
+  
+  // ✅ CARGAR HISTORIAL DESPUÉS DE CARGAR EL EQUIPO
+  await loadHistorialMantenimientos()
 }
 
 onMounted(() => {
