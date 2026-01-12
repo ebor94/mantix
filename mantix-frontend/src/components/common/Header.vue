@@ -1,10 +1,11 @@
 <!-- src/components/common/Header.vue -->
 <template>
-  <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
-    <div class="flex items-center justify-between px-6 py-4">
+ <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+    <div class="flex items-center justify-between px-4 md:px-6 py-4">
       
       <!-- Título de la página -->
       <div class="flex items-center space-x-4">
+        <!-- ✅ Botón hamburguesa SIEMPRE visible en móvil -->
         <button
           @click="emit('toggle-sidebar')"
           class="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -15,8 +16,8 @@
         </button>
         
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">{{ pageTitle }}</h1>
-          <p v-if="pageSubtitle" class="text-sm text-gray-500">{{ pageSubtitle }}</p>
+          <h1 class="text-xl md:text-2xl font-bold text-gray-900">{{ pageTitle }}</h1>
+          <p v-if="pageSubtitle" class="text-xs md:text-sm text-gray-500 hidden sm:block">{{ pageSubtitle }}</p>
         </div>
       </div>
 
