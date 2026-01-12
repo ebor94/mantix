@@ -3,6 +3,7 @@
 <!-- Administración completa de proveedores -->
 <!-- ============================================ -->
 <template>
+    <MainLayout>
   <div class="container mx-auto px-4 py-8">
     <!-- Header -->
     <div class="mb-8">
@@ -182,6 +183,7 @@
       @cancel="cerrarConfirmacion"
     />
   </div>
+  </MainLayout>
 </template>
 
 <script setup>
@@ -190,6 +192,7 @@ import { useProveedoresStore } from '@/stores/proveedores'
 import ProveedorModal from '@/components/proveedores/ProveedorModal.vue'
 import ProveedorDetalleModal from '@/components/proveedores/ProveedorDetalleModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import MainLayout from '../components/common/MainLayout.vue'
 
 const proveedoresStore = useProveedoresStore()
 
