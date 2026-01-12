@@ -43,36 +43,6 @@ const options = {
       {
         bearerAuth: []
       }
-    ],
-    tags: [
-      {
-        name: 'Auth',
-        description: 'Autenticación y autorización'
-      },
-      {
-        name: 'Usuarios',
-        description: 'Gestión de usuarios'
-      },
-      {
-        name: 'Sedes',
-        description: 'Gestión de sedes'
-      },
-      {
-        name: 'Equipos',
-        description: 'Gestión de equipos'
-      },
-      {
-        name: 'Mantenimientos',
-        description: 'Gestión de mantenimientos'
-      },
-      {
-        name: 'Solicitudes',
-        description: 'Gestión de solicitudes'
-      },
-      {
-        name: 'Dashboard',
-        description: 'Estadísticas y reportes'
-      }
     ]
   },
   // Rutas donde Swagger buscará los comentarios de documentación
