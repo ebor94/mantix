@@ -309,6 +309,108 @@
               No hay evidencias de tipo "{{ tipoEvidenciaActivo }}"
             </p>
           </div>
+          <!-- Agregar en MantenimientoDetalleView.vue después de la sección de Evidencias -->
+
+            <!-- Novedades y Seguimiento -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                  <svg class="h-6 w-6 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  Novedades y Seguimiento
+                  <span v-if="novedades.length > 0" class="ml-2 px-2 py-1 text-xs font-semibold text-primary-600 bg-primary-100 rounded-full">
+                    {{ novedades.length }}
+                  </span>
+                </h2>
+                <button
+                  @click="showNovedadModal = true"
+                  class="btn-primary text-sm"
+                >
+                  <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Nueva Novedad
+                </button>
+              </div>
+
+              <!-- Filtros de novedades -->
+              <div v-if="novedades.length > 0" class="mb-4 flex items-center space-x-3">
+                <select
+                  v-model="filtroTipoNovedad"
+                  class="input-field text-sm"
+                >
+                  <option :value="null">Todos los tipos</option>
+                  <option value="reprogramacion">Reprogramaciones</option>
+                  <option value="comunicacion_proveedor">Comunicaciones</option>
+                  <option value="cambio_estado">Cambios de Estado</option>
+                  <option value="suspension">Suspensiones</option>
+                  <option value="observacion_general">Observaciones</option>
+                </select>
+
+                <label class="flex items-center text-sm text-gray-700">
+                  <input
+                    v-model="soloVisiblesProveedor"
+                    type="checkbox"
+                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded mr-2"
+                  />
+                  Solo visibles para proveedor
+                </label>
+              </div>
+
+              <!-- Estadísticas rápidas -->
+              <div v-if="estadisticasNovedades" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-4 bg-gray-50 rounded-lg">
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-primary-600">{{ estadisticasNovedades.total_novedades }}</p>
+                  <p class="text-xs text-gray-600">Total</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-yellow-600">
+                    {{ contarPorTipo('reprogramacion') }}
+                  </p>
+                  <p class="text-xs text-gray-600">Reprogramaciones</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-blue-600">
+                    {{ contarPorTipo('comunicacion_proveedor') }}
+                  </p>
+                  <p class="text-xs text-gray-600">Comunicaciones</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-purple-600">
+                    {{ contarPorTipo('cambio_estado') }}
+                  </p>
+                  <p class="text-xs text-gray-600">Cambios Estado</p>
+                </div>
+              </div>
+
+              <!-- Timeline de novedades -->
+              <div v-if="novedadesFiltradas.length > 0" class="space-y-4">
+                <NovedadCard
+                  v-for="novedad in novedadesFiltradas"
+                  :key="novedad.id"
+                  :novedad="novedad"
+                  @editar="editarNovedad"
+                  @eliminar="confirmarEliminarNovedad"
+                />
+              </div>
+
+              <div v-else class="text-center py-8">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p class="mt-2 text-sm text-gray-500">
+                  {{ filtroTipoNovedad ? 'No hay novedades de este tipo' : 'No se han registrado novedades aún' }}
+                </p>
+                <button
+                  @click="showNovedadModal = true"
+                  class="mt-4 btn-primary text-sm"
+                >
+                  Registrar primera novedad
+                </button>
+              </div>
+            </div>
+
         </div>
 
         <!-- Sidebar -->
@@ -498,35 +600,58 @@
         </p>
       </div>
     </div>
+
+    <!-- Agregar al final del template, después del Modal Ver Evidencia -->
+
+<!-- Modal Novedad -->
+<NovedadModal
+  v-if="showNovedadModal"
+  :mantenimiento-id="parseInt(route.params.id)"
+  :novedad="novedadEditando"
+  :mantenimiento="mantenimiento"
+  @close="showNovedadModal = false"
+  @success="handleNovedadSuccess"
+/>
   </MainLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMantenimientosStore } from '@/stores/mantenimientos'
+import { useMantenimientoNovedadesStore } from '@/stores/mantenimientoNovedades' // ✅ NUEVO
 import { storeToRefs } from 'pinia'
+import { useToast } from 'vue-toastification' // ✅ NUEVO
 import MainLayout from '@/components/common/MainLayout.vue'
 import Badge from '@/components/common/Badge.vue'
-import EmptyState from '@/components/common/EmptyState.vue' // ✅ Correcto
+import EmptyState from '@/components/common/EmptyState.vue'
 import EjecutarMantenimientoModal from '@/components/mantenimientos/EjecutarMantenimientoModal.vue'
+import NovedadCard from '@/components/mantenimientos/NovedadCard.vue' // ✅ NUEVO
+import NovedadModal from '@/components/mantenimientos/NovedadModal.vue' // ✅ NUEVO
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
-
-
 
 dayjs.locale('es')
 
 const route = useRoute()
 const mantenimientosStore = useMantenimientosStore()
+const novedadesStore = useMantenimientoNovedadesStore() // ✅ NUEVO
+const toast = useToast() // ✅ NUEVO
 
 const { mantenimientoActual: mantenimiento, loading } = storeToRefs(mantenimientosStore)
+const { novedades, estadisticas: estadisticasNovedades } = storeToRefs(novedadesStore) // ✅ NUEVO
 
 const showEjecutarModal = ref(false)
 const tipoEvidenciaActivo = ref('antes')
 const evidenciaActual = ref(null)
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3020'
 const apiurlPdf = 'http://localhost:3020'
+
+// ✅ NUEVAS REFERENCIAS PARA NOVEDADES
+const showNovedadModal = ref(false)
+const novedadEditando = ref(null)
+const filtroTipoNovedad = ref(null)
+const soloVisiblesProveedor = ref(false)
 
 // Computed
 const totalMateriales = computed(() => {
@@ -545,6 +670,27 @@ const checklistCompletado = computed(() => {
   const total = mantenimiento.value.ejecucion.checklist.length
   return Math.round((completadas / total) * 100)
 })
+
+// ✅ NUEVOS COMPUTED PARA NOVEDADES
+const novedadesFiltradas = computed(() => {
+  let filtered = novedades.value
+
+  // Filtrar por tipo
+  if (filtroTipoNovedad.value) {
+    filtered = filtered.filter(n => n.tipo_novedad === filtroTipoNovedad.value)
+  }
+
+  // Filtrar por visibilidad
+  if (soloVisiblesProveedor.value) {
+    filtered = filtered.filter(n => n.es_visible_proveedor)
+  }
+
+  return filtered
+})
+
+const contarPorTipo = (tipo) => {
+  return novedades.value.filter(n => n.tipo_novedad === tipo).length
+}
 
 // Methods
 const formatDate = (date) => {
@@ -599,10 +745,37 @@ const verEvidencia = (evidencia) => {
 
 const handleEjecucionSuccess = async () => {
   showEjecutarModal.value = false
-  // Recargar mantenimiento
   await loadMantenimiento()
 }
 
+// ✅ NUEVOS MÉTODOS PARA NOVEDADES
+const editarNovedad = (novedad) => {
+  novedadEditando.value = novedad
+  showNovedadModal.value = true
+}
+
+const confirmarEliminarNovedad = async (novedad) => {
+  if (confirm(`¿Está seguro de eliminar esta novedad?\n\n${novedad.descripcion}`)) {
+    try {
+      await novedadesStore.eliminarNovedad(novedad.id)
+      toast.success('Novedad eliminada exitosamente')
+    } catch (error) {
+      console.error('Error al eliminar novedad:', error)
+      toast.error('Error al eliminar la novedad')
+    }
+  }
+}
+
+const handleNovedadSuccess = async () => {
+  showNovedadModal.value = false
+  novedadEditando.value = null
+  
+  // Recargar novedades y mantenimiento
+  await Promise.all([
+    loadNovedades(),
+    loadMantenimiento()
+  ])
+}
 
 const loadMantenimiento = async () => {
   const id = route.params.id
@@ -611,15 +784,40 @@ const loadMantenimiento = async () => {
   console.log('Mantenimiento cargado:', mantenimiento.value)
 }
 
-onMounted(() => {
+// ✅ NUEVO MÉTODO PARA CARGAR NOVEDADES
+const loadNovedades = async () => {
+  const id = route.params.id
+  try {
+    await Promise.all([
+      novedadesStore.fetchNovedades(id),
+     // novedadesStore.fetchEstadisticas(id)
+    ])
+  } catch (error) {
+    console.error('Error al cargar novedades:', error)
+  }
+}
+
+// ✅ WATCH PARA CERRAR MODAL Y LIMPIAR ESTADO
+watch(showNovedadModal, (newVal) => {
+  if (!newVal) {
+    novedadEditando.value = null
+  }
+})
+
+onMounted(async () => {
   console.log('MantenimientoDetalleView montado')
   console.log('Parámetro ID:', route.params.id)
-  loadMantenimiento()
+  
+  // ✅ CARGAR MANTENIMIENTO Y NOVEDADES
+  await Promise.all([
+    loadMantenimiento(),
+    loadNovedades()
+  ])
 })
 
 const generarPDF = async () => {
   try {
-    loading.value = true;
+    loading.value = true
     
     const response = await fetch(
       `${apiUrl}/mantenimientos/${route.params.id}/pdf`,
@@ -628,45 +826,42 @@ const generarPDF = async () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       }
-    );
+    )
     
-    const data = await response.json();
+    const data = await response.json()
     
     if (data.success) {
-      // Abrir PDF en nueva pestaña
-      window.open(`${apiurlPdf}${data.data.url}`, '_blank');
-      
-      toast.success('PDF generado exitosamente');
+      window.open(`${apiurlPdf}${data.data.url}`, '_blank')
+      toast.success('PDF generado exitosamente')
     } else {
-      toast.error(data.message || 'Error al generar PDF');
+      toast.error(data.message || 'Error al generar PDF')
     }
   } catch (error) {
-    console.error('Error al generar PDF:', error);
-    toast.error('Error al generar el PDF');
+    console.error('Error al generar PDF:', error)
+    toast.error('Error al generar el PDF')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const descargarPDF = async () => {
   try {
-    loading.value = true;
+    loading.value = true
     
-    // Crear link temporal para descargar
-    const link = document.createElement('a');
-    link.href = `${apiUrl}/mantenimientos/${route.params.id}/pdf/descargar`;
-    link.download = `mantenimiento_${mantenimiento.value.codigo}.pdf`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const link = document.createElement('a')
+    link.href = `${apiUrl}/mantenimientos/${route.params.id}/pdf/descargar`
+    link.download = `mantenimiento_${mantenimiento.value.codigo}.pdf`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
     
-    toast.success('Descargando PDF...');
+    toast.success('Descargando PDF...')
   } catch (error) {
-    console.error('Error al descargar PDF:', error);
-    toast.error('Error al descargar el PDF');
+    console.error('Error al descargar PDF:', error)
+    toast.error('Error al descargar el PDF')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 </script>
