@@ -48,7 +48,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // Relación muchos a muchos con usuarios (a través de usuario_categorias)
     CategoriaMantenimiento.belongsToMany(models.Usuario, {
-      through: 'UsuarioCategoria', // ← IMPORTANTE: usar string
+      through: models.UsuarioCategoria, // ✅ Usando el modelo
       foreignKey: 'categoria_id',
       otherKey: 'usuario_id',
       as: 'usuarios_con_acceso'
@@ -58,6 +58,20 @@ module.exports = (sequelize, DataTypes) => {
     CategoriaMantenimiento.hasMany(models.UsuarioCategoria, {
       foreignKey: 'categoria_id',
       as: 'usuario_categorias'
+    });
+
+    // ✅ Relación muchos a muchos con requisitos
+    CategoriaMantenimiento.belongsToMany(models.Requisito, {
+      through: models.RequisitoCategoria, // ✅ Usando el modelo, NO string
+      foreignKey: 'categoria_id',
+      otherKey: 'requisito_id',
+      as: 'requisitos'
+    });
+
+    // ✅ Relación con la tabla intermedia de requisitos
+    CategoriaMantenimiento.hasMany(models.RequisitoCategoria, {
+      foreignKey: 'categoria_id',
+      as: 'categoria_requisitos'
     });
   };
 
@@ -180,6 +194,14 @@ module.exports = (sequelize, DataTypes) => {
       where: { categoria_id: categoriaId }
     });
 
+    // ✅ NUEVO: Contar requisitos asociados
+    const totalRequisitos = await models.RequisitoCategoria.count({
+      where: { 
+        categoria_id: categoriaId,
+        active: true 
+      }
+    });
+
     return {
       categoria: {
         id: categoria.id,
@@ -192,7 +214,8 @@ module.exports = (sequelize, DataTypes) => {
         equipos_por_estado: equiposPorEstado,
         total_actividades: totalActividades,
         mantenimientos_pendientes: mantenimientosPendientes,
-        usuarios_con_acceso: usuariosConAcceso
+        usuarios_con_acceso: usuariosConAcceso,
+        total_requisitos: totalRequisitos // ✅ NUEVO
       }
     };
   };
