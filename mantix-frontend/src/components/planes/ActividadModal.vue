@@ -1,5 +1,5 @@
 <!-- ============================================ -->
-<!-- src/components/planes/ActividadModal.vue -->
+<!-- src/components/planes/ActividadModal.vue - ACTUALIZADO -->
 <!-- ============================================ -->
 <template>
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -54,7 +54,7 @@
                 id="act_descripcion"
                 rows="3"
                 placeholder="Describe la actividad de mantenimiento..."
-                 class="w-full"
+                class="w-full"
               ></textarea>
               <p class="text-xs text-gray-500 mt-1">Opcional. Breve resumen de la tarea a realizar.</p>
             </div>
@@ -64,7 +64,13 @@
                 <label for="act_categoria" class="block text-sm font-medium text-gray-700 mb-1">
                   Categoría <span class="text-red-500">*</span>
                 </label>
-                <select v-model="form.categoria_id" id="act_categoria" required class="input">
+                <select 
+                  v-model="form.categoria_id" 
+                  id="act_categoria" 
+                  required 
+                  class="input"
+                  @change="cargarRequisitosPorCategoria"
+                >
                   <option value="">Seleccione categoría</option>
                   <option v-for="cat in categorias" :key="cat.id" :value="cat.id">
                     {{ cat.nombre }}
@@ -83,6 +89,109 @@
                   </option>
                 </select>
               </div>
+            </div>
+          </div>
+
+          <!-- ✅ NUEVA SECCIÓN: REQUISITOS -->
+          <div v-if="requisitosCategoria.length > 0" class="space-y-4 pt-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900">
+                Requisitos de la Categoría
+              </h3>
+              <span class="px-3 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
+                {{ requisitosCategoria.length }} requisito{{ requisitosCategoria.length !== 1 ? 's' : '' }}
+              </span>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div class="flex items-start">
+                <svg class="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="flex-1">
+                  <h4 class="text-sm font-medium text-blue-900 mb-1">
+                    Documentación Requerida
+                  </h4>
+                  <p class="text-xs text-blue-700">
+                    Los siguientes requisitos deben cumplirse antes de ejecutar esta actividad de mantenimiento.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <div
+                v-for="requisito in requisitosCategoria"
+                :key="requisito.id"
+                class="border border-gray-200 rounded-lg p-4 hover:border-primary-300 hover:bg-primary-50 transition-all"
+              >
+                <div class="flex items-start space-x-3">
+                  <div class="flex-shrink-0 mt-1">
+                    <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <svg class="h-4 w-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  <div class="flex-1 min-w-0">
+                    <h5 class="text-sm font-semibold text-gray-900">
+                      {{ requisito.nombre }}
+                    </h5>
+                    
+                    <p v-if="requisito.descripcion" class="text-xs text-gray-600 mt-1">
+                      {{ requisito.descripcion }}
+                    </p>
+                    
+                    <div v-if="requisito.dependencia" class="mt-2 flex items-center text-xs text-gray-500">
+                      <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      <span class="font-medium">{{ requisito.dependencia.nombre }}</span>
+                      <span v-if="requisito.dependencia.descripcion" class="ml-1">
+                        - {{ requisito.dependencia.descripcion }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div class="flex items-start">
+                <svg class="h-5 w-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p class="text-xs text-yellow-800">
+                  <strong>Importante:</strong> Estos requisitos serán validados antes de la ejecución del mantenimiento.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ✅ MENSAJE SI NO HAY REQUISITOS -->
+          <div v-else-if="form.categoria_id && cargandoRequisitos === false" class="space-y-4 pt-6">
+            <h3 class="text-lg font-semibold text-gray-900">
+              Requisitos de la Categoría
+            </h3>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+              <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p class="text-sm text-gray-600">
+                Esta categoría no tiene requisitos configurados
+              </p>
+            </div>
+          </div>
+
+          <!-- ✅ LOADER DE REQUISITOS -->
+          <div v-if="cargandoRequisitos" class="space-y-4 pt-6">
+            <h3 class="text-lg font-semibold text-gray-900">
+              Requisitos de la Categoría
+            </h3>
+            <div class="flex items-center justify-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+              <span class="ml-3 text-sm text-gray-600">Cargando requisitos...</span>
             </div>
           </div>
 
@@ -232,7 +341,7 @@
               id="act_observaciones"
               rows="3"
               placeholder="Notas adicionales sobre la actividad..."
-             class="w-full"
+              class="w-full"
             ></textarea>
             <p class="text-xs text-gray-500 mt-1">Opcional. Cualquier nota adicional, advertencia o consideración especial.</p>
           </div>
@@ -292,7 +401,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePlanActividadesStore } from '@/stores/planActividades'
 import api from '@/services/api'
 import { useToast } from 'vue-toastification'
@@ -325,6 +434,10 @@ const equiposFiltrados = ref([])
 const periodicidades = ref([])
 const usuarios = ref([])
 const proveedores = ref([])
+
+// ✅ NUEVO: Requisitos
+const requisitosCategoria = ref([])
+const cargandoRequisitos = ref(false)
 
 // Formulario
 const form = ref({
@@ -363,7 +476,7 @@ const formularioValido = computed(() => {
 // Métodos
 const cargarCatalogos = async () => {
   try {
-    const [catRes, tiposRes, sedesRes, equiposRes, perRes, usuariosRes,provRes] = await Promise.all([
+    const [catRes, tiposRes, sedesRes, equiposRes, perRes, usuariosRes, provRes] = await Promise.all([
       api.get('/categorias-mantenimiento?activo=true'),
       api.get('/tipos-mantenimiento'),
       api.get('/sedes'),
@@ -373,17 +486,41 @@ const cargarCatalogos = async () => {
       api.get('/proveedores')
     ])
 
-    categorias.value = catRes.data || catRes.data
-    tiposMantenimiento.value = tiposRes.data || tiposRes.data
+    categorias.value = catRes.data || catRes
+    tiposMantenimiento.value = tiposRes.data || tiposRes
     sedes.value = sedesRes || sedesRes.data
     equipos.value = equiposRes || equiposRes.data
-    periodicidades.value = perRes.data || perRes.data
+    periodicidades.value = perRes.data || perRes
     usuarios.value = usuariosRes || usuariosRes.data
     proveedores.value = provRes || provRes
 
   } catch (error) {
     console.error('Error al cargar catálogos:', error)
     toast.error('Error al cargar los catálogos')
+  }
+}
+
+// ✅ NUEVO: Cargar requisitos por categoría
+const cargarRequisitosPorCategoria = async () => {
+  if (!form.value.categoria_id) {
+    requisitosCategoria.value = []
+    return
+  }
+
+  cargandoRequisitos.value = true
+  try {
+    const response = await api.get(`/requisitos/categoria/${form.value.categoria_id}?activo=true`)
+    requisitosCategoria.value = response.data || response
+    
+    if (requisitosCategoria.value.length > 0) {
+      toast.info(`Se encontraron ${requisitosCategoria.value.length} requisito(s) para esta categoría`)
+    }
+  } catch (error) {
+    console.error('Error al cargar requisitos:', error)
+    toast.error('Error al cargar los requisitos de la categoría')
+    requisitosCategoria.value = []
+  } finally {
+    cargandoRequisitos.value = false
   }
 }
 
@@ -394,20 +531,17 @@ const cargarEquiposPorSede = () => {
     equiposFiltrados.value = []
   }
   
-  // Limpiar equipo si ya no está en la lista filtrada
   if (form.value.equipo_id && !equiposFiltrados.value.find(e => e.id === form.value.equipo_id)) {
     form.value.equipo_id = ''
   }
 }
 
 const guardar = async () => {
-
   console.log('Guardando actividad con datos:', form.value)
   if (!formularioValido.value) return
 
   loading.value = true
   try {
-    // Limpiar campos de responsable según el tipo
     const datos = { ...form.value }
     if (datos.responsable_tipo === 'interno') {
       datos.responsable_proveedor_id = null
@@ -451,9 +585,13 @@ onMounted(async () => {
       activo: props.actividad.activo
     }
     
-    // Cargar equipos de la sede
     if (form.value.sede_id) {
       cargarEquiposPorSede()
+    }
+
+    // ✅ Cargar requisitos si hay categoría
+    if (form.value.categoria_id) {
+      await cargarRequisitosPorCategoria()
     }
   }
 })
