@@ -60,7 +60,7 @@ app.use(helmet({
 // ============================================
 const limiter = rateLimit({
   windowMs: (process.env.RATE_LIMIT_WINDOW || 15) * 60 * 1000,
-  max: process.env.RATE_LIMIT_MAX_REQUESTS || 100,
+  max: process.env.RATE_LIMIT_MAX_REQUESTS || 1000,
   message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.'
 });
 app.use('/api/', limiter);
