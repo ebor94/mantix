@@ -1,7 +1,7 @@
 // ============================================
 module.exports = {
   development: {
-    host: process.env.DB_HOST || 'localhost',
+    host: process.env.DB_HOST || '192.9.17.30',
     port: process.env.DB_PORT || 3306,
     database: process.env.DB_NAME || 'serfuweb',
     username: process.env.DB_USER || 'root',
