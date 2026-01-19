@@ -49,6 +49,8 @@ Dependencia: require('./Dependencia')(sequelize, Sequelize.DataTypes),
   RequisitoCategoria: require('./RequisitoCategoria')(sequelize, Sequelize.DataTypes),
   
   Notificacion: require('./Notificacion')(sequelize, Sequelize.DataTypes),
+
+  AuditLog: require('./AuditLog')(sequelize, Sequelize.DataTypes)
 };
 
 // Definir asociaciones
