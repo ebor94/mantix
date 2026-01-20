@@ -229,8 +229,8 @@ cron.schedule('0 8 * * *', async () => {
 });
 
     // Enviar alertas de mantenimientos vencidos - Cada día a las 09:00
-//cron.schedule('0 9 * * *', async () => {
-cron.schedule('*/1 * * * *', async () => {   
+cron.schedule('0 9 * * *', async () => {
+//cron.schedule('*/1 * * * *', async () => {   
   try {
     logger.info('🔄 Ejecutando tarea: Alertar mantenimientos vencidos');
     
