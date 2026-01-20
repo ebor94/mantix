@@ -12,9 +12,9 @@ sequelize.authenticate()
     logger.info('✅ Conexión a la base de datos establecida correctamente');
     
     // Sincronizar modelos (solo en desarrollo)
-    if (process.env.NODE_ENV === 'development') {
+   // if (process.env.NODE_ENV === 'development') {
       return sequelize.sync({ alter: false });
-    }
+    //}
   })
   .then(() => {
     // Iniciar tareas programadas
@@ -24,7 +24,7 @@ sequelize.authenticate()
     // Iniciar servidor
     app.listen(PORT, () => {
       logger.info(`🚀 Servidor Mantix corriendo en puerto ${PORT}`);
-      logger.info(`📚 Documentación API: http://localhost:${PORT}/api-docs`);
+      logger.info(`📚 Documentación API: http://${process.env.DB_HOST}:${PORT}/api-docs`);
       logger.info(`🌍 Ambiente: ${process.env.NODE_ENV}`);
     });
   })

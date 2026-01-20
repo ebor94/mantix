@@ -21,12 +21,12 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3020',
-        description: 'Servidor de desarrollo'
+        url: 'https://mantix-api.losolivoscucuta.com',
+        description: 'Servidor de producción (red interna)'
       },
       {
         url: 'http://localhost:3020/api',
-        description: 'API de desarrollo'
+        description: 'Servidor local'
       }
     ],
     components: {
