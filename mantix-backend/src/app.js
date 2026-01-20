@@ -29,9 +29,11 @@ if (!fs.existsSync(pdfsPath)) {
 // ============================================
 // CORS
 // ============================================
+
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || ['http://localhost:8090', 'http://127.0.0.1:8090'],
-  credentials: true,
+  origin: '*' , 
+  credentials: false,  
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Type', 'Content-Disposition']
@@ -43,18 +45,11 @@ app.options('*', cors());
 // HELMET
 // ============================================
 app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,  // Deshabilitar esta política
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "http://localhost:3020", "http://localhost:8090"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      connectSrc: ["'self'", "http://localhost:3020", "http://localhost:8090"]
-    }
-  }
+  contentSecurityPolicy: false,  // Deshabilitar CSP completamente para Swagger
 }));
-
 // ============================================
 // Rate limiting
 // ============================================

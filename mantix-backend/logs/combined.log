@@ -70,3 +70,177 @@
 {"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-05 08:00:00"}
 {"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-06 08:00:00"}
 {"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-06 08:00:00"}
+{"level":"error","message":"❌ Error al iniciar el servidor: Access denied for user 'root'@'localhost' (using password: YES)","name":"SequelizeAccessDeniedError","original":{"code":"ER_ACCESS_DENIED_ERROR","errno":1045,"sqlMessage":"Access denied for user 'root'@'localhost' (using password: YES)","sqlState":"28000"},"parent":{"code":"ER_ACCESS_DENIED_ERROR","errno":1045,"sqlMessage":"Access denied for user 'root'@'localhost' (using password: YES)","sqlState":"28000"},"service":"mantix-api","stack":"SequelizeAccessDeniedError: Access denied for user 'root'@'localhost' (using password: YES)\n    at ConnectionManager.connect (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/mysql/connection-manager.js:94:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async ConnectionManager._connect (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:222:24)\n    at async /home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:174:32\n    at async ConnectionManager.getConnection (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:197:7)\n    at async /home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/sequelize.js:305:26\n    at async Sequelize.authenticate (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/sequelize.js:457:5)","timestamp":"2026-01-12 21:32:59"}
+{"level":"error","message":"❌ Error al iniciar el servidor: Access denied for user 'root'@'localhost' (using password: YES)","name":"SequelizeAccessDeniedError","original":{"code":"ER_ACCESS_DENIED_ERROR","errno":1045,"sqlMessage":"Access denied for user 'root'@'localhost' (using password: YES)","sqlState":"28000"},"parent":{"code":"ER_ACCESS_DENIED_ERROR","errno":1045,"sqlMessage":"Access denied for user 'root'@'localhost' (using password: YES)","sqlState":"28000"},"service":"mantix-api","stack":"SequelizeAccessDeniedError: Access denied for user 'root'@'localhost' (using password: YES)\n    at ConnectionManager.connect (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/mysql/connection-manager.js:94:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async ConnectionManager._connect (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:222:24)\n    at async /home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:174:32\n    at async ConnectionManager.getConnection (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/connection-manager.js:197:7)\n    at async /home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/sequelize.js:305:26\n    at async Sequelize.authenticate (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/sequelize.js:457:5)","timestamp":"2026-01-12 21:39:05"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 21:48:45"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 21:51:39"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 21:53:32"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 21:57:01"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 21:58:42"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:02:44"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"🌍 Ambiente: production","service":"mantix-api","timestamp":"2026-01-12 22:18:20"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"📚 Documentación API: http://localhost:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:24:32"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:25:55"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:32:35"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:34:45"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-12 22:36:40"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-12 22:37:31"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-12 22:37:55"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-12 22:56:12"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-12 22:59:04"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-13 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-13 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-13 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-13 08:00:00"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-13 13:14:54"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-13 14:01:35"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 14:01:47"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 14:10:13"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 15:59:28"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 15:59:55"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 17:25:29"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-13 17:27:55"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-13 19:08:16"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 19:20:20"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 19:20:34"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 19:20:59"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-13 20:29:44"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 20:30:18"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 20:36:18"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 21:06:49"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 21:08:44"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:03:32"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:05:05"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:17:10"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:38:07"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:40:51"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:43:36"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:44:03"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:49:29"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:53:50"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-13 22:59:48"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-13 23:00:22"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-13 23:01:38"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-13 23:04:58"}
+{"level":"error","message":"Data truncated for column 'tipo_novedad' at row 1","method":"POST","path":"/api/mantenimiento-novedades","service":"mantix-api","stack":"Error\n    at Query.run (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/mysql/query.js:52:25)\n    at /home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async MySQLQueryInterface.insert (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/dialects/abstract/query-interface.js:308:21)\n    at async model.save (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/model.js:2490:35)\n    at async MantenimientoNovedad.create (/home/bortega/apps/mantix/mantix-backend/node_modules/sequelize/lib/model.js:1362:12)\n    at async create (/home/bortega/apps/mantix/mantix-backend/src/controllers/mantenimientoNovedadesController.js:63:21)","timestamp":"2026-01-13 23:06:50"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-14 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-14 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-14 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-14 08:00:00"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-14 15:46:31"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-14 19:21:45"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-14 22:04:05"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-15 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-15 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-15 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-15 08:00:00"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-15 20:13:47"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-16 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-16 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-16 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-16 08:00:00"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-16 13:15:25"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-16 19:02:52"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-16 19:08:07"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-16 21:17:42"}
+{"level":"info","message":"Usuario dpabon inició sesión","service":"mantix-api","timestamp":"2026-01-16 22:41:54"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-17 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-17 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-17 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-17 08:00:00"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-18 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-18 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-18 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-18 08:00:00"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-19 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-19 00:00:00"}
+{"level":"info","message":"Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-19 08:00:00"}
+{"level":"info","message":"Tarea completada: 0 notificaciones enviadas","service":"mantix-api","timestamp":"2026-01-19 08:00:00"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-19 14:05:16"}
+{"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-20 00:00:00"}
+{"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-20 00:00:00"}

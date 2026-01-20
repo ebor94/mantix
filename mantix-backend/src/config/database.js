@@ -1,11 +1,11 @@
-// ============================================
+// =================src/config/database.js===========================
 module.exports = {
   development: {
-    host: process.env.DB_HOST || '192.9.17.30',
-    port: process.env.DB_PORT || 3306,
-    database: process.env.DB_NAME || 'serfuweb',
-    username: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    host: process.env.DB_HOST ,
+    port: process.env.DB_PORT ,
+    database: process.env.DB_NAME ,
+    username: process.env.DB_USER ,
+    password: process.env.DB_PASSWORD ,
     dialect: 'mysql',
     logging: false,
     pool: {

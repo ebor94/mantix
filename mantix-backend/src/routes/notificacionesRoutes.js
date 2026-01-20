@@ -1,5 +1,5 @@
 // ============================================
-// src/routes/notificaciones.routes.js
+// src/routes/notificacionesRoutes.js - Rutas de Notificaciones
 // ============================================
 const express = require('express');
 const router = express.Router();

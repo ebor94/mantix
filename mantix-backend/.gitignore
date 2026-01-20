@@ -13,4 +13,6 @@ npmrc
 *.iml
 .cache/
 *.tsbuildinfo
- 
+/uploads/
+uploads/
+/logs/
