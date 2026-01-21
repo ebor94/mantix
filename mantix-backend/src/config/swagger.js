@@ -25,7 +25,7 @@ const options = {
         description: 'Servidor de producción (red interna)'
       },
       {
-        url: 'http://localhost:3020/api',
+        url: 'http://localhost:3020',
         description: 'Servidor local'
       }
     ],
