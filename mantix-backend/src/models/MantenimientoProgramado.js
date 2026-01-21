@@ -48,6 +48,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     observaciones: {
       type: DataTypes.TEXT
+    },
+    exigencias: {
+      type: DataTypes.ENUM('Manual/Fabricante','Contractual/Garantia','Cumplimiento Legal'),
+      defaultValue: 'Manual/Fabricante'
     }
   }, {
     tableName: 'mantenimientos_programados',

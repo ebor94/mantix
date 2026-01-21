@@ -84,8 +84,6 @@ router.use(auth);
  *   post:
  *     summary: Programar mantenimientos para una actividad específica
  *     tags: [Programar Mantenimientos]
- *     security:
- *       - BearerAuth: []
  *     description: Genera automáticamente mantenimientos programados según la periodicidad de la actividad
  *     parameters:
  *       - in: path
@@ -105,6 +103,7 @@ router.use(auth);
  *             fecha_fin: "2025-12-31"
  *             estado_id: 1
  *             prioridad: "media"
+ *             excluir_fines_semana : true
  *     responses:
  *       201:
  *         description: Mantenimientos programados exitosamente

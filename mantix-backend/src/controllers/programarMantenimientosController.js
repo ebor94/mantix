@@ -14,9 +14,10 @@ const {
 } = db;
 
 const { Periodicidad } = require('../models');
+const logger = require('../utils/logger');
 
 // Función auxiliar para calcular las fechas de programación según periodicidad
-const calcularFechasProgramacion = async (fechaInicio, fechaFin, periodicidad_id) => {
+const calcularFechasProgramacion = async (fechaInicio, fechaFin, periodicidad_id, excluirFinesSemana = true) => {
     const fechas = [];
     const inicio = new Date(fechaInicio);
     const fin = new Date(fechaFin);
@@ -32,7 +33,21 @@ const calcularFechasProgramacion = async (fechaInicio, fechaFin, periodicidad_id
     let fechaActual = new Date(inicio);
 
     while (fechaActual <= fin) {
-        fechas.push(new Date(fechaActual));
+        let fechaProgramada = new Date(fechaActual);
+        
+        // Excluir fines de semana si está habilitado
+        if (excluirFinesSemana) {
+            // 0 = Domingo, 6 = Sábado
+            while (fechaProgramada.getDay() === 0 || fechaProgramada.getDay() === 6) {
+                fechaProgramada.setDate(fechaProgramada.getDate() + 1);
+            }
+        }
+        
+        // Solo agregar si la fecha ajustada está dentro del rango
+        if (fechaProgramada <= fin) {
+            fechas.push(new Date(fechaProgramada));
+        }
+        
         fechaActual.setDate(fechaActual.getDate() + dias);
     }
 
@@ -66,7 +81,16 @@ exports.programarActividad = async (req, res) => {
         console.log('=== INICIO programarActividad ===');
         
         const { id } = req.params; // ID de la actividad
-        const { fecha_inicio, fecha_fin, estado_id, prioridad } = req.body;
+        const { fecha_inicio, fecha_fin, estado_id, prioridad, excluir_fines_semana } = req.body;
+
+        console.log('Parámetros recibidos:', {
+            actividad_id: id,
+            fecha_inicio,
+            fecha_fin,
+            estado_id,
+            prioridad,
+            excluir_fines_semana
+        });
 
         // ⚠️ VALIDACIÓN CRÍTICA: Verificar que req.usuario existe
         if (!req.usuario) {
@@ -127,8 +151,8 @@ exports.programarActividad = async (req, res) => {
         }
 
         // Determinar fechas del plan
-        const fechaInicioPrograma = fecha_inicio || (actividad.plan ? actividad.plan.fecha_inicio : null);
-        const fechaFinPrograma = fecha_fin || (actividad.plan ? actividad.plan.fecha_fin : null);
+        const fechaInicioPrograma = fecha_inicio ;
+        const fechaFinPrograma = fecha_fin ;
 
         if (!fechaInicioPrograma || !fechaFinPrograma) {
             return res.status(400).json({
@@ -137,15 +161,18 @@ exports.programarActividad = async (req, res) => {
             });
         }
 
-        console.log('📅 Fechas de programación:', {
+        logger.info('📅 Fechas de programación:', {
             inicio: fechaInicioPrograma,
             fin: fechaFinPrograma
         });
 
+        logger
+
         const fechasProgramadas = await calcularFechasProgramacion(
             fechaInicioPrograma,
             fechaFinPrograma,
-            actividad.periodicidad_id
+            actividad.periodicidad_id,
+            excluir_fines_semana
         );
 
         console.log(`📊 Fechas generadas: ${fechasProgramadas.length}`);
