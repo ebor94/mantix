@@ -30,6 +30,8 @@ module.exports = {
   },
   
   PRIORIDADES: ['baja', 'media', 'alta', 'critica'],
+
+  EXIGENCIAS :['Manual/Fabricante', 'Contractual/Garantia', 'Cumplimiento Legal'],
   
   TIPOS_MANTENIMIENTO: {
     PREVENTIVO: 1,
