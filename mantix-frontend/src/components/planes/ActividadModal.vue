@@ -526,7 +526,10 @@ const cargarRequisitosPorCategoria = async () => {
 
 const cargarEquiposPorSede = () => {
   if (form.value.sede_id) {
-    equiposFiltrados.value = equipos.value.filter(e => e.sede_id === form.value.sede_id)
+   equiposFiltrados.value = equipos.value.filter(e => 
+  e.sede_id === form.value.sede_id && 
+  e.categoria_id === form.value.categoria_id
+)
   } else {
     equiposFiltrados.value = []
   }
