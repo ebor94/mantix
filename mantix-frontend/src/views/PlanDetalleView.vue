@@ -1,5 +1,5 @@
 <!-- ============================================ -->
-<!-- src/views/PlanDetalleView.vue - ACTUALIZADO -->
+<!-- src/views/PlanDetalleView.vue - ACTUALIZADO CON GESTIÓN DE GRUPOS -->
 <!-- ============================================ -->
 <template>
   <MainLayout>
@@ -181,6 +181,9 @@
             @eliminar="confirmarEliminarActividad"
             @toggle="toggleActividad"
             @programar="abrirModalProgramacion"
+            @ver-grupo="handleVerGrupo"
+            @editar-grupo="handleEditarGrupo"
+            @eliminar-grupo="handleEliminarGrupo"
           />
         </div>
 
@@ -201,7 +204,7 @@
       </div>
     </div>
 
-    <!-- Modales -->
+    <!-- Modales Existentes -->
     <CrearPlanModal
       v-if="mostrarModalEditar"
       :plan="plan"
@@ -217,7 +220,6 @@
       @success="handleActividadGuardada"
     />
 
-    <!-- ✅ NUEVO: Modal de Programación -->
     <ProgramarMantenimientoModal
       v-if="mostrarModalProgramacion"
       :actividad="actividadAProgramar"
@@ -234,6 +236,35 @@
       @confirm="eliminarActividad"
       @cancel="mostrarConfirmEliminar = false"
     />
+
+    <!-- ✅ NUEVOS MODALES PARA GRUPOS -->
+    <VerGrupoModal
+      v-if="mostrarVerGrupo"
+      :grupo-masivo-id="grupoSeleccionado"
+      @close="cerrarVerGrupo"
+      @editar-grupo="handleEditarGrupoDesdeModal"
+      @editar-individual="editarActividad"
+    />
+
+    <ConfirmModal
+      v-if="mostrarConfirmEliminarGrupo"
+      title="Eliminar Grupo Completo"
+      :message="`¿Estás seguro de que deseas eliminar TODAS las actividades del grupo '${grupoSeleccionado}'? Esta acción no se puede deshacer.`"
+      confirm-text="Eliminar Grupo"
+      confirm-color="danger"
+      @confirm="eliminarGrupo"
+      @cancel="cerrarConfirmEliminarGrupo"
+    />
+
+<EditarGrupoModal
+  :visible="mostrarEditarGrupo"
+  :actividades="actividadesGrupo"
+  :periodicidades="periodicidades"
+  :proveedores="proveedores"
+  :usuarios="usuarios"
+  @cerrar="cerrarEditarGrupo"
+  @guardar="guardarCambiosGrupo"
+/>
   </MainLayout>
 </template>
 
@@ -243,13 +274,17 @@ import { useRoute } from 'vue-router'
 import { usePlanesStore } from '@/stores/planes'
 import { usePlanActividadesStore } from '@/stores/planActividades'
 import { storeToRefs } from 'pinia'
+import { useToast } from 'vue-toastification'
+import api from '@/services/api'
 import MainLayout from '@/components/common/MainLayout.vue'
 import Badge from '@/components/common/Badge.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import CrearPlanModal from '@/components/planes/CrearPlanModal.vue'
 import ActividadCard from '@/components/planes/ActividadCard.vue'
 import ActividadModal from '@/components/planes/ActividadModal.vue'
-import ProgramarMantenimientoModal from '@/components/planes/ProgramarMantenimientoModal.vue' // ✅ NUEVO
+import ProgramarMantenimientoModal from '@/components/planes/ProgramarMantenimientoModal.vue'
+import VerGrupoModal from '@/components/planes/VerGrupoModal.vue'
+import EditarGrupoModal from '@/components/planes/EditarGrupoModal.vue'
 import ConfirmModal from '@/components/common/ConfirmDialog.vue'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -259,9 +294,11 @@ dayjs.locale('es')
 const route = useRoute()
 const planesStore = usePlanesStore()
 const actividadesStore = usePlanActividadesStore()
+const toast = useToast()
 
 const { planActual: plan, loading } = storeToRefs(planesStore)
 
+// Estados existentes
 const estadisticas = ref(null)
 const mostrarModalEditar = ref(false)
 const mostrarModalActividad = ref(false)
@@ -269,10 +306,20 @@ const actividadEditar = ref(null)
 const mostrarConfirmEliminar = ref(false)
 const actividadEliminar = ref(null)
 const loadingProgramar = ref(false)
-
-// ✅ NUEVO: Estado para el modal de programación
 const mostrarModalProgramacion = ref(false)
 const actividadAProgramar = ref(null)
+
+// ✅ Estados para gestión de grupos
+const mostrarVerGrupo = ref(false)
+const mostrarEditarGrupo = ref(false) // ✅ AGREGADO
+const grupoSeleccionado = ref(null)
+const mostrarConfirmEliminarGrupo = ref(false)
+
+// ✅ Estados para datos del formulario de editar grupo
+const periodicidades = ref([])
+const proveedores = ref([])
+const usuarios = ref([])
+const actividadesGrupo = ref([]) // ✅ AGREGADO: Para guardar las actividades del grupo
 
 const formatDate = (date) => {
   if (!date) return 'N/A'
@@ -293,6 +340,36 @@ const cargarEstadisticas = async () => {
     estadisticas.value = await planesStore.fetchEstadisticas(route.params.id)
   } catch (error) {
     // Error manejado en el store
+  }
+}
+
+// ✅ NUEVA: Cargar datos para los formularios
+const cargarDatosFormularios = async () => {
+  try {
+    // Cargar periodicidades
+    const respPeriodicidades = await api.get('/periodicidades')
+    periodicidades.value = respPeriodicidades.data
+
+    // Cargar proveedores (asumiendo que tienes este endpoint)
+    try {
+      const respProveedores = await api.get('/proveedores')
+      proveedores.value = respProveedores.data
+    } catch (error) {
+      console.warn('No se pudieron cargar proveedores:', error)
+      proveedores.value = []
+    }
+
+    // Cargar usuarios (asumiendo que tienes este endpoint)
+    try {
+      const respUsuarios = await api.get('/usuarios')
+      usuarios.value = respUsuarios.data
+    } catch (error) {
+      console.warn('No se pudieron cargar usuarios:', error)
+      usuarios.value = []
+    }
+  } catch (error) {
+    console.error('Error al cargar datos de formularios:', error)
+    toast.error('Error al cargar datos necesarios para el formulario')
   }
 }
 
@@ -344,23 +421,18 @@ const toggleActividad = async (actividad) => {
   }
 }
 
-// ✅ NUEVO: Abrir modal de programación
 const abrirModalProgramacion = (actividad) => {
-  //console.log('Abrir modal de programación para:', actividad)
   actividadAProgramar.value = actividad
   mostrarModalProgramacion.value = true
 }
 
-// ✅ NUEVO: Cerrar modal de programación
 const cerrarModalProgramacion = () => {
   mostrarModalProgramacion.value = false
   actividadAProgramar.value = null
 }
 
-// ✅ NUEVO: Manejar programación exitosa
 const handleProgramacionExitosa = async (resultado) => {
   cerrarModalProgramacion()
-  // Recargar datos si es necesario
   await planesStore.fetchPlan(route.params.id)
   await cargarEstadisticas()
 }
@@ -376,8 +448,101 @@ const programarTodasActividades = async () => {
   }
 }
 
+// ✅ GESTIÓN DE GRUPOS - FUNCIONES ACTUALIZADAS
+
+const handleVerGrupo = (grupoMasivoId) => {
+  grupoSeleccionado.value = grupoMasivoId
+  mostrarVerGrupo.value = true
+}
+
+const cerrarVerGrupo = () => {
+  mostrarVerGrupo.value = false
+  grupoSeleccionado.value = null
+}
+
+const handleEditarGrupo = async (grupoMasivoId) => {
+  try {
+    // Cargar las actividades del grupo
+    const response = await api.get(`/plan-actividades/grupo/${grupoMasivoId}`)
+    actividadesGrupo.value = response.data
+    grupoSeleccionado.value = grupoMasivoId
+    mostrarEditarGrupo.value = true
+  } catch (error) {
+    console.error('Error al cargar actividades del grupo:', error)
+    toast.error('Error al cargar las actividades del grupo')
+  }
+}
+
+const handleEditarGrupoDesdeModal = (grupoMasivoId) => {
+  cerrarVerGrupo()
+  handleEditarGrupo(grupoMasivoId)
+}
+
+const cerrarEditarGrupo = () => {
+  mostrarEditarGrupo.value = false
+  grupoSeleccionado.value = null
+  actividadesGrupo.value = []
+}
+
+const handleEliminarGrupo = (grupoMasivoId) => {
+  grupoSeleccionado.value = grupoMasivoId
+  mostrarConfirmEliminarGrupo.value = true
+}
+
+const cerrarConfirmEliminarGrupo = () => {
+  mostrarConfirmEliminarGrupo.value = false
+  grupoSeleccionado.value = null
+}
+
+// ✅ FUNCIÓN CORREGIDA: Guardar cambios del grupo
+const guardarCambiosGrupo = async (datosActualizados) => {
+  if (!grupoSeleccionado.value) return
+
+  try {
+    await api.put(`/plan-actividades/grupo/${grupoSeleccionado.value}`, datosActualizados)
+
+    toast.success(`Grupo actualizado correctamente`)
+    cerrarEditarGrupo()
+    await planesStore.fetchPlan(route.params.id)
+    await cargarEstadisticas()
+  } catch (error) {
+    console.error('Error al actualizar grupo:', error)
+    toast.error(error.response?.data?.message || 'Error al actualizar el grupo')
+  }
+}
+
+const eliminarGrupo = async () => {
+  try {
+    const response = await api.delete(`/plan-actividades/grupo/${grupoSeleccionado.value}`)
+    
+    toast.success(response.data?.message || `Grupo eliminado exitosamente`)
+    
+    cerrarConfirmEliminarGrupo()
+    await planesStore.fetchPlan(route.params.id)
+    await cargarEstadisticas()
+  } catch (error) {
+    console.error('Error al eliminar grupo:', error)
+    
+    if (error.response?.status === 409) {
+      const bloqueadas = error.response.data.actividades_bloqueadas
+      if (bloqueadas && bloqueadas.length > 0) {
+        const lista = bloqueadas.map(a => `- ${a.nombre} (${a.mantenimientos} mantenimiento(s))`).join('\n')
+        toast.error(
+          `No se puede eliminar el grupo porque algunas actividades tienen mantenimientos programados:\n${lista}`,
+          { timeout: 8000 }
+        )
+      } else {
+        toast.error(error.response.data.message || 'No se puede eliminar el grupo')
+      }
+    } else {
+      toast.error(error.response?.data?.message || 'Error al eliminar el grupo')
+    }
+  }
+}
+
 onMounted(async () => {
   await planesStore.fetchPlan(route.params.id)
   await cargarEstadisticas()
+  await cargarDatosFormularios() // ✅ AGREGADO
 })
 </script>
