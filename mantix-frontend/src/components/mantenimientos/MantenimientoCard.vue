@@ -22,6 +22,9 @@
             </h3>
             
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                <div class="flex items-center text-sm text-gray-600">                
+                <span>{{ mantenimiento.codigo || 'N/A' }}</span>
+              </div>
               <div class="flex items-center text-sm text-gray-600">
                 <svg class="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -37,22 +40,33 @@
               </div>
 
               <div class="flex items-center text-sm text-gray-600">
-                <svg class="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>{{ mantenimiento.hora_programada || 'Sin hora' }}</span>
+              <svg class="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9.878,18.122a3,3,0,0,0,4.244,0l3.211-3.211A1,1,0,0,0,15.919,13.5l-2.926,2.927L13,1a1,1,0,0,0-1-1h0a1,1,0,0,0-1,1l-.009,15.408L8.081,13.5a1,1,0,0,0-1.414,1.415Z"/><path d="M23,16h0a1,1,0,0,0-1,1v4a1,1,0,0,1-1,1H3a1,1,0,0,1-1-1V17a1,1,0,0,0-1-1H1a1,1,0,0,0-1,1v4a3,3,0,0,0,3,3H21a3,3,0,0,0,3-3V17A1,1,0,0,0,23,16Z"/></svg>
+
+                   <span>{{ mantenimiento.actividad?.equipo?.ubicacion_especifica || 'N/A' }}</span>
               </div>
 
               <div class="flex items-center text-sm text-gray-600">
                 <svg class="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                 </svg>
-                <span>{{ mantenimiento.actividad?.categoria?.nombre || 'N/A' }}</span>
+                <span>{{ mantenimiento.actividad?.equipo?.nombre || 'N/A' }}</span>
               </div>
+          
+             <div class="flex items-center text-sm text-gray-600">
+                <svg class="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <span>{{ mantenimiento.exigencias || 'N/A' }}</span>
+              </div>
+                 
             </div>
+
 
             <p v-if="mantenimiento.observaciones" class="text-sm text-gray-500 mt-3">
               {{ mantenimiento.observaciones }}
+            </p>
+             <p v-if="mantenimiento.observaciones" class="text-sm text-gray-500 mt-3">
+              {{ mantenimiento.actividad.observaciones }}
             </p>
           </div>
         </div>
