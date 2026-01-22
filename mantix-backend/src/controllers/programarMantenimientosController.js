@@ -81,7 +81,7 @@ exports.programarActividad = async (req, res) => {
         console.log('=== INICIO programarActividad ===');
         
         const { id } = req.params; // ID de la actividad
-        const { fecha_inicio, fecha_fin, estado_id, prioridad, excluir_fines_semana } = req.body;
+        const { fecha_inicio, fecha_fin, estado_id, prioridad, excluir_fines_semana, exigencias } = req.body;
 
         console.log('Parámetros recibidos:', {
             actividad_id: id,
@@ -186,7 +186,7 @@ exports.programarActividad = async (req, res) => {
 
         // Obtener el estado por defecto (Programado)
         const estadoPorDefecto = estado_id || 1;
-        const prioridadPorDefecto = prioridad || 'media';
+        const prioridadPorDefecto = prioridad ;
 
         // Crear los mantenimientos programados
         const mantenimientosCreados = [];
@@ -204,6 +204,7 @@ exports.programarActividad = async (req, res) => {
                 prioridad: prioridadPorDefecto,
                 reprogramaciones: 0,
                 notificacion_enviada: false,
+                exigencias: exigencias ,
                 observaciones: `Generado automáticamente desde: ${actividad.nombre}`
             });
 

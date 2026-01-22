@@ -99,11 +99,12 @@ router.use(auth);
  *           schema:
  *             $ref: '#/components/schemas/ProgramarActividadInput'
  *           example:
- *             fecha_inicio: "2025-01-01"
- *             fecha_fin: "2025-12-31"
+ *             fecha_inicio: "2026-01-01"
+ *             fecha_fin: "2026-12-31"
  *             estado_id: 1
- *             prioridad: "media"
+ *             prioridad: "alta"
  *             excluir_fines_semana : true
+ *             exigencias: "Contractual/Garantia"
  *     responses:
  *       201:
  *         description: Mantenimientos programados exitosamente
