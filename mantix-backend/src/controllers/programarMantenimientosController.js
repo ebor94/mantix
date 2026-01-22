@@ -10,7 +10,10 @@ const {
     PlanMantenimiento,
     Estado,
     Usuario,
-    UsuarioCategoria
+    UsuarioCategoria,
+    sequelize,
+    Equipo,
+    Sede
 } = db;
 
 const { Periodicidad } = require('../models');
@@ -588,3 +591,457 @@ exports.previsualizarProgramacion = async (req, res) => {
         });
     }
 };
+/**
+ * Programar mantenimientos para un grupo masivo de actividades completas
+ */
+exports.programarGrupo = async (req, res) => {
+  console.log('=== INICIO programarGrupo ===');
+  
+  const { grupoMasivoId } = req.params;
+  const { 
+    fecha_inicio, 
+    fecha_fin, 
+    prioridad, 
+    exigencia, 
+    excluir_fines_semana 
+  } = req.body;
+
+  console.log('Parámetros recibidos:', {
+    grupo_masivo_id: grupoMasivoId,
+    fecha_inicio,
+    fecha_fin,
+    prioridad,
+    exigencia,
+    excluir_fines_semana
+  });
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    // ⚠️ VALIDACIÓN CRÍTICA: Verificar autenticación
+    if (!req.usuario) {
+      console.error('❌ ERROR CRÍTICO: req.usuario es undefined');
+      await transaction.rollback();
+      return res.status(401).json({
+        success: false,
+        message: 'No autenticado. El token JWT no fue procesado correctamente.'
+      });
+    }
+
+    console.log('✅ Usuario autenticado:', {
+      id: req.usuario.id,
+      email: req.usuario.email,
+      es_super_admin: req.usuario.es_super_admin
+    });
+
+    // Validaciones de parámetros
+    if (!grupoMasivoId) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requiere el ID del grupo masivo' 
+      });
+    }
+
+    if (!fecha_inicio || !fecha_fin) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requieren fechas de inicio y fin' 
+      });
+    }
+
+    if (!prioridad || !exigencia) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requieren prioridad y exigencia' 
+      });
+    }
+
+    // Buscar todas las actividades del grupo
+    const actividades = await PlanActividad.findAll({
+      where: {
+        grupo_masivo_id: grupoMasivoId
+      },
+      include: [
+        {
+          model: Equipo,
+          as: 'equipo',
+          required: true,
+          include: [
+            {
+              model: Sede,
+              as: 'sede'
+            }
+          ]
+        },
+        {
+          model: Periodicidad,
+          as: 'periodicidad',
+          required: true
+        },
+        {
+          model: PlanMantenimiento,
+          as: 'plan',
+          required: true
+        }
+      ],
+      transaction
+    });
+
+    if (actividades.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({ 
+        success: false,
+        message: 'No se encontraron actividades para este grupo' 
+      });
+    }
+
+    console.log(`✅ Actividades del grupo encontradas: ${actividades.length}`);
+
+    // Verificar permisos (si no es super admin, verificar acceso a categorías)
+    if (!req.usuario.es_super_admin) {
+      console.log('⚠️ Usuario NO es super admin, verificando acceso a categorías...');
+      
+      for (const actividad of actividades) {
+        const tieneAcceso = await req.usuario.tieneAccesoCategoria(actividad.categoria_id);
+        
+        if (!tieneAcceso) {
+          await transaction.rollback();
+          return res.status(403).json({
+            success: false,
+            message: `No tienes permiso para programar mantenimientos en la categoría de la actividad: ${actividad.nombre}`
+          });
+        }
+      }
+    } else {
+      console.log('✅ Usuario es super admin - tiene acceso total');
+    }
+
+    const fechaInicioPrograma = fecha_inicio;
+    const fechaFinPrograma = fecha_fin;
+
+    logger.info('📅 Fechas de programación:', {
+      inicio: fechaInicioPrograma,
+      fin: fechaFinPrograma,
+      grupo_masivo_id: grupoMasivoId
+    });
+
+    // Buscar estado "Programado" - ✅ CORREGIDO
+    const estadoProgramado = await Estado.findOne({
+      where: { nombre: 'Programado' },
+      transaction
+    });
+
+    if (!estadoProgramado) {
+      throw new Error('No se encontró el estado "Programado"');
+    }
+
+    console.log('✅ Estado encontrado:', {
+      id: estadoProgramado.id,
+      nombre: estadoProgramado.nombre
+    });
+
+    let totalMantenimientosCreados = 0;
+    const resultadoPorActividad = [];
+    const anio = new Date(fechaInicioPrograma).getFullYear();
+   
+
+    // 1. Buscamos el último código una sola vez antes de empezar los bucles
+const ultimoMantenimiento = await MantenimientoProgramado.findOne({
+    where: { codigo: { [Op.like]: `MNT-${anio}-%` } },
+    order: [['codigo', 'DESC']],
+    transaction // Importante incluir la transacción por si acaso
+});
+
+let contadorSecuencial = 1;
+if (ultimoMantenimiento) {
+    const ultimoNumero = parseInt(ultimoMantenimiento.codigo.split('-')[2]);
+    contadorSecuencial = ultimoNumero + 1;
+}
+
+    // Procesar cada actividad del grupo
+    for (const actividad of actividades) {
+      console.log(`📋 Procesando actividad: ${actividad.nombre}`);      
+      // Calcular fechas para esta actividad según su periodicidad
+      const fechasProgramadas = await calcularFechasProgramacion(
+        fechaInicioPrograma,
+        fechaFinPrograma,
+        actividad.periodicidad_id,
+        excluir_fines_semana
+      );
+
+      console.log(`📊 Fechas generadas para ${actividad.nombre}: ${fechasProgramadas.length}`);
+
+ 
+
+      // Crear mantenimientos para cada fecha
+      for (const fecha of fechasProgramadas) {
+        //const codigo = await generarCodigoMantenimiento(anio);
+        const codigo = `MNT-${anio}-${String(contadorSecuencial).padStart(4, '0')}`;
+        
+        await MantenimientoProgramado.create({
+          plan_actividad_id: actividad.id,
+          codigo,
+          fecha_programada: fecha.toISOString().split('T')[0],
+          hora_programada: '08:00:00',
+          estado_id: estadoProgramado.id, // ✅ CORREGIDO: usar .id en lugar de .id_estado
+          prioridad: prioridad,
+          exigencias: exigencia,
+          reprogramaciones: 0,
+          notificacion_enviada: false,
+          observaciones: `Programación grupal (Grupo ${grupoMasivoId}) - ${actividad.nombre}`
+        }, { transaction });
+
+       contadorSecuencial++;
+        totalMantenimientosCreados++;
+      }
+
+      resultadoPorActividad.push({
+        id_actividad: actividad.id,
+        nombre_actividad: actividad.nombre,
+        equipo: actividad.equipo.nombre,
+        sede: actividad.equipo.sede?.nombre || 'N/A',
+        mantenimientos_creados: totalMantenimientosCreados
+      });
+
+      //console.log(`✅ ${mantenimientosCreados} mantenimientos creados para ${actividad.nombre}`);
+    }
+
+    await transaction.commit();
+
+    console.log(`✅ TOTAL: ${totalMantenimientosCreados} mantenimientos creados para el grupo`);
+    console.log('=== FIN programarGrupo ===');
+
+    res.status(201).json({
+      success: true,
+      message: `Se programaron ${totalMantenimientosCreados} mantenimientos para el grupo ${grupoMasivoId} (${actividades.length} actividades)`,
+      data: {
+        grupo_masivo_id: grupoMasivoId,
+        total_mantenimientos: totalMantenimientosCreados,
+        total_actividades: actividades.length,
+        detalle: resultadoPorActividad
+      }
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('❌ Error en programación de grupo:', error);
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Error al programar mantenimientos del grupo',
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Programar mantenimientos masivos para múltiples actividades seleccionadas
+ */
+exports.programarMasivo = async (req, res) => {
+  console.log('=== INICIO programarMasivo ===');
+  
+  const {
+    ids_actividades,
+    fecha_inicio,
+    fecha_fin,
+    prioridad,
+    exigencia,
+    excluir_fines_semana
+  } = req.body;
+
+  console.log('Parámetros recibidos:', {
+    ids_actividades,
+    fecha_inicio,
+    fecha_fin,
+    prioridad,
+    exigencia,
+    excluir_fines_semana
+  });
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Validación de autenticación
+    if (!req.usuario) {
+      console.error('❌ ERROR CRÍTICO: req.usuario es undefined');
+      await transaction.rollback();
+      return res.status(401).json({
+        success: false,
+        message: 'No autenticado. El token JWT no fue procesado correctamente.'
+      });
+    }
+
+    console.log('✅ Usuario autenticado:', {
+      id: req.usuario.id,
+      email: req.usuario.email,
+      es_super_admin: req.usuario.es_super_admin
+    });
+
+    // Validaciones
+    if (!ids_actividades || !Array.isArray(ids_actividades) || ids_actividades.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requiere un array de IDs de actividades' 
+      });
+    }
+
+    if (!fecha_inicio || !fecha_fin) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requieren fechas de inicio y fin' 
+      });
+    }
+
+    if (!prioridad || !exigencia) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        message: 'Se requieren prioridad y exigencia' 
+      });
+    }
+
+    // Cargar actividades
+    const actividades = await PlanActividad.findAll({
+      where: {
+        id: ids_actividades
+      },
+      include: [
+        {
+          model: Equipo,
+          as: 'equipo',
+          required: true,
+          include: [
+            {
+              model: require('../models').Sede,
+              as: 'sede'
+            }
+          ]
+        },
+        {
+          model: Periodicidad,
+          as: 'periodicidad',
+          required: true
+        },
+        {
+          model: PlanMantenimiento,
+          as: 'plan',
+          required: true
+        }
+      ],
+      transaction
+    });
+
+    if (actividades.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({ 
+        success: false,
+        message: 'No se encontraron actividades válidas' 
+      });
+    }
+
+    console.log(`✅ Actividades encontradas: ${actividades.length}`);
+
+    // Verificar permisos
+    if (!req.usuario.es_super_admin) {
+      for (const actividad of actividades) {
+        const tieneAcceso = await req.usuario.tieneAccesoCategoria(actividad.categoria_id);
+        
+        if (!tieneAcceso) {
+          await transaction.rollback();
+          return res.status(403).json({
+            success: false,
+            message: `No tienes permiso para programar mantenimientos en la categoría de la actividad: ${actividad.nombre}`
+          });
+        }
+      }
+    }
+
+    const fechaInicioPrograma = fecha_inicio;
+    const fechaFinPrograma = fecha_fin;
+
+    // Buscar estado "Programado"
+    const estadoProgramado = await Estado.findOne({
+      where: { nombre: 'Programado' },
+      transaction
+    });
+
+    if (!estadoProgramado) {
+      throw new Error('No se encontró el estado "Programado"');
+    }
+
+    let totalMantenimientosCreados = 0;
+    const resultadoPorActividad = [];
+    const anio = new Date(fechaInicioPrograma).getFullYear();
+
+    // Procesar cada actividad
+    for (const actividad of actividades) {
+      const fechasProgramadas = await calcularFechasProgramacion(
+        fechaInicioPrograma,
+        fechaFinPrograma,
+        actividad.periodicidad_id,
+        excluir_fines_semana
+      );
+
+      let mantenimientosCreados = 0;
+
+      for (const fecha of fechasProgramadas) {
+        const codigo = await generarCodigoMantenimiento(anio);
+
+        await MantenimientoProgramado.create({
+          plan_actividad_id: actividad.id,
+          codigo,
+          fecha_programada: fecha.toISOString().split('T')[0],
+          hora_programada: '08:00:00',
+          estado_id: estadoProgramado.id_estado,
+          prioridad: prioridad,
+          exigencias: exigencia,
+          reprogramaciones: 0,
+          notificacion_enviada: false,
+          observaciones: `Programación masiva - ${actividad.nombre}`
+        }, { transaction });
+
+        mantenimientosCreados++;
+        totalMantenimientosCreados++;
+      }
+
+      resultadoPorActividad.push({
+        id_actividad: actividad.id,
+        nombre_actividad: actividad.nombre,
+        equipo: actividad.equipo.nombre,
+        sede: actividad.equipo.sede?.nombre || 'N/A',
+        mantenimientos_creados: mantenimientosCreados
+      });
+    }
+
+    await transaction.commit();
+
+    console.log(`✅ TOTAL: ${totalMantenimientosCreados} mantenimientos creados`);
+    console.log('=== FIN programarMasivo ===');
+
+    res.status(201).json({
+      success: true,
+      message: `Se programaron ${totalMantenimientosCreados} mantenimientos para ${actividades.length} actividades`,
+      data: {
+        total_mantenimientos: totalMantenimientosCreados,
+        total_actividades: actividades.length,
+        detalle: resultadoPorActividad
+      }
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('❌ Error en programación masiva:', error);
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Error al programar mantenimientos de forma masiva',
+      error: error.message 
+    });
+  }
+};
+
