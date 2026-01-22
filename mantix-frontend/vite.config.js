@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [vue()],
+  base: '/mantix/', // ← LÍNEA AGREGADA
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

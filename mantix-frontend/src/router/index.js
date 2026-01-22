@@ -1,4 +1,3 @@
-
 // ============================================
 // src/router/index.js - Configuración de rutas
 // ============================================
@@ -125,7 +124,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/mantix/'), // ← CAMBIO AQUÍ: agregada la base
   routes
 })
 
