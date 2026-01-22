@@ -59,6 +59,11 @@ module.exports = (sequelize, DataTypes) => {
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
+    },
+    grupo_masivo_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Identificador para actividades creadas en lote'
     }
   }, {
     tableName: 'plan_actividades',

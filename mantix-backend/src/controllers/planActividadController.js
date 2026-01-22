@@ -2,6 +2,7 @@
 // src/controllers/planActividadController.js
 // ============================================
 const {
+  sequelize,
   PlanActividad,
   PlanMantenimiento,
   CategoriaMantenimiento,
@@ -11,8 +12,10 @@ const {
   Equipo,
   MantenimientoProgramado,
   UsuarioCategoria,
-  Rol
+  Rol,
+  Proveedor
 } = require('../models');
+const { generarGrupoMasivoId } = require('../utils/grupoMasivoHelper');
 const { Op } = require('sequelize');
 
 const planActividadController = {
@@ -212,7 +215,7 @@ const planActividadController = {
       });
     }
   },
-    // Obtener actividad por ID (con verificación de permisos)
+  // Obtener actividad por ID (con verificación de permisos)
   async obtenerPorId(req, res, next) {
     try {
       const { id } = req.params;
@@ -780,7 +783,606 @@ const planActividadController = {
         error: error.message
       });
     }
+  },
+  async crearMasivo(req, res, next) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      const {
+        equipos_ids, // ✅ Array de IDs de equipos
+        plan_id,
+        categoria_id,
+        tipo_mantenimiento_id,
+        nombre,
+        descripcion,
+        sede_id,
+        periodicidad_id,
+        responsable_tipo,
+        responsable_usuario_id,
+        responsable_proveedor_id,
+        duracion_estimada_horas,
+        costo_estimado,
+        observaciones,
+        activo
+      } = req.body;
+
+      const usuarioId = req.usuario.id;
+
+      // ✅ Validación: equipos_ids debe ser array con al menos 2 elementos
+      if (!equipos_ids || !Array.isArray(equipos_ids) || equipos_ids.length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: 'Debe proporcionar al menos 2 equipos para creación masiva'
+        });
+      }
+
+      // Validaciones básicas (igual que crear individual)
+      if (!nombre) {
+        return res.status(400).json({
+          success: false,
+          message: 'El nombre es requerido'
+        });
+      }
+
+      if (!plan_id || !categoria_id || !sede_id || !periodicidad_id || !responsable_tipo) {
+        return res.status(400).json({
+          success: false,
+          message: 'Todos los campos requeridos deben ser proporcionados'
+        });
+      }
+
+      // Verificar permisos sobre la categoría
+      const usuario = await Usuario.findByPk(usuarioId);
+      if (!usuario.es_super_admin) {
+        const tieneAcceso = await usuario.tieneAccesoCategoria(categoria_id);
+        if (!tieneAcceso) {
+          ////await transaction.rollback();
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permiso para crear actividades en esta categoría'
+          });
+        }
+      }
+
+      // Verificar que el plan existe
+      const plan = await PlanMantenimiento.findByPk(plan_id);
+      if (!plan) {
+       // //await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Plan de mantenimiento no encontrado'
+        });
+      }
+
+      // Verificar que la categoría existe
+      const categoria = await CategoriaMantenimiento.findByPk(categoria_id);
+      if (!categoria) {
+       // //await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Categoría no encontrada'
+        });
+      }
+
+      // Verificar que la sede existe
+      const sede = await Sede.findByPk(sede_id);
+      if (!sede) {
+       // //await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Sede no encontrada'
+        });
+      }
+
+      // Verificar que la periodicidad existe
+      const periodicidad = await Periodicidad.findByPk(periodicidad_id);
+      if (!periodicidad) {
+       // //await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Periodicidad no encontrada'
+        });
+      }
+
+      // ✅ Verificar que TODOS los equipos existen y pertenecen a la categoría
+      const equipos = await Equipo.findAll({
+        where: {
+          id: equipos_ids
+        }
+      });
+
+      if (equipos.length !== equipos_ids.length) {
+       // //await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Uno o más equipos no fueron encontrados'
+        });
+      }
+
+      // Validar que todos los equipos pertenecen a la categoría correcta
+      const equiposInvalidos = equipos.filter(e => e.categoria_id !== parseInt(categoria_id));
+      if (equiposInvalidos.length > 0) {
+       // //await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Los siguientes equipos no pertenecen a la categoría seleccionada: ${equiposInvalidos.map(e => e.codigo).join(', ')}`
+        });
+      }
+
+      // Validar responsable según tipo
+      if (responsable_tipo === 'interno') {
+        if (!responsable_usuario_id) {
+         // //await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'Debe proporcionar un responsable usuario para tipo interno'
+          });
+        }
+
+        const responsable = await Usuario.findByPk(responsable_usuario_id);
+        if (!responsable) {
+          ////await transaction.rollback();
+          return res.status(404).json({
+            success: false,
+            message: 'Usuario responsable no encontrado'
+          });
+        }
+      } else if (responsable_tipo === 'externo') {
+        if (!responsable_proveedor_id) {
+          ////await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'Debe proporcionar un proveedor para tipo proveedor'
+          });
+        }
+
+        const proveedor = await Proveedor.findByPk(responsable_proveedor_id);
+        if (!proveedor) {
+         // //await transaction.rollback();
+          return res.status(404).json({
+            success: false,
+            message: 'Proveedor no encontrado'
+          });
+        }
+      }
+
+      // ✅ Generar ID de grupo masivo
+      const grupoMasivoId = generarGrupoMasivoId();
+
+      // ✅ Crear una actividad por cada equipo
+      const actividadesCreadas = [];
+
+      for (const equipo_id of equipos_ids) {
+        const nuevaActividad = await PlanActividad.create({
+          plan_id,
+          categoria_id,
+          tipo_mantenimiento_id,
+          nombre,
+          descripcion,
+          sede_id,
+          equipo_id, // ✅ Equipo específico
+          periodicidad_id,
+          responsable_tipo,
+          responsable_usuario_id: responsable_tipo === 'interno' ? responsable_usuario_id : null,
+          responsable_proveedor_id: responsable_tipo === 'externo' ? responsable_proveedor_id : null,
+          duracion_estimada_horas,
+          costo_estimado,
+          observaciones,
+          activo: activo !== undefined ? activo : true,
+          grupo_masivo_id: grupoMasivoId // ✅ Mismo grupo para todas
+        }, { transaction });
+
+        actividadesCreadas.push(nuevaActividad);
+      }
+
+      await transaction.commit();
+
+      // ✅ Obtener las actividades creadas con sus relaciones
+      const actividadesCompletas = await PlanActividad.findAll({
+        where: {
+          grupo_masivo_id: grupoMasivoId
+        },
+        include: [
+          {
+            model: PlanMantenimiento,
+            as: 'plan',
+            attributes: ['id', 'nombre', 'anio']
+          },
+          {
+            model: CategoriaMantenimiento,
+            as: 'categoria',
+            attributes: ['id', 'nombre', 'color']
+          },
+          {
+            model: Sede,
+            as: 'sede',
+            attributes: ['id', 'nombre']
+          },
+          {
+            model: Equipo,
+            as: 'equipo',
+            attributes: ['id', 'codigo', 'nombre']
+          },
+          {
+            model: Periodicidad,
+            as: 'periodicidad',
+            attributes: ['id', 'nombre', 'dias']
+          },
+          {
+            model: Usuario,
+            as: 'responsable_usuario',
+            attributes: ['id', 'nombre', 'apellido']
+          },
+          {
+            model: Proveedor,
+            as: 'responsable_proveedor',
+            attributes: ['id', 'nombre']
+          }
+        ],
+        order: [['id', 'ASC']]
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `${actividadesCreadas.length} actividades creadas exitosamente en grupo ${grupoMasivoId}`,
+        grupo_masivo_id: grupoMasivoId,
+        cantidad: actividadesCreadas.length,
+        data: actividadesCompletas
+      });
+
+    } catch (error) {
+     // //await transaction.rollback();
+      console.error('Error al crear actividades masivamente:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error al crear las actividades',
+        error: error.message
+      });
+    }
+
+  },
+  /**
+ * Obtener todas las actividades de un grupo masivo
+ */
+async obtenerPorGrupo(req, res, next) {
+  try {
+    const { grupo_masivo_id } = req.params;
+    const usuarioId = req.usuario.id;
+
+    const actividades = await PlanActividad.findAll({
+      where: { grupo_masivo_id },
+      include: [
+        {
+          model: PlanMantenimiento,
+          as: 'plan',
+          attributes: ['id', 'nombre', 'anio']
+        },
+        {
+          model: CategoriaMantenimiento,
+          as: 'categoria',
+          attributes: ['id', 'nombre', 'color']
+        },
+        {
+          model: Sede,
+          as: 'sede',
+          attributes: ['id', 'nombre']
+        },
+        {
+          model: Equipo,
+          as: 'equipo',
+          attributes: ['id', 'codigo', 'nombre']
+        },
+        {
+          model: Periodicidad,
+          as: 'periodicidad',
+          attributes: ['id', 'nombre', 'dias']
+        },
+        {
+          model: Usuario,
+          as: 'responsable_usuario',
+          attributes: ['id', 'nombre', 'apellido']
+        },
+        {
+          model: Proveedor,
+          as: 'responsable_proveedor',
+          attributes: ['id', 'nombre']
+        }
+      ],
+      order: [['id', 'ASC']]
+    });
+
+    if (actividades.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontraron actividades con ese grupo_masivo_id'
+      });
+    }
+
+    // Verificar permisos sobre la primera actividad (todas tienen la misma categoría)
+    const usuario = await Usuario.findByPk(usuarioId);
+    if (!usuario.es_super_admin) {
+      const tieneAcceso = await usuario.tieneAccesoCategoria(actividades[0].categoria_id);
+      if (!tieneAcceso) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para ver estas actividades'
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      grupo_masivo_id,
+      cantidad: actividades.length,
+      data: actividades
+    });
+
+  } catch (error) {
+    console.error('Error al obtener actividades del grupo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las actividades del grupo',
+      error: error.message
+    });
   }
+},
+
+/**
+ * Actualizar todas las actividades de un grupo masivo
+ */
+async actualizarGrupo(req, res, next) {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { grupo_masivo_id } = req.params;
+    const datosActualizacion = req.body;
+    const usuarioId = req.usuario.id;
+
+    // Validar que el grupo existe
+    const actividades = await PlanActividad.findAll({
+      where: { grupo_masivo_id }
+    });
+
+    if (actividades.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontraron actividades con ese grupo_masivo_id'
+      });
+    }
+
+    // Verificar permisos
+    const usuario = await Usuario.findByPk(usuarioId);
+    if (!usuario.es_super_admin) {
+      const tieneAcceso = await usuario.tieneAccesoCategoria(actividades[0].categoria_id);
+      if (!tieneAcceso) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para modificar estas actividades'
+        });
+      }
+
+      // Si está cambiando de categoría, verificar permisos en la nueva
+      if (datosActualizacion.categoria_id && 
+          datosActualizacion.categoria_id !== actividades[0].categoria_id) {
+        const tieneAccesoNuevaCategoria = await usuario.tieneAccesoCategoria(datosActualizacion.categoria_id);
+        if (!tieneAccesoNuevaCategoria) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tienes permiso para mover las actividades a esa categoría'
+          });
+        }
+      }
+    }
+
+    // Campos que NO se pueden actualizar masivamente (por seguridad)
+    const camposProhibidos = ['id', 'plan_id', 'equipo_id', 'grupo_masivo_id', 'created_at', 'updated_at'];
+    camposProhibidos.forEach(campo => delete datosActualizacion[campo]);
+
+    // Validar recursos si se están actualizando
+    if (datosActualizacion.categoria_id) {
+      const categoria = await CategoriaMantenimiento.findByPk(datosActualizacion.categoria_id);
+      if (!categoria) {
+        return res.status(404).json({
+          success: false,
+          message: 'Categoría no encontrada'
+        });
+      }
+    }
+
+    if (datosActualizacion.sede_id) {
+      const sede = await Sede.findByPk(datosActualizacion.sede_id);
+      if (!sede) {
+        return res.status(404).json({
+          success: false,
+          message: 'Sede no encontrada'
+        });
+      }
+    }
+
+    if (datosActualizacion.periodicidad_id) {
+      const periodicidad = await Periodicidad.findByPk(datosActualizacion.periodicidad_id);
+      if (!periodicidad) {
+        return res.status(404).json({
+          success: false,
+          message: 'Periodicidad no encontrada'
+        });
+      }
+    }
+
+    if (datosActualizacion.responsable_tipo === 'interno' && datosActualizacion.responsable_usuario_id) {
+      const responsable = await Usuario.findByPk(datosActualizacion.responsable_usuario_id);
+      if (!responsable) {
+        return res.status(404).json({
+          success: false,
+          message: 'Usuario responsable no encontrado'
+        });
+      }
+      datosActualizacion.responsable_proveedor_id = null;
+    } else if (datosActualizacion.responsable_tipo === 'externo' && datosActualizacion.responsable_proveedor_id) {
+      const proveedor = await Proveedor.findByPk(datosActualizacion.responsable_proveedor_id);
+      if (!proveedor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Proveedor no encontrado'
+        });
+      }
+      datosActualizacion.responsable_usuario_id = null;
+    }
+
+    // Actualizar todas las actividades del grupo
+    const [cantidadActualizada] = await PlanActividad.update(
+      datosActualizacion,
+      { 
+        where: { grupo_masivo_id },
+        transaction 
+      }
+    );
+
+    await transaction.commit();
+
+    // Obtener actividades actualizadas
+    const actividadesActualizadas = await PlanActividad.findAll({
+      where: { grupo_masivo_id },
+      include: [
+        {
+          model: PlanMantenimiento,
+          as: 'plan',
+          attributes: ['id', 'nombre', 'anio']
+        },
+        {
+          model: CategoriaMantenimiento,
+          as: 'categoria',
+          attributes: ['id', 'nombre', 'color']
+        },
+        {
+          model: Sede,
+          as: 'sede',
+          attributes: ['id', 'nombre']
+        },
+        {
+          model: Equipo,
+          as: 'equipo',
+          attributes: ['id', 'codigo', 'nombre']
+        },
+        {
+          model: Periodicidad,
+          as: 'periodicidad',
+          attributes: ['id', 'nombre', 'dias']
+        },
+        {
+          model: Usuario,
+          as: 'responsable_usuario',
+          attributes: ['id', 'nombre', 'apellido']
+        },
+        {
+          model: Proveedor,
+          as: 'responsable_proveedor',
+          attributes: ['id', 'nombre']
+        }
+      ],
+      order: [['id', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      message: `${cantidadActualizada} actividades actualizadas en el grupo ${grupo_masivo_id}`,
+      grupo_masivo_id,
+      cantidad_actualizada: cantidadActualizada,
+      data: actividadesActualizadas
+    });
+
+  } catch (error) {
+    //await transaction.rollback();
+    console.error('Error al actualizar grupo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al actualizar el grupo de actividades',
+      error: error.message
+    });
+  }
+},
+
+/**
+ * Eliminar todas las actividades de un grupo masivo
+ */
+async eliminarGrupo(req, res, next) {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { grupo_masivo_id } = req.params;
+    const usuarioId = req.usuario.id;
+
+    // Validar que el grupo existe
+    const actividades = await PlanActividad.findAll({
+      where: { grupo_masivo_id }
+    });
+
+    if (actividades.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontraron actividades con ese grupo_masivo_id'
+      });
+    }
+
+    // Verificar permisos
+    const usuario = await Usuario.findByPk(usuarioId);
+    if (!usuario.es_super_admin) {
+      const tieneAcceso = await usuario.tieneAccesoCategoria(actividades[0].categoria_id);
+      if (!tieneAcceso) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para eliminar estas actividades'
+        });
+      }
+    }
+
+    // Verificar si alguna actividad tiene mantenimientos programados
+    const actividadesConMantenimientos = [];
+    for (const actividad of actividades) {
+      const count = await MantenimientoProgramado.count({
+        where: { plan_actividad_id: actividad.id }
+      });
+      if (count > 0) {
+        actividadesConMantenimientos.push({
+          id: actividad.id,
+          nombre: actividad.nombre,
+          mantenimientos: count
+        });
+      }
+    }
+
+    if (actividadesConMantenimientos.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'No se puede eliminar el grupo porque algunas actividades tienen mantenimientos programados',
+        actividades_bloqueadas: actividadesConMantenimientos
+      });
+    }
+
+    // Eliminar todas las actividades del grupo
+    const cantidad = await PlanActividad.destroy({
+      where: { grupo_masivo_id },
+      transaction
+    });
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: `${cantidad} actividades eliminadas del grupo ${grupo_masivo_id}`,
+      cantidad_eliminada: cantidad
+    });
+
+  } catch (error) {
+    //await transaction.rollback();
+    console.error('Error al eliminar grupo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar el grupo de actividades',
+      error: error.message
+    });
+  }
+}
 
 };
 
