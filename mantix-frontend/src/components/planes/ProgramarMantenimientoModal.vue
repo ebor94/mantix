@@ -446,7 +446,7 @@ const programar = async () => {
   try {
     // Enviar al backend para crear los mantenimientos programados
     //console.log('Programando mantenimientos para las fechas:', preview.value)
-    console.log('Con las opciones:', opciones.value)
+   // console.log('Con las opciones:', opciones.value)
     const response = await actividadesStore.programarActividad(props.actividad.id, {
       fecha_inicio: opciones.value.fecha_inicio,
       fecha_fin: opciones.value.fecha_fin,
