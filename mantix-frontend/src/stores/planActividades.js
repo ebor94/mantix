@@ -198,10 +198,10 @@ export const usePlanActividadesStore = defineStore('planActividades', {
     /**
      * Programar mantenimientos de una actividad
      */
-    async programarActividad(id) {
+    async programarActividad(id, data) {
       this.loading = true
       try {
-        const response = await api.post(`/programar-mantenimientos/actividad/${id}`)
+        const response = await api.post(`/programar-mantenimientos/actividad/${id}`, data)
         toast.success(response.data.message)
         return response.data
       } catch (error) {
