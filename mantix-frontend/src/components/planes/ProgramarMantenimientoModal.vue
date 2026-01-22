@@ -132,16 +132,41 @@
             </label>
 
             <label class="flex items-center cursor-pointer">
-              <input
-                v-model="opciones.incluir_festivos"
-                type="checkbox"
-                class="form-checkbox h-4 w-4 text-primary-600 rounded"
-                @change="calcularPreview"
-              />
-              <span class="ml-2 text-sm text-gray-700">
-                Incluir días festivos
+                <span class="ml-2 text-sm text-gray-700">
+               Seleccione prioridad <span class="text-red-500">*</span>
               </span>
+             <select
+                v-model="opciones.prioridad"
+                required
+                class="input"
+                
+              >
+                <option value="">Seleccione prioridad</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>  
+                <option value="baja">Baja</option>
+                <option value="critica">Critica</option>
+              </select>
             </label>
+             <label class="flex items-center cursor-pointer">
+               <span class="ml-2 text-sm text-gray-700">
+               Seleccione exigencia <span class="text-red-500">*</span>
+              </span>
+             <select
+                v-model="opciones.exigencia"
+                required
+                class="input"
+               
+              >
+                <option value="">Seleccione exigencia</option>
+                <option value="Manual/Fabricante">Manual/Fabricante</option>
+                <option value="Contractual/Garantia">Contractual/Garantia</option>  
+                <option value="Cumplimiento Legal">Cumplimiento Legal</option>
+                </select>
+            </label>
+
+            
+
           </div>
         </div>
 
@@ -309,7 +334,8 @@ const opciones = ref({
   fecha_inicio: '',
   fecha_fin: '',
   excluir_fines_semana: false,
-  incluir_festivos: true
+  prioridad: 'media',
+  exigencia: ''
 })
 
 // Computed
@@ -419,16 +445,19 @@ const programar = async () => {
   loading.value = true
   try {
     // Enviar al backend para crear los mantenimientos programados
+    //console.log('Programando mantenimientos para las fechas:', preview.value)
+    console.log('Con las opciones:', opciones.value)
     const response = await actividadesStore.programarActividad(props.actividad.id, {
       fecha_inicio: opciones.value.fecha_inicio,
       fecha_fin: opciones.value.fecha_fin,
-      fechas_programadas: preview.value,
+      prioridad: opciones.value.prioridad,
+      exigencia: opciones.value.exigencia,
       excluir_fines_semana: opciones.value.excluir_fines_semana,
-      incluir_festivos: opciones.value.incluir_festivos
-    })
-
-    toast.success(`Se programaron ${preview.value.length} mantenimiento(s) exitosamente`)
-    emit('success', response)
+  
+    }) 
+    //console.log('Respuesta del servidor:', response.total_programados)
+    toast.success(`Se programaron ${response.total_programados} mantenimiento(s) exitosamente`)
+    //emit('success', `Se programaron ${response.total_programados} mantenimiento(s) exitosamente`)
   } catch (error) {
     console.error('Error al programar:', error)
     // El error ya se maneja en el store
