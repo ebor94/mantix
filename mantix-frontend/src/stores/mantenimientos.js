@@ -80,10 +80,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       }
     },
     // Obtener mantenimientos programados
-    async fetchMantenimientos(params = {}) {
+    async fetchMantenimientos(params = { page: 1, limit: 100 }) {
       this.loading = true
       try {
-        const response = await api.get('/mantenimientos', { params })
+        const response = await api.get('/mantenimientos?page=1&limit=100')
         this.mantenimientos = response.data
         console.log('Mantenimientos cargados:', this.mantenimientos)
         this.pagination.total = response.total || response.data.length
