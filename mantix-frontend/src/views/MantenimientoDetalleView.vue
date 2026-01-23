@@ -290,7 +290,7 @@
                 class="relative group cursor-pointer aspect-square rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
               >
                 <img
-                  :src="`http://localhost:3020/${evidencia.ruta_archivo}`"
+                  :src="`https://mantix-api.losolivoscucuta.com/${evidencia.ruta_archivo}`"
                   :alt="evidencia.descripcion"
                   class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                 />
