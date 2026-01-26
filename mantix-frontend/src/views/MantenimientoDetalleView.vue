@@ -290,7 +290,7 @@
                 class="relative group cursor-pointer aspect-square rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
               >
                 <img
-                  :src="`https://mantix-api.losolivoscucuta.com/${evidencia.ruta_archivo}`"
+                  :src="`https://mantix-api.losolivoscucuta.com${evidencia.ruta_archivo}`"
                   :alt="evidencia.descripcion"
                   class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                 />
@@ -591,7 +591,7 @@
     >
       <div class="max-w-4xl max-h-full">
         <img
-          :src="`http://localhost:3020/${evidenciaActual.ruta_archivo}`"
+          :src="`https://mantix-api.losolivoscucuta.com${evidenciaActual.ruta_archivo}`"
           :alt="evidenciaActual.descripcion"
           class="max-w-full max-h-[90vh] object-contain rounded-lg"
         />

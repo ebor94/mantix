@@ -184,6 +184,7 @@
             @ver-grupo="handleVerGrupo"
             @editar-grupo="handleEditarGrupo"
             @eliminar-grupo="handleEliminarGrupo"
+            @programar-grupo="handleProgramarGrupo"
           />
         </div>
 
@@ -265,6 +266,14 @@
   @cerrar="cerrarEditarGrupo"
   @guardar="guardarCambiosGrupo"
 />
+
+<ProgramarGrupoModal
+  v-if="mostrarProgramarGrupo"
+  :grupo-masivo-id="grupoAProgramar"
+  :plan="plan"
+  @close="cerrarProgramarGrupo"
+  @success="handleProgramacionGrupoExitosa"
+/>
   </MainLayout>
 </template>
 
@@ -286,6 +295,7 @@ import ProgramarMantenimientoModal from '@/components/planes/ProgramarMantenimie
 import VerGrupoModal from '@/components/planes/VerGrupoModal.vue'
 import EditarGrupoModal from '@/components/planes/EditarGrupoModal.vue'
 import ConfirmModal from '@/components/common/ConfirmDialog.vue'
+import ProgramarGrupoModal from '@/components/planes/ProgramarMasivoModal.vue'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 
@@ -320,6 +330,26 @@ const periodicidades = ref([])
 const proveedores = ref([])
 const usuarios = ref([])
 const actividadesGrupo = ref([]) // ✅ AGREGADO: Para guardar las actividades del grupo
+
+const mostrarProgramarGrupo = ref(false)
+const grupoAProgramar = ref(null)
+
+// Agregar handler
+const handleProgramarGrupo = (grupoMasivoId) => {
+  grupoAProgramar.value = grupoMasivoId
+  mostrarProgramarGrupo.value = true
+}
+
+const cerrarProgramarGrupo = () => {
+  mostrarProgramarGrupo.value = false
+  grupoAProgramar.value = null
+}
+
+const handleProgramacionGrupoExitosa = async (resultado) => {
+  cerrarProgramarGrupo()
+  await planesStore.fetchPlan(route.params.id)
+  await cargarEstadisticas()
+}
 
 const formatDate = (date) => {
   if (!date) return 'N/A'

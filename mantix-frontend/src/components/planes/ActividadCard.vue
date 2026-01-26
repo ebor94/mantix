@@ -14,16 +14,12 @@
           <Badge v-if="actividad.categoria" :color="getCategoryColor(actividad.categoria.color)">
             {{ actividad.categoria.nombre }}
           </Badge>
-          
+
           <!-- ✅ NUEVO: Badge de grupo masivo -->
-          <Badge 
-            v-if="actividad.grupo_masivo_id" 
-            color="blue"
-            size="sm"
-            :title="`Grupo: ${actividad.grupo_masivo_id}`"
-          >
+          <Badge v-if="actividad.grupo_masivo_id" color="blue" size="sm" :title="`Grupo: ${actividad.grupo_masivo_id}`">
             <svg class="inline h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
             Grupo
           </Badge>
@@ -58,80 +54,74 @@
 
       <!-- Menú de acciones -->
       <div class="relative ml-4" ref="menuContainer">
-        <button
-          @click.stop="toggleMenu"
-          class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
+        <button @click.stop="toggleMenu" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <svg class="h-5 w-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
           </svg>
         </button>
 
         <!-- Dropdown menu -->
-        <Transition
-          enter-active-class="transition ease-out duration-100"
-          enter-from-class="transform opacity-0 scale-95"
-          enter-to-class="transform opacity-100 scale-100"
-          leave-active-class="transition ease-in duration-75"
-          leave-from-class="transform opacity-100 scale-100"
-          leave-to-class="transform opacity-0 scale-95"
-        >
-          <div
-            v-if="mostrarMenu"
-            class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-10"
-          >
+        <Transition enter-active-class="transition ease-out duration-100"
+          enter-from-class="transform opacity-0 scale-95" enter-to-class="transform opacity-100 scale-100"
+          leave-active-class="transition ease-in duration-75" leave-from-class="transform opacity-100 scale-100"
+          leave-to-class="transform opacity-0 scale-95">
+          <div v-if="mostrarMenu" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-10">
             <!-- ✅ NUEVO: Opciones para grupos masivos -->
             <template v-if="actividad.grupo_masivo_id">
-              <button
-                @click="handleVerGrupo"
-                class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-              >
+              <button @click="handleVerGrupo"
+                class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center">
                 <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 Ver actividades del grupo
               </button>
 
-              <button
-                @click="handleEditarGrupo"
-                class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-              >
+              <button @click="handleEditarGrupo"
+                class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center">
                 <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
                 Editar grupo completo
+              </button>
+
+              <button @click="handleProgramarGrupo"
+                class="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 flex items-center">
+                <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Programar grupo completo
               </button>
 
               <hr class="my-1">
             </template>
 
             <!-- Opciones individuales -->
-            <button
-              @click="handleEditar"
-              class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center"
-            >
+            <button @click="handleEditar"
+              class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               Editar actividad
             </button>
 
-            <button
-              @click="handleToggle"
-              class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center"
-            >
+            <button @click="handleToggle"
+              class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
               {{ actividad.activo ? 'Desactivar' : 'Activar' }}
             </button>
 
-            <button
-              @click="handleProgramar"
-              class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center"
-            >
+            <button @click="handleProgramar"
+              class="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Programar Mantenimientos
             </button>
@@ -139,23 +129,20 @@
             <hr class="my-1">
 
             <!-- ✅ Eliminar individual o grupo -->
-            <button
-              v-if="actividad.grupo_masivo_id"
-              @click="handleEliminarGrupo"
-              class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center"
-            >
+            <button v-if="actividad.grupo_masivo_id" @click="handleEliminarGrupo"
+              class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
               Eliminar grupo completo
             </button>
 
-            <button
-              @click="handleEliminar"
-              class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center"
-            >
+            <button @click="handleEliminar"
+              class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center">
               <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
               Eliminar solo esta actividad
             </button>
@@ -183,13 +170,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'editar', 
-  'eliminar', 
-  'toggle', 
+  'editar',
+  'eliminar',
+  'toggle',
   'programar',
   'ver-grupo',
   'editar-grupo',
-  'eliminar-grupo'
+  'eliminar-grupo',
+   'programar-grupo'
 ])
 
 const equipoNombre = ref('Cargando...')
@@ -230,6 +218,11 @@ const handleEliminar = () => {
 }
 
 // ✅ NUEVOS: Handlers para grupos
+
+const handleProgramarGrupo = () => {
+  emit('programar-grupo', props.actividad.grupo_masivo_id)
+  cerrarMenu()
+}
 const handleVerGrupo = () => {
   emit('ver-grupo', props.actividad.grupo_masivo_id)
   cerrarMenu()
@@ -267,7 +260,7 @@ const getCategoryColor = (color) => {
 // ✅ Cargar nombre del equipo
 const cargarNombreEquipo = async () => {
   const id = props.actividad.equipo_id
-  
+
   if (!id) {
     equipoNombre.value = 'Sin equipo'
     return
@@ -291,7 +284,7 @@ const cargarResponsable = async () => {
       responsableNombre.value = proveedor?.nombre || 'Sin asignar'
       return
     }
-    
+
     // Si es responsable interno (usuario)
     if (props.actividad.responsable_tipo === 'interno' && props.actividad.responsable_usuario) {
       const { nombre, apellido } = props.actividad.responsable_usuario
@@ -328,7 +321,7 @@ onMounted(async () => {
     cargarNombreEquipo(),
     cargarResponsable()
   ])
-  
+
   // Agregar listener global para cerrar menú al hacer click fuera
   document.addEventListener('click', handleClickOutside)
 })
