@@ -465,7 +465,7 @@ const mantenimientosController = {
     try {
       const hoy = new Date();
       const proximaSemana = new Date();
-      proximaSemana.setDate(proximaSemana.getDate() + 7);
+      proximaSemana.setDate(proximaSemana.getDate() + 30);
 
       const includes = [];
 
