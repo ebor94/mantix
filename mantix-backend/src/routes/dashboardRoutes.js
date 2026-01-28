@@ -612,7 +612,7 @@ router.get('/cumplimiento', dashboardController.getCumplimiento);
  *         name: periodo
  *         schema:
  *           type: string
- *           enum: [diario, semanal, mensual, anual]
+ *           enum: [trimestral, semanal, mensual, anual]
  *         description: Período del indicador (default mensual)
  *       - in: query
  *         name: tipo
