@@ -363,7 +363,7 @@ async getCumplimiento(req, res){
     } = req.query;
 
     // Validar período
-    const periodosValidos = ['diario', 'semanal', 'mensual', 'anual'];
+     const periodosValidos = ['semanal', 'mensual', 'trimestral', 'anual']; // ✅ Cambiado
     if (!periodosValidos.includes(periodo)) {
       return res.status(400).json({
         success: false,
@@ -398,6 +398,19 @@ async getCumplimiento(req, res){
         
         fechaInicio = primerDiaMes.toISOString().split('T')[0];
         fechaFin = ultimoDiaMes.toISOString().split('T')[0];
+        break;
+
+      case 'trimestral': // ✅ NUEVO
+        const mesActual = hoy.getMonth();
+        const trimestreActual = Math.floor(mesActual / 3);
+        const primerMesTrimestre = trimestreActual * 3;
+        const ultimoMesTrimestre = primerMesTrimestre + 2;
+        
+        const primerDiaTrimestre = new Date(hoy.getFullYear(), primerMesTrimestre, 1);
+        const ultimoDiaTrimestre = new Date(hoy.getFullYear(), ultimoMesTrimestre + 1, 0);
+        
+        fechaInicio = primerDiaTrimestre.toISOString().split('T')[0];
+        fechaFin = ultimoDiaTrimestre.toISOString().split('T')[0];
         break;
       
       case 'anual':

@@ -579,7 +579,7 @@ router.get('/actividad-reciente', dashboardController.getActividadReciente);
  *         name: periodo
  *         schema:
  *           type: string
- *           enum: [diario, semanal, mensual, anual]
+ *           enum: [diario, semanal, mensual, anual, semestral]
  *         description: Período del indicador (default mensual)
  *       - in: query
  *         name: sede_id
