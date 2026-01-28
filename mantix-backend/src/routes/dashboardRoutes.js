@@ -568,4 +568,66 @@ router.get('/estadisticas-solicitudes', dashboardController.getEstadisticasSolic
  */
 router.get('/actividad-reciente', dashboardController.getActividadReciente);
 
+/**
+ * @swagger
+ * /api/dashboard/cumplimiento:
+ *   get:
+ *     summary: Obtener indicador de cumplimiento
+ *     tags: [Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *           enum: [diario, semanal, mensual, anual]
+ *         description: Período del indicador (default mensual)
+ *       - in: query
+ *         name: sede_id
+ *         schema:
+ *           type: integer
+ *         description: ID de sede (opcional, null = global)
+ *       - in: query
+ *         name: categoria_id
+ *         schema:
+ *           type: integer
+ *         description: ID de categoría (opcional, null = global)
+ *     responses:
+ *       200:
+ *         description: Indicador de cumplimiento
+ *       400:
+ *         description: Parámetros inválidos
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/cumplimiento', dashboardController.getCumplimiento);
+
+/**
+ * @swagger
+ * /api/dashboard/cumplimiento/multiple:
+ *   get:
+ *     summary: Obtener múltiples indicadores (por sede o categoría)
+ *     tags: [Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *           enum: [diario, semanal, mensual, anual]
+ *         description: Período del indicador (default mensual)
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [sede, categoria]
+ *         description: Tipo de agrupación (default sede)
+ *     responses:
+ *       200:
+ *         description: Lista de indicadores
+ *       400:
+ *         description: Parámetros inválidos
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/cumplimiento/multiple', dashboardController.getCumplimientoMultiple);
+
 module.exports = router;

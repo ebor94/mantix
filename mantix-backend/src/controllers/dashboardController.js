@@ -9,8 +9,10 @@ const {
   Estado,
   CategoriaMantenimiento,
   Sede,
-  Usuario
+  Usuario,
+  sequelize
 } = require('../models');
+const { QueryTypes } = require('sequelize');
 const { Op } = require('sequelize');
 const { calcularPorcentaje } = require('../utils/helpers');
 
@@ -347,7 +349,265 @@ const dashboardController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  // ============================================
+// OBTENER INDICADOR DE CUMPLIMIENTO
+// ============================================
+async getCumplimiento(req, res){
+  try {
+    const { 
+      periodo = 'mensual',  // diario, semanal, mensual, anual
+      sede_id,              // null = todas las sedes
+      categoria_id          // null = todas las categorías
+    } = req.query;
+
+    // Validar período
+    const periodosValidos = ['diario', 'semanal', 'mensual', 'anual'];
+    if (!periodosValidos.includes(periodo)) {
+      return res.status(400).json({
+        success: false,
+        message: `Período inválido. Valores permitidos: ${periodosValidos.join(', ')}`
+      });
+    }
+
+    // Calcular fechas según el período
+    const hoy = new Date();
+    let fechaInicio, fechaFin;
+
+    switch (periodo) {
+      case 'diario':
+        fechaInicio = fechaFin = hoy.toISOString().split('T')[0];
+        break;
+      
+      case 'semanal':
+        // Lunes de la semana actual
+        const diaSemana = hoy.getDay();
+        const diff = hoy.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1);
+        const primerDiaSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
+        const ultimoDiaSemana = new Date(primerDiaSemana);
+        ultimoDiaSemana.setDate(primerDiaSemana.getDate() + 6);
+        
+        fechaInicio = primerDiaSemana.toISOString().split('T')[0];
+        fechaFin = ultimoDiaSemana.toISOString().split('T')[0];
+        break;
+      
+      case 'mensual':
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        
+        fechaInicio = primerDiaMes.toISOString().split('T')[0];
+        fechaFin = ultimoDiaMes.toISOString().split('T')[0];
+        break;
+      
+      case 'anual':
+        fechaInicio = `${hoy.getFullYear()}-01-01`;
+        fechaFin = `${hoy.getFullYear()}-12-31`;
+        break;
+    }
+
+    // Construir condiciones WHERE dinámicas
+    const whereConditions = [
+      'periodo = :periodo',
+      'fecha_inicio = :fechaInicio',
+      'fecha_fin = :fechaFin'
+    ];
+
+    const replacements = {
+      periodo,
+      fechaInicio,
+      fechaFin
+    };
+
+    // Filtro por sede (opcional)
+    if (sede_id) {
+      whereConditions.push('sede_id = :sedeId');
+      replacements.sedeId = sede_id;
+    } else {
+      whereConditions.push('sede_id IS NULL');
+    }
+
+    // Filtro por categoría (opcional)
+    if (categoria_id) {
+      whereConditions.push('categoria_id = :categoriaId');
+      replacements.categoriaId = categoria_id;
+    } else {
+      whereConditions.push('categoria_id IS NULL');
+    }
+
+    // Buscar indicador en la tabla
+    const [indicador] = await sequelize.query(`
+      SELECT 
+        id,
+        periodo,
+        fecha_inicio,
+        fecha_fin,
+        total_programados,
+        total_ejecutados,
+        total_en_proceso,
+        total_atrasados,
+        porcentaje_cumplimiento,
+        sede_id,
+        categoria_id,
+        updated_at
+      FROM indicadores_cumplimiento
+      WHERE ${whereConditions.join(' AND ')}
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    // Si no existe el indicador, devolver valores en cero (fallback)
+    if (!indicador) {
+      return res.json({
+        success: true,
+        data: {
+          periodo,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          total_programados: 0,
+          total_ejecutados: 0,
+          total_en_proceso: 0,
+          total_atrasados: 0,
+          porcentaje_cumplimiento: 0,
+          sede_id: sede_id || null,
+          categoria_id: categoria_id || null,
+          mensaje: 'Indicador en proceso de cálculo'
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: indicador
+    });
+
+  } catch (error) {
+    console.error('Error al obtener cumplimiento:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener indicador de cumplimiento',
+      error: error.message
+    });
   }
+},
+
+// ============================================
+// OBTENER MÚLTIPLES INDICADORES (POR SEDE O CATEGORÍA)
+// ============================================
+ async getCumplimientoMultiple(req, res){
+  try {
+    const { 
+      periodo = 'mensual',
+      tipo = 'sede'  // 'sede' o 'categoria'
+    } = req.query;
+
+    // Validar período
+    const periodosValidos = ['diario', 'semanal', 'mensual', 'anual'];
+    if (!periodosValidos.includes(periodo)) {
+      return res.status(400).json({
+        success: false,
+        message: `Período inválido. Valores permitidos: ${periodosValidos.join(', ')}`
+      });
+    }
+
+    // Validar tipo
+    if (!['sede', 'categoria'].includes(tipo)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tipo inválido. Valores permitidos: sede, categoria'
+      });
+    }
+
+    // Calcular fechas
+    const hoy = new Date();
+    let fechaInicio, fechaFin;
+
+    switch (periodo) {
+      case 'diario':
+        fechaInicio = fechaFin = hoy.toISOString().split('T')[0];
+        break;
+      
+      case 'semanal':
+        const diaSemana = hoy.getDay();
+        const diff = hoy.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1);
+        const primerDiaSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
+        const ultimoDiaSemana = new Date(primerDiaSemana);
+        ultimoDiaSemana.setDate(primerDiaSemana.getDate() + 6);
+        
+        fechaInicio = primerDiaSemana.toISOString().split('T')[0];
+        fechaFin = ultimoDiaSemana.toISOString().split('T')[0];
+        break;
+      
+      case 'mensual':
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        
+        fechaInicio = primerDiaMes.toISOString().split('T')[0];
+        fechaFin = ultimoDiaMes.toISOString().split('T')[0];
+        break;
+      
+      case 'anual':
+        fechaInicio = `${hoy.getFullYear()}-01-01`;
+        fechaFin = `${hoy.getFullYear()}-12-31`;
+        break;
+    }
+
+    // Construir query según el tipo
+    let query;
+    if (tipo === 'sede') {
+      query = `
+        SELECT 
+          ic.*,
+          s.nombre as nombre_sede,
+          s.codigo as codigo_sede
+        FROM indicadores_cumplimiento ic
+        INNER JOIN sedes s ON ic.sede_id = s.id
+        WHERE ic.periodo = :periodo
+          AND ic.fecha_inicio = :fechaInicio
+          AND ic.fecha_fin = :fechaFin
+          AND ic.sede_id IS NOT NULL
+          AND ic.categoria_id IS NULL
+        ORDER BY ic.porcentaje_cumplimiento DESC
+      `;
+    } else {
+      query = `
+        SELECT 
+          ic.*,
+          cm.nombre as nombre_categoria
+        FROM indicadores_cumplimiento ic
+        INNER JOIN categorias_mantenimiento cm ON ic.categoria_id = cm.id
+        WHERE ic.periodo = :periodo
+          AND ic.fecha_inicio = :fechaInicio
+          AND ic.fecha_fin = :fechaFin
+          AND ic.categoria_id IS NOT NULL
+          AND ic.sede_id IS NULL
+        ORDER BY ic.porcentaje_cumplimiento DESC
+      `;
+    }
+
+    const indicadores = await sequelize.query(query, {
+      replacements: { periodo, fechaInicio, fechaFin },
+      type: QueryTypes.SELECT
+    });
+
+    res.json({
+      success: true,
+      data: indicadores,
+      total: indicadores.length
+    });
+
+  } catch (error) {
+    console.error('Error al obtener cumplimiento múltiple:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener indicadores',
+      error: error.message
+    });
+  }
+}
 };
 
 module.exports = dashboardController;
