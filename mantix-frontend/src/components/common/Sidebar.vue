@@ -143,6 +143,7 @@ const authStore = useAuthStore()
 const isDesktop = ref(false)
 
 const menuItems = computed(() => [
+   { name: 'Dashboard', path: '/dashboard', icon: ChartBarIcon },
   { name: 'Planes', path: '/planes', icon: CalendarDaysIcon },
   { name: 'Mantenimientos', path: '/mantenimientos', icon: WrenchIcon },
   { name: 'Equipos', path: '/equipos', icon: CpuChipIcon },
