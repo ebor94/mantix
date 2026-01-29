@@ -1,228 +1,148 @@
-<!-- src/views/DashboardView.vue -->
 <template>
   <MainLayout>
     <div class="space-y-6">
-      
-      <!-- KPIs Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard
-          title="Cumplimiento Mensual"
-          :value="kpis?.cumplimiento_mensual || 0"
-          suffix="%"
-          icon="ChartBarIcon"
-          color="blue"
-          :trend="5.2"
-          trend-label="vs mes anterior"
-        />
-        
-        <KPICard
-          title="Mantenimientos Programados"
-          :value="kpis?.mantenimientos_programados || 0"
-          icon="CalendarIcon"
-          color="green"
-          :subtitle="`${kpis?.mantenimientos_pendientes || 0} pendientes`"
-        />
-        
-        <KPICard
-          title="Solicitudes R-275"
-          :value="kpis?.solicitudes_mes || 0"
-          icon="DocumentTextIcon"
-          color="orange"
-          :subtitle="`${kpis?.solicitudes_pendientes || 0} pendientes`"
-        />
-        
-        <KPICard
-          title="Mantenimientos Atrasados"
-          :value="kpis?.mantenimientos_atrasados || 0"
-          icon="ExclamationTriangleIcon"
-          color="red"
-          :trend="kpis?.mantenimientos_atrasados > 5 ? 2 : -1"
-          trend-label="más que ayer"
-        />
+
+      <!-- ✅ NUEVO: Selector de Período y Sede -->
+      <div class="card">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">Dashboard de Mantenimiento</h2>
+            <p class="text-sm text-gray-500 mt-1">Indicadores y estadísticas en tiempo real</p>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <!-- Selector de Período -->
+            <select v-model="periodoSeleccionado" @change="handleCambioPeriodo" class="input text-sm">
+              <option value="trimestral">Este Trimestre</option>
+              <option value="semanal">Esta Semana</option>
+              <option value="mensual">Este Mes</option>
+              <option value="anual">Este Año</option>
+            </select>
+
+            <!-- Selector de Sede (opcional) -->
+            <select v-model="sedeSeleccionada" @change="handleCambioSede" class="input text-sm">
+              <option :value="null">Todas las Sedes</option>
+              <option v-for="sede in sedes" :key="sede.id" :value="sede.id">
+                {{ sede.nombre }}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      <!-- Gráficos -->
+      <!-- ✅ ACTUALIZADO: KPI de Cumplimiento con validación -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <KPICard title="Cumplimiento" :value="parseFloat(indicadorGlobal?.porcentaje_cumplimiento || 0)" suffix="%"
+          icon="ChartBarIcon" color="blue" :subtitle="subtituloCumplimiento" />
+
+        <KPICard title="Mantenimientos Programados" :value="indicadorGlobal?.total_programados || 0" icon="CalendarIcon"
+          color="green" :subtitle="`${indicadorGlobal?.total_ejecutados || 0} ejecutados`" />
+
+    <!--     <KPICard title="En Proceso" :value="indicadorGlobal?.total_en_proceso || 0" icon="ClockIcon" color="orange"
+          :subtitle="periodoLabel" /> -->
+
+        <KPICard title="Atrasados" :value="indicadorGlobal?.total_atrasados || 0" icon="ExclamationTriangleIcon"
+          color="red" :subtitle="periodoLabel" />
+      </div>
+
+      <!-- ✅ ACTUALIZADO: Gráficos con datos de indicadores -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         <!-- Cumplimiento por Sede -->
-        <ChartCard title="Cumplimiento por Sede">
-          <BarChart
-            v-if="cumplimientoSede.length > 0"
-            :data="cumplimientoSedeData"
-            :options="barChartOptions"
-          />
-          <EmptyState
-            v-else
-            title="No hay datos"
-            description="No se encontraron datos de cumplimiento"
-            icon="chart"
-          />
+        <ChartCard :title="`Cumplimiento por Sede - ${periodoLabel}`">
+          <BarChart v-if="indicadoresPorSede && indicadoresPorSede.length > 0" :data="cumplimientoSedeChartData"
+            :options="barChartOptions" />
+          <EmptyState v-else title="No hay datos" description="No se encontraron datos de cumplimiento por sede"
+            icon="chart" />
         </ChartCard>
 
         <!-- Cumplimiento por Categoría -->
-        <ChartCard title="Cumplimiento por Categoría">
-          <DoughnutChart
-            v-if="cumplimientoCategoria.length > 0"
-            :data="cumplimientoCategoriaData"
-            :options="doughnutChartOptions"
-          />
-          <EmptyState
-            v-else
-            title="No hay datos"
-            description="No se encontraron datos de categorías"
-            icon="chart"
-          />
+        <ChartCard :title="`Cumplimiento por Categoría - ${periodoLabel}`">
+          <DoughnutChart v-if="indicadoresPorCategoria && indicadoresPorCategoria.length > 0"
+            :data="cumplimientoCategoriaChartData" :options="doughnutChartOptions" />
+          <EmptyState v-else title="No hay datos" description="No se encontraron datos por categoría" icon="chart" />
         </ChartCard>
       </div>
 
-      <!-- Solicitudes y Actividad -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <!-- Estadísticas de Solicitudes -->
-        <div class="card">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">Solicitudes por Estado</h3>
-          <div class="space-y-3">
-            <div
-              v-for="estado in estadisticasSolicitudes?.por_estado || []"
-              :key="estado.estado_id"
-              class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-            >
-              <div class="flex items-center space-x-3">
-                <div :class="['h-3 w-3 rounded-full', getEstadoBgColor(estado.estado_id)]"></div>
-                <span class="text-sm font-medium text-gray-700">
-                  {{ estado.estado?.nombre || 'Estado' }}
-                </span>
-              </div>
-              <span class="text-sm font-bold text-gray-900">{{ estado.total }}</span>
-            </div>
-            
-            <div v-if="!estadisticasSolicitudes?.por_estado?.length" class="text-center py-8 text-gray-500">
-              No hay datos disponibles
-            </div>
-          </div>
-          
-          <div class="mt-4 pt-4 border-t border-gray-200">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600">Tiempo promedio de respuesta</span>
-              <span class="text-lg font-bold text-primary-600">
-                {{ formatTiempoRespuesta(estadisticasSolicitudes?.tiempo_promedio_respuesta) }} hrs
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Actividad Reciente -->
-        <div class="card">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Actividad Reciente</h3>
-            <select
-              v-model="activityFilter"
-              class="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Todas</option>
-              <option value="mantenimientos">Mantenimientos</option>
-              <option value="solicitudes">Solicitudes</option>
-            </select>
-          </div>
-          
-          <div class="space-y-3 max-h-96 overflow-y-auto">
-            <div
-              v-for="(activity, index) in filteredActivity"
-              :key="index"
-              class="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              <div :class="['flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center', activity.iconBg]">
-                <component :is="activity.icon" class="h-5 w-5 text-white" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-gray-900">{{ activity.title }}</p>
-                <p class="text-xs text-gray-500 mt-1">{{ activity.description }}</p>
-                <p class="text-xs text-gray-400 mt-1">{{ formatRelativeTime(activity.date) }}</p>
-              </div>
-            </div>
-            
-            <EmptyState
-              v-if="filteredActivity.length === 0"
-              title="No hay actividad reciente"
-              description="Aún no hay actividad registrada"
-              icon="inbox"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Mantenimientos de Hoy -->
+      <!-- ✅ NUEVO: Tabla de Cumplimiento por Sede -->
       <div class="card">
-        <div class="flex items-center justify-between mb-6">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900">Mantenimientos de Hoy</h3>
-            <p class="text-sm text-gray-500 mt-1">{{ mantenimientosHoy.length }} mantenimientos programados</p>
-          </div>
-          <router-link
-            to="/mantenimientos"
-            class="btn-secondary text-sm"
-          >
-            Ver todos
-          </router-link>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          Detalle de Cumplimiento por Sede - {{ periodoLabel }}
+        </h3>
+
+        <div v-if="indicadoresPorSede && indicadoresPorSede.length > 0" class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sede
+                </th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Programados
+                </th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Ejecutados
+                </th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Atrasados
+                </th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cumplimiento
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="sede in indicadoresPorSede" :key="sede.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="h-10 w-10 flex-shrink-0 bg-primary-100 rounded-lg flex items-center justify-center">
+                      <span class="text-primary-600 font-bold text-sm">{{ sede.codigo_sede }}</span>
+                    </div>
+                    <div class="ml-4">
+                      <div class="text-sm font-medium text-gray-900">{{ sede.nombre_sede }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+                  {{ sede.total_programados }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-green-600 font-semibold">
+                  {{ sede.total_ejecutados }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-red-600">
+                  {{ sede.total_atrasados }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center">
+                  <div class="flex items-center justify-center space-x-2">
+                    <div class="w-full max-w-xs bg-gray-200 rounded-full h-2">
+                      <div class="h-2 rounded-full transition-all"
+                        :class="getProgressBarColor(sede.porcentaje_cumplimiento)"
+                        :style="{ width: sede.porcentaje_cumplimiento + '%' }"></div>
+                    </div>
+                    <span class="text-sm font-bold" :class="getPercentageColor(sede.porcentaje_cumplimiento)">
+                      {{ parseFloat(sede.porcentaje_cumplimiento).toFixed(1) }}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <div v-if="mantenimientosHoy.length > 0" class="space-y-3">
-          <div
-            v-for="mant in mantenimientosHoy"
-            :key="mant.id"
-            class="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl hover:shadow-md transition-all"
-          >
-            <div class="flex items-center space-x-4 flex-1">
-              <div class="flex-shrink-0">
-                <div class="h-12 w-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                  <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-gray-900 truncate">
-                  {{ mant.actividad?.nombre || 'Mantenimiento' }}
-                </p>
-                <div class="flex items-center space-x-4 mt-1">
-                  <span class="text-xs text-gray-500 flex items-center">
-                    <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    {{ mant.actividad?.sede?.nombre || 'N/A' }}
-                  </span>
-                  <span class="text-xs text-gray-500 flex items-center">
-                    <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {{ mant.hora_programada || 'Sin hora' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center space-x-3">
-              <Badge :color="getPrioridadColor(mant.prioridad)">
-                {{ mant.prioridad }}
-              </Badge>
-              <Badge :color="getEstadoColorByName(mant.estado?.nombre)">
-                {{ mant.estado?.nombre }}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        <EmptyState
-          v-else
-          title="No hay mantenimientos programados hoy"
-          description="No tienes mantenimientos pendientes para el día de hoy"
-          icon="calendar"
-        />
+        <EmptyState v-else title="No hay datos" description="No se encontraron datos de cumplimiento por sede"
+          icon="building" />
       </div>
+
+      <!-- Resto del contenido existente: Solicitudes, Actividad Reciente, Mantenimientos de Hoy -->
+      <!-- ... (mantén todo lo que ya tienes) ... -->
+
     </div>
+
+
 
     <!-- Loader -->
     <Loader :loading="loading" />
+    <MantenimientosFiltroFechas />
   </MainLayout>
 </template>
 
@@ -231,6 +151,7 @@ import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useMantenimientosStore } from '@/stores/mantenimientos'
+import api from '@/services/api'
 import MainLayout from '@/components/common/MainLayout.vue'
 import KPICard from '@/components/dashboard/KPICard.vue'
 import ChartCard from '@/components/dashboard/ChartCard.vue'
@@ -248,13 +169,7 @@ import {
   LinearScale,
   ArcElement
 } from 'chart.js'
-import { formatRelativeTime } from '@/utils/formatters'
-import {
-  WrenchIcon,
-  DocumentTextIcon,
-  CheckCircleIcon,
-  XCircleIcon
-} from '@heroicons/vue/24/outline'
+import MantenimientosFiltroFechas from '../components/mantenimientos/MantenimientosFiltroFechas.vue'
 
 // Registrar componentes de Chart.js
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement)
@@ -262,78 +177,118 @@ ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale,
 const dashboardStore = useDashboardStore()
 const mantenimientosStore = useMantenimientosStore()
 
-const { kpis, cumplimientoSede, cumplimientoCategoria, estadisticasSolicitudes, actividadReciente, loading } = storeToRefs(dashboardStore)
+const {
+  loading,
+  indicadorGlobal,
+  indicadoresPorSede,
+  indicadoresPorCategoria,
+  periodoSeleccionado: periodoStore,
+  sedeSeleccionada: sedeStore
+} = storeToRefs(dashboardStore)
+
 const { mantenimientosHoy } = storeToRefs(mantenimientosStore)
 
-const activityFilter = ref('all')
-const formatTiempoRespuesta = (tiempo) => {
-  if (!tiempo && tiempo !== 0) return '0.0';
-  
-  // Convertir a número si es string
-  const tiempoNumero = typeof tiempo === 'string' ? parseFloat(tiempo) : tiempo;
-  
-  // Verificar que sea un número válido
-  if (isNaN(tiempoNumero)) return '0.0';
-  
-  return tiempoNumero.toFixed(1);
-};
-// Datos del gráfico de barras
-const cumplimientoSedeData = computed(() => ({
-  labels: cumplimientoSede.value.map(s => s.codigo),
-  datasets: [
-    {
-      label: 'Cumplimiento %',
-      data: cumplimientoSede.value.map(s => s.cumplimiento),
-      backgroundColor: 'rgba(0, 135, 92, 0.8)',
-      borderColor: 'rgb(0, 135, 92)',
-      borderWidth: 2,
-      borderRadius: 8
-    }
-  ]
-}))
+// Estados locales
+const periodoSeleccionado = ref('mensual')
+const sedeSeleccionada = ref(null)
+const sedes = ref([])
 
-const barChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: false
-    },
-    tooltip: {
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      padding: 12,
-      borderRadius: 8
-    }
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      max: 100,
-      ticks: {
-        callback: (value) => value + '%'
+const subtituloCumplimiento = computed(() => {
+  if (!indicadorGlobal.value) return 'Cargando...'
+  const { total_ejecutados, total_programados } = indicadorGlobal.value
+  return `${total_ejecutados || 0} de ${total_programados || 0} mantenimientos`
+})
+
+// ✅ Computed para label del período
+const periodoLabel = computed(() => {
+  const labels = {
+    //diario: 'Hoy',
+    semanal: 'Esta Semana',
+    mensual: 'Este Mes',
+    trimestral: 'Este Trimestre',
+    anual: 'Este Año'
+  }
+  return labels[periodoSeleccionado.value] || 'Este Mes'
+})
+
+// ✅ Computed para datos del gráfico de barras (sedes)
+const cumplimientoSedeChartData = computed(() => {
+  if (!indicadoresPorSede.value || indicadoresPorSede.value.length === 0) {
+    return { labels: [], datasets: [] }
+  }
+
+  // ✅ Eliminar duplicados: mantener solo el más reciente por sede_id
+  const sedesUnicas = indicadoresPorSede.value.reduce((acc, sede) => {
+    const existe = acc.find(s => s.sede_id === sede.sede_id)
+    if (!existe) {
+      acc.push(sede)
+    } else {
+      // Si ya existe, mantener el más reciente (mayor id)
+      const index = acc.findIndex(s => s.sede_id === sede.sede_id)
+      if (sede.id > acc[index].id) {
+        acc[index] = sede
       }
     }
-  }
-}
+    return acc
+  }, [])
 
-// Datos del gráfico de dona
-const cumplimientoCategoriaData = computed(() => ({
-  labels: cumplimientoCategoria.value.map(c => c.categoria),
-  datasets: [
-    {
-      data: cumplimientoCategoria.value.map(c => c.ejecutados),
-      backgroundColor: [
-        'rgba(0, 135, 92, 0.8)',
-        'rgba(34, 197, 94, 0.8)',
-        'rgba(251, 191, 36, 0.8)',
-        'rgba(239, 68, 68, 0.8)',
-        'rgba(59, 130, 246, 0.8)',
-        'rgba(168, 85, 247, 0.8)'
-      ],
-      borderWidth: 0
+  return {
+    labels: sedesUnicas.map(s => s.codigo_sede || `Sede ${s.sede_id}`),
+    datasets: [
+      {
+        label: 'Cumplimiento %',
+        data: sedesUnicas.map(s => parseFloat(s.porcentaje_cumplimiento)),
+        backgroundColor: sedesUnicas.map(s =>
+          getChartBarColor(parseFloat(s.porcentaje_cumplimiento))
+        ),
+        borderColor: 'rgba(0, 135, 92, 1)',
+        borderWidth: 2,
+        borderRadius: 8
+      }
+    ]
+  }
+})
+
+// ✅ Computed para datos del gráfico de dona (categorías)
+const cumplimientoCategoriaChartData = computed(() => {
+  if (!indicadoresPorCategoria.value || indicadoresPorCategoria.value.length === 0) {
+    return { labels: [], datasets: [] }
+  }
+
+  // ✅ Eliminar duplicados por categoria_id
+  const categoriasUnicas = indicadoresPorCategoria.value.reduce((acc, cat) => {
+    const existe = acc.find(c => c.categoria_id === cat.categoria_id)
+    if (!existe) {
+      acc.push(cat)
+    } else {
+      const index = acc.findIndex(c => c.categoria_id === cat.categoria_id)
+      if (cat.id > acc[index].id) {
+        acc[index] = cat
+      }
     }
-  ]
-}))
+    return acc
+  }, [])
+
+  return {
+    labels: categoriasUnicas.map(c => c.nombre_categoria),
+    datasets: [
+      {
+        data: categoriasUnicas.map(c => c.total_ejecutados),
+        backgroundColor: [
+          'rgba(0, 135, 92, 0.8)',
+          'rgba(34, 197, 94, 0.8)',
+          'rgba(251, 191, 36, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(168, 85, 247, 0.8)',
+          'rgba(236, 72, 153, 0.8)',
+          'rgba(14, 165, 233, 0.8)'
+        ],
+        borderWidth: 0
+      }
+    ]
+  }
+})
 
 const doughnutChartOptions = {
   responsive: true,
@@ -347,85 +302,74 @@ const doughnutChartOptions = {
           size: 12
         }
       }
+    },
+    tooltip: {
+      callbacks: {
+        label: (context) => {
+          const label = context.label || ''
+          const value = context.parsed || 0
+          return `${label}: ${value} ejecutados`
+        }
+      }
     }
   }
 }
 
-// Actividad reciente mock (reemplazar con datos reales)
-const mockActivity = [
-  {
-    type: 'mantenimiento',
-    title: 'Mantenimiento Completado',
-    description: 'Aire Acondicionado - Sede Gran Colombia',
-    date: new Date(Date.now() - 3600000),
-    icon: CheckCircleIcon,
-    iconBg: 'bg-green-500'
-  },
-  {
-    type: 'solicitud',
-    title: 'Nueva Solicitud R-275',
-    description: 'Fuga en tubería - Área administrativa',
-    date: new Date(Date.now() - 7200000),
-    icon: DocumentTextIcon,
-    iconBg: 'bg-orange-500'
-  },
-  {
-    type: 'mantenimiento',
-    title: 'Mantenimiento Iniciado',
-    description: 'Revisión Extractores - Sede PC',
-    date: new Date(Date.now() - 10800000),
-    icon: WrenchIcon,
-    iconBg: 'bg-blue-500'
-  }
-]
-
-const filteredActivity = computed(() => {
-  if (activityFilter.value === 'all') return mockActivity
-  return mockActivity.filter(a => a.type === activityFilter.value.slice(0, -1))
-})
-
-const getPrioridadColor = (prioridad) => {
-  const colors = {
-    baja: 'green',
-    media: 'yellow',
-    alta: 'orange',
-    critica: 'red'
-  }
-  return colors[prioridad] || 'gray'
+// ✅ Funciones para colores
+const getProgressBarColor = (porcentaje) => {
+  const p = parseFloat(porcentaje)
+  if (p >= 80) return 'bg-green-500'
+  if (p >= 60) return 'bg-blue-500'
+  if (p >= 40) return 'bg-yellow-500'
+  return 'bg-red-500'
 }
 
-const getEstadoColorByName = (estado) => {
-  const colors = {
-    'Programado': 'blue',
-    'En Proceso': 'orange',
-    'Ejecutado': 'green',
-    'Atrasado': 'red'
-  }
-  return colors[estado] || 'gray'
+const getPercentageColor = (porcentaje) => {
+  const p = parseFloat(porcentaje)
+  if (p >= 80) return 'text-green-600'
+  if (p >= 60) return 'text-blue-600'
+  if (p >= 40) return 'text-yellow-600'
+  return 'text-red-600'
 }
 
-const getEstadoBgColor = (estadoId) => {
-  const colors = {
-    7: 'bg-blue-500',
-    8: 'bg-orange-500',
-    9: 'bg-green-500',
-    10: 'bg-blue-600',
-    11: 'bg-orange-600',
-    12: 'bg-green-600',
-    13: 'bg-red-500',
-    14: 'bg-gray-500'
+const getChartBarColor = (porcentaje) => {
+  if (porcentaje >= 80) return 'rgba(34, 197, 94, 0.8)'
+  if (porcentaje >= 60) return 'rgba(59, 130, 246, 0.8)'
+  if (porcentaje >= 40) return 'rgba(251, 191, 36, 0.8)'
+  return 'rgba(239, 68, 68, 0.8)'
+}
+
+// ✅ Handlers
+const handleCambioPeriodo = async () => {
+  await dashboardStore.cambiarPeriodo(periodoSeleccionado.value)
+}
+
+const handleCambioSede = async () => {
+  await dashboardStore.cambiarSede(sedeSeleccionada.value)
+}
+
+// ✅ Cargar sedes
+const cargarSedes = async () => {
+  try {
+    const response = await api.get('/sedes')
+    sedes.value = response
+  } catch (error) {
+    console.error('Error al cargar sedes:', error)
   }
-  return colors[estadoId] || 'bg-gray-500'
 }
 
 onMounted(async () => {
   await Promise.all([
     dashboardStore.loadDashboardData(),
-    mantenimientosStore.fetchMantenimientosHoy()
+    mantenimientosStore.fetchMantenimientosHoy(),
+    cargarSedes()
   ])
+
+  // ✅ DEBUG: Ver qué hay en el store después de cargar
+  console.log('📊 Estado del store después de cargar:', {
+    indicadorGlobal: indicadorGlobal.value,
+    indicadoresPorSede: indicadoresPorSede.value,
+    indicadoresPorCategoria: indicadoresPorCategoria.value
+  })
 })
 </script>
-
-<style scoped>
-/* Estilos adicionales si son necesarios */
-</style>
