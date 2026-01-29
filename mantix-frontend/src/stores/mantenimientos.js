@@ -15,6 +15,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
     mantenimientosAtrasados: [],
     mantenimientoActual: null,
     loading: false,
+  // ✅ NUEVO: Estados para consulta por rango de fechas
+  mantenimientosConsulta: [], // Cambié el nombre para evitar conflicto
+  fechaConsultaDesde: null,
+  fechaConsultaHasta: null,
     filters: {
       sede_id: null,
       categoria_id: null,
@@ -83,13 +87,13 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
     async fetchMantenimientos(params = { page: 1, limit: 100 }) {
       this.loading = true
       try {
-        const response = await api.get('/mantenimientos?page=1&limit=100')
+        const response = await api.get('/mantenimientos?page=1&limit=1000')
         this.mantenimientos = response.data
-        console.log('Mantenimientos cargados:', this.mantenimientos)
+        //console.log('Mantenimientos cargados:', this.mantenimientos)
         this.pagination.total = response.total || response.data.length
         return response.data
       } catch (error) {
-        console.error('Error al cargar mantenimientos:', error)
+       // console.error('Error al cargar mantenimientos:', error)
         toast.error('Error al cargar los mantenimientos')
         return []
       } finally {
@@ -103,10 +107,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/dia/hoy')
         this.mantenimientosHoy = response.data
-        console.log('Mantenimientos de hoy cargados:', this.mantenimientosHoy)
+        //console.log('Mantenimientos de hoy cargados:', this.mantenimientosHoy)
         return response.data
       } catch (error) {
-        console.error('Error al cargar mantenimientos de hoy:', error)
+        //console.error('Error al cargar mantenimientos de hoy:', error)
         this.mantenimientosHoy = []
         return []
       } finally {
@@ -120,10 +124,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/proximos')
         this.mantenimientosProximos = response.data
-        console.log('Mantenimientos próximos cargados:', this.mantenimientosProximos)
+        //console.log('Mantenimientos próximos cargados:', this.mantenimientosProximos)
         return response.data
       } catch (error) {
-        console.error('Error al cargar mantenimientos próximos:', error)
+        //console.error('Error al cargar mantenimientos próximos:', error)
         this.mantenimientosProximos = []
         return []
       } finally {
@@ -137,10 +141,10 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
       try {
         const response = await api.get('/mantenimientos/atrasados')
         this.mantenimientosAtrasados = response.data
-        console.log('Mantenimientos atrasados cargados:', this.mantenimientosAtrasados)
+        //console.log('Mantenimientos atrasados cargados:', this.mantenimientosAtrasados)
         return response.data
       } catch (error) {
-        console.error('Error al cargar mantenimientos atrasados:', error)
+        //console.error('Error al cargar mantenimientos atrasados:', error)
         this.mantenimientosAtrasados = []
         return []
       } finally {
@@ -318,6 +322,58 @@ export const useMantenimientosStore = defineStore('mantenimientos', {
         limit: this.pagination.limit,
         ...this.filters
       })
+    },
+
+// ✅ NUEVO: Buscar mantenimientos por rango de fechas
+async fetchMantenimientosPorFechas(fechaDesde, fechaHasta) {
+  this.loading = true
+  try {
+    //console.log('🔍 Buscando mantenimientos por fechas:', { fechaDesde, fechaHasta })
+    
+    const response = await api.get('/mantenimientos', {
+      params: {
+        fecha_desde: fechaDesde,
+        fecha_hasta: fechaHasta,
+        limit: 1000
+      }
+    })
+
+    //console.log('✅ Respuesta del servidor:', response)
+
+    // Manejar diferentes formatos de respuesta
+    let datos = []
+    if (Array.isArray(response)) {
+      datos = response
+    } else if (response.data && Array.isArray(response.data)) {
+      datos = response.data
+    } else if (response.success && Array.isArray(response.data)) {
+      datos = response.data
     }
+    
+    // Guardar en estado específico para consultas
+    this.mantenimientosConsulta = datos
+    this.fechaConsultaDesde = fechaDesde
+    this.fechaConsultaHasta = fechaHasta
+    
+    toast.success(`Se encontraron ${datos.length} mantenimiento${datos.length !== 1 ? 's' : ''}`)
+    
+    return datos
+    
+  } catch (error) {
+    console.error('❌ Error al buscar mantenimientos por fechas:', error)
+    toast.error(error.response?.data?.message || 'Error al buscar mantenimientos')
+    this.mantenimientosConsulta = []
+    return []
+  } finally {
+    this.loading = false
+  }
+},
+
+// ✅ NUEVO: Limpiar consulta de fechas
+limpiarConsultaFechas() {
+  this.mantenimientosConsulta = []
+  this.fechaConsultaDesde = null
+  this.fechaConsultaHasta = null
+}
   }
 })
