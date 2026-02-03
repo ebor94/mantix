@@ -38,130 +38,228 @@ console.log('Modelos cargados:', {
 // Función auxiliar para verificar si un modelo existe
 const modelExists = (model) => model !== undefined && model !== null;
 
+/**
+ * Obtener IDs de categorías asignadas al usuario
+ * Si es Administrador (rol_id = 1) O es_super_admin = true → retorna null (todas las categorías)
+ * Si tiene otro rol y NO es super admin → retorna solo las categorías asignadas
+ */
+const obtenerCategoriasUsuario = async (usuarioId) => {
+  try {
+    const { Rol } = db;
+    
+    // Obtener usuario con su rol
+    const usuario = await Usuario.findByPk(usuarioId, {
+      include: [
+        {
+          model: Rol,
+          as: 'rol',
+          attributes: ['id', 'nombre']
+        }
+      ]
+    });
+    
+    if (!usuario) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    console.log(`👤 Usuario: ${usuario.email}`);
+    console.log(`   - Rol ID: ${usuario.rol_id}`);
+    console.log(`   - Es Super Admin: ${usuario.es_super_admin}`);
+
+    // ✅ VALIDACIÓN: Administrador (rol_id = 1) y Super Admin
+    if (usuario.rol_id === 1 &&  usuario.es_super_admin === true) {
+      console.log('✅ Usuario con permisos de administrador - Sin filtro de categorías');
+      return null; // null = sin filtro, ve todas las categorías
+    }
+
+   // console.log('🔒 Usuario regular - Filtrando por categorías asignadas');
+
+    // Obtener categorías asignadas al usuario
+    const { UsuarioCategoria } = db;
+    
+    if (!modelExists(UsuarioCategoria)) {
+      console.warn('⚠️ Modelo UsuarioCategoria no disponible');
+      return [];
+    }
+
+    const usuarioCategorias = await UsuarioCategoria.findAll({
+      where: { usuario_id: usuarioId },
+      attributes: ['categoria_id']
+    });
+
+    const categoriasIds = usuarioCategorias.map(uc => uc.categoria_id);
+    
+    //console.log(`📋 Categorías asignadas al usuario:`, categoriasIds);
+
+    return categoriasIds;
+    
+  } catch (error) {
+    console.error('❌ Error al obtener categorías del usuario:', error);
+    return [];
+  }
+};
 const mantenimientosController = {
   // Listar mantenimientos programados
-  async listar(req, res, next) {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        sede_id,
-        estado_id,
-        fecha_desde,
-        fecha_hasta,
-        categoria_id,
-        prioridad
-      } = req.query;
+ async listar(req, res, next) {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      sede_id,
+      estado_id,
+      fecha_desde,
+      fecha_hasta,
+      categoria_id,
+      prioridad
+    } = req.query;
 
-      const where = {};
+    const where = {};
 
-      if (fecha_desde && fecha_hasta) {
-        where.fecha_programada = {
-          [Op.between]: [fecha_desde, fecha_hasta]
-        };
-      }
+    if (fecha_desde && fecha_hasta) {
+      where.fecha_programada = {
+        [Op.between]: [fecha_desde, fecha_hasta]
+      };
+    }
 
-      if (estado_id) where.estado_id = estado_id;
-      if (prioridad) where.prioridad = prioridad;
+    if (estado_id) where.estado_id = estado_id;
+    if (prioridad) where.prioridad = prioridad;
 
-      // Construir includes dinámicamente
-      const includes = [];
+    // Obtener categorías del usuario autenticado
+    const usuarioId = req.usuario ? req.usuario.id : null;
+    const categoriasUsuario = usuarioId ? await obtenerCategoriasUsuario(usuarioId) : null;
 
-      // Include de PlanActividad con sus sub-includes
-      if (modelExists(PlanActividad)) {
-        const planActividadInclude = {
-          model: PlanActividad,
-          as: 'actividad',
-          required: false,
-          include: []
-        };
+    console.log('🔍 Categorías del usuario:', categoriasUsuario);
 
-        // Sub-includes de PlanActividad
-        if (modelExists(Sede)) {
-          const sedeInclude = {
-            model: Sede,
-            as: 'sede',
-            required: false
-          };
-          if (sede_id) {
-            sedeInclude.where = { id: sede_id };
-          }
-          planActividadInclude.include.push(sedeInclude);
-        }
+    let planIds = null;
 
-        if (modelExists(CategoriaMantenimiento)) {
-          const categoriaInclude = {
-            model: CategoriaMantenimiento,
-            as: 'categoria',
-            required: false
-          };
-          if (categoria_id) {
-            categoriaInclude.where = { id: categoria_id };
-          }
-          planActividadInclude.include.push(categoriaInclude);
-        }
-
-        if (modelExists(Equipo)) {
-          planActividadInclude.include.push({
-            model: Equipo,
-            as: 'equipo',
-            required: false
-          });
-        }
-
-        if (modelExists(Usuario)) {
-          planActividadInclude.include.push({
-            model: Usuario,
-            as: 'responsable_usuario',
-            required: false
-          });
-        }
-
-        if (modelExists(Proveedor)) {
-          planActividadInclude.include.push({
-            model: Proveedor,
-            as: 'responsable_proveedor',
-            required: false
-          });
-        }
-
-        includes.push(planActividadInclude);
-      }
-
-      // Include de Estado
-      if (modelExists(Estado)) {
-        includes.push({
-          model: Estado,
-          as: 'estado',
-          required: false
-        });
-      }
-
-      // Include de MantenimientoEjecutado
-      if (modelExists(MantenimientoEjecutado)) {
-        includes.push({
-          model: MantenimientoEjecutado,
-          as: 'ejecucion',
-          required: false
-        });
-      }
-
-      const { count, rows } = await MantenimientoProgramado.findAndCountAll({
-        where,
-        include: includes,
-        ...paginar(page, limit),
-        order: [['fecha_programada', 'ASC']],
-        distinct: true,
-        subQuery: false
+    // CRÍTICO: Filtrar por categorías
+    if (categoriasUsuario !== null && categoriasUsuario.length > 0) {
+      console.log('🔒 Aplicando filtro de categorías...');
+      
+      // Obtener planes permitidos
+      const planesPermitidos = await PlanActividad.findAll({
+        where: {
+          categoria_id: { [Op.in]: categoriasUsuario }
+        },
+        attributes: ['id'],
+        raw: true
       });
 
-      res.json(formatearRespuestaPaginada(rows, page, limit, count));
-    } catch (error) {
-      console.error('Error en listar mantenimientos:', error);
-      console.error('Stack:', error.stack);
-      next(error);
+      planIds = planesPermitidos.map(p => p.id);
+      
+      console.log('📝 Total de planes permitidos:', planIds.length);
+
+      if (planIds.length === 0) {
+        console.log('⚠️ No hay planes - Retornando array vacío');
+        return res.json(formatearRespuestaPaginada([], page, limit, 0));
+      }
+
+      // ✅ Aplicar filtro
+      where.plan_actividad_id = { [Op.in]: planIds };
+      
+    } else {
+      console.log('✅ Usuario administrador - Sin filtro');
     }
-  },
+
+    // Construir includes
+    const includes = [];
+
+    if (modelExists(PlanActividad)) {
+      const planActividadInclude = {
+        model: PlanActividad,
+        as: 'actividad',
+        required: false,
+        include: []
+      };
+
+      if (modelExists(Sede)) {
+        const sedeInclude = {
+          model: Sede,
+          as: 'sede',
+          required: false
+        };
+        if (sede_id) {
+          sedeInclude.where = { id: sede_id };
+        }
+        planActividadInclude.include.push(sedeInclude);
+      }
+
+      if (modelExists(CategoriaMantenimiento)) {
+        planActividadInclude.include.push({
+          model: CategoriaMantenimiento,
+          as: 'categoria',
+          required: false
+        });
+      }
+
+      if (modelExists(Equipo)) {
+        planActividadInclude.include.push({
+          model: Equipo,
+          as: 'equipo',
+          required: false
+        });
+      }
+
+      if (modelExists(Usuario)) {
+        planActividadInclude.include.push({
+          model: Usuario,
+          as: 'responsable_usuario',
+          required: false
+        });
+      }
+
+      if (modelExists(Proveedor)) {
+        planActividadInclude.include.push({
+          model: Proveedor,
+          as: 'responsable_proveedor',
+          required: false
+        });
+      }
+
+      includes.push(planActividadInclude);
+    }
+
+    if (modelExists(Estado)) {
+      includes.push({
+        model: Estado,
+        as: 'estado',
+        required: false
+      });
+    }
+
+    if (modelExists(MantenimientoEjecutado)) {
+      includes.push({
+        model: MantenimientoEjecutado,
+        as: 'ejecucion',
+        required: false
+      });
+    }
+
+    // ✅ SOLUCIÓN: Separar count y findAll
+    const count = await MantenimientoProgramado.count({
+      where,
+      distinct: true
+    });
+
+    console.log(`📊 Total con WHERE aplicado: ${count}`);
+
+    const rows = await MantenimientoProgramado.findAll({
+      where,
+      include: includes,
+      ...paginar(page, limit),
+      order: [['fecha_programada', 'DESC']]
+    });
+
+    console.log(`📊 Registros en página ${page}: ${rows.length}`);
+
+    res.json(formatearRespuestaPaginada(rows, page, limit, count));
+    
+  } catch (error) {
+    console.error('❌ Error en listar:', error);
+    console.error('Stack:', error.stack);
+    next(error);
+  }
+},
 
   // Obtener mantenimiento por ID
   async obtenerPorId(req, res, next) {
@@ -406,167 +504,236 @@ const mantenimientosController = {
   },
 
   // Obtener mantenimientos del día
-  async obtenerDelDia(req, res, next) {
-    try {
-      const hoy = new Date().toISOString().split('T')[0];
+async obtenerDelDia(req, res, next) {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
 
-      const includes = [];
-
-      if (modelExists(PlanActividad)) {
-        const planActividadInclude = {
-          model: PlanActividad,
-          as: 'actividad',
-          required: false,
-          include: []
-        };
-
-        if (modelExists(Sede)) {
-          planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
-        }
-
-        if (modelExists(CategoriaMantenimiento)) {
-          planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
-        }
-
-        if (modelExists(Equipo)) {
-          planActividadInclude.include.push({ model: Equipo, as: 'equipo', required: false });
-        }
-
-        includes.push(planActividadInclude);
+    const where = {
+      fecha_programada: hoy,
+      estado_id: {
+        [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.EN_PROCESO]
       }
+    };
 
-      if (modelExists(Estado)) {
-        includes.push({ model: Estado, as: 'estado', required: false });
-      }
+    // ✅ Obtener categorías del usuario
+    const usuarioId = req.usuario ? req.usuario.id : null;
+    const categoriasUsuario = usuarioId ? await obtenerCategoriasUsuario(usuarioId) : null;
 
-      const mantenimientos = await MantenimientoProgramado.findAll({
-        where: {
-          fecha_programada: hoy,
-          estado_id: {
-            [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.EN_PROCESO]
-          }
-        },
-        include: includes,
-        order: [['hora_programada', 'ASC']]
+    // ✅ Aplicar filtro por categorías
+    if (categoriasUsuario !== null && categoriasUsuario.length > 0) {
+      const planesPermitidos = await PlanActividad.findAll({
+        where: { categoria_id: { [Op.in]: categoriasUsuario } },
+        attributes: ['id'],
+        raw: true
       });
 
-      res.json({
-        success: true,
-        data: mantenimientos
-      });
-    } catch (error) {
-      console.error('Error en obtenerDelDia:', error);
-      next(error);
+      const planIds = planesPermitidos.map(p => p.id);
+
+      if (planIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      where.plan_actividad_id = { [Op.in]: planIds };
     }
-  },
+
+    const includes = [];
+
+    if (modelExists(PlanActividad)) {
+      const planActividadInclude = {
+        model: PlanActividad,
+        as: 'actividad',
+        required: false,
+        include: []
+      };
+
+      if (modelExists(Sede)) {
+        planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
+      }
+
+      if (modelExists(CategoriaMantenimiento)) {
+        planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
+      }
+
+      if (modelExists(Equipo)) {
+        planActividadInclude.include.push({ model: Equipo, as: 'equipo', required: false });
+      }
+
+      includes.push(planActividadInclude);
+    }
+
+    if (modelExists(Estado)) {
+      includes.push({ model: Estado, as: 'estado', required: false });
+    }
+
+    const mantenimientos = await MantenimientoProgramado.findAll({
+      where,
+      include: includes,
+      order: [['hora_programada', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      data: mantenimientos
+    });
+  } catch (error) {
+    console.error('Error en obtenerDelDia:', error);
+    next(error);
+  }
+},
 
   // Obtener mantenimientos próximos (siguiente semana)
-  async obtenerProximos(req, res, next) {
-    try {
-      const hoy = new Date();
-      const proximaSemana = new Date();
-      proximaSemana.setDate(proximaSemana.getDate() + 30);
+async obtenerProximos(req, res, next) {
+  try {
+    const hoy = new Date();
+    const proximaSemana = new Date();
+    proximaSemana.setDate(proximaSemana.getDate() + 30);
 
-      const includes = [];
-
-      if (modelExists(PlanActividad)) {
-        const planActividadInclude = {
-          model: PlanActividad,
-          as: 'actividad',
-          required: false,
-          include: []
-        };
-
-        if (modelExists(Sede)) {
-          planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
-        }
-
-        if (modelExists(CategoriaMantenimiento)) {
-          planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
-        }
-
-        includes.push(planActividadInclude);
+    const where = {
+      fecha_programada: {
+        [Op.between]: [hoy.toISOString().split('T')[0], proximaSemana.toISOString().split('T')[0]]
+      },
+      estado_id: {
+        [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.REPROGRAMADO]
       }
+    };
 
-      if (modelExists(Estado)) {
-        includes.push({ model: Estado, as: 'estado', required: false });
-      }
+    // ✅ Obtener categorías del usuario
+    const usuarioId = req.usuario ? req.usuario.id : null;
+    const categoriasUsuario = usuarioId ? await obtenerCategoriasUsuario(usuarioId) : null;
 
-      const mantenimientos = await MantenimientoProgramado.findAll({
-        where: {
-          fecha_programada: {
-            [Op.between]: [hoy.toISOString().split('T')[0], proximaSemana.toISOString().split('T')[0]]
-          },
-          estado_id: {
-            [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.REPROGRAMADO]
-          }
-        },
-        include: includes,
-        order: [['fecha_programada', 'ASC']]
+    // ✅ Aplicar filtro por categorías
+    if (categoriasUsuario !== null && categoriasUsuario.length > 0) {
+      const planesPermitidos = await PlanActividad.findAll({
+        where: { categoria_id: { [Op.in]: categoriasUsuario } },
+        attributes: ['id'],
+        raw: true
       });
 
-      res.json({
-        success: true,
-        data: mantenimientos
-      });
-    } catch (error) {
-      console.error('Error en obtenerProximos:', error);
-      next(error);
+      const planIds = planesPermitidos.map(p => p.id);
+
+      if (planIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      where.plan_actividad_id = { [Op.in]: planIds };
     }
-  },
+
+    const includes = [];
+
+    if (modelExists(PlanActividad)) {
+      const planActividadInclude = {
+        model: PlanActividad,
+        as: 'actividad',
+        required: false,
+        include: []
+      };
+
+      if (modelExists(Sede)) {
+        planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
+      }
+
+      if (modelExists(CategoriaMantenimiento)) {
+        planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
+      }
+
+      includes.push(planActividadInclude);
+    }
+
+    if (modelExists(Estado)) {
+      includes.push({ model: Estado, as: 'estado', required: false });
+    }
+
+    const mantenimientos = await MantenimientoProgramado.findAll({
+      where,
+      include: includes,
+      order: [['fecha_programada', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      data: mantenimientos
+    });
+  } catch (error) {
+    console.error('Error en obtenerProximos:', error);
+    next(error);
+  }
+},
 
   // Obtener mantenimientos atrasados
-  async obtenerAtrasados(req, res, next) {
-    try {
-      const hoy = new Date().toISOString().split('T')[0];
+async obtenerAtrasados(req, res, next) {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
 
-      const includes = [];
-
-      if (modelExists(PlanActividad)) {
-        const planActividadInclude = {
-          model: PlanActividad,
-          as: 'actividad',
-          required: false,
-          include: []
-        };
-
-        if (modelExists(Sede)) {
-          planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
-        }
-
-        if (modelExists(CategoriaMantenimiento)) {
-          planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
-        }
-
-        includes.push(planActividadInclude);
+    const where = {
+      fecha_programada: {
+        [Op.lt]: hoy
+      },
+      estado_id: {
+        [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.ATRASADO]
       }
+    };
 
-      if (modelExists(Estado)) {
-        includes.push({ model: Estado, as: 'estado', required: false });
-      }
+    // ✅ Obtener categorías del usuario
+    const usuarioId = req.usuario ? req.usuario.id : null;
+    const categoriasUsuario = usuarioId ? await obtenerCategoriasUsuario(usuarioId) : null;
 
-      const mantenimientos = await MantenimientoProgramado.findAll({
-        where: {
-          fecha_programada: {
-            [Op.lt]: hoy
-          },
-          estado_id: {
-            [Op.in]: [ESTADOS_MANTENIMIENTO.PROGRAMADO, ESTADOS_MANTENIMIENTO.ATRASADO]
-          }
-        },
-        include: includes,
-        order: [['fecha_programada', 'ASC']]
+    // ✅ Aplicar filtro por categorías
+    if (categoriasUsuario !== null && categoriasUsuario.length > 0) {
+      const planesPermitidos = await PlanActividad.findAll({
+        where: { categoria_id: { [Op.in]: categoriasUsuario } },
+        attributes: ['id'],
+        raw: true
       });
 
-      res.json({
-        success: true,
-        data: mantenimientos
-      });
-    } catch (error) {
-      console.error('Error en obtenerAtrasados:', error);
-      next(error);
+      const planIds = planesPermitidos.map(p => p.id);
+
+      if (planIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      where.plan_actividad_id = { [Op.in]: planIds };
     }
-  },
+
+    const includes = [];
+
+    if (modelExists(PlanActividad)) {
+      const planActividadInclude = {
+        model: PlanActividad,
+        as: 'actividad',
+        required: false,
+        include: []
+      };
+
+      if (modelExists(Sede)) {
+        planActividadInclude.include.push({ model: Sede, as: 'sede', required: false });
+      }
+
+      if (modelExists(CategoriaMantenimiento)) {
+        planActividadInclude.include.push({ model: CategoriaMantenimiento, as: 'categoria', required: false });
+      }
+
+      includes.push(planActividadInclude);
+    }
+
+    if (modelExists(Estado)) {
+      includes.push({ model: Estado, as: 'estado', required: false });
+    }
+
+    const mantenimientos = await MantenimientoProgramado.findAll({
+      where,
+      include: includes,
+      order: [['fecha_programada', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      data: mantenimientos
+    });
+  } catch (error) {
+    console.error('Error en obtenerAtrasados:', error);
+    next(error);
+  }
+},
   /**
  * Generar PDF de mantenimiento
  */
