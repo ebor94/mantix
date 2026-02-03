@@ -244,3 +244,528 @@
 {"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-19 14:05:16"}
 {"level":"info","message":"Ejecutando tarea: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-20 00:00:00"}
 {"level":"info","message":"Tarea completada: Mantenimientos atrasados actualizados","service":"mantix-api","timestamp":"2026-01-20 00:00:00"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 08:05:58"}
+{"level":"info","message":"🔄 Ejecutando tarea: Alertar mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 09:00:00"}
+{"level":"info","message":"Notificación enviada a Google Chat:","name":"spaces/AAQAhcpELhU/messages/EuXNn7xzrrU.EuXNn7xzrrU","service":"mantix-api","space":{"name":"spaces/AAQAhcpELhU"},"text":"*🚨 Alerta: Mantenimientos Vencidos*\n\nHay *7* mantenimiento(s) vencido(s) que requieren atención inmediata.\n\n📊 *Estadísticas:*\n   • Promedio de atraso: 20 días\n   • Más atrasado: MNT-2026-0009 (20 días)\n   • Fecha más antigua: 2026-01-01\n\n📋 *Detalle de mantenimientos vencidos:*\n\n1. 🟡 ⚠️ *MNT-2026-0009*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: MTTO AIRES ACONDICIONADOS  \n\n2. 🟡 ⚠️ *MNT-2026-0014*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: MTTO AIRES ACONDICIONADOS  \n\n3. 🟡 ⚠️ *MNT-2026-0019*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: Mtto Compresor aire - Horno Proindul\n\n4. 🟡 ⚠️ *MNT-2026-0051*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: Mtto Inyectoras - Laboratorio\n\n5. 🟡 ⚠️ *MNT-2026-0056*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: Mtto Inyectoras - Laboratorio\n\n6. 🟡 ⚠️ *MNT-2026-0061*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: Mtto Inyectoras - Laboratorio\n\n7. 🟡 ⚠️ *MNT-2026-0066*\n   📅 Programado: 2026-01-01 🕐 08:00:00\n   ⏱️ Días de atraso: *20 días*\n   👤 Responsable: Sin asignar\n   🔧 Actividad: Mtto Blower - Sede Gran Colombia\n\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ _Por favor, revisar y gestionar estos mantenimientos lo antes posible._\n🕐 Fecha de alerta: 21/1/2026, 9:00:00 a. m.\n\n_Este es un mensaje automático de Mantix - Sistema de Gestión de Mantenimiento_","thread":{"name":"spaces/AAQAhcpELhU/threads/EuXNn7xzrrU"},"timestamp":"2026-01-21 09:00:01"}
+{"level":"info","message":"✅ Alerta enviada: 7 mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 09:00:01"}
+{"level":"info","message":"📊 Promedio de atraso: 20 días","service":"mantix-api","timestamp":"2026-01-21 09:00:01"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 09:55:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 09:55:36"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 10:04:35"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 10:04:54"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 10:49:43"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 10:49:44"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 10:53:49"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 10:56:40"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 10:56:42"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 11:15:10"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 11:15:11"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 11:28:47"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 11:28:50"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 11:33:22"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 11:33:23"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 11:35:55"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 11:35:56"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 11:37:35"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 11:38:24"}
+{"fin":"2026-12-31","inicio":"2026-01-21","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-21 11:39:01"}
+{"fin":"2026-12-31","inicio":"2026-01-21","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-21 11:40:38"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 15:07:15"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 15:07:16"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 15:07:58"}
+{"fin":"2026-12-31","inicio":"2026-01-30","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-21 15:09:04"}
+{"fin":"2026-12-31","inicio":"2026-01-30","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-21 15:15:57"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 21:21:49"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 21:21:55"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 21:56:46"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 21:58:12"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-21 22:00:53"}
+{"level":"error","message":"❌ Unhandled Rejection: sequelize is not defined","service":"mantix-api","stack":"ReferenceError: sequelize is not defined\n    at crearMasivo (C:\\apps\\mantix\\mantix-backend\\src\\controllers\\planActividadController.js:786:25)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at requireActividadAccess (C:\\apps\\mantix\\mantix-backend\\src\\middleware\\auth.js:203:14)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at Route.dispatch (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:119:3)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:284:15\n    at Function.process_params (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:346:12)","timestamp":"2026-01-21 22:01:10"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 22:01:53"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 22:02:01"}
+{"level":"error","message":"❌ Unhandled Rejection: sequelize is not defined","service":"mantix-api","stack":"ReferenceError: sequelize is not defined\n    at crearMasivo (C:\\apps\\mantix\\mantix-backend\\src\\controllers\\planActividadController.js:786:25)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at requireActividadAccess (C:\\apps\\mantix\\mantix-backend\\src\\middleware\\auth.js:203:14)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at Route.dispatch (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:119:3)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:284:15\n    at Function.process_params (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:346:12)","timestamp":"2026-01-21 22:02:26"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-21 22:04:01"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-21 22:04:07"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 10:22:27"}
+{"level":"error","message":"❌ Unhandled Rejection: Transaction cannot be rolled back because it has been finished with state: commit","service":"mantix-api","stack":"Error: Transaction cannot be rolled back because it has been finished with state: commit\n    at Transaction.rollback (C:\\apps\\mantix\\mantix-backend\\node_modules\\sequelize\\lib\\transaction.js:59:13)\n    at crearMasivo (C:\\apps\\mantix\\mantix-backend\\src\\controllers\\planActividadController.js:1033:25)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","timestamp":"2026-01-22 10:26:53"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 10:28:04"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 10:28:05"}
+{"level":"error","message":"❌ Unhandled Rejection: Transaction cannot be rolled back because it has been finished with state: commit","service":"mantix-api","stack":"Error: Transaction cannot be rolled back because it has been finished with state: commit\n    at Transaction.rollback (C:\\apps\\mantix\\mantix-backend\\node_modules\\sequelize\\lib\\transaction.js:59:13)\n    at crearMasivo (C:\\apps\\mantix\\mantix-backend\\src\\controllers\\planActividadController.js:1033:25)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","timestamp":"2026-01-22 10:28:29"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 10:34:44"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 10:41:21"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 11:33:48"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-22 11:41:49"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 16:54:20"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 16:54:21"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-22 17:02:32"}
+{"level":"error","message":"❌ Unhandled Rejection: sequelize is not defined","service":"mantix-api","stack":"ReferenceError: sequelize is not defined\n    at exports.programarGrupo (C:\\apps\\mantix\\mantix-backend\\src\\controllers\\programarMantenimientosController.js:615:23)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at Route.dispatch (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\route.js:119:3)\n    at Layer.handle [as handle_request] (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:284:15\n    at param (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:365:14)\n    at param (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:376:14)\n    at Function.process_params (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:421:3)\n    at next (C:\\apps\\mantix\\mantix-backend\\node_modules\\express\\lib\\router\\index.js:280:10)","timestamp":"2026-01-22 17:03:19"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:04:29"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:04:31"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:07:49"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:07:50"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:07:57"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:16:45"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:17:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:17:37"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:17:42"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:24:37"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:24:38"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:24:46"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:27:25"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:27:28"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:36:43"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:36:44"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:36:50"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:37:30"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:37:31"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:37:40"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:38:16"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:38:18"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:38:40"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:38:41"}
+{"fin":"2026-12-31","grupo_masivo_id":"20260122165924Y698","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:38:45"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-22 17:54:36"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-22 17:54:37"}
+{"fin":"2026-12-31","inicio":"2026-02-01","level":"info","message":"📅 Fechas de programación:","service":"mantix-api","timestamp":"2026-01-22 17:55:29"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-23 09:22:35"}
+{"level":"info","message":"🔄 Ejecutando tarea: Alertar mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-27 08:00:00"}
+{"level":"info","message":"🔄 Ejecutando tarea: Notificar mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-27 08:00:00"}
+{"level":"info","message":"ℹ️ No hay mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-27 08:00:00"}
+{"level":"info","message":"ℹ️ No hay mantenimientos próximos para notificar","service":"mantix-api","timestamp":"2026-01-27 08:00:00"}
+{"level":"info","message":"✅ Tarea completada: 0 notificaciones enviadas (0 reenvíos)","service":"mantix-api","timestamp":"2026-01-27 08:00:00"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-27 18:01:44"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-27 18:01:46"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-27 18:02:31"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-27 18:03:30"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-27 18:03:31"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-27 18:04:07"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-27 18:04:08"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-28 10:36:12"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-28 10:36:13"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-28 10:37:23"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-01-28 10:38:00"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-01-28 10:53:41"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 09:50:01"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 09:50:02"}
+{"level":"info","message":"Usuario mantenimientocucuta@losolivos.co inició sesión","service":"mantix-api","timestamp":"2026-02-03 09:58:52"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:00:11"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:00:12"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:12:10"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:12:11"}
+{"level":"info","message":"Usuario mantenimientocucuta@losolivos.co inició sesión","service":"mantix-api","timestamp":"2026-02-03 10:13:46"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:27:28"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:27:29"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:34:42"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:34:43"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:36:53"}
+{"level":"info","message":"✅ Conexión a la base de datos establecida correctamente","service":"mantix-api","timestamp":"2026-02-03 10:41:30"}
+{"level":"info","message":"✅ Tareas programadas (cron) configuradas correctamente","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"⏰ Horarios de ejecución:","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"   - 00:00: Actualizar mantenimientos atrasados","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"   - 08:00: Enviar notificaciones de mantenimientos próximos","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"   - 09:00: Enviar alertas de mantenimientos vencidos","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"   - 18:00: Enviar reporte diario","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"✅ Tareas programadas iniciadas","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"🚀 Servidor Mantix corriendo en puerto 3020","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"📚 Documentación API: http://192.9.17.30:3020/api-docs","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"🌍 Ambiente: development","service":"mantix-api","timestamp":"2026-02-03 10:41:31"}
+{"level":"info","message":"Usuario bortega inició sesión","service":"mantix-api","timestamp":"2026-02-03 10:44:38"}
