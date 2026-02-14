@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const errorHandler = require('./middleware/errorHandler');
+const errorHandler2 = require('./middleware/errorHandlers');
 const routes = require('./routes');
 const path = require('path');
 const fs = require('fs');
@@ -144,5 +145,7 @@ app.use((req, res) => {
 // Middleware de manejo de errores
 // ============================================
 app.use(errorHandler);
+app.use(errorHandler2);
+
 
 module.exports = app;

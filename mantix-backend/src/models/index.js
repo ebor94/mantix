@@ -1,5 +1,5 @@
 // ============================================
-// src/models/index.js - Conexión Sequelize (CORREGIDO)
+// src/models/index.js - Conexión Sequelize mantix 
 // ============================================
 const { Sequelize } = require('sequelize');
 const config = require('../config/database');
@@ -18,7 +18,7 @@ const db = {
   sequelize,
   Sequelize,
   
-  // Modelos
+  // Modelos existentes
   Rol: require('./Rol')(sequelize, Sequelize.DataTypes),
   Usuario: require('./Usuario')(sequelize, Sequelize.DataTypes),
   Sede: require('./Sede')(sequelize, Sequelize.DataTypes),
@@ -43,14 +43,18 @@ const db = {
   EjecucionMaterial: require('./EjecucionMaterial')(sequelize, Sequelize.DataTypes),
   EjecucionEvidencia: require('./EjecucionEvidencia')(sequelize, Sequelize.DataTypes),
   SolicitudAdicional: require('./SolicitudAdicional')(sequelize, Sequelize.DataTypes),
-Dependencia: require('./Dependencia')(sequelize, Sequelize.DataTypes),
+  Dependencia: require('./Dependencia')(sequelize, Sequelize.DataTypes),
 
   Requisito: require('./Requisito')(sequelize, Sequelize.DataTypes),  
   RequisitoCategoria: require('./RequisitoCategoria')(sequelize, Sequelize.DataTypes),
   
   Notificacion: require('./Notificacion')(sequelize, Sequelize.DataTypes),
 
-  AuditLog: require('./AuditLog')(sequelize, Sequelize.DataTypes)
+  AuditLog: require('./AuditLog')(sequelize, Sequelize.DataTypes),
+
+  // NUEVOS MODELOS - Afiliados
+  Afiliado: require('./Afiliado')(sequelize, Sequelize.DataTypes),
+  Beneficiario: require('./Beneficiario')(sequelize, Sequelize.DataTypes)
 };
 
 // Definir asociaciones

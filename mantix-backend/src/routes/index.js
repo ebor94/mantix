@@ -28,6 +28,7 @@ const tipoMantenimientoRoutes = require('./tipoMantenimientoRoutes');
 const mantenimientoNovedadesRoutes = require('./mantenimientoNovedadesRoutes'); // NUEVO
 const requisitosRoutes = require('./requisitosRoutes'); // NUEVO
 const dependenciasRoutes = require('./dependenciasRoutes');
+const afiliadoRoutes = require('./afiliado.routes');
 // Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
@@ -52,4 +53,6 @@ router.use('/tipos-mantenimiento', tipoMantenimientoRoutes);
 router.use('/mantenimiento-novedades', mantenimientoNovedadesRoutes); 
 router.use('/requisitos', requisitosRoutes); // NUEVO
 router.use('/dependencias', dependenciasRoutes); // ✅ NUEVO
+router.use('/afiliados', afiliadoRoutes);
+
 module.exports = router;
