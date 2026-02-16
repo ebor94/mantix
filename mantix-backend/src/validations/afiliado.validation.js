@@ -5,10 +5,10 @@ const beneficiarioSchema = Joi.object({
     .messages({ 'any.only': 'Tipo de beneficiario debe ser DE_LEY o ADICIONAL' }),
   parentesco: Joi.string().valid('CONYUGE', 'HIJO(A)', 'PADRE', 'MADRE', 'HERMANO(A)', 'ABUELO(A)', 'OTRO').required()
     .messages({ 'any.only': 'Parentesco no válido' }),
-  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT').required()
+  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
-  numeroDocumento: Joi.string().pattern(/^\d{5,15}$/).required().trim()
-    .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 15 dígitos' }),
+  numeroDocumento: Joi.string().pattern(/^\d{5,20}$/).required().trim()
+    .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 20 dígitos' }),
   primerApellido: Joi.string().max(80).required().trim()
     .messages({ 'string.empty': 'Primer apellido es obligatorio' }),
   segundoApellido: Joi.string().max(80).allow('', null).trim(),
@@ -43,11 +43,14 @@ const createAfiliadoSchema = Joi.object({
   email: Joi.string().email().allow('', null)
     .messages({ 'string.email': 'Email no tiene formato válido' }),
   direccion: Joi.string().max(200).allow('', null).trim(),
-  canal: Joi.string().valid('BANCARIO', 'LIBRANZA', 'CAJA', 'PSE', 'TRANSFERENCIA', 'OTRO').required()
+  departamento: Joi.string().max(80).allow('', null).trim(),
+  ciudad: Joi.string().max(80).allow('', null).trim(),
+  barrio: Joi.string().max(120).allow('', null).trim(),
+  canal: Joi.string().valid('BANCARIO', 'LIBRANZA', 'CAJA', 'PSE', 'TRANSFERENCIA', 'OTRO').allow('', null)
     .messages({ 'any.only': 'Canal no válido' }),
-  producto: Joi.string().valid('INTEGRAL', 'BASICO', 'OTRO').required()
+  producto: Joi.string().valid('INTEGRAL', 'BASICO', 'OTRO').allow('', null)
     .messages({ 'any.only': 'Producto no válido' }),
-  grupo: Joi.string().valid('BASICO', 'PLUS', 'PREMIUM', 'OTRO').required()
+  grupo: Joi.string().valid('BASICO', 'PLUS', 'PREMIUM', 'OTRO').allow('', null)
     .messages({ 'any.only': 'Grupo no válido' }),
   beneficiarios: Joi.array().items(beneficiarioSchema).min(0).default([])
 });

@@ -61,18 +61,30 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(200),
       allowNull: true
     },
-    canal: {
-      type: DataTypes.ENUM('BANCARIO', 'LIBRANZA', 'CAJA', 'PSE', 'TRANSFERENCIA', 'OTRO'),
-      allowNull: false
-    },
-    producto: {
-      type: DataTypes.ENUM('INTEGRAL', 'BASICO', 'OTRO'),
-      allowNull: false
-    },
-    grupo: {
-      type: DataTypes.ENUM('BASICO', 'PLUS', 'PREMIUM', 'OTRO'),
-      allowNull: false
-    }
+  departamento: {
+    type: DataTypes.STRING(80),
+    allowNull: true
+  },
+  ciudad: {
+    type: DataTypes.STRING(80),
+    allowNull: true
+  },
+  barrio: {
+    type: DataTypes.STRING(120),
+    allowNull: true
+  },
+  canal: {
+    type: DataTypes.ENUM('BANCARIO', 'LIBRANZA', 'CAJA', 'PSE', 'TRANSFERENCIA', 'OTRO'),
+    allowNull: true
+  },
+  producto: {
+    type: DataTypes.ENUM('INTEGRAL', 'BASICO', 'OTRO'),
+    allowNull: true
+  },
+  grupo: {
+    type: DataTypes.ENUM('BASICO', 'PLUS', 'PREMIUM', 'OTRO'),
+    allowNull: true
+  }
   }, {
     tableName: 'afiliados',
     timestamps: true
