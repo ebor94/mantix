@@ -5,7 +5,7 @@ const beneficiarioSchema = Joi.object({
     .messages({ 'any.only': 'Tipo de beneficiario debe ser DE_LEY o ADICIONAL' }),
   parentesco: Joi.string().valid('CONYUGE', 'HIJO(A)', 'PADRE', 'MADRE', 'HERMANO(A)', 'ABUELO(A)', 'OTRO').required()
     .messages({ 'any.only': 'Parentesco no válido' }),
-  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT').required()
+  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'RC', 'PPT', 'ADT').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
   numeroDocumento: Joi.string().pattern(/^\d{5,20}$/).required().trim()
     .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 20 dígitos' }),
@@ -17,7 +17,9 @@ const beneficiarioSchema = Joi.object({
   segundoNombre: Joi.string().max(80).allow('', null).trim(),
   fechaNacimiento: Joi.date().iso().max('now').required()
     .messages({ 'date.max': 'Fecha de nacimiento no puede ser futura' }),
-  edad: Joi.number().integer().min(0).max(150).required()
+  edad: Joi.number().integer().min(0).max(150).required(),
+  estado: Joi.string().valid('ACTUALIZACION', 'RETIRO', 'INGRESO').required()
+    .messages({ 'any.only': 'Estado debe ser ACTUALIZACION, RETIRO o INGRESO' })
 });
 
 const createAfiliadoSchema = Joi.object({
