@@ -52,6 +52,10 @@ module.exports = (sequelize, DataTypes) => {
     edad: {
       type: DataTypes.TINYINT.UNSIGNED,
       allowNull: false
+    },
+    estado: {
+      type: DataTypes.ENUM('ACTUALIZACION', 'RETIRO', 'INGRESO'),
+      allowNull: false
     }
   }, {
     tableName: 'beneficiarios',
