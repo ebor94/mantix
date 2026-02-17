@@ -18,7 +18,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     parentesco: {
-      type: DataTypes.ENUM('CONYUGE', 'HIJO(A)', 'PADRE', 'MADRE', 'HERMANO(A)', 'ABUELO(A)', 'OTRO'),
+      type: DataTypes.ENUM(
+      'ABUELASTRO (A)', 'ABUELO (A)', 'AHIJADO (A)', 'ASEGURADO PRINCIPAL',
+      'BISABUELO (A)', 'BISNIETO (A)', 'COMPAÑERO (A)', 'CONYUGE',
+      'CUÑADO (A)', 'EX-ESPOSO (A)', 'HERMANASTRO (A)', 'HERMANO (A)',
+      'HERMANO CON INCAPACIDAD', 'HIJASTRO (A)', 'HIJO (A)', 'HIJO ADOPTIVO',
+      'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
+      'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
+      'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
+      'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
+    ),
       allowNull: false
     },
     tipoDocumento: {

@@ -3,7 +3,16 @@ const Joi = require('joi');
 const beneficiarioSchema = Joi.object({
   tipoBeneficiario: Joi.string().valid('DE_LEY', 'ADICIONAL').required()
     .messages({ 'any.only': 'Tipo de beneficiario debe ser DE_LEY o ADICIONAL' }),
-  parentesco: Joi.string().valid('CONYUGE', 'HIJO(A)', 'PADRE', 'MADRE', 'HERMANO(A)', 'ABUELO(A)', 'OTRO').required()
+  parentesco: Joi.string().valid(
+    'ABUELASTRO (A)', 'ABUELO (A)', 'AHIJADO (A)', 'ASEGURADO PRINCIPAL',
+    'BISABUELO (A)', 'BISNIETO (A)', 'COMPAÑERO (A)', 'CONYUGE',
+    'CUÑADO (A)', 'EX-ESPOSO (A)', 'HERMANASTRO (A)', 'HERMANO (A)',
+    'HERMANO CON INCAPACIDAD', 'HIJASTRO (A)', 'HIJO (A)', 'HIJO ADOPTIVO',
+    'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
+    'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
+    'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
+    'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
+  ).required()    
     .messages({ 'any.only': 'Parentesco no válido' }),
   tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'RC', 'PPT', 'ADT').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
