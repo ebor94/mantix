@@ -41,4 +41,31 @@ async function getById(req, res, next) {
   }
 }
 
-module.exports = { create, getAll, getById };
+async function getPendientes(req, res, next) {
+  try {
+    const afiliados = await afiliadoService.getPendientes();
+    res.json({
+      success: true,
+      data: afiliados
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function aprobar(req, res, next) {
+  try {
+    const afiliado = await afiliadoService.aprobarAfiliado(req.params.id);
+    res.json({
+      success: true,
+      message: 'Registro aprobado exitosamente',
+      data: afiliado
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { create, getAll, getById, getPendientes, aprobar };
+
+

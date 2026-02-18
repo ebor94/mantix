@@ -44,4 +44,23 @@ async function getAfiliadoById(id) {
   });
 }
 
-module.exports = { createAfiliadoWithBeneficiarios, getAllAfiliados, getAfiliadoById };
+async function getPendientes() {
+  return Afiliado.findAll({
+    where: { estadoRegistro: 0 },
+    include: [{ model: Beneficiario, as: 'beneficiarios' }],
+    order: [['createdAt', 'DESC']]
+  });
+}
+
+async function aprobarAfiliado(id) {
+  const afiliado = await Afiliado.findByPk(id);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+  await afiliado.update({
+    estadoRegistro: 1,
+    notificacionAprobacion: 1,
+    fechaNotificacionAprobacion: new Date()
+  });
+  return afiliado;
+}
+
+module.exports = { createAfiliadoWithBeneficiarios, getAllAfiliados, getAfiliadoById, getPendientes, aprobarAfiliado };

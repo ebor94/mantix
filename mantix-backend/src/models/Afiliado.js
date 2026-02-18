@@ -84,6 +84,29 @@ module.exports = (sequelize, DataTypes) => {
   grupo: {
     type: DataTypes.ENUM('BASICO', 'PLUS', 'PREMIUM', 'OTRO'),
     allowNull: true
+  },
+  notificacionRecibo: {
+    type: DataTypes.INTEGER(1).UNSIGNED,
+    allowNull: true,
+    defaultValue: 0
+  },
+  fechaNotificacionRecibo: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  estadoRegistro: {
+    type: DataTypes.INTEGER(1).UNSIGNED,
+    allowNull: true,
+    defaultValue: 0
+  },
+  notificacionAprobacion: {
+    type: DataTypes.INTEGER(1).UNSIGNED,
+    allowNull: true,
+    defaultValue: 0
+  },
+  fechaNotificacionAprobacion: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
   }, {
     tableName: 'afiliados',
