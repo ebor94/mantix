@@ -54,7 +54,13 @@ const db = {
 
   // NUEVOS MODELOS - Afiliados
   Afiliado: require('./Afiliado')(sequelize, Sequelize.DataTypes),
-  Beneficiario: require('./Beneficiario')(sequelize, Sequelize.DataTypes)
+  Beneficiario: require('./Beneficiario')(sequelize, Sequelize.DataTypes),
+
+  // MÓDULO DE VOTACIONES
+  VotacionEvento: require('./VotacionEvento')(sequelize, Sequelize.DataTypes),
+  VotacionVotante: require('./VotacionVotante')(sequelize, Sequelize.DataTypes),
+  VotacionCandidato: require('./VotacionCandidato')(sequelize, Sequelize.DataTypes),
+  VotacionVoto: require('./VotacionVoto')(sequelize, Sequelize.DataTypes),
 };
 
 // Definir asociaciones

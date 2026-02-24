@@ -114,6 +114,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'sede_id',
       as: 'equipos'
     });
+
+    // Votaciones
+    if (models.VotacionVotante) {
+      Sede.hasMany(models.VotacionVotante, { foreignKey: 'sede_id', as: 'votacion_votantes' });
+    }
+    if (models.VotacionCandidato) {
+      Sede.hasMany(models.VotacionCandidato, { foreignKey: 'sede_id', as: 'votacion_candidatos' });
+    }
   };
 
   return Sede;
