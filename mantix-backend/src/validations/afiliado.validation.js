@@ -148,7 +148,8 @@ const createAfiliadoSchema = Joi.object({
     is: 'CENS',
     then: Joi.string().valid('FAMILIAR', 'ARRENDADO', 'PROPIETARIO').required()
       .messages({ 'any.only': 'Relación con el predio es obligatoria para canal CENS' }),
-    otherwise: Joi.string().valid('FAMILIAR', 'ARRENDADO', 'PROPIETARIO').allow('', null)
+    otherwise: Joi.string().valid('FAMILIAR', 'ARRENDADO', 'PROPIETARIO').allow('', null).empty('') // ← Esta línea convierte '' en null
+    .default(null)
   }),
 
   // Observaciones
