@@ -1,3 +1,7 @@
+// ============================================
+// src/models/Beneficiario.js - Modelo de Beneficiarios
+// ============================================
+
 module.exports = (sequelize, DataTypes) => {
   const Beneficiario = sequelize.define('Beneficiario', {
     id: {
@@ -19,19 +23,28 @@ module.exports = (sequelize, DataTypes) => {
     },
     parentesco: {
       type: DataTypes.ENUM(
-      'ABUELASTRO (A)', 'ABUELO (A)', 'AHIJADO (A)', 'ASEGURADO PRINCIPAL',
-      'BISABUELO (A)', 'BISNIETO (A)', 'COMPAÑERO (A)', 'CONYUGE',
-      'CUÑADO (A)', 'EX-ESPOSO (A)', 'HERMANASTRO (A)', 'HERMANO (A)',
-      'HERMANO CON INCAPACIDAD', 'HIJASTRO (A)', 'HIJO (A)', 'HIJO ADOPTIVO',
-      'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
-      'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
-      'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
-      'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
-    ),
+        'ABUELASTRO (A)', 'ABUELO (A)', 'AHIJADO (A)', 'ASEGURADO PRINCIPAL',
+        'BISABUELO (A)', 'BISNIETO (A)', 'COMPAÑERO (A)', 'CONYUGE',
+        'CUÑADO (A)', 'EX-ESPOSO (A)', 'HERMANASTRO (A)', 'HERMANO (A)',
+        'HERMANO CON INCAPACIDAD', 'HIJASTRO (A)', 'HIJO (A)', 'HIJO ADOPTIVO',
+        'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
+        'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
+        'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
+        'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
+      ),
       allowNull: false
     },
+    genero: {
+      type: DataTypes.ENUM('M', 'F'),
+      allowNull: true
+    },
+    valorPorPersona: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      defaultValue: 0.00
+    },
     tipoDocumento: {
-      type: DataTypes.ENUM('CC', 'TI', 'CE', 'PA', 'RC', 'PPT', 'ADT'),
+      type: DataTypes.ENUM('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT', 'RC'),
       allowNull: false
     },
     numeroDocumento: {
@@ -64,7 +77,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     estado: {
       type: DataTypes.ENUM('ACTUALIZACION', 'RETIRO', 'INGRESO'),
-      allowNull: false
+      allowNull: false,
+      defaultValue: 'INGRESO'
     }
   }, {
     tableName: 'beneficiarios',
@@ -75,11 +89,15 @@ module.exports = (sequelize, DataTypes) => {
       },
       {
         fields: ['numeroDocumento']
+      },
+      {
+        fields: ['estado']
       }
     ]
   });
 
   Beneficiario.associate = function(models) {
+    // Un beneficiario pertenece a un afiliado
     Beneficiario.belongsTo(models.Afiliado, {
       as: 'afiliado',
       foreignKey: 'afiliadoId'

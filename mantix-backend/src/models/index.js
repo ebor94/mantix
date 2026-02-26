@@ -18,7 +18,9 @@ const db = {
   sequelize,
   Sequelize,
   
-  // Modelos existentes
+  // ============================================
+  // MODELOS DE MANTENIMIENTO (EXISTENTES)
+  // ============================================
   Rol: require('./Rol')(sequelize, Sequelize.DataTypes),
   Usuario: require('./Usuario')(sequelize, Sequelize.DataTypes),
   Sede: require('./Sede')(sequelize, Sequelize.DataTypes),
@@ -52,11 +54,24 @@ const db = {
 
   AuditLog: require('./AuditLog')(sequelize, Sequelize.DataTypes),
 
-  // NUEVOS MODELOS - Afiliados
+  // ============================================
+  // MÓDULO DE AFILIADOS Y SERVICIOS EXEQUIALES
+  // ============================================
+  
+  // ⚠️ IMPORTANTE: Empresa y Tarifa DEBEN ir ANTES de Afiliado
+  Empresa: require('./Empresa')(sequelize, Sequelize.DataTypes),
+  Tarifa: require('./Tarifa')(sequelize, Sequelize.DataTypes),
+  PrimaSeguro: require('./PrimaSeguro')(sequelize, Sequelize.DataTypes),
+  
+  // Ahora sí los modelos que dependen de Empresa
   Afiliado: require('./Afiliado')(sequelize, Sequelize.DataTypes),
   Beneficiario: require('./Beneficiario')(sequelize, Sequelize.DataTypes),
+  Seguro: require('./Seguro')(sequelize, Sequelize.DataTypes),
+  ContratoValor: require('./ContratoValor')(sequelize, Sequelize.DataTypes),
 
+  // ============================================
   // MÓDULO DE VOTACIONES
+  // ============================================
   VotacionEvento: require('./VotacionEvento')(sequelize, Sequelize.DataTypes),
   VotacionVotante: require('./VotacionVotante')(sequelize, Sequelize.DataTypes),
   VotacionCandidato: require('./VotacionCandidato')(sequelize, Sequelize.DataTypes),

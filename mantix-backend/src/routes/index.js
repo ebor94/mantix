@@ -30,6 +30,8 @@ const requisitosRoutes = require('./requisitosRoutes'); // NUEVO
 const dependenciasRoutes = require('./dependenciasRoutes');
 const afiliadoRoutes = require('./afiliado.routes');
 const votacionesRoutes = require('./votaciones.routes');
+const empresaRoutes = require('./empresa.routes');
+const tarifaRoutes = require('./tarifa.routes');
 // Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
@@ -56,5 +58,7 @@ router.use('/requisitos', requisitosRoutes); // NUEVO
 router.use('/dependencias', dependenciasRoutes); // ✅ NUEVO
 router.use('/afiliados', afiliadoRoutes);
 router.use('/votaciones', votacionesRoutes);
+router.use('/empresas', empresaRoutes);
+router.use('/tarifas', tarifaRoutes);
 
 module.exports = router;
