@@ -24,6 +24,8 @@ async function createAfiliadoWithBeneficiarios(data) {
     }
 
     // ── 2. Crear afiliado ────────────────────────────────────
+    afiliadoData.notificacionRecibo = 1;
+    afiliadoData.fechaNotificacionRecibo = new Date();
     const afiliado = await Afiliado.create(afiliadoData, { transaction });
 
     // ── 3. Crear beneficiarios ───────────────────────────────

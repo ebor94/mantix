@@ -36,7 +36,24 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0.00,
-      comment: 'Valor por beneficiario adicional mensual'
+      comment: 'Valor por beneficiario adicional menor de 50 años (mensual)'
+    },
+    valorAdicionalMayor50: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor por beneficiario adicional entre 50 y 65 años (mensual)'
+    },
+    valorAsistencia: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor anual de asistencia fuera de casa'
+    },
+    vigencia: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      comment: 'Año de vigencia de la tarifa (ej: 2026)'
     },
     activo: {
       type: DataTypes.TINYINT(1),

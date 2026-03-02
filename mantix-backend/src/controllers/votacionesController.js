@@ -256,6 +256,8 @@ const getCandidatosVotante = async (req, res, next) => {
  */
 const emitirVoto = async (req, res, next) => {
   const t = await sequelize.transaction();
+  console.log('Iniciando transacción para emitir voto');
+  console.log('Datos del votante en token:', req);
   try {
     const { votante_id, evento_id, sede_id } = req.votacion;
     const { candidato_id } = req.body;
