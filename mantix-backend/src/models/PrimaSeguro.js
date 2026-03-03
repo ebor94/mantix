@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true
     },
     nombreSeguro: {
-      type: DataTypes.ENUM('SOLICANASTA', 'ACCIDENTES', 'SINERGIA', 'SOLIENVIDA'),
+      type: DataTypes.ENUM('SOLICANASTA', 'Acc. Personales Opción 1M-100Aux', 'Acc. Personales Opción 2M-100Aux', 'Acc. Personales Opción 3M-100Aux', 'Acc. Personales Opción 5M-300Aux', 'SINERGIA OP 1', 'SINERGIA OP 2', 'SINERGIA OP 3', 'SOLIENVIDA'),
       allowNull: false
     },
     montoAsegurado: {
