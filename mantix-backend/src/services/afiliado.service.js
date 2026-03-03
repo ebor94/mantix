@@ -108,8 +108,8 @@ async function aprobarAfiliado(id) {
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
   await afiliado.update({
     estadoRegistro: 1,
-    notificacionAprobacion: 1,
-    fechaNotificacionAprobacion: new Date()
+    //notificacionAprobacion: 1,
+    //fechaNotificacionAprobacion: new Date()
   });
   return afiliado;
 }
