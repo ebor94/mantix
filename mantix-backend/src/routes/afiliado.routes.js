@@ -32,8 +32,21 @@ router.post(
   controller.create
 );
 
-router.get('/', controller.getAll);
+router.get('/',           controller.getAll);
 router.get('/pendientes', controller.getPendientes);
-router.get('/:id', controller.getById);
-router.post('/:id/aprobar', controller.aprobar);
+router.get('/rechazados', controller.getRechazados);
+router.get('/:id',        controller.getById);
+
+router.post('/:id/aprobar',  controller.aprobar);
+router.post('/:id/rechazar', controller.rechazar);
+
+// PUT /:id/reenviar — acepta FormData (con nuevo soporte de pago) o JSON puro
+router.put(
+  '/:id/reenviar',
+  upload.single('soporte'),
+  parseMultipartJson,
+  validate(createAfiliadoSchema),
+  controller.reenviar
+);
+
 module.exports = router;

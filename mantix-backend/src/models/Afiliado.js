@@ -203,6 +203,19 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Referencia de pago 3'
     },
 
+    // ── Control de rechazo ─────────────────────────────────────
+    rechazado: {
+      type: DataTypes.TINYINT(1).UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: '1 = rechazado por el aprobador; 0 = sin rechazo'
+    },
+    motivoRechazo: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Motivo de rechazo ingresado por el aprobador'
+    },
+
     // ── Control de estado ──────────────────────────────────────
     notificacionRecibo: {
       type: DataTypes.INTEGER(1).UNSIGNED,

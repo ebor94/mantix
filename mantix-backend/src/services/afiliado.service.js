@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { sequelize, Afiliado, Beneficiario, Empresa, Seguro, ContratoValor, Tarifa } = require('../models');
 const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
@@ -92,7 +93,7 @@ async function getAfiliadoById(id) {
 
 async function getPendientes() {
   return Afiliado.findAll({
-    where: { estadoRegistro: 0 },
+    where: { estadoRegistro: 0, rechazado: { [Op.not]: 1 } },
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -108,10 +109,88 @@ async function aprobarAfiliado(id) {
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
   await afiliado.update({
     estadoRegistro: 1,
+    rechazado: 0,
+    motivoRechazo: null
     //notificacionAprobacion: 1,
     //fechaNotificacionAprobacion: new Date()
   });
   return afiliado;
+}
+
+async function rechazarAfiliado(id, motivo) {
+  const afiliado = await Afiliado.findByPk(id);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+  await afiliado.update({
+    rechazado: 1,
+    motivoRechazo: motivo || null,
+    estadoRegistro: 0
+  });
+  return afiliado;
+}
+
+async function getRechazados() {
+  return Afiliado.findAll({
+    where: { rechazado: 1 },
+    include: [
+      { model: Beneficiario, as: 'beneficiarios' },
+      { model: Seguro, as: 'seguros' },
+      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+      { model: Empresa, as: 'empresa' }
+    ],
+    order: [['updatedAt', 'DESC']]
+  });
+}
+
+async function reenviarAfiliacion(id, data) {
+  const afiliado = await Afiliado.findByPk(id);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+  if (!afiliado.rechazado) throw new AppError('La afiliación no está en estado rechazado', 400);
+
+  const { beneficiarios = [], seguros = [], contrato = {}, ...afiliadoData } = data;
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Resetear rechazo y actualizar datos
+    afiliadoData.rechazado = 0;
+    afiliadoData.motivoRechazo = null;
+    afiliadoData.estadoRegistro = 0;
+
+    await afiliado.update(afiliadoData, { transaction });
+
+    // Reemplazar beneficiarios
+    if (beneficiarios.length > 0) {
+      await Beneficiario.destroy({ where: { afiliadoId: id }, transaction });
+      const bConId = beneficiarios.map(b => ({ ...b, afiliadoId: id }));
+      await Beneficiario.bulkCreate(bConId, { transaction });
+    }
+
+    // Reemplazar seguros
+    if (seguros.length > 0) {
+      await Seguro.destroy({ where: { afiliadoId: id }, transaction });
+      const sConId = seguros.map(s => ({ ...s, afiliadoId: id }));
+      await Seguro.bulkCreate(sConId, { transaction });
+    }
+
+    // Reemplazar contrato
+    if (contrato && Object.keys(contrato).length > 0) {
+      await ContratoValor.destroy({ where: { afiliadoId: id }, transaction });
+      await ContratoValor.create({ ...contrato, afiliadoId: id }, { transaction });
+    }
+
+    await transaction.commit();
+
+    return Afiliado.findByPk(id, {
+      include: [
+        { model: Beneficiario, as: 'beneficiarios' },
+        { model: Seguro, as: 'seguros' },
+        { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+        { model: Empresa, as: 'empresa' }
+      ]
+    });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 module.exports = {
@@ -119,5 +198,8 @@ module.exports = {
   getAllAfiliados,
   getAfiliadoById,
   getPendientes,
-  aprobarAfiliado
+  aprobarAfiliado,
+  rechazarAfiliado,
+  getRechazados,
+  reenviarAfiliacion
 };

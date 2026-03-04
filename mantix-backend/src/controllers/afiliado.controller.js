@@ -71,6 +71,44 @@ async function aprobar(req, res, next) {
   }
 }
 
-module.exports = { create, getAll, getById, getPendientes, aprobar };
+async function rechazar(req, res, next) {
+  try {
+    const { motivo } = req.body;
+    const afiliado = await afiliadoService.rechazarAfiliado(req.params.id, motivo);
+    res.json({
+      success: true,
+      message: 'Registro rechazado',
+      data: afiliado
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getRechazados(req, res, next) {
+  try {
+    const afiliados = await afiliadoService.getRechazados();
+    res.json({ success: true, data: afiliados });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function reenviar(req, res, next) {
+  try {
+    const body = { ...req.body };
+    if (req.file) body.soportePago = req.file.filename;
+    const result = await afiliadoService.reenviarAfiliacion(req.params.id, body);
+    res.json({
+      success: true,
+      message: 'Afiliación reenviada para aprobación',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { create, getAll, getById, getPendientes, aprobar, rechazar, getRechazados, reenviar };
 
 
