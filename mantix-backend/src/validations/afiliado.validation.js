@@ -55,13 +55,14 @@ const seguroSchema = Joi.object({
 const contratoSchema = Joi.object({
   tarifaId: Joi.number().integer().positive().allow(null),
   valorPlanExequial: Joi.number().min(0).default(0),
-  valorAdicionales: Joi.number().min(0).default(0),
-  valorSeguros: Joi.number().min(0).default(0),
-  valorTotal: Joi.number().min(0).default(0),
+  valorAdicionales:  Joi.number().min(0).default(0),
+  valorAsistencia:   Joi.number().min(0).default(0),
+  valorSeguros:      Joi.number().min(0).default(0),
+  valorTotal:        Joi.number().min(0).default(0),
   periodicidad: Joi.string()
     .valid('MENSUAL', 'ANUAL', 'TRIMESTRAL', 'SEMESTRAL', 'SEMANAL')
     .default('MENSUAL'),
-  nCuotas: Joi.number().integer().min(1).default(1),
+  nCuotas:    Joi.number().integer().min(1).default(1),
   valorCuota: Joi.number().min(0).default(0)
 });
 
@@ -154,6 +155,16 @@ const createAfiliadoSchema = Joi.object({
 
   // Observaciones
   observaciones: Joi.string().max(2000).allow('', null).trim(),
+
+  // ── Primera cuota / soporte de pago ─────────────────────────
+  formaPago: Joi.string()
+    .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL')
+    .allow('', null)
+    .messages({ 'any.only': 'Forma de pago no válida' }),
+  referenciaPago1: Joi.string().max(200).allow('', null).trim(),
+  referenciaPago2: Joi.string().max(200).allow('', null).trim(),
+  referenciaPago3: Joi.string().max(200).allow('', null).trim(),
+  // soportePago se inyecta en el controller desde req.file — no viene en el body
 
   // Relaciones anidadas
   beneficiarios: Joi.array().items(beneficiarioSchema).min(0).default([]),

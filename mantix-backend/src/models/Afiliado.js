@@ -176,6 +176,33 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
 
+    // ── Primera cuota / soporte de pago ───────────────────────
+    formaPago: {
+      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL'),
+      allowNull: true,
+      comment: 'Forma de pago de la primera cuota'
+    },
+    soportePago: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Nombre del archivo soporte de pago primera cuota'
+    },
+    referenciaPago1: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Referencia de pago 1 (no. transacción, recibo, etc.)'
+    },
+    referenciaPago2: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Referencia de pago 2'
+    },
+    referenciaPago3: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Referencia de pago 3'
+    },
+
     // ── Control de estado ──────────────────────────────────────
     notificacionRecibo: {
       type: DataTypes.INTEGER(1).UNSIGNED,

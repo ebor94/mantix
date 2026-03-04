@@ -3,7 +3,12 @@ const AppError = require('../utils/AppError');
 
 async function create(req, res, next) {
   try {
-    const result = await afiliadoService.createAfiliadoWithBeneficiarios(req.body);
+    const body = { ...req.body };
+    // Si viene un archivo adjunto (soporte de pago), guardar su nombre
+    if (req.file) {
+      body.soportePago = req.file.filename;
+    }
+    const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
     res.status(201).json({
       success: true,
       message: 'Afiliado registrado exitosamente',

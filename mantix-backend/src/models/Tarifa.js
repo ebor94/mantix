@@ -30,19 +30,19 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0.00,
-      comment: 'Valor plan exequial mensual'
+      comment: 'Valor plan exequial anual'
     },
     valorAdicional: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0.00,
-      comment: 'Valor por beneficiario adicional menor de 50 años (mensual)'
+      comment: 'Valor por beneficiario adicional menor de 50 años (anual)'
     },
     valorAdicionalMayor50: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
       defaultValue: 0.00,
-      comment: 'Valor por beneficiario adicional entre 50 y 65 años (mensual)'
+      comment: 'Valor por beneficiario adicional entre 50 y 65 años (anual)'
     },
     valorAsistencia: {
       type: DataTypes.DECIMAL(12, 2),
