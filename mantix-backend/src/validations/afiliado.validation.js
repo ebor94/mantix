@@ -161,10 +161,14 @@ const createAfiliadoSchema = Joi.object({
     .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL')
     .allow('', null)
     .messages({ 'any.only': 'Forma de pago no válida' }),
+  valorRecibido: Joi.number().min(0).allow(null),
   referenciaPago1: Joi.string().max(200).allow('', null).trim(),
   referenciaPago2: Joi.string().max(200).allow('', null).trim(),
   referenciaPago3: Joi.string().max(200).allow('', null).trim(),
-  // soportePago se inyecta en el controller desde req.file — no viene en el body
+  // soportePago, cedulaFrontal, cedulaReverso se inyectan en el controller desde req.files — no vienen en el body
+
+  // ── Afiliado diferente al contratante ───────────────────────
+  diferenteAlContratante: Joi.number().integer().valid(0, 1).allow(null).default(0),
 
   // Relaciones anidadas
   beneficiarios: Joi.array().items(beneficiarioSchema).min(0).default([]),

@@ -202,6 +202,29 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Referencia de pago 3'
     },
+    valorRecibido: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      comment: 'Valor efectivamente recibido en la primera cuota (puede diferir del valorCuota)'
+    },
+
+    // ── Afiliado diferente al contratante + cédula ─────────────
+    diferenteAlContratante: {
+      type: DataTypes.TINYINT(1).UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: '1 = el afiliado es diferente al contratante'
+    },
+    cedulaFrontal: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Nombre del archivo foto cédula cara frontal'
+    },
+    cedulaReverso: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Nombre del archivo foto cédula cara reverso'
+    },
 
     // ── Control de rechazo ─────────────────────────────────────
     rechazado: {

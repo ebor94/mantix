@@ -23,11 +23,18 @@ function parseMultipartJson(req, res, next) {
   next();
 }
 
-// POST /afiliados — acepta tanto JSON puro como multipart/form-data (con soporte de pago)
+// Campos de archivo aceptados: soporte de pago, cédula frontal y reverso
+const uploadFields = upload.fields([
+  { name: 'soporte',       maxCount: 1 },
+  { name: 'cedulaFrontal', maxCount: 1 },
+  { name: 'cedulaReverso', maxCount: 1 }
+]);
+
+// POST /afiliados — acepta tanto JSON puro como multipart/form-data
 router.post(
   '/',
-  upload.single('soporte'),   // procesa el archivo; si no viene, req.file = undefined
-  parseMultipartJson,          // convierte req.body.data → req.body cuando aplica
+  uploadFields,
+  parseMultipartJson,
   validate(createAfiliadoSchema),
   controller.create
 );
@@ -40,10 +47,10 @@ router.get('/:id',        controller.getById);
 router.post('/:id/aprobar',  controller.aprobar);
 router.post('/:id/rechazar', controller.rechazar);
 
-// PUT /:id/reenviar — acepta FormData (con nuevo soporte de pago) o JSON puro
+// PUT /:id/reenviar — acepta FormData (con archivos) o JSON puro
 router.put(
   '/:id/reenviar',
-  upload.single('soporte'),
+  uploadFields,
   parseMultipartJson,
   validate(createAfiliadoSchema),
   controller.reenviar

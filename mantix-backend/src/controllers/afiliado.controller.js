@@ -1,13 +1,16 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 
+function extractFiles(req, body) {
+  if (req.files?.soporte?.[0])       body.soportePago   = req.files.soporte[0].filename;
+  if (req.files?.cedulaFrontal?.[0]) body.cedulaFrontal = req.files.cedulaFrontal[0].filename;
+  if (req.files?.cedulaReverso?.[0]) body.cedulaReverso = req.files.cedulaReverso[0].filename;
+}
+
 async function create(req, res, next) {
   try {
     const body = { ...req.body };
-    // Si viene un archivo adjunto (soporte de pago), guardar su nombre
-    if (req.file) {
-      body.soportePago = req.file.filename;
-    }
+    extractFiles(req, body);
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
     res.status(201).json({
       success: true,
@@ -97,7 +100,7 @@ async function getRechazados(req, res, next) {
 async function reenviar(req, res, next) {
   try {
     const body = { ...req.body };
-    if (req.file) body.soportePago = req.file.filename;
+    extractFiles(req, body);
     const result = await afiliadoService.reenviarAfiliacion(req.params.id, body);
     res.json({
       success: true,
