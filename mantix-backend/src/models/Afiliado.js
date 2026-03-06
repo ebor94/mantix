@@ -176,6 +176,13 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
 
+    // ── Trazabilidad del registro ──────────────────────────────
+    asesorId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      comment: 'Usuario (asesor) que registró la afiliación'
+    },
+
     // ── Primera cuota / soporte de pago ───────────────────────
     formaPago: {
       type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL'),
@@ -306,6 +313,12 @@ module.exports = (sequelize, DataTypes) => {
       as: 'contrato',
       foreignKey: 'afiliadoId',
       onDelete: 'CASCADE'
+    });
+
+    // Un afiliado fue registrado por un asesor (usuario)
+    Afiliado.belongsTo(models.Usuario, {
+      as: 'asesor',
+      foreignKey: 'asesorId'
     });
   };
 

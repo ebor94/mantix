@@ -11,6 +11,8 @@ async function create(req, res, next) {
   try {
     const body = { ...req.body };
     extractFiles(req, body);
+    // Registrar quién creó la afiliación
+    body.asesorId = req.usuario.id;
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
     res.status(201).json({
       success: true,
@@ -40,6 +42,17 @@ async function getById(req, res, next) {
     if (!afiliado) {
       throw new AppError('Afiliado no encontrado', 404);
     }
+    // Si no es super admin ni aprobador, solo puede ver sus propias afiliaciones
+    const usuario = req.usuario;
+    if (!usuario.es_super_admin) {
+      const permisos = typeof usuario.rol?.permisos === 'string'
+        ? JSON.parse(usuario.rol.permisos)
+        : (usuario.rol?.permisos || {});
+      const pAfil = permisos.afiliaciones || {};
+      if (!pAfil.ver_todas && afiliado.asesorId !== usuario.id) {
+        throw new AppError('No tienes permiso para ver esta afiliación', 403);
+      }
+    }
     res.json({
       success: true,
       data: afiliado
@@ -51,7 +64,8 @@ async function getById(req, res, next) {
 
 async function getPendientes(req, res, next) {
   try {
-    const afiliados = await afiliadoService.getPendientes();
+    // Se pasa el usuario para que el servicio filtre según sus permisos
+    const afiliados = await afiliadoService.getPendientes(req.usuario);
     res.json({
       success: true,
       data: afiliados
@@ -90,7 +104,8 @@ async function rechazar(req, res, next) {
 
 async function getRechazados(req, res, next) {
   try {
-    const afiliados = await afiliadoService.getRechazados();
+    // Se pasa el usuario para que el servicio filtre según sus permisos
+    const afiliados = await afiliadoService.getRechazados(req.usuario);
     res.json({ success: true, data: afiliados });
   } catch (error) {
     next(error);
@@ -101,7 +116,8 @@ async function reenviar(req, res, next) {
   try {
     const body = { ...req.body };
     extractFiles(req, body);
-    const result = await afiliadoService.reenviarAfiliacion(req.params.id, body);
+    // Pasar el usuario para validar que sea el dueño de la afiliación
+    const result = await afiliadoService.reenviarAfiliacion(req.params.id, body, req.usuario);
     res.json({
       success: true,
       message: 'Afiliación reenviada para aprobación',
@@ -113,5 +129,3 @@ async function reenviar(req, res, next) {
 }
 
 module.exports = { create, getAll, getById, getPendientes, aprobar, rechazar, getRechazados, reenviar };
-
-

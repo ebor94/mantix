@@ -2,6 +2,7 @@ const { Router } = require('express');
 const controller = require('../controllers/afiliado.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
+const { auth, requirePermiso } = require('../middleware/auth');
 const { createAfiliadoSchema } = require('../validations/afiliado.validation');
 
 const router = Router();
@@ -30,26 +31,48 @@ const uploadFields = upload.fields([
   { name: 'cedulaReverso', maxCount: 1 }
 ]);
 
-// POST /afiliados — acepta tanto JSON puro como multipart/form-data
+// ── POST /afiliados — solo ASESOR_AFILIACIONES y ADMIN pueden crear ────────
 router.post(
   '/',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
   uploadFields,
   parseMultipartJson,
   validate(createAfiliadoSchema),
   controller.create
 );
 
-router.get('/',           controller.getAll);
-router.get('/pendientes', controller.getPendientes);
-router.get('/rechazados', controller.getRechazados);
-router.get('/:id',        controller.getById);
+// ── GET /afiliados — acceso ADMIN (super_admin) para ver todos ─────────────
+router.get('/', auth, controller.getAll);
 
-router.post('/:id/aprobar',  controller.aprobar);
-router.post('/:id/rechazar', controller.rechazar);
+// ── GET /afiliados/pendientes — asesor ve propias, aprobador/admin ve todas ─
+//    La lógica de filtrado se hace en el servicio según permisos del usuario
+router.get('/pendientes', auth, controller.getPendientes);
 
-// PUT /:id/reenviar — acepta FormData (con archivos) o JSON puro
+// ── GET /afiliados/rechazados — ídem ──────────────────────────────────────
+router.get('/rechazados', auth, controller.getRechazados);
+
+// ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
+router.get('/:id', auth, controller.getById);
+
+// ── POST /:id/aprobar — solo APROBADOR_AFILIACIONES y ADMIN ───────────────
+router.post('/:id/aprobar',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.aprobar
+);
+
+// ── POST /:id/rechazar — solo APROBADOR_AFILIACIONES y ADMIN ──────────────
+router.post('/:id/rechazar',
+  auth,
+  requirePermiso('afiliaciones', 'rechazar'),
+  controller.rechazar
+);
+
+// ── PUT /:id/reenviar — solo el asesor dueño o admin (validación en service) ─
 router.put(
   '/:id/reenviar',
+  auth,
   uploadFields,
   parseMultipartJson,
   validate(createAfiliadoSchema),

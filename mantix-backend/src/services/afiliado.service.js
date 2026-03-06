@@ -4,6 +4,30 @@ const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const AppError = require('../utils/AppError');
 
+/**
+ * Extrae el objeto de permisos del rol del usuario
+ * (el campo permisos puede venir como string JSON o como objeto JS)
+ */
+function getPermisos(usuario) {
+  const raw = usuario?.rol?.permisos;
+  if (!raw) return {};
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+}
+
+/**
+ * Construye la cláusula WHERE para getPendientes / getRechazados
+ * según los permisos del usuario:
+ *   - super_admin o ver_todas → sin filtro por asesorId
+ *   - ver_propias             → filtrar por asesorId del usuario
+ */
+function whereConFiltroAsesor(baseWhere, usuario) {
+  if (usuario.es_super_admin) return baseWhere;
+  const p = getPermisos(usuario).afiliaciones || {};
+  if (p.ver_todas) return baseWhere;
+  // Solo ve las propias
+  return { ...baseWhere, asesorId: usuario.id };
+}
+
 async function createAfiliadoWithBeneficiarios(data) {
   const { beneficiarios = [], seguros = [], contrato = {}, ...afiliadoData } = data;
 
@@ -91,9 +115,17 @@ async function getAfiliadoById(id) {
   });
 }
 
-async function getPendientes() {
+/**
+ * Afiliaciones pendientes (estadoRegistro=0, no rechazadas)
+ * Si el usuario es asesor (ver_propias), solo retorna las propias.
+ * Si es aprobador o admin, retorna todas.
+ */
+async function getPendientes(usuario) {
+  const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 } };
+  const where = whereConFiltroAsesor(baseWhere, usuario);
+
   return Afiliado.findAll({
-    where: { estadoRegistro: 0, rechazado: { [Op.not]: 1 } },
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -128,9 +160,17 @@ async function rechazarAfiliado(id, motivo) {
   return afiliado;
 }
 
-async function getRechazados() {
+/**
+ * Afiliaciones rechazadas
+ * Si el usuario es asesor (ver_propias), solo retorna las propias.
+ * Si es aprobador o admin, retorna todas.
+ */
+async function getRechazados(usuario) {
+  const baseWhere = { rechazado: 1 };
+  const where = whereConFiltroAsesor(baseWhere, usuario);
+
   return Afiliado.findAll({
-    where: { rechazado: 1 },
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -141,10 +181,19 @@ async function getRechazados() {
   });
 }
 
-async function reenviarAfiliacion(id, data) {
+/**
+ * Reenviar una afiliación rechazada para nueva revisión.
+ * Solo el asesor que la creó o un super_admin puede reenviarla.
+ */
+async function reenviarAfiliacion(id, data, usuario) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
   if (!afiliado.rechazado) throw new AppError('La afiliación no está en estado rechazado', 400);
+
+  // Validar ownership: solo el asesor dueño o super_admin pueden reenviar
+  if (!usuario.es_super_admin && afiliado.asesorId !== usuario.id) {
+    throw new AppError('No tienes permiso para reenviar esta afiliación', 403);
+  }
 
   const { beneficiarios = [], seguros = [], contrato = {}, ...afiliadoData } = data;
   const transaction = await sequelize.transaction();

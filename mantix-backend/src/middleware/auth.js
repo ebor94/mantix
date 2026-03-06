@@ -313,10 +313,42 @@ const authWithCategories = async (req, res, next) => {
   }
 };
 
-module.exports = { 
-  auth, 
+/**
+ * Middleware RBAC basado en permisos JSON del rol
+ * Permite acceso si:
+ *   - El usuario es super admin (es_super_admin = true), O
+ *   - El campo `permisos` del rol contiene `{ [modulo]: { [accion]: true } }`
+ *
+ * Uso: requirePermiso('afiliaciones', 'crear')
+ */
+function requirePermiso(modulo, accion) {
+  return (req, res, next) => {
+    if (!req.usuario) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    // Super admin pasa todos los checks
+    if (req.usuario.es_super_admin) return next();
+
+    const permisos = req.usuario.rol?.permisos;
+    const permisoModulo = typeof permisos === 'string'
+      ? JSON.parse(permisos)[modulo]
+      : permisos?.[modulo];
+
+    if (!permisoModulo?.[accion]) {
+      return res.status(403).json({
+        success: false,
+        message: `No tienes permiso para realizar esta acción (${modulo}.${accion})`
+      });
+    }
+    next();
+  };
+}
+
+module.exports = {
+  auth,
   authorize,
   requireSuperAdmin,
+  requirePermiso,
   requireCategoriaAccess,
   requireEquipoAccess,
   requireActividadAccess,
