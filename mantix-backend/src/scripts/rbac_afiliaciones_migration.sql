@@ -13,7 +13,16 @@ ALTER TABLE afiliados
 -- Índice para filtrar afiliaciones por asesor eficientemente
 CREATE INDEX IF NOT EXISTS idx_afiliados_asesorId ON afiliados (asesorId);
 
--- 2. Insertar nuevos roles para el módulo de afiliaciones
+-- 2. Actualizar roles existentes tipo "administrador" con todos los permisos de afiliaciones
+--    Usa JSON_MERGE_PATCH para no destruir otros permisos que ya pudieran existir
+UPDATE roles
+SET permisos = JSON_MERGE_PATCH(
+  COALESCE(permisos, '{}'),
+  '{"afiliaciones":{"crear":true,"ver_propias":true,"ver_todas":true,"aprobar":true,"rechazar":true,"corregir_propias":true}}'
+)
+WHERE LOWER(nombre) LIKE '%admin%';
+
+-- 3. Insertar nuevos roles para el módulo de afiliaciones
 -- El campo "permisos" (JSON) ya existe en la tabla roles
 INSERT INTO roles (nombre, descripcion, permisos, activo) VALUES
 (

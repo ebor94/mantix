@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // ── Identificación ─────────────────────────────────────────
     tipoDocumento: {
-      type: DataTypes.ENUM('CC', 'TI', 'CE', 'PA', 'NIT'),
+      type: DataTypes.ENUM('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT'),
       allowNull: false
     },
     numeroDocumento: {
