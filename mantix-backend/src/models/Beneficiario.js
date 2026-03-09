@@ -79,6 +79,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('ACTUALIZACION', 'RETIRO', 'INGRESO'),
       allowNull: false,
       defaultValue: 'INGRESO'
+    },
+
+    // ── Documento adjunto del beneficiario (opcional) ──────────
+    documentoUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Nombre del archivo de documento adjunto del beneficiario'
     }
   }, {
     tableName: 'beneficiarios',

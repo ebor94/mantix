@@ -5,6 +5,16 @@ function extractFiles(req, body) {
   if (req.files?.soporte?.[0])       body.soportePago   = req.files.soporte[0].filename;
   if (req.files?.cedulaFrontal?.[0]) body.cedulaFrontal = req.files.cedulaFrontal[0].filename;
   if (req.files?.cedulaReverso?.[0]) body.cedulaReverso = req.files.cedulaReverso[0].filename;
+
+  // Inyectar documentoUrl en cada beneficiario según el índice
+  // El frontend envía los archivos como: beneficiario_doc_0, beneficiario_doc_1, …
+  if (Array.isArray(body.beneficiarios)) {
+    body.beneficiarios = body.beneficiarios.map((b, i) => {
+      const campo = `beneficiario_doc_${i}`;
+      const file  = req.files?.[campo]?.[0];
+      return file ? { ...b, documentoUrl: file.filename } : b;
+    });
+  }
 }
 
 async function create(req, res, next) {

@@ -24,11 +24,18 @@ function parseMultipartJson(req, res, next) {
   next();
 }
 
-// Campos de archivo aceptados: soporte de pago, cédula frontal y reverso
+// Campos de archivo aceptados: soporte de pago, cédula y documentos por beneficiario
+// Se admiten hasta 10 documentos de beneficiarios (beneficiario_doc_0 … beneficiario_doc_9)
+const beneficiariosDocFields = Array.from({ length: 10 }, (_, i) => ({
+  name: `beneficiario_doc_${i}`,
+  maxCount: 1
+}))
+
 const uploadFields = upload.fields([
   { name: 'soporte',       maxCount: 1 },
   { name: 'cedulaFrontal', maxCount: 1 },
-  { name: 'cedulaReverso', maxCount: 1 }
+  { name: 'cedulaReverso', maxCount: 1 },
+  ...beneficiariosDocFields
 ]);
 
 // ── POST /afiliados — solo ASESOR_AFILIACIONES y ADMIN pueden crear ────────
