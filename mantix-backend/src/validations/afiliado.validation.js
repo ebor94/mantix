@@ -78,7 +78,7 @@ const createAfiliadoSchema = Joi.object({
     .messages({ 'date.min': 'Vigencia hasta no puede ser anterior a Vigencia desde' }),
 
   // Identificación
-  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT').required()
+  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
   numeroDocumento: Joi.string().pattern(/^\d{5,15}$/).required().trim()
     .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 15 dígitos' }),
