@@ -1,0 +1,78 @@
+// ============================================
+// src/models/Tarifa.js - Modelo de Tarifas
+// ============================================
+
+module.exports = (sequelize, DataTypes) => {
+  const Tarifa = sequelize.define('Tarifa', {
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true
+    },
+    canal: {
+      type: DataTypes.ENUM('EMPRESARIAL', 'INDIVIDUAL', 'CENS'),
+      allowNull: false
+    },
+    producto: {
+      type: DataTypes.ENUM('VERDE', 'INTEGRAL', 'CENS'),
+      allowNull: false
+    },
+    grupo: {
+      type: DataTypes.ENUM('UNIPERSONAL', 'UNIFAMILIAR', 'BASICO', 'CENS_II', 'INDIVIDUAL', 'TRADICIONAL'),
+      allowNull: false
+    },
+    asistenciaFueraDeCasa: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 0
+    },
+    valorBase: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor plan exequial anual'
+    },
+    valorAdicional: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor por beneficiario adicional menor de 50 años (anual)'
+    },
+    valorAdicionalMayor50: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor por beneficiario adicional entre 50 y 65 años (anual)'
+    },
+    valorAsistencia: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00,
+      comment: 'Valor anual de asistencia fuera de casa'
+    },
+    vigencia: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      comment: 'Año de vigencia de la tarifa (ej: 2026)'
+    },
+    activo: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 1
+    }
+  }, {
+    tableName: 'tarifas',
+    timestamps: true
+  });
+
+  Tarifa.associate = function(models) {
+    // Una tarifa puede estar asociada a muchos contratos
+    Tarifa.hasMany(models.ContratoValor, {
+      as: 'contratos',
+      foreignKey: 'tarifaId',
+      onDelete: 'SET NULL'
+    });
+  };
+
+  return Tarifa;
+};
