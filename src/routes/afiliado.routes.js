@@ -32,9 +32,10 @@ const beneficiariosDocFields = Array.from({ length: 10 }, (_, i) => ({
 }))
 
 const uploadFields = upload.fields([
-  { name: 'soporte',       maxCount: 1 },
-  { name: 'cedulaFrontal', maxCount: 1 },
-  { name: 'cedulaReverso', maxCount: 1 },
+  { name: 'soporte',              maxCount: 1 },
+  { name: 'cedulaFrontal',        maxCount: 1 },
+  { name: 'cedulaReverso',        maxCount: 1 },
+  { name: 'contratoCompetencia',  maxCount: 1 },
   ...beneficiariosDocFields
 ]);
 

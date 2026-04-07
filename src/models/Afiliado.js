@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     novedad: {
-      type: DataTypes.ENUM('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION'),
+      type: DataTypes.ENUM('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA'),
       allowNull: true
     },
     vigenciaDesde: {
@@ -185,7 +185,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // ── Primera cuota / soporte de pago ───────────────────────
     formaPago: {
-      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL'),
+      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO'),
       allowNull: true,
       comment: 'Forma de pago de la primera cuota'
     },
@@ -213,6 +213,16 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: true,
       comment: 'Valor efectivamente recibido en la primera cuota (puede diferir del valorCuota)'
+    },
+    fechaPagoTentativa: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: 'Fecha tentativa de pago para forma POSFECHADO'
+    },
+    contratoCompetencia: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Archivo contrato de la competencia (novedad TRASLADO_COMPETENCIA)'
     },
 
     // ── Afiliado diferente al contratante + cédula ─────────────

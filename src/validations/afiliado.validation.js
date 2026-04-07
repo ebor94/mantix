@@ -82,7 +82,7 @@ const createAfiliadoSchema = Joi.object({
   sucursal: Joi.string()
     .valid('CUCUTA', 'PAMPLONA', 'OCAÑA', 'SARAVENA', 'ARAUCA', 'TAME', 'CRISTO REY', 'ARAUQUITA')
     .allow('', null),
-  novedad: Joi.string().valid('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION').allow('', null),
+  novedad: Joi.string().valid('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA').allow('', null),
   vigenciaDesde: Joi.date().iso().allow('', null),
   vigenciaHasta: Joi.date().iso().min(Joi.ref('vigenciaDesde')).allow('', null)
     .messages({ 'date.min': 'Vigencia hasta no puede ser anterior a Vigencia desde' }),
@@ -168,7 +168,7 @@ const createAfiliadoSchema = Joi.object({
 
   // ── Primera cuota / soporte de pago ─────────────────────────
   formaPago: Joi.string()
-    .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL')
+    .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO')
     .allow('', null)
     .messages({ 'any.only': 'Forma de pago no válida' }),
   valorRecibido: Joi.number().min(0).allow(null),

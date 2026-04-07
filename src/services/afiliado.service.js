@@ -35,7 +35,8 @@ const NULLABLE_FIELDS = [
   'celular2', 'email', 'barrio', 'nit', 'nombreEmpresa',
   'actividadEconomica', 'ocupacion', 'codigoCiiu',
   'usuarioCens', 'cicloEstrato', 'relacionPredio', 'observaciones',
-  'referenciaPago1', 'referenciaPago2', 'referenciaPago3', 'formaPago'
+  'referenciaPago1', 'referenciaPago2', 'referenciaPago3', 'formaPago',
+  'fechaPagoTentativa', 'contratoCompetencia'
 ]
 function nullifyEmpty(obj) {
   const result = { ...obj }

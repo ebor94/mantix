@@ -2,9 +2,10 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 
 function extractFiles(req, body) {
-  if (req.files?.soporte?.[0])       body.soportePago   = req.files.soporte[0].filename;
-  if (req.files?.cedulaFrontal?.[0]) body.cedulaFrontal = req.files.cedulaFrontal[0].filename;
-  if (req.files?.cedulaReverso?.[0]) body.cedulaReverso = req.files.cedulaReverso[0].filename;
+  if (req.files?.soporte?.[0])             body.soportePago          = req.files.soporte[0].filename;
+  if (req.files?.cedulaFrontal?.[0])       body.cedulaFrontal        = req.files.cedulaFrontal[0].filename;
+  if (req.files?.cedulaReverso?.[0])       body.cedulaReverso        = req.files.cedulaReverso[0].filename;
+  if (req.files?.contratoCompetencia?.[0]) body.contratoCompetencia  = req.files.contratoCompetencia[0].filename;
 
   // Inyectar documentoUrl en cada beneficiario según el índice
   // El frontend envía los archivos como: beneficiario_doc_0, beneficiario_doc_1, …
