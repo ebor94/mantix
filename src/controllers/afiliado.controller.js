@@ -1,6 +1,7 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion } = require('../services/whatsappService');
+const { Afiliado } = require('../models');
 
 function extractFiles(req, body) {
   if (req.files?.soporte?.[0])             body.soportePago          = req.files.soporte[0].filename;
@@ -26,8 +27,10 @@ async function create(req, res, next) {
     // Registrar quién creó la afiliación
     body.asesorId = req.usuario.id;
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
-    // Fire-and-forget: enviar WhatsApp de aceptación de datos (no bloquea si falla)
-    sendAceptacion(body.celular).catch(() => {});
+    // WhatsApp aceptación: solo si es el primer registro con ese celular
+    Afiliado.count({ where: { celular: body.celular } })
+      .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
+      .catch(() => {});
     res.status(201).json({
       success: true,
       message: 'Afiliado registrado exitosamente',
@@ -48,8 +51,10 @@ async function createPublico(req, res, next) {
     // Veolia: notificación de recibo pendiente hasta aprobación
     body.notificacionRecibo = 0;
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
-    // Fire-and-forget: enviar WhatsApp de aceptación de datos (no bloquea si falla)
-    sendAceptacion(body.celular).catch(() => {});
+    // WhatsApp aceptación: solo si es el primer registro con ese celular
+    Afiliado.count({ where: { celular: body.celular } })
+      .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
+      .catch(() => {});
     res.status(201).json({
       success: true,
       message: 'Afiliado registrado exitosamente',
