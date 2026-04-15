@@ -109,4 +109,40 @@ function formatearTelefono(telefono) {
   return numero;
 }
 
-module.exports = { sendOTP };
+/**
+ * Envía el mensaje de aceptación de tratamiento de datos al afiliado
+ * usando la plantilla "aceptacion" de 1msg.
+ * No lanza excepción — si falla solo registra un warn, el registro ya fue guardado.
+ *
+ * @param {string} celular - Número del afiliado (se formatea automáticamente)
+ */
+async function sendAceptacion(celular) {
+  const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
+  const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
+  const numero   = formatearTelefono(celular);
+
+  const payload = {
+    token,
+    namespace: NAMESPACE,
+    template: 'aceptacion',
+    language: { policy: 'deterministic', code: 'es' },
+    params: [],
+    phone: numero,
+  };
+
+  try {
+    const response = await axios.post(
+      `https://api.1msg.io/${instance}/sendTemplate`,
+      payload,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+    );
+    logger.info(`[WhatsApp] Aceptación enviada a ${numero} | ID: ${response.data?.id || 'ok'}`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const msg = error.response?.data?.message || error.response?.data || error.message;
+    logger.warn(`[WhatsApp] Error enviando aceptación a ${numero}: ${JSON.stringify(msg)}`);
+    return { success: false, error: msg }; // No lanza — no debe bloquear el registro
+  }
+}
+
+module.exports = { sendOTP, sendAceptacion };
