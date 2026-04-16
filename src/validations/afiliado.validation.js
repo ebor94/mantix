@@ -180,6 +180,9 @@ const createAfiliadoSchema = Joi.object({
   // ── Afiliado diferente al contratante ───────────────────────
   diferenteAlContratante: Joi.number().integer().valid(0, 1).allow(null).default(0),
 
+  // OTP de confirmación (reenvío de afiliación rechazada)
+  otp: Joi.string().max(10).allow('', null),
+
   // Relaciones anidadas
   beneficiarios: Joi.array().items(beneficiarioSchema).min(0).default([]),
   seguros: Joi.array().items(seguroSchema).min(0).default([]),
