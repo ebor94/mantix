@@ -140,7 +140,7 @@ async function getAfiliadoById(id) {
  * Si es aprobador o admin, retorna todas.
  */
 async function getPendientes(usuario) {
-  const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 } };
+  const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 }, rechazadoParcial: 0 };
   const where = whereConFiltroAsesor(baseWhere, usuario);
 
   return Afiliado.findAll({
@@ -193,7 +193,10 @@ async function rechazarAfiliado(id, motivo, usuarioId) {
  * El afiliado permanece en estado pendiente.
  */
 async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
-  const afiliado = await Afiliado.findByPk(afiliadoId);
+  const { Usuario } = require('../models');
+  const afiliado = await Afiliado.findByPk(afiliadoId, {
+    include: [{ model: Usuario, as: 'asesor', attributes: ['id', 'email', 'nombre'] }]
+  });
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
 
   const transaction = await sequelize.transaction();
@@ -202,6 +205,8 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
       { activo: 0, motivoRechazo: motivo || null },
       { where: { id: ids, afiliadoId }, transaction }
     );
+    // Marcar afiliado como rechazado parcialmente
+    await afiliado.update({ rechazadoParcial: 1 }, { transaction });
     await Trazabilidad.create({
       afiliadoId,
       tipo: 'RECHAZO_PARCIAL',
@@ -219,7 +224,8 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato' },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Usuario, as: 'asesor', attributes: ['id', 'email', 'nombre'] }
     ]
   });
 }
@@ -289,7 +295,12 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
  * Si es aprobador o admin, retorna todas.
  */
 async function getRechazados(usuario) {
-  const baseWhere = { rechazado: 1 };
+  const baseWhere = {
+    [Op.or]: [
+      { rechazado: 1 },
+      { rechazadoParcial: 1 }
+    ]
+  };
   const where = whereConFiltroAsesor(baseWhere, usuario);
 
   return Afiliado.findAll({
@@ -311,7 +322,8 @@ async function getRechazados(usuario) {
 async function reenviarAfiliacion(id, data, usuario) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
-  if (!afiliado.rechazado) throw new AppError('La afiliación no está en estado rechazado', 400);
+  if (!afiliado.rechazado && !afiliado.rechazadoParcial)
+    throw new AppError('La afiliación no está en estado rechazado', 400);
 
   // Validar ownership: solo el asesor dueño o super_admin pueden reenviar
   if (!usuario.es_super_admin && afiliado.asesorId !== usuario.id) {
@@ -322,8 +334,9 @@ async function reenviarAfiliacion(id, data, usuario) {
   const transaction = await sequelize.transaction();
 
   try {
-    // Resetear rechazo y actualizar datos
+    // Resetear rechazo (total y parcial) y actualizar datos
     afiliadoData.rechazado = 0;
+    afiliadoData.rechazadoParcial = 0;
     afiliadoData.motivoRechazo = null;
     afiliadoData.estadoRegistro = 0;
 

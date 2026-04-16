@@ -256,6 +256,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 0,
       comment: '1 = rechazado por el aprobador; 0 = sin rechazo'
     },
+    rechazadoParcial: {
+      type: DataTypes.TINYINT(1).UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: '1 = rechazado parcialmente (beneficiarios inactivados); pendiente corrección del asesor'
+    },
     motivoRechazo: {
       type: DataTypes.TEXT,
       allowNull: true,
