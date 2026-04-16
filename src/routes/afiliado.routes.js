@@ -77,6 +77,9 @@ router.get('/pendientes', auth, controller.getPendientes);
 // ── GET /afiliados/rechazados — ídem ──────────────────────────────────────
 router.get('/rechazados', auth, controller.getRechazados);
 
+// ── GET /afiliados/por-hash/:hash — carga pública de afiliación via hash cifrado ─
+router.get('/por-hash/:hash', softAuth, controller.getByHash);
+
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
 router.get('/:id', auth, controller.getById);
 
@@ -110,13 +113,13 @@ router.put('/:id/actualizar-beneficiarios',
 // ── PUT /:id/datos-contacto — edición de datos de contacto (pública con OTP previo) ─
 router.put('/:id/datos-contacto', softAuth, controller.actualizarDatosContacto);
 
-// ── POST /:id/solicitar-otp-reenvio — OTP para confirmar reenvío de afiliación ─
-router.post('/:id/solicitar-otp-reenvio', auth, controller.solicitarOtpReenvio);
+// ── POST /:id/solicitar-otp-reenvio — OTP para confirmar reenvío (público via hash) ─
+router.post('/:id/solicitar-otp-reenvio', softAuth, controller.solicitarOtpReenvio);
 
-// ── PUT /:id/reenviar — solo el asesor dueño o admin (validación en service) ─
+// ── PUT /:id/reenviar — público via hash cifrado; OTP es el control de acceso ─
 router.put(
   '/:id/reenviar',
-  auth,
+  softAuth,
   uploadFields,
   parseMultipartJson,
   validate(createAfiliadoSchema),

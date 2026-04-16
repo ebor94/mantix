@@ -4,7 +4,7 @@ const { sendAceptacion, sendOTP } = require('../services/whatsappService');
 const { Afiliado } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
-const { encodeId } = require('../utils/hashId');
+const { encodeId, decodeId } = require('../utils/hashId');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +85,26 @@ async function getAll(req, res, next) {
   try {
     const afiliados = await afiliadoService.getAllAfiliados();
     res.json({ success: true, data: afiliados });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /afiliados/por-hash/:hash
+ * Carga pública de una afiliación rechazada/parcial usando el hash cifrado.
+ * No requiere autenticación — el hash es el control de acceso.
+ */
+async function getByHash(req, res, next) {
+  try {
+    const id = decodeId(req.params.hash);
+    if (!id) throw new AppError('Enlace inválido o expirado', 400);
+    const afiliado = await afiliadoService.getAfiliadoById(id);
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+    if (!afiliado.rechazado && !afiliado.rechazadoParcial) {
+      throw new AppError('Esta afiliación no está pendiente de corrección', 400);
+    }
+    res.json({ success: true, data: afiliado });
   } catch (error) {
     next(error);
   }
@@ -326,6 +346,7 @@ module.exports = {
   createPublico,
   getAll,
   getById,
+  getByHash,
   getPendientes,
   aprobar,
   rechazar,
