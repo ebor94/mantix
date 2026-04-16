@@ -1,7 +1,6 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP } = require('../services/whatsappService');
-const emailService = require('../services/emailService');
 const { Afiliado } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
@@ -123,10 +122,10 @@ async function getPendientes(req, res, next) {
 async function getRechazados(req, res, next) {
   try {
     const afiliados = await afiliadoService.getRechazados(req.usuario);
-    // Agregar hash del ID para usar en URL /corregir/:hash
+    // Usar hashCorreccion guardado en BD; si no existe (ej. rechazo total), calcular al vuelo
     const data = afiliados.map(a => ({
       ...a.toJSON(),
-      hash: encodeId(a.id)
+      hash: a.hashCorreccion || encodeId(a.id)
     }));
     res.json({ success: true, data });
   } catch (error) {
@@ -164,17 +163,6 @@ async function rechazarParcial(req, res, next) {
     const afiliado = await afiliadoService.rechazarBeneficiarios(
       req.params.id, beneficiarioIds, motivo, req.usuario.id
     );
-
-    // Notificar al asesor por email con enlace de corrección (fire-and-forget)
-    const destinatario = afiliado.asesor?.email || process.env.ADMIN_EMAIL || null;
-    if (destinatario) {
-      const hash = encodeId(afiliado.id);
-      const urlBase = (process.env.FRONTEND_URL || 'https://losolivoscucuta.com').replace(/\/$/, '');
-      const urlCorreccion = `${urlBase}/afiliados/corregir/${hash}`;
-      const nombreAfiliado = [afiliado.primerNombre, afiliado.primerApellido].filter(Boolean).join(' ');
-      emailService.sendRechazoParcialAfiliacion(destinatario, nombreAfiliado, motivo, urlCorreccion)
-        .catch(() => {});
-    }
 
     res.json({ success: true, message: 'Beneficiarios inactivados', data: afiliado });
   } catch (error) {

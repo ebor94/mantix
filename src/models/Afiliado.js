@@ -262,6 +262,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 0,
       comment: '1 = rechazado parcialmente (beneficiarios inactivados); pendiente corrección del asesor'
     },
+    hashCorreccion: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Hash AES-256 del ID para la URL /corregir/:hash; se genera al hacer rechazo parcial'
+    },
     motivoRechazo: {
       type: DataTypes.TEXT,
       allowNull: true,

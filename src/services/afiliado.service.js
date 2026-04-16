@@ -193,11 +193,11 @@ async function rechazarAfiliado(id, motivo, usuarioId) {
  * El afiliado permanece en estado pendiente.
  */
 async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
-  const { Usuario } = require('../models');
-  const afiliado = await Afiliado.findByPk(afiliadoId, {
-    include: [{ model: Usuario, as: 'asesor', attributes: ['id', 'email', 'nombre'] }]
-  });
+  const { encodeId } = require('../utils/hashId');
+  const afiliado = await Afiliado.findByPk(afiliadoId);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+  const hash = encodeId(afiliadoId);
 
   const transaction = await sequelize.transaction();
   try {
@@ -205,8 +205,8 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
       { activo: 0, motivoRechazo: motivo || null },
       { where: { id: ids, afiliadoId }, transaction }
     );
-    // Marcar afiliado como rechazado parcialmente
-    await afiliado.update({ rechazadoParcial: 1 }, { transaction });
+    // Marcar afiliado como rechazado parcialmente y guardar hash de corrección
+    await afiliado.update({ rechazadoParcial: 1, hashCorreccion: hash }, { transaction });
     await Trazabilidad.create({
       afiliadoId,
       tipo: 'RECHAZO_PARCIAL',
@@ -224,8 +224,7 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato' },
-      { model: Empresa, as: 'empresa' },
-      { model: Usuario, as: 'asesor', attributes: ['id', 'email', 'nombre'] }
+      { model: Empresa, as: 'empresa' }
     ]
   });
 }
@@ -337,6 +336,7 @@ async function reenviarAfiliacion(id, data, usuario) {
     // Resetear rechazo (total y parcial) y actualizar datos
     afiliadoData.rechazado = 0;
     afiliadoData.rechazadoParcial = 0;
+    afiliadoData.hashCorreccion = null;
     afiliadoData.motivoRechazo = null;
     afiliadoData.estadoRegistro = 0;
 
