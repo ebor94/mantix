@@ -59,8 +59,12 @@ router.post(
   controller.create
 );
 
+// ── Rutas OTP consulta pública ─────────────────────────────────────────────
+// ⚠️ TODAS las rutas /consulta/* y rutas fijas deben ir ANTES de /:id
+router.post('/consulta/solicitar-otp', softAuth, controller.solicitarOtp);
+router.post('/consulta/verificar-otp', softAuth, controller.verificarOtp);
+
 // ── GET /afiliados/consulta/:numerodocumento — consulta pública por documento ─
-// ⚠️ DEBE estar ANTES de /:id para que Express no lo capture como parámetro id
 router.get('/consulta/:numerodocumento', softAuth, controller.consultarPorDocumento);
 
 // ── GET /afiliados — acceso ADMIN (super_admin) para ver todos ─────────────
@@ -102,6 +106,12 @@ router.put('/:id/actualizar-beneficiarios',
   softAuth,
   controller.actualizarBeneficiariosConsulta
 );
+
+// ── PUT /:id/datos-contacto — edición de datos de contacto (pública con OTP previo) ─
+router.put('/:id/datos-contacto', softAuth, controller.actualizarDatosContacto);
+
+// ── POST /:id/solicitar-otp-reenvio — OTP para confirmar reenvío de afiliación ─
+router.post('/:id/solicitar-otp-reenvio', auth, controller.solicitarOtpReenvio);
 
 // ── PUT /:id/reenviar — solo el asesor dueño o admin (validación en service) ─
 router.put(

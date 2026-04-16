@@ -365,6 +365,31 @@ async function reenviarAfiliacion(id, data, usuario) {
   }
 }
 
+/**
+ * Actualiza solo los campos de contacto editables por el afiliado.
+ * Registra trazabilidad ACTUALIZACION_DATOS.
+ */
+async function actualizarDatosContacto(id, datos, usuarioId) {
+  const camposPermitidos = ['celular', 'celular2', 'email', 'direccion', 'barrio', 'ciudad', 'departamento'];
+  const update = {};
+  camposPermitidos.forEach(k => {
+    if (datos[k] !== undefined) update[k] = datos[k] || null;
+  });
+
+  const afiliado = await Afiliado.findByPk(id);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+  await afiliado.update(update);
+
+  Trazabilidad.create({
+    afiliadoId: id,
+    tipo: 'ACTUALIZACION_DATOS',
+    descripcion: `Campos actualizados: ${Object.keys(update).join(', ')}`,
+    usuarioId: usuarioId || null
+  }).catch(() => {});
+
+  return afiliado;
+}
+
 module.exports = {
   createAfiliadoWithBeneficiarios,
   getAllAfiliados,
@@ -377,5 +402,6 @@ module.exports = {
   reenviarAfiliacion,
   getAfiliadoByDocumento,
   registrarConsulta,
-  actualizarBeneficiariosConsulta
+  actualizarBeneficiariosConsulta,
+  actualizarDatosContacto
 };
