@@ -324,8 +324,10 @@ async function reenviarAfiliacion(id, data, usuario) {
   if (!afiliado.rechazado && !afiliado.rechazadoParcial)
     throw new AppError('La afiliación no está en estado rechazado', 400);
 
-  // Validar ownership: solo el asesor dueño o super_admin pueden reenviar
-  if (!usuario.es_super_admin && afiliado.asesorId !== usuario.id) {
+  // Validar ownership: solo el asesor dueño o super_admin pueden reenviar.
+  // Si no hay usuario autenticado (ruta pública via hash+OTP), se omite el chequeo
+  // porque el hash cifrado + OTP ya actúan como control de acceso.
+  if (usuario && !usuario.es_super_admin && afiliado.asesorId !== usuario.id) {
     throw new AppError('No tienes permiso para reenviar esta afiliación', 403);
   }
 
