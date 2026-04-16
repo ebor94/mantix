@@ -80,6 +80,17 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 'INGRESO'
     },
+    activo: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 1,
+      comment: '0 = inactivado por aprobador; 1 = activo'
+    },
+    motivoRechazo: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Motivo de inactivación dado por el aprobador'
+    },
 
     // ── Documento adjunto del beneficiario (opcional) ──────────
     documentoUrl: {
@@ -99,6 +110,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       {
         fields: ['estado']
+      },
+      {
+        fields: ['activo']
       }
     ]
   });

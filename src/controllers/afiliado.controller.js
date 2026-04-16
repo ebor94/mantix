@@ -2,6 +2,7 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion } = require('../services/whatsappService');
 const { Afiliado } = require('../models');
+const { Op } = require('sequelize');
 
 function extractFiles(req, body) {
   if (req.files?.soporte?.[0])             body.soportePago          = req.files.soporte[0].filename;
@@ -26,6 +27,7 @@ async function create(req, res, next) {
     extractFiles(req, body);
     // Registrar quién creó la afiliación
     body.asesorId = req.usuario.id;
+    body.origen = 'ASESOR';
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
     // WhatsApp aceptación: solo si es el primer registro con ese celular
     Afiliado.count({ where: { celular: body.celular } })
@@ -48,6 +50,7 @@ async function createPublico(req, res, next) {
     extractFiles(req, body);
     // Sin sesión: asesorId queda null (campo permite null en el modelo)
     body.asesorId = null;
+    body.origen = 'VEOLIA';
     // Veolia: notificación de recibo pendiente hasta aprobación
     body.notificacionRecibo = 0;
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
@@ -118,7 +121,7 @@ async function getPendientes(req, res, next) {
 
 async function aprobar(req, res, next) {
   try {
-    const afiliado = await afiliadoService.aprobarAfiliado(req.params.id);
+    const afiliado = await afiliadoService.aprobarAfiliado(req.params.id, req.usuario.id);
     res.json({
       success: true,
       message: 'Registro aprobado exitosamente',
@@ -132,12 +135,60 @@ async function aprobar(req, res, next) {
 async function rechazar(req, res, next) {
   try {
     const { motivo } = req.body;
-    const afiliado = await afiliadoService.rechazarAfiliado(req.params.id, motivo);
+    const afiliado = await afiliadoService.rechazarAfiliado(req.params.id, motivo, req.usuario.id);
     res.json({
       success: true,
       message: 'Registro rechazado',
       data: afiliado
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function rechazarParcial(req, res, next) {
+  try {
+    const { motivo, beneficiarioIds } = req.body;
+    if (!Array.isArray(beneficiarioIds) || beneficiarioIds.length === 0) {
+      throw new AppError('Debe enviar al menos un beneficiarioId', 400);
+    }
+    const afiliado = await afiliadoService.rechazarBeneficiarios(
+      req.params.id,
+      beneficiarioIds,
+      motivo,
+      req.usuario.id
+    );
+    res.json({ success: true, message: 'Beneficiarios inactivados', data: afiliado });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function consultarPorDocumento(req, res, next) {
+  try {
+    const afiliado = await afiliadoService.getAfiliadoByDocumento(req.params.numerodocumento);
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+    // Trazabilidad de consulta (fire-and-forget)
+    afiliadoService.registrarConsulta(
+      afiliado.id,
+      req.usuario?.id || null,
+      `Consulta por documento: ${req.params.numerodocumento}`
+    ).catch(() => {});
+    res.json({ success: true, data: afiliado });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function actualizarBeneficiariosConsulta(req, res, next) {
+  try {
+    const { beneficiarios = [] } = req.body;
+    const result = await afiliadoService.actualizarBeneficiariosConsulta(
+      req.params.id,
+      beneficiarios,
+      req.usuario?.id || null
+    );
+    res.json({ success: true, message: 'Beneficiarios actualizados', data: result });
   } catch (error) {
     next(error);
   }
@@ -169,4 +220,17 @@ async function reenviar(req, res, next) {
   }
 }
 
-module.exports = { create, createPublico, getAll, getById, getPendientes, aprobar, rechazar, getRechazados, reenviar };
+module.exports = {
+  create,
+  createPublico,
+  getAll,
+  getById,
+  getPendientes,
+  aprobar,
+  rechazar,
+  rechazarParcial,
+  getRechazados,
+  reenviar,
+  consultarPorDocumento,
+  actualizarBeneficiariosConsulta
+};

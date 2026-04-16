@@ -182,6 +182,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Usuario (asesor) que registró la afiliación'
     },
+    origen: {
+      type: DataTypes.ENUM('ASESOR', 'VEOLIA'),
+      allowNull: false,
+      defaultValue: 'ASESOR',
+      comment: 'VEOLIA = registro público; ASESOR = registrado por asesor'
+    },
 
     // ── Primera cuota / soporte de pago ───────────────────────
     formaPago: {
@@ -329,6 +335,12 @@ module.exports = (sequelize, DataTypes) => {
     Afiliado.belongsTo(models.Usuario, {
       as: 'asesor',
       foreignKey: 'asesorId'
+    });
+
+    // Trazabilidad de acciones sobre el afiliado
+    Afiliado.hasMany(models.Trazabilidad, {
+      as: 'trazabilidad',
+      foreignKey: 'afiliadoId'
     });
   };
 

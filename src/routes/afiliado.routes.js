@@ -2,7 +2,7 @@ const { Router } = require('express');
 const controller = require('../controllers/afiliado.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
-const { auth, requirePermiso } = require('../middleware/auth');
+const { auth, requirePermiso, softAuth } = require('../middleware/auth');
 const { createAfiliadoSchema } = require('../validations/afiliado.validation');
 
 const router = Router();
@@ -59,6 +59,10 @@ router.post(
   controller.create
 );
 
+// ── GET /afiliados/consulta/:numerodocumento — consulta pública por documento ─
+// ⚠️ DEBE estar ANTES de /:id para que Express no lo capture como parámetro id
+router.get('/consulta/:numerodocumento', softAuth, controller.consultarPorDocumento);
+
 // ── GET /afiliados — acceso ADMIN (super_admin) para ver todos ─────────────
 router.get('/', auth, controller.getAll);
 
@@ -84,6 +88,19 @@ router.post('/:id/rechazar',
   auth,
   requirePermiso('afiliaciones', 'rechazar'),
   controller.rechazar
+);
+
+// ── POST /:id/rechazar-parcial — inactiva beneficiarios; afiliado sigue pendiente
+router.post('/:id/rechazar-parcial',
+  auth,
+  requirePermiso('afiliaciones', 'rechazar'),
+  controller.rechazarParcial
+);
+
+// ── PUT /:id/actualizar-beneficiarios — actualización pública de beneficiarios ─
+router.put('/:id/actualizar-beneficiarios',
+  softAuth,
+  controller.actualizarBeneficiariosConsulta
 );
 
 // ── PUT /:id/reenviar — solo el asesor dueño o admin (validación en service) ─

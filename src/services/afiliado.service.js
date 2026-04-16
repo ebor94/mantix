@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { sequelize, Afiliado, Beneficiario, Empresa, Seguro, ContratoValor, Tarifa } = require('../models');
+const { sequelize, Afiliado, Beneficiario, Empresa, Seguro, ContratoValor, Tarifa, Trazabilidad } = require('../models');
 const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const AppError = require('../utils/AppError');
@@ -155,7 +155,7 @@ async function getPendientes(usuario) {
   });
 }
 
-async function aprobarAfiliado(id) {
+async function aprobarAfiliado(id, usuarioId) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
   await afiliado.update({
@@ -165,10 +165,12 @@ async function aprobarAfiliado(id) {
     //notificacionAprobacion: 1,
     //fechaNotificacionAprobacion: new Date()
   });
+  // Trazabilidad
+  Trazabilidad.create({ afiliadoId: id, tipo: 'APROBACION', usuarioId: usuarioId || null }).catch(() => {});
   return afiliado;
 }
 
-async function rechazarAfiliado(id, motivo) {
+async function rechazarAfiliado(id, motivo, usuarioId) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
   await afiliado.update({
@@ -176,7 +178,109 @@ async function rechazarAfiliado(id, motivo) {
     motivoRechazo: motivo || null,
     estadoRegistro: 0
   });
+  // Trazabilidad
+  Trazabilidad.create({
+    afiliadoId: id,
+    tipo: 'RECHAZO_TOTAL',
+    descripcion: motivo || null,
+    usuarioId: usuarioId || null
+  }).catch(() => {});
   return afiliado;
+}
+
+/**
+ * Rechazo parcial: inactiva beneficiarios específicos.
+ * El afiliado permanece en estado pendiente.
+ */
+async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
+  const afiliado = await Afiliado.findByPk(afiliadoId);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+  const transaction = await sequelize.transaction();
+  try {
+    await Beneficiario.update(
+      { activo: 0, motivoRechazo: motivo || null },
+      { where: { id: ids, afiliadoId }, transaction }
+    );
+    await Trazabilidad.create({
+      afiliadoId,
+      tipo: 'RECHAZO_PARCIAL',
+      descripcion: `Beneficiarios inactivados: ${ids.join(', ')}. Motivo: ${motivo || ''}`,
+      usuarioId: usuarioId || null
+    }, { transaction });
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+
+  return Afiliado.findByPk(afiliadoId, {
+    include: [
+      { model: Beneficiario, as: 'beneficiarios' },
+      { model: Seguro, as: 'seguros' },
+      { model: ContratoValor, as: 'contrato' },
+      { model: Empresa, as: 'empresa' }
+    ]
+  });
+}
+
+/**
+ * Busca el afiliado más reciente por número de documento (consulta pública).
+ */
+async function getAfiliadoByDocumento(numeroDocumento) {
+  return Afiliado.findOne({
+    where: { numeroDocumento },
+    include: [
+      { model: Beneficiario, as: 'beneficiarios' },
+      { model: Seguro, as: 'seguros' },
+      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+      { model: Empresa, as: 'empresa' }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+}
+
+/**
+ * Registra una consulta en la tabla de trazabilidad.
+ */
+async function registrarConsulta(afiliadoId, usuarioId, descripcion) {
+  return Trazabilidad.create({
+    afiliadoId,
+    tipo: 'CONSULTA',
+    descripcion: descripcion || null,
+    usuarioId: usuarioId || null
+  });
+}
+
+/**
+ * Actualiza (reemplaza) los beneficiarios de un afiliado desde la vista de consulta pública.
+ */
+async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuarioId) {
+  const afiliado = await Afiliado.findByPk(afiliadoId);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+  const transaction = await sequelize.transaction();
+  try {
+    await Beneficiario.destroy({ where: { afiliadoId }, transaction });
+    if (beneficiarios.length > 0) {
+      const conId = beneficiarios.map(b => ({ ...b, afiliadoId }));
+      await Beneficiario.bulkCreate(conId, { transaction });
+    }
+    await Trazabilidad.create({
+      afiliadoId,
+      tipo: 'ACTUALIZACION_BENEFICIARIOS',
+      descripcion: `${beneficiarios.length} beneficiario(s) actualizado(s)`,
+      usuarioId: usuarioId || null
+    }, { transaction });
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+
+  return Afiliado.findByPk(afiliadoId, {
+    include: [{ model: Beneficiario, as: 'beneficiarios' }]
+  });
 }
 
 /**
@@ -268,6 +372,10 @@ module.exports = {
   getPendientes,
   aprobarAfiliado,
   rechazarAfiliado,
+  rechazarBeneficiarios,
   getRechazados,
-  reenviarAfiliacion
+  reenviarAfiliacion,
+  getAfiliadoByDocumento,
+  registrarConsulta,
+  actualizarBeneficiariosConsulta
 };

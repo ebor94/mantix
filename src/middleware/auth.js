@@ -344,11 +344,34 @@ function requirePermiso(modulo, accion) {
   };
 }
 
+/**
+ * Middleware de autenticación suave: intenta autenticar pero no rechaza si no hay token.
+ * Útil para rutas públicas que registran trazabilidad opcional por usuario.
+ */
+const softAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+      req.usuario = null;
+      return next();
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const usuario = await Usuario.findByPk(decoded.id, {
+      include: [{ model: Rol, as: 'rol' }]
+    });
+    req.usuario = (usuario?.activo) ? usuario : null;
+  } catch {
+    req.usuario = null;
+  }
+  next();
+};
+
 module.exports = {
   auth,
   authorize,
   requireSuperAdmin,
   requirePermiso,
+  softAuth,
   requireCategoriaAccess,
   requireEquipoAccess,
   requireActividadAccess,
