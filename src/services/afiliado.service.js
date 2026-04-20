@@ -199,6 +199,16 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
 
   const hash = encodeId(afiliadoId);
 
+  // Obtener nombres de los beneficiarios antes de inactivarlos
+  const beneficiariosAInactivar = await Beneficiario.findAll({
+    where: { id: ids, afiliadoId },
+    attributes: ['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido']
+  });
+  const nombresBenef = beneficiariosAInactivar
+    .map(b => [b.primerNombre, b.segundoNombre, b.primerApellido, b.segundoApellido]
+      .filter(Boolean).join(' '))
+    .join('; ');
+
   const transaction = await sequelize.transaction();
   try {
     await Beneficiario.update(
@@ -210,7 +220,7 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
     await Trazabilidad.create({
       afiliadoId,
       tipo: 'RECHAZO_PARCIAL',
-      descripcion: `Beneficiarios inactivados: ${ids.join(', ')}. Motivo: ${motivo || ''}`,
+      descripcion: `Beneficiarios inactivados: ${nombresBenef || ids.join(', ')}. Motivo: ${motivo || ''}`,
       usuarioId: usuarioId || null
     }, { transaction });
     await transaction.commit();
@@ -407,6 +417,18 @@ async function actualizarDatosContacto(id, datos, usuarioId) {
   return afiliado;
 }
 
+/**
+ * Retorna el historial de trazabilidad de un afiliado, ordenado de más reciente a más antiguo.
+ */
+async function getTrazabilidad(afiliadoId) {
+  const { Usuario } = require('../models');
+  return Trazabilidad.findAll({
+    where: { afiliadoId },
+    include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'email'] }],
+    order: [['createdAt', 'DESC']]
+  });
+}
+
 module.exports = {
   createAfiliadoWithBeneficiarios,
   getAllAfiliados,
@@ -420,5 +442,6 @@ module.exports = {
   getAfiliadoByDocumento,
   registrarConsulta,
   actualizarBeneficiariosConsulta,
-  actualizarDatosContacto
+  actualizarDatosContacto,
+  getTrazabilidad
 };

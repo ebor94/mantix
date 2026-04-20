@@ -80,6 +80,9 @@ router.get('/rechazados', auth, controller.getRechazados);
 // ── GET /afiliados/por-hash/:hash — carga pública de afiliación via hash cifrado ─
 router.get('/por-hash/:hash', softAuth, controller.getByHash);
 
+// ── GET /afiliados/:id/trazabilidad — historial de auditoría del afiliado ─────
+router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
+
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
 router.get('/:id', auth, controller.getById);
 

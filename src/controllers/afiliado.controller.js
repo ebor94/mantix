@@ -341,6 +341,15 @@ async function actualizarBeneficiariosConsulta(req, res, next) {
   }
 }
 
+async function getTrazabilidad(req, res, next) {
+  try {
+    const registros = await afiliadoService.getTrazabilidad(req.params.id);
+    res.json({ success: true, data: registros });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   createPublico,
@@ -358,5 +367,6 @@ module.exports = {
   actualizarDatosContacto,
   solicitarOtpReenvio,
   consultarPorDocumento,
-  actualizarBeneficiariosConsulta
+  actualizarBeneficiariosConsulta,
+  getTrazabilidad
 };
