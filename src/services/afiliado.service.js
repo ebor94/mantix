@@ -331,7 +331,7 @@ async function reenviarAfiliacion(id, data, usuario) {
     throw new AppError('No tienes permiso para reenviar esta afiliación', 403);
   }
 
-  const { beneficiarios = [], seguros = [], contrato = {}, ...afiliadoData } = data;
+  const { beneficiarios = [], seguros = [], contrato = {}, otp: _otp, ...afiliadoData } = data;
   const transaction = await sequelize.transaction();
 
   try {
@@ -342,7 +342,9 @@ async function reenviarAfiliacion(id, data, usuario) {
     afiliadoData.motivoRechazo = null;
     afiliadoData.estadoRegistro = 0;
 
-    await afiliado.update(afiliadoData, { transaction });
+    // Convertir cadenas vacías a null en campos ENUM/nullable (ej: sucursal, novedad)
+    const cleanData = nullifyEmpty(afiliadoData);
+    await afiliado.update(cleanData, { transaction });
 
     // Reemplazar beneficiarios
     if (beneficiarios.length > 0) {
