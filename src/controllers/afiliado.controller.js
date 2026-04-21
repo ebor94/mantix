@@ -1,6 +1,7 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP } = require('../services/whatsappService');
+const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
 const { Afiliado } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
@@ -73,6 +74,8 @@ async function createPublico(req, res, next) {
     Afiliado.count({ where: { celular: body.celular } })
       .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
       .catch(() => {});
+    // Notificación Google Chat — fire-and-forget
+    notificarNuevoVeolia({ ...body, beneficiarios: body.beneficiarios || [] });
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);
@@ -207,6 +210,8 @@ async function reenviar(req, res, next) {
     delete body.otp;
     extractFiles(req, body);
     const result = await afiliadoService.reenviarAfiliacion(req.params.id, body, req.usuario);
+    // Notificación Google Chat — fire-and-forget
+    notificarCorreccionVeolia(result);
     res.json({ success: true, message: 'Afiliación reenviada para aprobación', data: result });
   } catch (error) {
     next(error);
