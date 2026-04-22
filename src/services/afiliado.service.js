@@ -70,6 +70,7 @@ async function createAfiliadoWithBeneficiarios(data) {
     // ── 2. Crear afiliado ────────────────────────────────────
     if (afiliadoData.notificacionRecibo === undefined) afiliadoData.notificacionRecibo = 1;
     afiliadoData.fechaNotificacionRecibo = new Date();
+    afiliadoData.estadoRegistro = 0; // Siempre inicia como pendiente, independiente del default BD
     const afiliado = await Afiliado.create(afiliadoData, { transaction });
 
     // ── 3. Crear beneficiarios ───────────────────────────────
