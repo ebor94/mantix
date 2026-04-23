@@ -60,6 +60,7 @@ const db = {
   
   // ⚠️ IMPORTANTE: Empresa y Tarifa DEBEN ir ANTES de Afiliado
   Empresa: require('./Empresa')(sequelize, Sequelize.DataTypes),
+  VeoliaUnidadNegocio: require('./VeoliaUnidadNegocio')(sequelize, Sequelize.DataTypes),
   Tarifa: require('./Tarifa')(sequelize, Sequelize.DataTypes),
   PrimaSeguro: require('./PrimaSeguro')(sequelize, Sequelize.DataTypes),
   

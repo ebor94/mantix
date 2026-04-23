@@ -126,6 +126,10 @@ const createAfiliadoSchema = Joi.object({
   nombreEmpresa: Joi.string().max(200).allow('', null).trim(),
   empresaId: Joi.number().integer().positive().allow(null),
 
+  // Veolia
+  unidadNegocio: Joi.string().max(300).allow('', null).trim(),
+  planVeolia: Joi.string().valid('PLATINO', 'ORO').allow('', null),
+
   // Comercial
   canal: Joi.string().valid('EMPRESARIAL', 'INDIVIDUAL', 'CENS').allow('', null)
     .messages({ 'any.only': 'Canal debe ser EMPRESARIAL, INDIVIDUAL o CENS' }),

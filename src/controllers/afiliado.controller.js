@@ -346,6 +346,20 @@ async function actualizarBeneficiariosConsulta(req, res, next) {
   }
 }
 
+async function getVeoliaUnidades(req, res, next) {
+  try {
+    const { VeoliaUnidadNegocio } = require('../models');
+    const unidades = await VeoliaUnidadNegocio.findAll({
+      where: { activo: 1 },
+      attributes: ['id', 'nombre'],
+      order: [['nombre', 'ASC']]
+    });
+    res.json({ success: true, data: unidades });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getTrazabilidad(req, res, next) {
   try {
     const registros = await afiliadoService.getTrazabilidad(req.params.id);
@@ -373,5 +387,6 @@ module.exports = {
   solicitarOtpReenvio,
   consultarPorDocumento,
   actualizarBeneficiariosConsulta,
-  getTrazabilidad
+  getTrazabilidad,
+  getVeoliaUnidades
 };

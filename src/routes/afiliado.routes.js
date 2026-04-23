@@ -77,6 +77,9 @@ router.get('/pendientes', auth, controller.getPendientes);
 // ── GET /afiliados/rechazados — ídem ──────────────────────────────────────
 router.get('/rechazados', auth, controller.getRechazados);
 
+// ── GET /afiliados/veolia-unidades — listado público de unidades de negocio ──
+router.get('/veolia-unidades', controller.getVeoliaUnidades);
+
 // ── GET /afiliados/por-hash/:hash — carga pública de afiliación via hash cifrado ─
 router.get('/por-hash/:hash', softAuth, controller.getByHash);
 

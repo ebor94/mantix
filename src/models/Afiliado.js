@@ -124,6 +124,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
 
+    // ── Unidad de negocio Veolia ───────────────────────────────
+    unidadNegocio: {
+      type: DataTypes.STRING(300),
+      allowNull: true
+    },
+    planVeolia: {
+      type: DataTypes.ENUM('PLATINO', 'ORO'),
+      allowNull: true
+    },
+
     // ── Información comercial ──────────────────────────────────
     canal: {
       type: DataTypes.ENUM('EMPRESARIAL', 'INDIVIDUAL', 'CENS'),
