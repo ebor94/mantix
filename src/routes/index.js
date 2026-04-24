@@ -32,6 +32,7 @@ const afiliadoRoutes = require('./afiliado.routes');
 const votacionesRoutes = require('./votaciones.routes');
 const empresaRoutes = require('./empresa.routes');
 const tarifaRoutes = require('./tarifa.routes');
+const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes360
 // Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
@@ -60,5 +61,6 @@ router.use('/afiliados', afiliadoRoutes);
 router.use('/votaciones', votacionesRoutes);
 router.use('/empresas', empresaRoutes);
 router.use('/tarifas', tarifaRoutes);
+router.use('/h360',   h360Routes);   // ← Módulo Homenajes360
 
 module.exports = router;
