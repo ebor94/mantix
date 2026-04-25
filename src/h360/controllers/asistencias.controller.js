@@ -53,6 +53,8 @@ async function listar(req, res, next) {
       conditions.push('(tanatologo_id = ? OR tanatologo_id IS NULL)')
       params.push(usuario)
       if (!estado) { conditions.push("estado = 'PREPARACION'") }
+    } else if (rol === 'asistente_tanatologo') {
+      if (!estado) { conditions.push("estado IN ('TRASLADO','PREPARACION')") }
     } else if (rol === 'supervisora') {
       if (!estado) { conditions.push("estado = 'ENTREGA'") }
     }
