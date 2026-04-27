@@ -335,4 +335,27 @@ async function aprobar(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar }
+/**
+ * POST /:id/nota
+ * Agrega una nota/comentario al historial sin cambiar el estado.
+ * Útil para que contabilidad registre notas de facturación en casos CERRADOS.
+ */
+async function agregarNota(req, res, next) {
+  try {
+    const { id } = req.params
+    const { comentario } = req.body
+    const { usuario, nombre } = req.user
+
+    if (!comentario?.trim()) {
+      return res.status(400).json({ mensaje: 'El comentario es requerido' })
+    }
+
+    const [[asistencia]] = await db.query('SELECT estado FROM asistencias WHERE id = ?', [id])
+    if (!asistencia) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
+    await insertarHistorial(id, asistencia.estado, asistencia.estado, usuario, nombre, comentario.trim())
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota }
