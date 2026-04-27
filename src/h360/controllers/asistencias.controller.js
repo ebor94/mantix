@@ -18,6 +18,19 @@ const ETAPAS_POR_ROL = {
   admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F05_ENTREGA'],
 }
 
+// Etapas requeridas para cerrar cada estado por rol
+const ETAPAS_PARA_CERRAR = {
+  asistente:            { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
+  tanatologo:           { PREPARACION: ['F04_TANATOPRAXIA'] },
+  asistente_tanatologo: { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+                          PREPARACION: ['F04_TANATOPRAXIA'] },
+  supervisora:          { ENTREGA:     ['F05_ENTREGA'] },
+  admin:                { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+                          PREPARACION: ['F04_TANATOPRAXIA'],
+                          ENTREGA:     ['F05_ENTREGA'],
+                          APROBACION:  [] },
+}
+
 // Transiciones del flujo — cada rol puede avanzar desde su estado
 const TRANSICIONES = {
   NUEVO:       { siguiente: 'TRASLADO',    roles: ['admin'] },
@@ -239,26 +252,20 @@ async function guardarEtapa(req, res, next) {
       [id, etapa, JSON.stringify(datos), usuario, completar ? 1 : 0]
     )
 
-    // Si completar=true y es la última etapa del rol, avanzar estado automáticamente
+    // Si completar=true, avanzar estado
     if (completar) {
-      const estadoActual = asist[0].estado
-      const transicion   = TRANSICIONES[estadoActual]
-      const etapasDelRol = ETAPAS_POR_ROL[rol] || []
-      const estadioPorRol= ESTADOS_POR_ROL[rol] || []
+      const estadoActual  = asist[0].estado
+      const transicion    = TRANSICIONES[estadoActual]
+      const estadosPorRol = ESTADOS_POR_ROL[rol] || []
 
-      if (transicion && estadioPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
-        // Verificar que todas las etapas del rol estén guardadas
-        const [guardadas] = await db.query(
-          'SELECT etapa FROM asistencia_etapas WHERE asistencia_id = ? AND etapa IN (?)',
-          [id, etapasDelRol]
+      if (transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
+        await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
+        await db.query(
+          'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id) VALUES (?,?,?,?)',
+          [id, estadoActual, transicion.siguiente, usuario]
         )
-        if (guardadas.length >= etapasDelRol.length) {
-          await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
-          await db.query(
-            'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id) VALUES (?,?,?,?)',
-            [id, estadoActual, transicion.siguiente, usuario]
-          )
-        }
+        glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
+          .catch(e => console.warn('[GLPI]', e.message))
       }
     }
 
