@@ -99,11 +99,20 @@ function extraerAtributos(entry) {
 }
 
 /**
- * Lista los miembros activos de un grupo AD por nombre de grupo.
+ * Lista los miembros activos de un grupo AD por nombre de grupo (cn).
+ * Paso 1: busca el grupo en todo el dominio para obtener su DN exacto.
+ * Paso 2: busca usuarios activos con memberOf=<DN exacto>.
  * Retorna [{ usuario: sAMAccountName, nombre: displayName }] ordenados por nombre.
  */
 async function listarMiembrosGrupo(groupName) {
   if (!groupName) return []
+
+  // Base de dominio completo para buscar grupos (pueden estar en cualquier OU)
+  const domainBase = process.env.LDAP_BASE_DN
+    .split(',')
+    .filter(p => p.toUpperCase().startsWith('DC='))
+    .join(',')
+  const searchBase = domainBase || process.env.LDAP_BASE_DN
 
   const svcClient = createClient()
   try {
@@ -113,12 +122,33 @@ async function listarMiembrosGrupo(groupName) {
     throw new Error('No se pudo conectar al directorio activo: ' + err.message)
   }
 
+  let groupDN
+  try {
+    // Paso 1: resolver DN real del grupo buscando por cn en todo el dominio
+    const escapedGroup = escapeFilter(groupName)
+    const groupEntries = await searchAsync(
+      svcClient, searchBase,
+      `(&(objectClass=group)(cn=${escapedGroup}))`,
+      ['dn']
+    )
+    if (!groupEntries.length) {
+      console.warn(`[LDAP] Grupo "${groupName}" no encontrado en ${searchBase}`)
+      svcClient.destroy()
+      return []
+    }
+    groupDN = groupEntries[0].objectName?.toString() || groupEntries[0].dn?.toString()
+    console.log(`[LDAP] Grupo encontrado: ${groupDN}`)
+  } catch (err) {
+    svcClient.destroy()
+    throw new Error('Error al buscar el grupo en el directorio: ' + err.message)
+  }
+
   let entries
   try {
-    // Busca en toda la base DN usuarios activos que pertenezcan al grupo indicado
-    const escapedGroup = escapeFilter(groupName)
-    const filter = `(&${USER_FILTER}(memberOf=CN=${escapedGroup},${process.env.LDAP_BASE_DN}))`
-    entries = await searchAsync(svcClient, process.env.LDAP_BASE_DN, filter,
+    // Paso 2: buscar usuarios activos que sean miembros del grupo (DN exacto)
+    const escapedDN = escapeFilter(groupDN)
+    const filter = `(&${USER_FILTER}(memberOf=${escapedDN}))`
+    entries = await searchAsync(svcClient, searchBase, filter,
       ['sAMAccountName', 'displayName'])
   } catch (err) {
     throw new Error('Error al consultar miembros del grupo: ' + err.message)
