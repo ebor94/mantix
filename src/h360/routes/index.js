@@ -7,12 +7,14 @@ const router       = require('express').Router()
 const { verifyToken } = require('../middleware/auth')
 const authRoutes   = require('./auth.routes')
 const asistRoutes  = require('./asistencias.routes')
+const usuariosRoutes = require('./usuarios.routes')
 
 // Auth H360 (login con LDAP — público)
 router.use('/auth', authRoutes)
 
 // Rutas protegidas con token H360
 router.use('/asistencias', verifyToken, asistRoutes)
+router.use('/usuarios',    verifyToken, usuariosRoutes)
 
 // Health H360
 router.get('/health', (_, res) => res.json({ ok: true, modulo: 'Homenajes360', version: '1.0.0' }))

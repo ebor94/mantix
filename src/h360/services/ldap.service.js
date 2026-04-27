@@ -99,6 +99,43 @@ function extraerAtributos(entry) {
 }
 
 /**
+ * Lista los miembros activos de un grupo AD por nombre de grupo.
+ * Retorna [{ usuario: sAMAccountName, nombre: displayName }] ordenados por nombre.
+ */
+async function listarMiembrosGrupo(groupName) {
+  if (!groupName) return []
+
+  const svcClient = createClient()
+  try {
+    await bindAsync(svcClient, process.env.LDAP_BIND_USER, process.env.LDAP_BIND_PASS)
+  } catch (err) {
+    svcClient.destroy()
+    throw new Error('No se pudo conectar al directorio activo: ' + err.message)
+  }
+
+  let entries
+  try {
+    // Busca en toda la base DN usuarios activos que pertenezcan al grupo indicado
+    const escapedGroup = escapeFilter(groupName)
+    const filter = `(&${USER_FILTER}(memberOf=CN=${escapedGroup},${process.env.LDAP_BASE_DN}))`
+    entries = await searchAsync(svcClient, process.env.LDAP_BASE_DN, filter,
+      ['sAMAccountName', 'displayName'])
+  } catch (err) {
+    throw new Error('Error al consultar miembros del grupo: ' + err.message)
+  } finally {
+    svcClient.destroy()
+  }
+
+  const miembros = entries.map(e => {
+    const a = extraerAtributos(e)
+    return { usuario: a.sam, nombre: a.displayName || a.sam }
+  }).filter(m => m.usuario)
+
+  miembros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  return miembros
+}
+
+/**
  * Autentica un usuario contra el AD olivos.local.
  * Patrón: bind con cuenta de servicio → busca usuario → re-bind con
  * credenciales del usuario para verificarlas → retorna { usuario, nombre, email, rol }.
@@ -193,4 +230,4 @@ function detectarRol(memberOf) {
   return null
 }
 
-module.exports = { autenticarLDAP }
+module.exports = { autenticarLDAP, listarMiembrosGrupo }
