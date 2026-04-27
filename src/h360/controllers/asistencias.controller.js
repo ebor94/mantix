@@ -40,6 +40,16 @@ const TRANSICIONES = {
   APROBACION:  { siguiente: 'CERRADO',     roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
+// Helper: insertar registro en historial con nombre completo del usuario
+async function insertarHistorial(asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario = null) {
+  await db.query(
+    `INSERT INTO asistencia_historial
+     (asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario)
+     VALUES (?,?,?,?,?,?)`,
+    [asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario || null, comentario]
+  )
+}
+
 async function generarCodigo() {
   const year = new Date().getFullYear()
   const [rows] = await db.query('SELECT COUNT(*) as total FROM asistencias WHERE YEAR(created_at) = ?', [year])
@@ -111,6 +121,24 @@ async function obtener(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// GET /asistencias/:id/historial  — trazabilidad independiente
+async function obtenerHistorial(req, res, next) {
+  try {
+    const { id } = req.params
+    const [rows] = await db.query('SELECT id FROM asistencias WHERE id = ?', [id])
+    if (!rows.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
+    const [historial] = await db.query(
+      `SELECT id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario, created_at
+       FROM asistencia_historial
+       WHERE asistencia_id = ?
+       ORDER BY created_at ASC`,
+      [id]
+    )
+    res.json(historial)
+  } catch (err) { next(err) }
+}
+
 // GET /asistencias/:id/etapa/:etapa
 async function obtenerEtapa(req, res, next) {
   try {
@@ -125,7 +153,7 @@ async function obtenerEtapa(req, res, next) {
 // POST /asistencias
 async function crear(req, res, next) {
   try {
-    const { usuario } = req.user
+    const { usuario, nombre } = req.user
     const codigo = await generarCodigo()
     const {
       nombre_ser_querido, identificacion, contrato, certificado_defuncion,
@@ -147,10 +175,7 @@ async function crear(req, res, next) {
       ]
     )
 
-    await db.query(
-      'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id) VALUES (?,?,?,?)',
-      [result.insertId, null, 'NUEVO', usuario]
-    )
+    await insertarHistorial(result.insertId, null, 'NUEVO', usuario, nombre)
 
     glpi.crearTicket({ id: result.insertId, codigo, nombre_ser_querido, lugar_asistencia, nombre_contacto })
       .then(ticketId => {
@@ -168,7 +193,7 @@ async function asignarActores(req, res, next) {
   try {
     const { id } = req.params
     const { asistente_id, tanatologo_id } = req.body
-    const { usuario } = req.user
+    const { usuario, nombre } = req.user
 
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
@@ -181,9 +206,9 @@ async function asignarActores(req, res, next) {
     updates.estado = 'TRASLADO'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
-    await db.query(
-      'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id, comentario) VALUES (?,?,?,?,?)',
-      [id, 'NUEVO', 'TRASLADO', usuario, `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`]
+    await insertarHistorial(
+      id, 'NUEVO', 'TRASLADO', usuario, nombre,
+      `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`
     )
 
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
@@ -195,7 +220,7 @@ async function asignarActores(req, res, next) {
 async function cambiarEstado(req, res, next) {
   try {
     const { id } = req.params
-    const { rol, usuario } = req.user
+    const { rol, usuario, nombre } = req.user
     const { estado: nuevoEstado, comentario } = req.body
 
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
@@ -215,10 +240,7 @@ async function cambiarEstado(req, res, next) {
     if (nuevoEstado === 'CERRADO') updates.closed_at = new Date()
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
-    await db.query(
-      'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id, comentario) VALUES (?,?,?,?,?)',
-      [id, asistencia.estado, nuevoEstado, usuario, comentario || null]
-    )
+    await insertarHistorial(id, asistencia.estado, nuevoEstado, usuario, nombre, comentario || null)
 
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
 
@@ -235,7 +257,7 @@ async function guardarEtapa(req, res, next) {
   try {
     const { id } = req.params
     const { etapa, datos, completar = false } = req.body
-    const { rol, usuario } = req.user
+    const { rol, usuario, nombre } = req.user
 
     const permitidas = ETAPAS_POR_ROL[rol] || []
     if (!permitidas.includes(etapa))
@@ -260,10 +282,7 @@ async function guardarEtapa(req, res, next) {
 
       if (transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
         await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
-        await db.query(
-          'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id) VALUES (?,?,?,?)',
-          [id, estadoActual, transicion.siguiente, usuario]
-        )
+        await insertarHistorial(id, estadoActual, transicion.siguiente, usuario, nombre)
         glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
           .catch(e => console.warn('[GLPI]', e.message))
       }
@@ -278,7 +297,7 @@ async function guardarEtapa(req, res, next) {
 async function aprobar(req, res, next) {
   try {
     const { id } = req.params
-    const { rol, usuario } = req.user
+    const { rol, usuario, nombre } = req.user
     const { aprobado, comentario } = req.body
 
     const nivel = rol === 'contabilidad' ? 'contabilidad' : 'coordinador'
@@ -298,20 +317,14 @@ async function aprobar(req, res, next) {
 
     if (!aprobado) {
       await db.query('UPDATE asistencias SET estado=? WHERE id=?', ['RECHAZADO', id])
-      await db.query(
-        'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id, comentario) VALUES (?,?,?,?,?)',
-        [id, 'APROBACION', 'RECHAZADO', usuario, comentario]
-      )
+      await insertarHistorial(id, 'APROBACION', 'RECHAZADO', usuario, nombre, comentario)
     } else {
       const [aprobaciones] = await db.query(
         'SELECT * FROM asistencia_aprobaciones WHERE asistencia_id = ? AND aprobado = 1', [id]
       )
       if (aprobaciones.length >= 2) {
         await db.query('UPDATE asistencias SET estado=?, closed_at=NOW() WHERE id=?', ['CERRADO', id])
-        await db.query(
-          'INSERT INTO asistencia_historial (asistencia_id, estado_desde, estado_hasta, usuario_id) VALUES (?,?,?,?)',
-          [id, 'APROBACION', 'CERRADO', usuario]
-        )
+        await insertarHistorial(id, 'APROBACION', 'CERRADO', usuario, nombre)
         const [a] = await db.query('SELECT glpi_ticket_id FROM asistencias WHERE id=?', [id])
         if (a[0]?.glpi_ticket_id) glpi.cerrarTicket(a[0].glpi_ticket_id).catch(console.warn)
       }
@@ -322,4 +335,4 @@ async function aprobar(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar }
+module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar }

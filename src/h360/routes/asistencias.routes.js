@@ -5,9 +5,10 @@ const { requireRol } = require('../middleware/auth')
 const ROLES_CAMPO  = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'admin']
 const ROLES_AVANCE = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'coordinador', 'contabilidad', 'admin']
 
-router.get ('/',                 ctrl.listar)
-router.get ('/:id',              ctrl.obtener)
-router.get ('/:id/etapa/:etapa', ctrl.obtenerEtapa)
+router.get ('/',                   ctrl.listar)
+router.get ('/:id',                ctrl.obtener)
+router.get ('/:id/historial',      ctrl.obtenerHistorial)
+router.get ('/:id/etapa/:etapa',   ctrl.obtenerEtapa)
 router.post('/',                 requireRol('asesor', 'admin'),          ctrl.crear)
 router.post('/:id/actores',      requireRol('admin'),                    ctrl.asignarActores)
 router.patch('/:id/estado',      requireRol(...ROLES_AVANCE),            ctrl.cambiarEstado)
