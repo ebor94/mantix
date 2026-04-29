@@ -60,7 +60,7 @@ async function generarCodigo() {
 // GET /asistencias
 async function listar(req, res, next) {
   try {
-    const { estado, page = 1, limit = 20 } = req.query
+    const { estado, identificacion, fecha_desde, fecha_hasta, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const { rol, usuario } = req.user
 
@@ -82,14 +82,17 @@ async function listar(req, res, next) {
       if (!estado) { conditions.push("estado = 'ENTREGA'") }
     }
 
-    if (estado) { conditions.push('estado = ?'); params.push(estado) }
+    if (estado)        { conditions.push('estado = ?');            params.push(estado) }
+    if (identificacion){ conditions.push('identificacion LIKE ?'); params.push(`%${identificacion}%`) }
+    if (fecha_desde)   { conditions.push('DATE(created_at) >= ?'); params.push(fecha_desde) }
+    if (fecha_hasta)   { conditions.push('DATE(created_at) <= ?'); params.push(fecha_hasta) }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
 
     const [rows] = await db.query(
-      `SELECT id, codigo, estado, nombre_ser_querido, nombre_contacto,
-              lugar_asistencia, causa_fallecimiento, asesor_id,
-              asistente_id, tanatologo_id, created_at, updated_at
+      `SELECT id, codigo, estado, nombre_ser_querido, identificacion,
+              nombre_contacto, lugar_asistencia, causa_fallecimiento,
+              asesor_id, asistente_id, tanatologo_id, created_at, updated_at
        FROM asistencias ${where}
        ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
