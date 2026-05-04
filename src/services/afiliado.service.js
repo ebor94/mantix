@@ -32,7 +32,7 @@ function whereConFiltroAsesor(baseWhere, usuario) {
 const NULLABLE_FIELDS = [
   'sucursal', 'novedad', 'vigenciaDesde', 'vigenciaHasta',
   'canal', 'producto', 'grupo', 'asistenciaFueraDeCasa',
-  'celular2', 'email', 'barrio', 'nit', 'nombreEmpresa',
+  'celular2', 'email', 'barrio', 'nit', 'nombreEmpresa', 'unidadNegocio', 'planVeolia',
   'actividadEconomica', 'ocupacion', 'codigoCiiu',
   'usuarioCens', 'cicloEstrato', 'relacionPredio', 'observaciones',
   'referenciaPago1', 'referenciaPago2', 'referenciaPago3', 'formaPago',
