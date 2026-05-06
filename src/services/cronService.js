@@ -443,9 +443,46 @@ cron.schedule('0 8 */3 * *', async () => {
       }
     }); */
 
+    // -------------------------------------------------------
+    // CYM: Actualizar estado de contratos de predios
+    // Diario a las 00:30 — activo→vencido, vencido→cerrado+predio inactivo
+    // -------------------------------------------------------
+    cron.schedule('30 0 * * *', async () => {
+      try {
+        const { CymContrato, CymPredio } = require('../models');
+        const hoy = new Date();
+
+        // activo → vencido cuando la fecha de vencimiento ya pasó
+        const [actualizadosVencidos] = await CymContrato.update(
+          { estado: 'vencido' },
+          { where: { estado: 'activo', fecha_vencimiento: { [Op.lt]: hoy } } }
+        );
+
+        // vencido → cerrado cuando ya pasaron 60 días de gracia
+        const limite60 = new Date(hoy);
+        limite60.setDate(limite60.getDate() - 60);
+
+        const porCerrar = await CymContrato.findAll({
+          where: { estado: 'vencido', fecha_vencimiento: { [Op.lt]: limite60 } }
+        });
+
+        for (const contrato of porCerrar) {
+          await contrato.update({ estado: 'cerrado' });
+          await CymPredio.update({ activo_mant: false }, { where: { id: contrato.predio_id } });
+        }
+
+        if (actualizadosVencidos > 0 || porCerrar.length > 0) {
+          logger.info(`[CYM Cron] Contratos actualizados: ${actualizadosVencidos} a vencido, ${porCerrar.length} cerrados y predios inactivados`);
+        }
+      } catch (error) {
+        logger.error('❌ Error en cron CYM de vencimiento de contratos:', error);
+      }
+    });
+
     logger.info('✅ Tareas programadas (cron) configuradas correctamente');
     logger.info('⏰ Horarios de ejecución:');
     logger.info('   - 00:00: Actualizar mantenimientos atrasados');
+    logger.info('   - 00:30: CYM — Actualizar estados de contratos');
     logger.info('   - 08:00: Enviar notificaciones de mantenimientos próximos');
     logger.info('   - 09:00: Enviar alertas de mantenimientos vencidos');
     logger.info('   - 18:00: Enviar reporte diario');

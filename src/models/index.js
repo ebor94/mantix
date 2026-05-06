@@ -78,6 +78,18 @@ const db = {
   VotacionVotante: require('./VotacionVotante')(sequelize, Sequelize.DataTypes),
   VotacionCandidato: require('./VotacionCandidato')(sequelize, Sequelize.DataTypes),
   VotacionVoto: require('./VotacionVoto')(sequelize, Sequelize.DataTypes),
+
+  // ============================================
+  // MÓDULO CYM — MANTENIMIENTO DE PREDIOS
+  // ============================================
+  CymPredio:       require('./CymPredio')(sequelize, Sequelize.DataTypes),
+  CymContrato:     require('./CymContrato')(sequelize, Sequelize.DataTypes),
+  CymAsignacion:   require('./CymAsignacion')(sequelize, Sequelize.DataTypes),
+  CymActividad:    require('./CymActividad')(sequelize, Sequelize.DataTypes),
+  CymMantenimiento:require('./CymMantenimiento')(sequelize, Sequelize.DataTypes),
+  CymChecklist:    require('./CymChecklist')(sequelize, Sequelize.DataTypes),
+  CymEvidencia:    require('./CymEvidencia')(sequelize, Sequelize.DataTypes),
+  CymCartera:      require('./CymCartera')(sequelize, Sequelize.DataTypes),
 };
 
 // Definir asociaciones

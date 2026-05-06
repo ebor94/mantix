@@ -62,5 +62,6 @@ router.use('/votaciones', votacionesRoutes);
 router.use('/empresas', empresaRoutes);
 router.use('/tarifas', tarifaRoutes);
 router.use('/h360',   h360Routes);   // ← Módulo Homenajes360
+router.use('/cym',    require('./cym.routes')); // ← Módulo CYM Mantenimiento Predios
 
 module.exports = router;
