@@ -21,11 +21,30 @@ function whereContratoVigente() {
 const cymPredioController = {
   async getAll(req, res, next) {
     try {
-      const usuario = req.usuario;
-      const rolNombre = usuario.rol?.nombre;
+      const usuario    = req.usuario;
+      const rolNombre  = usuario.rol?.nombre;
       const esSuperAdmin = usuario.es_super_admin;
 
-      let whereAsignacion = {};
+      // Paginación
+      const q      = req.query.q?.trim() || '';
+      const limite = Math.min(parseInt(req.query.limite) || 50, 200);
+      const pagina = Math.max(parseInt(req.query.pagina) || 1, 1);
+      const offset = (pagina - 1) * limite;
+
+      // Búsqueda de texto en todos los campos de seres queridos y ubicación
+      const whereSearch = q ? {
+        [Op.or]: [
+          { sector:      { [Op.like]: `%${q}%` } },
+          { numero_lote: { [Op.like]: `%${q}%` } },
+          { sq_cedula:   { [Op.like]: `%${q}%` } },
+          { sq_nombre:   { [Op.like]: `%${q}%` } },
+          { sq2_cedula:  { [Op.like]: `%${q}%` } },
+          { sq2_nombre:  { [Op.like]: `%${q}%` } },
+          { sq3_cedula:  { [Op.like]: `%${q}%` } },
+          { sq3_nombre:  { [Op.like]: `%${q}%` } },
+        ]
+      } : {};
+
       let includeAsignacion = {
         model: CymAsignacion,
         as: 'asignacion',
@@ -39,13 +58,11 @@ const cymPredioController = {
       };
 
       if (!esSuperAdmin && rolNombre === 'supervisor_cym') {
-        whereAsignacion = { supervisor_id: usuario.id };
         includeAsignacion.required = true;
-        includeAsignacion.where = whereAsignacion;
+        includeAsignacion.where = { supervisor_id: usuario.id };
       } else if (!esSuperAdmin && rolNombre === 'auxiliar_cartera_cym') {
-        whereAsignacion = { aux_cartera_id: usuario.id };
         includeAsignacion.required = true;
-        includeAsignacion.where = whereAsignacion;
+        includeAsignacion.where = { aux_cartera_id: usuario.id };
       }
 
       const whereContratoFilter =
@@ -53,7 +70,8 @@ const cymPredioController = {
           ? { where: whereContratoVigente(), required: true }
           : { required: false };
 
-      const predios = await CymPredio.findAll({
+      const { count, rows } = await CymPredio.findAndCountAll({
+        where: whereSearch,
         include: [
           {
             model: CymContrato,
@@ -64,10 +82,17 @@ const cymPredioController = {
           },
           includeAsignacion
         ],
-        order: [['sector', 'ASC'], ['numero_lote', 'ASC']]
+        order: [['sector', 'ASC'], ['numero_lote', 'ASC']],
+        limit: limite,
+        offset,
+        distinct: true
       });
 
-      res.json({ success: true, data: predios });
+      res.json({
+        success: true,
+        data: rows,
+        meta: { total: count, pagina, limite, totalPaginas: Math.ceil(count / limite) || 1 }
+      });
     } catch (err) {
       next(err);
     }
