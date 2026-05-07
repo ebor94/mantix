@@ -126,11 +126,54 @@ const cymParejaController = {
       const { Rol: RolModel } = require('../models');
       const rol = await RolModel.findOne({ where: { nombre: 'operario_cym', activo: true } });
       const operarios = await Usuario.findAll({
-        where: { rol_id: rol?.id, activo: true },
-        attributes: ['id','nombre','apellido','email'],
+        where: { rol_id: rol?.id },
+        attributes: ['id','nombre','apellido','email','activo'],
         order: [['nombre','ASC']]
       });
       res.json({ success: true, data: operarios });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async toggleOperarioActivo(req, res, next) {
+    try {
+      const operario = await Usuario.findByPk(req.params.id, {
+        include: [{ model: Rol, as: 'rol' }]
+      });
+      if (!operario) throw new AppError('Operario no encontrado', 404);
+      if (operario.rol?.nombre !== 'operario_cym') throw new AppError('El usuario no es un operario CYM', 400);
+
+      // Si se intenta desactivar, verificar que no esté en pareja activa
+      if (operario.activo) {
+        const enPareja = await CymParejaMiembro.findOne({
+          where: { operario_id: operario.id, activo: true },
+          include: [{ model: CymPareja, as: 'pareja', where: { activo: true } }]
+        });
+        if (enPareja) {
+          throw new AppError(
+            `No se puede desactivar: ${operario.nombre} ${operario.apellido} está asignado a la pareja "${enPareja.pareja.nombre}"`,
+            400
+          );
+        }
+      }
+
+      await operario.update({ activo: !operario.activo });
+
+      await AuditLog.create({
+        usuario_id:   req.usuario.id,
+        accion:       operario.activo ? 'ACTIVAR' : 'DESACTIVAR',
+        tabla:        'usuarios',
+        registro_id:  operario.id,
+        datos_nuevos: JSON.stringify({ activo: operario.activo }),
+        ip_address:   req.ip
+      });
+
+      res.json({
+        success: true,
+        data: { id: operario.id, activo: operario.activo },
+        message: `Operario ${operario.activo ? 'activado' : 'desactivado'} correctamente`
+      });
     } catch (err) {
       next(err);
     }

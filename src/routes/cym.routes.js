@@ -108,6 +108,10 @@ router.post('/parejas/operarios',
   auth, authorize(...COORD),
   cymParejaController.crearOperario
 );
+router.put('/parejas/operarios/:id/estado',
+  auth, authorize(...COORD),
+  cymParejaController.toggleOperarioActivo
+);
 router.post('/parejas',
   auth, authorize(...COORD),
   cymParejaController.crear
