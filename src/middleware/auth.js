@@ -39,8 +39,9 @@ const auth = async (req, res, next) => {
 };
 
 /**
- * Middleware para autorizar por rol
- * @param {...number} roles - IDs de roles permitidos
+ * Middleware para autorizar por rol.
+ * Acepta IDs numéricos (legacy) o nombres de rol (strings).
+ * El super admin pasa siempre.
  */
 const authorize = (...roles) => {
   return (req, res, next) => {
@@ -51,7 +52,12 @@ const authorize = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.usuario.rol_id)) {
+    if (req.usuario.es_super_admin) return next();
+
+    const matchById   = roles.some(r => typeof r === 'number' && r === req.usuario.rol_id);
+    const matchByName = roles.some(r => typeof r === 'string'  && r === req.usuario.rol?.nombre);
+
+    if (!matchById && !matchByName) {
       return res.status(403).json({
         success: false,
         message: MENSAJES.ERROR_AUTORIZACION
