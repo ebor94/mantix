@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const {
   CymPredio, CymContrato, CymAsignacion, CymMantenimiento,
+  CymPareja, CymParejaMiembro,
   CymChecklist, CymEvidencia, CymActividad, CymHistoricoSq, Usuario, AuditLog
 } = require('../models');
 const AppError = require('../utils/AppError');
@@ -88,8 +89,15 @@ const cymPredioController = {
         include: [
           { model: Usuario, as: 'coordinador', attributes: ['id','nombre','apellido'] },
           { model: Usuario, as: 'supervisor',  attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'operario',    attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido'] }
+          { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido'] },
+          {
+            model: CymPareja, as: 'pareja',
+            include: [{
+              model: CymParejaMiembro, as: 'miembros',
+              where: { activo: true }, required: false,
+              include: [{ model: Usuario, as: 'operario', attributes: ['id','nombre','apellido'] }]
+            }]
+          }
         ]
       };
 
@@ -149,8 +157,15 @@ const cymPredioController = {
             include: [
               { model: Usuario, as: 'coordinador', attributes: ['id','nombre','apellido','email'] },
               { model: Usuario, as: 'supervisor',  attributes: ['id','nombre','apellido','email'] },
-              { model: Usuario, as: 'operario',    attributes: ['id','nombre','apellido','email'] },
-              { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido','email'] }
+              { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido','email'] },
+              {
+                model: CymPareja, as: 'pareja',
+                include: [{
+                  model: CymParejaMiembro, as: 'miembros',
+                  where: { activo: true }, required: false,
+                  include: [{ model: Usuario, as: 'operario', attributes: ['id','nombre','apellido','email'] }]
+                }]
+              }
             ]
           }
         ]

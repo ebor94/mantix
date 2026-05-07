@@ -148,6 +148,10 @@ router.post('/asignaciones',
 // ----------------------------------------------------------------
 // MANTENIMIENTOS
 // ----------------------------------------------------------------
+router.get('/mantenimientos',
+  auth, authorize('coordinador_cym'),
+  cymMantenimientoController.getAll
+);
 router.get('/mantenimientos/asignados',
   auth, authorize('supervisor_cym'),
   cymMantenimientoController.getAsignados

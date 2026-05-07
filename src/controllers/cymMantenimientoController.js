@@ -32,6 +32,52 @@ const includePareja = {
 };
 
 const cymMantenimientoController = {
+  // Coordinador/superAdmin: todos los mantenimientos paginados
+  async getAll(req, res, next) {
+    try {
+      const limite = Math.min(parseInt(req.query.limite) || 50, 200);
+      const pagina = Math.max(parseInt(req.query.pagina) || 1, 1);
+      const offset = (pagina - 1) * limite;
+      const q      = req.query.q?.trim() || '';
+      const estado = req.query.estado || null;
+
+      const where = {};
+      if (estado) where.estado = estado;
+
+      const { count, rows } = await CymMantenimiento.findAndCountAll({
+        where,
+        include: [
+          {
+            model: CymPredio, as: 'predio',
+            where: q ? {
+              [Op.or]: [
+                { sector:      { [Op.like]: `%${q}%` } },
+                { numero_lote: { [Op.like]: `%${q}%` } },
+                { sq_nombre:   { [Op.like]: `%${q}%` } }
+              ]
+            } : undefined,
+            required: !!q
+          },
+          { model: Usuario, as: 'supervisor', attributes: ['id','nombre','apellido'] },
+          { model: Usuario, as: 'operario',   attributes: ['id','nombre','apellido'] },
+          { model: Usuario, as: 'operario2',  attributes: ['id','nombre','apellido'] }
+        ],
+        order: [['fecha_mant', 'DESC']],
+        limit: limite,
+        offset,
+        distinct: true
+      });
+
+      res.json({
+        success: true,
+        data: rows,
+        meta: { total: count, pagina, limite, totalPaginas: Math.ceil(count / limite) || 1 }
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getAsignados(req, res, next) {
     try {
       const supervisorId = req.usuario.id;
