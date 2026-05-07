@@ -103,12 +103,17 @@ const cymPredioController = {
 
   async create(req, res, next) {
     try {
-      const { sector, numero_lote, acomodacion, sq_cedula, sq_nombre,
-              sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum } = req.body;
+      const { sector, numero_lote, acomodacion,
+              sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
+              sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
+              sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum } = req.body;
 
       const predio = await CymPredio.create({
-        sector, numero_lote, acomodacion, sq_cedula, sq_nombre,
-        sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum, activo_mant: true
+        sector, numero_lote, acomodacion,
+        sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
+        sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
+        sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
+        activo_mant: true
       });
 
       await AuditLog.create({
@@ -135,12 +140,18 @@ const cymPredioController = {
       if (!predio) throw new AppError('Predio no encontrado', 404);
 
       const antes = predio.toJSON();
-      const { sector, numero_lote, acomodacion, sq_cedula, sq_nombre,
-              sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum, activo_mant } = req.body;
+      const { sector, numero_lote, acomodacion,
+              sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
+              sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
+              sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
+              activo_mant } = req.body;
 
       await predio.update({
-        sector, numero_lote, acomodacion, sq_cedula, sq_nombre,
-        sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum, activo_mant
+        sector, numero_lote, acomodacion,
+        sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
+        sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
+        sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
+        activo_mant
       });
 
       await AuditLog.create({

@@ -6,9 +6,21 @@ module.exports = (sequelize, DataTypes) => {
     acomodacion:  { type: DataTypes.ENUM('sencilla','doble','triple'), allowNull: false },
     sq_cedula:    { type: DataTypes.STRING(20) },
     sq_nombre:    { type: DataTypes.STRING(200) },
-    sq_fecha_nac: { type: DataTypes.DATEONLY },
-    sq_fecha_fall:{ type: DataTypes.DATEONLY },
+    sq_fecha_nac:  { type: DataTypes.DATEONLY },
+    sq_fecha_fall: { type: DataTypes.DATEONLY },
     sq_fecha_inhum:{ type: DataTypes.DATEONLY },
+    // Ser querido 2 (solo en acomodacion doble o triple)
+    sq2_cedula:    { type: DataTypes.STRING(20) },
+    sq2_nombre:    { type: DataTypes.STRING(200) },
+    sq2_fecha_nac: { type: DataTypes.DATEONLY },
+    sq2_fecha_fall:{ type: DataTypes.DATEONLY },
+    sq2_fecha_inhum:{ type: DataTypes.DATEONLY },
+    // Ser querido 3 (solo en acomodacion triple)
+    sq3_cedula:    { type: DataTypes.STRING(20) },
+    sq3_nombre:    { type: DataTypes.STRING(200) },
+    sq3_fecha_nac: { type: DataTypes.DATEONLY },
+    sq3_fecha_fall:{ type: DataTypes.DATEONLY },
+    sq3_fecha_inhum:{ type: DataTypes.DATEONLY },
     activo_mant:  { type: DataTypes.BOOLEAN, defaultValue: true }
   }, {
     tableName: 'cym_predios',
