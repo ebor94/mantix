@@ -31,9 +31,10 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   CymPredio.associate = (models) => {
-    CymPredio.hasMany(models.CymContrato, { foreignKey: 'predio_id', as: 'contratos' });
-    CymPredio.hasOne(models.CymAsignacion, { foreignKey: 'predio_id', as: 'asignacion' });
-    CymPredio.hasMany(models.CymMantenimiento, { foreignKey: 'predio_id', as: 'mantenimientos' });
+    CymPredio.hasMany(models.CymContrato,     { foreignKey: 'predio_id', as: 'contratos' });
+    CymPredio.hasOne(models.CymAsignacion,    { foreignKey: 'predio_id', as: 'asignacion' });
+    CymPredio.hasMany(models.CymMantenimiento,{ foreignKey: 'predio_id', as: 'mantenimientos' });
+    CymPredio.hasMany(models.CymHistoricoSq,  { foreignKey: 'predio_id', as: 'historico_sq' });
   };
 
   return CymPredio;

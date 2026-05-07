@@ -1,9 +1,42 @@
 const { Op } = require('sequelize');
 const {
   CymPredio, CymContrato, CymAsignacion, CymMantenimiento,
-  CymChecklist, CymEvidencia, CymActividad, Usuario, AuditLog
+  CymChecklist, CymEvidencia, CymActividad, CymHistoricoSq, Usuario, AuditLog
 } = require('../models');
 const AppError = require('../utils/AppError');
+
+// Detecta cambios en seres queridos y retorna registros a insertar en el historial
+function detectarCambiosSq(antes, body, predioId, usuarioId) {
+  const prefijos = ['sq', 'sq2', 'sq3'];
+  const cambios = [];
+  for (let i = 0; i < prefijos.length; i++) {
+    const pre = prefijos[i];
+    const pos = i + 1;
+    const cedOld = antes[`${pre}_cedula`] || null;
+    const nomOld = antes[`${pre}_nombre`] || null;
+    const cedNew = body[`${pre}_cedula`]  || null;
+    const nomNew = body[`${pre}_nombre`]  || null;
+    if (cedOld !== cedNew || nomOld !== nomNew) {
+      cambios.push({
+        predio_id:       predioId,
+        posicion:        pos,
+        cedula_ant:      cedOld,
+        nombre_ant:      nomOld,
+        fecha_nac_ant:   antes[`${pre}_fecha_nac`]  || null,
+        fecha_fall_ant:  antes[`${pre}_fecha_fall`] || null,
+        fecha_inhum_ant: antes[`${pre}_fecha_inhum`]|| null,
+        cedula_nue:      cedNew,
+        nombre_nue:      nomNew,
+        fecha_nac_nue:   body[`${pre}_fecha_nac`]   || null,
+        fecha_fall_nue:  body[`${pre}_fecha_fall`]  || null,
+        fecha_inhum_nue: body[`${pre}_fecha_inhum`] || null,
+        motivo:          body.motivo_cambio_sq       || null,
+        usuario_id:      usuarioId
+      });
+    }
+  }
+  return cambios;
+}
 
 // Devuelve contratos cuyo estado es activo o vencido dentro del período de gracia (60 días)
 function whereContratoVigente() {
@@ -171,6 +204,9 @@ const cymPredioController = {
               sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
               activo_mant } = req.body;
 
+      // Detectar cambios en seres queridos antes de actualizar
+      const cambiosSq = detectarCambiosSq(antes, req.body, predio.id, req.usuario.id);
+
       await predio.update({
         sector, numero_lote, acomodacion,
         sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
@@ -178,6 +214,11 @@ const cymPredioController = {
         sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
         activo_mant
       });
+
+      // Registrar cambios de ser querido en historial
+      if (cambiosSq.length > 0) {
+        await CymHistoricoSq.bulkCreate(cambiosSq);
+      }
 
       await AuditLog.create({
         usuario_id: req.usuario.id,
@@ -190,6 +231,23 @@ const cymPredioController = {
       });
 
       res.json({ success: true, data: predio, message: 'Predio actualizado' });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getHistoricoSq(req, res, next) {
+    try {
+      const predio = await CymPredio.findByPk(req.params.id);
+      if (!predio) throw new AppError('Predio no encontrado', 404);
+
+      const historial = await CymHistoricoSq.findAll({
+        where: { predio_id: req.params.id },
+        include: [{ model: Usuario, as: 'usuario', attributes: ['nombre', 'apellido'] }],
+        order: [['created_at', 'DESC']]
+      });
+
+      res.json({ success: true, data: historial });
     } catch (err) {
       next(err);
     }

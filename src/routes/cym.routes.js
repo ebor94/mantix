@@ -55,6 +55,10 @@ router.get('/predios/:id/timeline',
   auth, authorize(...ROLES_CYM),
   cymPredioController.getTimeline
 );
+router.get('/predios/:id/historico-sq',
+  auth, authorize(...ROLES_CYM),
+  cymPredioController.getHistoricoSq
+);
 router.post('/predios',
   auth, authorize(...COORD),
   cymPredioController.create
