@@ -76,6 +76,36 @@ const cymContratoController = {
     }
   },
 
+  async cancelar(req, res, next) {
+    try {
+      const contrato = await CymContrato.findByPk(req.params.id);
+      if (!contrato) throw new AppError('Contrato no encontrado', 404);
+      if (!['activo', 'vencido'].includes(contrato.estado)) {
+        throw new AppError('Solo se pueden cancelar contratos activos o vencidos', 400);
+      }
+
+      const { motivo } = req.body;
+      if (!motivo?.trim()) throw new AppError('El motivo de cancelación es requerido', 400);
+
+      const antes = contrato.toJSON();
+      await contrato.update({ estado: 'cancelado', motivo_cancelacion: motivo.trim() });
+
+      await AuditLog.create({
+        usuario_id: req.usuario.id,
+        accion: 'CANCELAR',
+        tabla: 'cym_contratos',
+        registro_id: contrato.id,
+        datos_anteriores: JSON.stringify(antes),
+        datos_nuevos: JSON.stringify(contrato),
+        ip_address: req.ip
+      });
+
+      res.json({ success: true, data: contrato, message: 'Contrato cancelado correctamente' });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async update(req, res, next) {
     try {
       const contrato = await CymContrato.findByPk(req.params.id);

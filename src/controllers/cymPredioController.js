@@ -170,6 +170,45 @@ const cymPredioController = {
     }
   },
 
+  async inactivar(req, res, next) {
+    try {
+      const predio = await CymPredio.findByPk(req.params.id, {
+        include: [{
+          model: CymContrato,
+          as: 'contratos',
+          where: { estado: { [Op.in]: ['activo', 'vencido'] } },
+          required: false
+        }]
+      });
+      if (!predio) throw new AppError('Predio no encontrado', 404);
+
+      const contratoVigente = predio.contratos?.find(c => ['activo', 'vencido'].includes(c.estado));
+      if (contratoVigente) throw new AppError('No se puede inactivar un predio con contrato activo o vencido', 400);
+
+      if (!predio.activo_mant) throw new AppError('El predio ya está inactivo', 400);
+
+      const { motivo } = req.body;
+      if (!motivo?.trim()) throw new AppError('El motivo de inactivación es requerido', 400);
+
+      const antes = predio.toJSON();
+      await predio.update({ activo_mant: false, motivo_inactivacion: motivo.trim() });
+
+      await AuditLog.create({
+        usuario_id: req.usuario.id,
+        accion: 'INACTIVAR',
+        tabla: 'cym_predios',
+        registro_id: predio.id,
+        datos_anteriores: JSON.stringify(antes),
+        datos_nuevos: JSON.stringify(predio),
+        ip_address: req.ip
+      });
+
+      res.json({ success: true, data: predio, message: 'Predio inactivado correctamente' });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getTimeline(req, res, next) {
     try {
       const predio = await CymPredio.findByPk(req.params.id);

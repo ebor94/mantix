@@ -21,7 +21,8 @@ module.exports = (sequelize, DataTypes) => {
     sq3_fecha_nac: { type: DataTypes.DATEONLY },
     sq3_fecha_fall:{ type: DataTypes.DATEONLY },
     sq3_fecha_inhum:{ type: DataTypes.DATEONLY },
-    activo_mant:  { type: DataTypes.BOOLEAN, defaultValue: true }
+    activo_mant:          { type: DataTypes.BOOLEAN, defaultValue: true },
+    motivo_inactivacion:  { type: DataTypes.STRING(500) }
   }, {
     tableName: 'cym_predios',
     timestamps: true,

@@ -10,7 +10,8 @@ module.exports = (sequelize, DataTypes) => {
     vigencia:             { type: DataTypes.ENUM('trimestral','semestral','anual','bianual'), allowNull: false },
     fecha_contratacion:   { type: DataTypes.DATEONLY, allowNull: false },
     fecha_vencimiento:    { type: DataTypes.DATEONLY, allowNull: false },
-    estado:               { type: DataTypes.ENUM('activo','vencido','cerrado'), defaultValue: 'activo' }
+    estado:               { type: DataTypes.ENUM('activo','vencido','cerrado','cancelado'), defaultValue: 'activo' },
+    motivo_cancelacion:   { type: DataTypes.STRING(500) }
   }, {
     tableName: 'cym_contratos',
     timestamps: true,

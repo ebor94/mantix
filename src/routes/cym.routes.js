@@ -63,6 +63,10 @@ router.put('/predios/:id',
   auth, authorize(...COORD),
   cymPredioController.update
 );
+router.put('/predios/:id/inactivar',
+  auth, authorize(...COORD),
+  cymPredioController.inactivar
+);
 
 // ----------------------------------------------------------------
 // CONTRATOS
@@ -78,6 +82,10 @@ router.post('/contratos',
 router.put('/contratos/:id',
   auth, authorize(...COORD),
   cymContratoController.update
+);
+router.put('/contratos/:id/cancelar',
+  auth, authorize(...COORD),
+  cymContratoController.cancelar
 );
 
 // ----------------------------------------------------------------
