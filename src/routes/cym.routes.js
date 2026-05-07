@@ -104,6 +104,10 @@ router.get('/parejas/operarios',
   auth, authorize(...COORD),
   cymParejaController.getOperarios
 );
+router.post('/parejas/operarios',
+  auth, authorize(...COORD),
+  cymParejaController.crearOperario
+);
 router.post('/parejas',
   auth, authorize(...COORD),
   cymParejaController.crear

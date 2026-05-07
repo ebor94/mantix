@@ -127,10 +127,54 @@ const cymParejaController = {
       const rol = await RolModel.findOne({ where: { nombre: 'operario_cym', activo: true } });
       const operarios = await Usuario.findAll({
         where: { rol_id: rol?.id, activo: true },
-        attributes: ['id','nombre','apellido'],
+        attributes: ['id','nombre','apellido','email'],
         order: [['nombre','ASC']]
       });
       res.json({ success: true, data: operarios });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async crearOperario(req, res, next) {
+    try {
+      const { Rol: RolModel } = require('../models');
+      const { nombre, apellido, email, password, telefono } = req.body;
+
+      if (!nombre?.trim() || !apellido?.trim() || !email?.trim() || !password) {
+        throw new AppError('nombre, apellido, email y password son requeridos', 400);
+      }
+
+      const rol = await RolModel.findOne({ where: { nombre: 'operario_cym', activo: true } });
+      if (!rol) throw new AppError('Rol operario_cym no encontrado en el sistema', 500);
+
+      const existente = await Usuario.findOne({ where: { email: email.trim().toLowerCase() } });
+      if (existente) throw new AppError('Ya existe un usuario con ese correo', 400);
+
+      const operario = await Usuario.create({
+        rol_id:   rol.id,
+        nombre:   nombre.trim(),
+        apellido: apellido.trim(),
+        email:    email.trim().toLowerCase(),
+        password,
+        telefono: telefono?.trim() || null,
+        activo:   true
+      });
+
+      await AuditLog.create({
+        usuario_id:   req.usuario.id,
+        accion:       'CREATE',
+        tabla:        'usuarios',
+        registro_id:  operario.id,
+        datos_nuevos: JSON.stringify({ nombre, apellido, email, rol: 'operario_cym' }),
+        ip_address:   req.ip
+      });
+
+      res.status(201).json({
+        success: true,
+        data: { id: operario.id, nombre: operario.nombre, apellido: operario.apellido, email: operario.email },
+        message: 'Operario creado correctamente'
+      });
     } catch (err) {
       next(err);
     }
