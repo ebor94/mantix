@@ -5,6 +5,9 @@ const {
 } = require('../models');
 const AppError = require('../utils/AppError');
 
+// Convierte string vacío a null para campos DATE — evita 'Invalid date' en MySQL
+const d = v => (v === '' || v === undefined ? null : v);
+
 // Detecta cambios en seres queridos y retorna registros a insertar en el historial
 function detectarCambiosSq(antes, body, predioId, usuarioId) {
   const prefijos = ['sq', 'sq2', 'sq3'];
@@ -168,9 +171,9 @@ const cymPredioController = {
 
       const predio = await CymPredio.create({
         sector, numero_lote, acomodacion,
-        sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
-        sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
-        sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
+        sq_cedula,  sq_nombre,  sq_fecha_nac:  d(sq_fecha_nac),  sq_fecha_fall:  d(sq_fecha_fall),  sq_fecha_inhum:  d(sq_fecha_inhum),
+        sq2_cedula, sq2_nombre, sq2_fecha_nac: d(sq2_fecha_nac), sq2_fecha_fall: d(sq2_fecha_fall), sq2_fecha_inhum: d(sq2_fecha_inhum),
+        sq3_cedula, sq3_nombre, sq3_fecha_nac: d(sq3_fecha_nac), sq3_fecha_fall: d(sq3_fecha_fall), sq3_fecha_inhum: d(sq3_fecha_inhum),
         activo_mant: true
       });
 
@@ -209,9 +212,9 @@ const cymPredioController = {
 
       await predio.update({
         sector, numero_lote, acomodacion,
-        sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
-        sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
-        sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum,
+        sq_cedula,  sq_nombre,  sq_fecha_nac:  d(sq_fecha_nac),  sq_fecha_fall:  d(sq_fecha_fall),  sq_fecha_inhum:  d(sq_fecha_inhum),
+        sq2_cedula, sq2_nombre, sq2_fecha_nac: d(sq2_fecha_nac), sq2_fecha_fall: d(sq2_fecha_fall), sq2_fecha_inhum: d(sq2_fecha_inhum),
+        sq3_cedula, sq3_nombre, sq3_fecha_nac: d(sq3_fecha_nac), sq3_fecha_fall: d(sq3_fecha_fall), sq3_fecha_inhum: d(sq3_fecha_inhum),
         activo_mant
       });
 
