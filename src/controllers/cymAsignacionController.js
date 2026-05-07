@@ -1,23 +1,5 @@
-const { CymAsignacion, CymPredio, Usuario, Rol, AuditLog } = require('../models');
+const { CymAsignacion, CymPareja, CymParejaMiembro, CymPredio, Usuario, Rol, AuditLog } = require('../models');
 const AppError = require('../utils/AppError');
-
-const ROLES_VALIDOS = {
-  supervisor_id:  ['supervisor_cym'],
-  operario_id:    ['operario_cym'],
-  operario2_id:   ['operario_cym'],
-  aux_cartera_id: ['auxiliar_cartera_cym'],
-  coordinador_id: ['coordinador_cym', 'superAdmin']
-};
-
-async function validarRolUsuario(campo, usuarioId) {
-  if (!usuarioId) return;
-  const usuario = await Usuario.findByPk(usuarioId, { include: [{ model: Rol, as: 'rol' }] });
-  if (!usuario) throw new AppError(`Usuario ${usuarioId} no encontrado`, 404);
-  const rolesPermitidos = ROLES_VALIDOS[campo];
-  if (!usuario.es_super_admin && !rolesPermitidos.includes(usuario.rol?.nombre)) {
-    throw new AppError(`El usuario ${usuario.nombre} no tiene el rol requerido para el campo ${campo}`, 400);
-  }
-}
 
 const cymAsignacionController = {
   async getByPredio(req, res, next) {
@@ -25,11 +7,21 @@ const cymAsignacionController = {
       const asignacion = await CymAsignacion.findOne({
         where: { predio_id: req.params.predioId, activo: true },
         include: [
-          { model: Usuario, as: 'coordinador', attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'supervisor',  attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'operario',    attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'operario2',   attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido'] }
+          { model: Usuario,   as: 'coordinador', attributes: ['id','nombre','apellido'] },
+          { model: Usuario,   as: 'supervisor',  attributes: ['id','nombre','apellido'] },
+          { model: Usuario,   as: 'aux_cartera', attributes: ['id','nombre','apellido'] },
+          {
+            model: CymPareja,
+            as: 'pareja',
+            include: [{
+              model: CymParejaMiembro,
+              as: 'miembros',
+              where: { activo: true },
+              required: false,
+              include: [{ model: Usuario, as: 'operario', attributes: ['id','nombre','apellido'] }],
+              order: [['posicion', 'ASC']]
+            }]
+          }
         ]
       });
       res.json({ success: true, data: asignacion });
@@ -40,25 +32,25 @@ const cymAsignacionController = {
 
   async asignar(req, res, next) {
     try {
-      const { predio_id, supervisor_id, operario_id, operario2_id, aux_cartera_id, coordinador_id } = req.body;
+      const { predio_id, supervisor_id, pareja_id, aux_cartera_id, coordinador_id } = req.body;
 
       const predio = await CymPredio.findByPk(predio_id);
       if (!predio) throw new AppError('Predio no encontrado', 404);
 
-      // Validar roles de cada usuario asignado
-      await Promise.all([
-        validarRolUsuario('supervisor_id',  supervisor_id),
-        validarRolUsuario('operario_id',    operario_id),
-        validarRolUsuario('operario2_id',   operario2_id),
-        validarRolUsuario('aux_cartera_id', aux_cartera_id),
-        validarRolUsuario('coordinador_id', coordinador_id)
-      ]);
+      if (supervisor_id)   await validarRol(supervisor_id,   ['supervisor_cym'],         'Supervisor');
+      if (aux_cartera_id)  await validarRol(aux_cartera_id,  ['auxiliar_cartera_cym'],   'Aux. Cartera');
+      if (coordinador_id)  await validarRol(coordinador_id,  ['coordinador_cym'],        'Coordinador');
 
-      // Desactivar asignación previa si existe
+      if (pareja_id) {
+        const pareja = await CymPareja.findByPk(pareja_id);
+        if (!pareja || !pareja.activo) throw new AppError('Pareja no encontrada o inactiva', 400);
+      }
+
+      // Desactivar asignación previa
       await CymAsignacion.update({ activo: false }, { where: { predio_id, activo: true } });
 
       const asignacion = await CymAsignacion.create({
-        predio_id, supervisor_id, operario_id, operario2_id, aux_cartera_id, coordinador_id, activo: true
+        predio_id, supervisor_id, pareja_id, aux_cartera_id, coordinador_id, activo: true
       });
 
       await AuditLog.create({
@@ -80,7 +72,7 @@ const cymAsignacionController = {
     try {
       const { Rol: RolModel } = require('../models');
       const roles = await RolModel.findAll({
-        where: { nombre: ['supervisor_cym','operario_cym','auxiliar_cartera_cym','coordinador_cym'], activo: true }
+        where: { nombre: ['supervisor_cym','auxiliar_cartera_cym','coordinador_cym'], activo: true }
       });
       const rolIds = roles.map(r => r.id);
       const personal = await Usuario.findAll({
@@ -95,5 +87,13 @@ const cymAsignacionController = {
     }
   }
 };
+
+async function validarRol(usuarioId, rolesPermitidos, label) {
+  const u = await Usuario.findByPk(usuarioId, { include: [{ model: Rol, as: 'rol' }] });
+  if (!u) throw new AppError(`${label}: usuario no encontrado`, 404);
+  if (!u.es_super_admin && !rolesPermitidos.includes(u.rol?.nombre)) {
+    throw new AppError(`${label}: el usuario no tiene el rol requerido`, 400);
+  }
+}
 
 module.exports = cymAsignacionController;

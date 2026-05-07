@@ -4,8 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     predio_id:      { type: DataTypes.INTEGER, allowNull: false },
     coordinador_id: { type: DataTypes.INTEGER },
     supervisor_id:  { type: DataTypes.INTEGER },
-    operario_id:    { type: DataTypes.INTEGER },
-    operario2_id:   { type: DataTypes.INTEGER },
+    pareja_id:      { type: DataTypes.INTEGER },
     aux_cartera_id: { type: DataTypes.INTEGER },
     activo:         { type: DataTypes.BOOLEAN, defaultValue: true }
   }, {
@@ -19,9 +18,8 @@ module.exports = (sequelize, DataTypes) => {
     CymAsignacion.belongsTo(models.CymPredio,  { foreignKey: 'predio_id',      as: 'predio' });
     CymAsignacion.belongsTo(models.Usuario,     { foreignKey: 'coordinador_id', as: 'coordinador' });
     CymAsignacion.belongsTo(models.Usuario,     { foreignKey: 'supervisor_id',  as: 'supervisor' });
-    CymAsignacion.belongsTo(models.Usuario,     { foreignKey: 'operario_id',    as: 'operario' });
-    CymAsignacion.belongsTo(models.Usuario,     { foreignKey: 'operario2_id',   as: 'operario2' });
     CymAsignacion.belongsTo(models.Usuario,     { foreignKey: 'aux_cartera_id', as: 'aux_cartera' });
+    CymAsignacion.belongsTo(models.CymPareja,   { foreignKey: 'pareja_id',      as: 'pareja' });
   };
 
   return CymAsignacion;

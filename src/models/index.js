@@ -91,6 +91,8 @@ const db = {
   CymEvidencia:    require('./CymEvidencia')(sequelize, Sequelize.DataTypes),
   CymCartera:      require('./CymCartera')(sequelize, Sequelize.DataTypes),
   CymHistoricoSq:  require('./CymHistoricoSq')(sequelize, Sequelize.DataTypes),
+  CymPareja:       require('./CymPareja')(sequelize, Sequelize.DataTypes),
+  CymParejaMiembro:require('./CymParejaMiembro')(sequelize, Sequelize.DataTypes),
 };
 
 // Definir asociaciones

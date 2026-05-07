@@ -2,11 +2,11 @@ const path = require('path');
 const { Op } = require('sequelize');
 const {
   CymMantenimiento, CymPredio, CymContrato, CymAsignacion,
+  CymPareja, CymParejaMiembro,
   CymActividad, CymChecklist, CymEvidencia, Usuario, AuditLog
 } = require('../models');
 const AppError = require('../utils/AppError');
 
-// Contratos vigentes: activo o vencido dentro de los 60 días de gracia
 function whereContratoVigente() {
   const limite = new Date();
   limite.setDate(limite.getDate() - 60);
@@ -18,8 +18,20 @@ function whereContratoVigente() {
   };
 }
 
+const includePareja = {
+  model: CymPareja,
+  as: 'pareja',
+  include: [{
+    model: CymParejaMiembro,
+    as: 'miembros',
+    where: { activo: true },
+    required: false,
+    include: [{ model: Usuario, as: 'operario', attributes: ['id','nombre','apellido'] }],
+    order: [['posicion', 'ASC']]
+  }]
+};
+
 const cymMantenimientoController = {
-  // Vista del supervisor: predios asignados con contrato vigente
   async getAsignados(req, res, next) {
     try {
       const supervisorId = req.usuario.id;
@@ -27,8 +39,7 @@ const cymMantenimientoController = {
       const asignaciones = await CymAsignacion.findAll({
         where: { supervisor_id: supervisorId, activo: true },
         include: [
-          { model: Usuario, as: 'operario',  attributes: ['id','nombre','apellido'] },
-          { model: Usuario, as: 'operario2', attributes: ['id','nombre','apellido'] },
+          includePareja,
           {
             model: CymPredio,
             as: 'predio',
@@ -53,28 +64,36 @@ const cymMantenimientoController = {
 
   async crear(req, res, next) {
     try {
-      const { predio_id, contrato_id, operario_id, operario2_id, fecha_mant, observaciones } = req.body;
+      const { predio_id, contrato_id, pareja_id, fecha_mant, observaciones } = req.body;
       const supervisor_id = req.usuario.id;
 
-      // Validar que el contrato esté vigente
       const contrato = await CymContrato.findOne({
         where: { id: contrato_id, predio_id, ...whereContratoVigente() }
       });
       if (!contrato) throw new AppError('El contrato no está vigente o no corresponde al predio', 400);
+
+      // Snapshot de los operarios actuales de la pareja para trazabilidad permanente
+      let operario_id = null, operario2_id = null;
+      if (pareja_id) {
+        const miembros = await CymParejaMiembro.findAll({
+          where: { pareja_id, activo: true },
+          order: [['posicion', 'ASC']]
+        });
+        operario_id  = miembros.find(m => m.posicion === 1)?.operario_id || null;
+        operario2_id = miembros.find(m => m.posicion === 2)?.operario_id || null;
+      }
 
       const mantenimiento = await CymMantenimiento.create({
         predio_id, contrato_id, supervisor_id, operario_id, operario2_id,
         fecha_mant, observaciones, estado: 'borrador'
       });
 
-      // Crear items de checklist automáticamente
       const actividades = await CymActividad.findAll({ where: { activo: true }, order: [['orden','ASC']] });
-      const items = actividades.map(a => ({
+      await CymChecklist.bulkCreate(actividades.map(a => ({
         mantenimiento_id: mantenimiento.id,
         actividad_id: a.id,
         realizado: false
-      }));
-      await CymChecklist.bulkCreate(items);
+      })));
 
       await AuditLog.create({
         usuario_id: req.usuario.id,
@@ -105,6 +124,7 @@ const cymMantenimientoController = {
           { model: CymContrato, as: 'contrato' },
           { model: Usuario, as: 'supervisor', attributes: ['id','nombre','apellido'] },
           { model: Usuario, as: 'operario',   attributes: ['id','nombre','apellido'] },
+          { model: Usuario, as: 'operario2',  attributes: ['id','nombre','apellido'] },
           {
             model: CymChecklist,
             as: 'checklist',
@@ -123,8 +143,7 @@ const cymMantenimientoController = {
   async completarChecklist(req, res, next) {
     try {
       const { id } = req.params;
-      const { items } = req.body; // [{ id, realizado, observacion }]
-
+      const { items } = req.body;
       const mant = await CymMantenimiento.findByPk(id);
       if (!mant) throw new AppError('Mantenimiento no encontrado', 404);
       if (mant.estado === 'completado') throw new AppError('El mantenimiento ya está completado', 400);
@@ -135,7 +154,6 @@ const cymMantenimientoController = {
           { where: { id: item.id, mantenimiento_id: id } }
         );
       }
-
       res.json({ success: true, message: 'Checklist actualizado' });
     } catch (err) {
       next(err);
@@ -149,7 +167,6 @@ const cymMantenimientoController = {
       if (mant.estado === 'completado') throw new AppError('El mantenimiento ya está completado', 400);
 
       const { observaciones, ejecutado_por } = req.body;
-
       const EJECUTADO_VALIDOS = ['pareja', 'operario1', 'operario2'];
       if (ejecutado_por && !EJECUTADO_VALIDOS.includes(ejecutado_por)) {
         throw new AppError('Valor de ejecutado_por inválido', 400);
@@ -181,7 +198,6 @@ const cymMantenimientoController = {
       const { id } = req.params;
       const mant = await CymMantenimiento.findByPk(id);
       if (!mant) throw new AppError('Mantenimiento no encontrado', 404);
-
       if (!req.files || req.files.length === 0) throw new AppError('No se enviaron archivos', 400);
 
       const evidencias = req.files.map(f => ({

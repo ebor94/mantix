@@ -12,6 +12,7 @@ const cymAsignacionController   = require('../controllers/cymAsignacionControlle
 const cymMantenimientoController= require('../controllers/cymMantenimientoController');
 const cymCarteraController      = require('../controllers/cymCarteraController');
 const cymReporteController      = require('../controllers/cymReporteController');
+const cymParejaController       = require('../controllers/cymParejaController');
 
 // Upload de evidencias fotográficas en uploads/cym/
 const uploadDir = path.join(process.env.UPLOAD_PATH || './uploads', 'cym');
@@ -90,6 +91,34 @@ router.put('/contratos/:id',
 router.put('/contratos/:id/cancelar',
   auth, authorize(...COORD),
   cymContratoController.cancelar
+);
+
+// ----------------------------------------------------------------
+// PAREJAS DE OPERARIOS
+// ----------------------------------------------------------------
+router.get('/parejas',
+  auth, authorize(...ROLES_CYM),
+  cymParejaController.getAll
+);
+router.get('/parejas/operarios',
+  auth, authorize(...COORD),
+  cymParejaController.getOperarios
+);
+router.post('/parejas',
+  auth, authorize(...COORD),
+  cymParejaController.crear
+);
+router.put('/parejas/:id',
+  auth, authorize(...COORD),
+  cymParejaController.actualizar
+);
+router.put('/parejas/:id/miembro',
+  auth, authorize(...COORD),
+  cymParejaController.cambiarMiembro
+);
+router.get('/parejas/:id/historial',
+  auth, authorize(...COORD),
+  cymParejaController.getHistorialMiembros
 );
 
 // ----------------------------------------------------------------
