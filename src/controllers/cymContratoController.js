@@ -4,9 +4,18 @@ const AppError = require('../utils/AppError');
 
 const VIGENCIA_MESES = { trimestral: 3, semestral: 6, anual: 12, bianual: 24 };
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseFecha(str, campo) {
+  if (!DATE_RE.test(str)) throw new AppError(`${campo}: formato inválido, use YYYY-MM-DD`, 400);
+  return str;
+}
+
 function calcularVencimiento(fechaContratacion, vigencia) {
-  const fecha = new Date(fechaContratacion);
-  fecha.setMonth(fecha.getMonth() + VIGENCIA_MESES[vigencia]);
+  // Parse as UTC to avoid timezone shifting the day
+  const [y, m, d] = fechaContratacion.split('-').map(Number);
+  const fecha = new Date(Date.UTC(y, m - 1, d));
+  fecha.setUTCMonth(fecha.getUTCMonth() + VIGENCIA_MESES[vigencia]);
   return fecha.toISOString().split('T')[0];
 }
 
@@ -27,6 +36,8 @@ const cymContratoController = {
     try {
       const { predio_id, contratante_cedula, contratante_nombre, contratante_telefono,
               contratante_correo, contratante_dir, vigencia, fecha_contratacion } = req.body;
+
+      parseFecha(fecha_contratacion, 'fecha_contratacion');
 
       const predio = await CymPredio.findByPk(predio_id);
       if (!predio) throw new AppError('Predio no encontrado', 404);
