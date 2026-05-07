@@ -173,7 +173,8 @@ const cymPredioController = {
             include: [{ model: CymActividad, as: 'actividad', attributes: ['nombre','orden'] }]
           },
           { model: CymEvidencia, as: 'evidencias' },
-          { model: Usuario, as: 'supervisor', attributes: ['nombre','apellido'] }
+          { model: Usuario, as: 'supervisor', attributes: ['nombre','apellido'] },
+          { model: Usuario, as: 'operario',   attributes: ['nombre','apellido'] }
         ],
         order: [['fecha_mant', 'DESC']]
       });
