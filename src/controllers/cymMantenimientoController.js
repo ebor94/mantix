@@ -26,19 +26,23 @@ const cymMantenimientoController = {
 
       const asignaciones = await CymAsignacion.findAll({
         where: { supervisor_id: supervisorId, activo: true },
-        include: [{
-          model: CymPredio,
-          as: 'predio',
-          where: { activo_mant: true },
-          include: [{
-            model: CymContrato,
-            as: 'contratos',
-            where: whereContratoVigente(),
-            required: true,
-            order: [['fecha_contratacion', 'DESC']],
-            limit: 1
-          }]
-        }]
+        include: [
+          { model: Usuario, as: 'operario',  attributes: ['id','nombre','apellido'] },
+          { model: Usuario, as: 'operario2', attributes: ['id','nombre','apellido'] },
+          {
+            model: CymPredio,
+            as: 'predio',
+            where: { activo_mant: true },
+            include: [{
+              model: CymContrato,
+              as: 'contratos',
+              where: whereContratoVigente(),
+              required: true,
+              order: [['fecha_contratacion', 'DESC']],
+              limit: 1
+            }]
+          }
+        ]
       });
 
       res.json({ success: true, data: asignaciones });
@@ -49,7 +53,7 @@ const cymMantenimientoController = {
 
   async crear(req, res, next) {
     try {
-      const { predio_id, contrato_id, operario_id, fecha_mant, observaciones } = req.body;
+      const { predio_id, contrato_id, operario_id, operario2_id, fecha_mant, observaciones } = req.body;
       const supervisor_id = req.usuario.id;
 
       // Validar que el contrato esté vigente
@@ -59,7 +63,7 @@ const cymMantenimientoController = {
       if (!contrato) throw new AppError('El contrato no está vigente o no corresponde al predio', 400);
 
       const mantenimiento = await CymMantenimiento.create({
-        predio_id, contrato_id, supervisor_id, operario_id,
+        predio_id, contrato_id, supervisor_id, operario_id, operario2_id,
         fecha_mant, observaciones, estado: 'borrador'
       });
 
@@ -144,8 +148,18 @@ const cymMantenimientoController = {
       if (!mant) throw new AppError('Mantenimiento no encontrado', 404);
       if (mant.estado === 'completado') throw new AppError('El mantenimiento ya está completado', 400);
 
-      const { observaciones } = req.body;
-      await mant.update({ estado: 'completado', observaciones: observaciones || mant.observaciones });
+      const { observaciones, ejecutado_por } = req.body;
+
+      const EJECUTADO_VALIDOS = ['pareja', 'operario1', 'operario2'];
+      if (ejecutado_por && !EJECUTADO_VALIDOS.includes(ejecutado_por)) {
+        throw new AppError('Valor de ejecutado_por inválido', 400);
+      }
+
+      await mant.update({
+        estado: 'completado',
+        observaciones: observaciones || mant.observaciones,
+        ejecutado_por: ejecutado_por || null
+      });
 
       await AuditLog.create({
         usuario_id: req.usuario.id,

@@ -4,6 +4,7 @@ const AppError = require('../utils/AppError');
 const ROLES_VALIDOS = {
   supervisor_id:  ['supervisor_cym'],
   operario_id:    ['operario_cym'],
+  operario2_id:   ['operario_cym'],
   aux_cartera_id: ['auxiliar_cartera_cym'],
   coordinador_id: ['coordinador_cym', 'superAdmin']
 };
@@ -27,6 +28,7 @@ const cymAsignacionController = {
           { model: Usuario, as: 'coordinador', attributes: ['id','nombre','apellido'] },
           { model: Usuario, as: 'supervisor',  attributes: ['id','nombre','apellido'] },
           { model: Usuario, as: 'operario',    attributes: ['id','nombre','apellido'] },
+          { model: Usuario, as: 'operario2',   attributes: ['id','nombre','apellido'] },
           { model: Usuario, as: 'aux_cartera', attributes: ['id','nombre','apellido'] }
         ]
       });
@@ -38,7 +40,7 @@ const cymAsignacionController = {
 
   async asignar(req, res, next) {
     try {
-      const { predio_id, supervisor_id, operario_id, aux_cartera_id, coordinador_id } = req.body;
+      const { predio_id, supervisor_id, operario_id, operario2_id, aux_cartera_id, coordinador_id } = req.body;
 
       const predio = await CymPredio.findByPk(predio_id);
       if (!predio) throw new AppError('Predio no encontrado', 404);
@@ -47,6 +49,7 @@ const cymAsignacionController = {
       await Promise.all([
         validarRolUsuario('supervisor_id',  supervisor_id),
         validarRolUsuario('operario_id',    operario_id),
+        validarRolUsuario('operario2_id',   operario2_id),
         validarRolUsuario('aux_cartera_id', aux_cartera_id),
         validarRolUsuario('coordinador_id', coordinador_id)
       ]);
@@ -55,7 +58,7 @@ const cymAsignacionController = {
       await CymAsignacion.update({ activo: false }, { where: { predio_id, activo: true } });
 
       const asignacion = await CymAsignacion.create({
-        predio_id, supervisor_id, operario_id, aux_cartera_id, coordinador_id, activo: true
+        predio_id, supervisor_id, operario_id, operario2_id, aux_cartera_id, coordinador_id, activo: true
       });
 
       await AuditLog.create({
