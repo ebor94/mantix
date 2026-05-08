@@ -121,12 +121,12 @@ const r44DocumentosController = {
 
   /**
    * POST /api/r44/extraccion/resultado
-   * Callback recibido de n8n cuando termina la extracción IA.
-   * Body: { proveedor_id, datos_extraidos, logs: [...] }
+   * Callback de n8n. Body: { proveedor_id, campos_r44, total_tokens, ... }
    */
   async recibirResultado(req, res, next) {
     try {
-      const { proveedor_id, datos_extraidos, logs } = req.body;
+      // n8n envía campos_r44; datos_extraidos es compatibilidad hacia atrás
+      const { proveedor_id, campos_r44, datos_extraidos, total_tokens, logs } = req.body;
 
       if (!proveedor_id) {
         return res.status(400).json({ ok: false, error: 'proveedor_id requerido' });
@@ -137,52 +137,83 @@ const r44DocumentosController = {
         return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
       }
 
+      const d      = campos_r44 || datos_extraidos;
+      const tokens = total_tokens ?? logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null;
+
       await R44ExtraccionLlm.create({
         proveedor_id:   parseInt(proveedor_id),
         tipo_documento: 'consolidado',
         estado:         'ok',
-        respuesta_json: datos_extraidos ?? {},
-        tokens_total:   logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null,
+        respuesta_json: d ?? {},
+        tokens_total:   tokens,
       });
 
-      if (datos_extraidos) {
-        const d = datos_extraidos;
-        // Usar columnas reales de r44_proveedores
-        const updateJuridica = {
-          pj_nit:           d.nit              ?? proveedor.pj_nit,
-          pj_razon_social:  d.razon_social      ?? proveedor.pj_razon_social,
-          pj_direccion:     d.direccion         ?? proveedor.pj_direccion,
-          pj_municipio:     d.ciudad            ?? proveedor.pj_municipio,
-          pj_departamento:  d.departamento      ?? proveedor.pj_departamento,
-          pj_telefono_fijo: d.telefono          ?? proveedor.pj_telefono_fijo,
-          pj_correo:        d.correo            ?? proveedor.pj_correo,
-          pj_ciiu_principal:   d.ciiu           ?? proveedor.pj_ciiu_principal,
-          pj_matricula_numero: d.matricula_mercantil ?? proveedor.pj_matricula_numero,
-        };
-        await proveedor.update({ ...updateJuridica, estado: 'extraccion_completada' });
+      if (d) {
+        if (proveedor.tipo_persona === 'juridica') {
+          await proveedor.update({
+            pj_nit:                  d.nit                      ?? proveedor.pj_nit,
+            pj_razon_social:         d.razon_social             ?? proveedor.pj_razon_social,
+            pj_nombre_comercial:     d.nombre_comercial         ?? proveedor.pj_nombre_comercial,
+            pj_direccion:            d.direccion_principal      ?? proveedor.pj_direccion,
+            pj_municipio:            d.municipio_nombre         ?? proveedor.pj_municipio,
+            pj_departamento:         d.departamento_nombre      ?? proveedor.pj_departamento,
+            pj_telefono_fijo:        d.telefono_1               ?? proveedor.pj_telefono_fijo,
+            pj_correo:               d.correo_electronico       ?? proveedor.pj_correo,
+            pj_ciiu_principal:       d.actividad_principal_ciiu ?? proveedor.pj_ciiu_principal,
+            pj_ciiu_secundario:      d.actividad_secundaria_ciiu ?? proveedor.pj_ciiu_secundario,
+            pj_descripcion_actividad: d.descripcion_actividad   ?? proveedor.pj_descripcion_actividad,
+            pj_matricula_numero:     d.matricula_numero         ?? proveedor.pj_matricula_numero,
+            pj_fecha_matricula:      d.fecha_matricula          ?? proveedor.pj_fecha_matricula,
+            pj_ultimo_anio_renovado: d.ultimo_anio_renovado     ?? proveedor.pj_ultimo_anio_renovado,
+            pj_grupo_niif:           d.grupo_niif               ?? proveedor.pj_grupo_niif,
+            pj_tamano_empresa:       d.tamano_empresa           ?? proveedor.pj_tamano_empresa,
+            estado: 'extraccion_completada',
+          });
+        } else {
+          await proveedor.update({
+            pn_numero_documento:    d.numero_identificacion    ?? d.nit               ?? proveedor.pn_numero_documento,
+            pn_nombre_completo:     d.nombre_completo          ?? proveedor.pn_nombre_completo,
+            pn_primer_nombre:       d.primer_nombre            ?? proveedor.pn_primer_nombre,
+            pn_primer_apellido:     d.primer_apellido          ?? proveedor.pn_primer_apellido,
+            pn_segundo_apellido:    d.segundo_apellido         ?? proveedor.pn_segundo_apellido,
+            pn_otros_nombres:       d.otros_nombres            ?? proveedor.pn_otros_nombres,
+            pn_direccion_domicilio: d.direccion_principal      ?? proveedor.pn_direccion_domicilio,
+            pn_municipio_domicilio: d.municipio_nombre         ?? proveedor.pn_municipio_domicilio,
+            pn_dpto_domicilio:      d.departamento_nombre      ?? proveedor.pn_dpto_domicilio,
+            pn_correo:              d.correo_electronico       ?? proveedor.pn_correo,
+            pn_ciiu:                d.actividad_principal_ciiu ?? proveedor.pn_ciiu,
+            estado: 'extraccion_completada',
+          });
+        }
 
         const { R44RepresentanteLegal } = require('../models');
-        await R44RepresentanteLegal.upsert({
-          proveedor_id:        parseInt(proveedor_id),
-          nombre:              d.rl_nombre           ?? null,
-          cedula:              d.rl_cedula           ?? null,
-          fecha_expedicion:    d.fecha_expedicion    ?? null,
-          ciudad_expedicion:   d.ciudad_expedicion   ?? null,
-          fecha_nacimiento:    d.fecha_nacimiento    ?? null,
-          lugar_nacimiento:    d.lugar_nacimiento    ?? null,
-          cedula_numero_serie: d.cedula_numero_serie ?? null,
-        });
+        if (d.rl_nombre || d.rl_numero_doc) {
+          await R44RepresentanteLegal.upsert({
+            proveedor_id:        parseInt(proveedor_id),
+            nombres_apellidos:   d.rl_nombre             ?? null,
+            tipo_documento:      d.rl_tipo_doc           ?? 'CC',
+            numero_documento:    d.rl_numero_doc         ?? null,
+            correo:              d.rl_correo             ?? null,
+            telefono:            d.rl_telefono           ?? null,
+            direccion_domicilio: d.rl_direccion          ?? null,
+            ciudad_expedicion:   d.rl_lugar_expedicion   ?? null,
+            fecha_expedicion:    d.rl_fecha_expedicion   ?? null,
+            fecha_nacimiento:    d.rl_fecha_nacimiento   ?? null,
+            lugar_nacimiento:    d.rl_lugar_nacimiento   ?? null,
+            cedula_numero_serie: d.rl_cedula_serie       ?? null,
+          });
+        }
 
-        if (d.activos_totales || d.patrimonio) {
+        if (d.total_activos || d.total_patrimonio) {
           const { R44InfoFinanciera } = require('../models');
           await R44InfoFinanciera.upsert({
             proveedor_id:           parseInt(proveedor_id),
-            activos_totales:        d.activos_totales        ?? null,
-            pasivos_totales:        d.pasivos_totales        ?? null,
-            patrimonio:             d.patrimonio             ?? null,
-            ingresos_operacionales: d.ingresos_operacionales ?? null,
-            utilidad_neta:          d.utilidad_neta          ?? null,
-            anio_declaracion:       d.anio_declaracion       ?? null,
+            activos_totales:        d.total_activos           ?? null,
+            pasivos_totales:        d.total_pasivos           ?? null,
+            patrimonio:             d.total_patrimonio        ?? null,
+            ingresos_operacionales: d.total_ingresos_brutos   ?? null,
+            utilidad_neta:          d.utilidad_operacional    ?? null,
+            anio_declaracion:       d.anio_gravable           ?? null,
           });
         }
       } else {
