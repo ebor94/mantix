@@ -81,6 +81,7 @@ const r44ProveedorController = {
       // Crear proveedor (el trigger MySQL asigna el radicado)
       // Filtrar undefined para evitar que ENUM/INT reciban '' en MySQL strict mode
       Object.keys(camposProveedor).forEach(k => { if (camposProveedor[k] === undefined) delete camposProveedor[k]; });
+      console.log('[R44 crear] camposProveedor:', JSON.stringify(camposProveedor));
       const proveedor = await R44Proveedor.create(camposProveedor, { transaction: t });
       const pid = proveedor.id;
 
@@ -141,6 +142,10 @@ const r44ProveedorController = {
       });
     } catch (err) {
       await t.rollback();
+      console.error('[R44 crear] ERROR name:', err.name);
+      console.error('[R44 crear] ERROR message:', err.message);
+      console.error('[R44 crear] ERROR errors:', JSON.stringify((err.errors || []).map(e => ({ path: e.path, message: e.message, type: e.type }))));
+      console.error('[R44 crear] ERROR parent:', err.parent?.message, '| SQL:', err.sql);
       next(err);
     }
   },
