@@ -79,6 +79,8 @@ const r44ProveedorController = {
       }
 
       // Crear proveedor (el trigger MySQL asigna el radicado)
+      // Filtrar undefined para evitar que ENUM/INT reciban '' en MySQL strict mode
+      Object.keys(camposProveedor).forEach(k => { if (camposProveedor[k] === undefined) delete camposProveedor[k]; });
       const proveedor = await R44Proveedor.create(camposProveedor, { transaction: t });
       const pid = proveedor.id;
 
@@ -234,6 +236,7 @@ const r44ProveedorController = {
       }
 
       if (esFirmaCompleta) camposProveedor.estado = 'en_revision';
+      Object.keys(camposProveedor).forEach(k => { if (camposProveedor[k] === undefined) delete camposProveedor[k]; });
       await proveedor.update(camposProveedor, { transaction: t });
       const pid = proveedor.id;
 
