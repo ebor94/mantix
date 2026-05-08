@@ -300,7 +300,8 @@ const r44ProveedorController = {
       if (proveedor.usuario_id !== usuario.id) {
         return res.status(403).json({ ok: false, error: 'Sin permisos para modificar este formulario' });
       }
-      if (proveedor.estado !== 'borrador') {
+      const ESTADOS_EDITABLES = ['borrador', 'documentos_cargados', 'extraccion_completada'];
+      if (!ESTADOS_EDITABLES.includes(proveedor.estado)) {
         return res.status(409).json({ ok: false, error: 'El formulario ya fue enviado y no puede modificarse' });
       }
 
