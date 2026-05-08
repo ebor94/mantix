@@ -6,9 +6,7 @@
 // GET   /api/r44/revisores/estadisticas
 // ============================================
 const { Op } = require('sequelize');
-const { R44Proveedor, R44Revision, R44Usuario } = require('../models');
-
-const ROLES_REVISOR = ['revisor_compras', 'revisor_excelencia', 'admin'];
+const { R44Proveedor, R44Revision } = require('../models');
 
 const r44RevisionController = {
 
@@ -28,11 +26,11 @@ const r44RevisionController = {
       if (busqueda) {
         const q = `%${busqueda}%`;
         where[Op.or] = [
-          { pj_razon_social:    { [Op.like]: q } },
-          { pj_nit:             { [Op.like]: q } },
-          { pn_nombre_completo: { [Op.like]: q } },
-          { pn_cedula:          { [Op.like]: q } },
-          { radicado:           { [Op.like]: q } },
+          { pj_razon_social:        { [Op.like]: q } },
+          { pj_nit:                 { [Op.like]: q } },
+          { pn_nombre_completo:     { [Op.like]: q } },
+          { pn_numero_documento:    { [Op.like]: q } },
+          { radicado:               { [Op.like]: q } },
         ];
       }
 
@@ -40,8 +38,8 @@ const r44RevisionController = {
         where,
         attributes: [
           'id','radicado','tipo_persona','estado',
-          'pj_razon_social','pj_nit','pj_ciudad',
-          'pn_nombre_completo','pn_cedula','pn_ciudad',
+          'pj_razon_social','pj_nit','pj_municipio',
+          'pn_nombre_completo','pn_numero_documento','pn_municipio_domicilio',
           'created_at',
         ],
         order: [['created_at', 'DESC']],
@@ -76,12 +74,9 @@ const r44RevisionController = {
           { model: R44RefBancaria,        as: 'referencias_bancarias' },
           { model: R44RefComercial,       as: 'referencias_comerciales' },
           { model: R44SarlaftDatos,       as: 'sarlaft' },
-          { model: R44Firma,              as: 'firma', attributes: ['aceptacion_terminos','fecha_firma','ip_firma'] },
-          {
-            model: R44Revision, as: 'revisiones',
-            include: [{ model: R44Usuario, as: 'revisor', attributes: ['nombre','rol'] }],
-            order: [['created_at','DESC']],
-          },
+          { model: R44Firma,              as: 'firma',
+            attributes: ['acepta_tratamiento','acepta_declaracion','fecha_firma','ip_firma'] },
+          { model: R44Revision,           as: 'revision' },
         ],
       });
 
@@ -97,7 +92,7 @@ const r44RevisionController = {
 
   /**
    * PATCH /api/r44/revisores/proveedores/:id/estado
-   * Cambia el estado de un proveedor y registra la revisión.
+   * Cambia el estado del proveedor y registra/actualiza la revisión.
    * Body: { estado, observaciones }
    */
   async actualizarEstado(req, res, next) {
@@ -116,21 +111,26 @@ const r44RevisionController = {
       }
 
       const estadoAnterior = proveedor.estado;
-
       await proveedor.update({ estado });
 
-      await R44Revision.create({
-        proveedor_id:    proveedor.id,
-        revisor_id:      revisor.id,
-        tipo_revision:   revisor.rol === 'revisor_excelencia' ? 'excelencia' : 'compras',
-        estado_anterior: estadoAnterior,
-        estado_nuevo:    estado,
-        observaciones:   observaciones || null,
+      // Mapear estado del proveedor al ENUM de resultado_verificacion
+      const resultadoMap = { aprobado: 'aceptado', rechazado: 'rechazado', en_revision: 'pendiente' };
+      await R44Revision.upsert({
+        proveedor_id:             proveedor.id,
+        resultado_verificacion:   resultadoMap[estado] ?? 'pendiente',
+        funcionario_verificacion: revisor.nombre || revisor.correo,
+        fecha_verificacion:       new Date(),
+        observaciones:            observaciones || null,
       });
 
       return res.json({
         ok: true,
-        data: { id: proveedor.id, radicado: proveedor.radicado, estado_anterior: estadoAnterior, estado_nuevo: estado },
+        data: {
+          id: proveedor.id,
+          radicado: proveedor.radicado,
+          estado_anterior: estadoAnterior,
+          estado_nuevo: estado,
+        },
       });
     } catch (err) {
       next(err);

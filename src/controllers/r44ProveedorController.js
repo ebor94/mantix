@@ -18,7 +18,7 @@ const INCLUDE_COMPLETO = [
   { model: R44RefBancaria,        as: 'referencias_bancarias' },
   { model: R44RefComercial,       as: 'referencias_comerciales' },
   { model: R44SarlaftDatos,       as: 'sarlaft' },
-  { model: R44Firma,              as: 'firma', attributes: ['aceptacion_terminos', 'fecha_firma'] },
+  { model: R44Firma,              as: 'firma', attributes: ['acepta_tratamiento', 'acepta_declaracion', 'fecha_firma'] },
   { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo', 'created_at'] },
 ];
 
@@ -160,11 +160,12 @@ const r44ProveedorController = {
       if (esFirmaCompleta) {
         const ip = req.ip || req.headers['x-forwarded-for'] || null;
         await R44Firma.create({
-          proveedor_id:        pid,
-          firma_electronica:   firma.base64,
-          aceptacion_terminos: true,
-          ip_firma:            ip,
-          fecha_firma:         new Date(),
+          proveedor_id:       pid,
+          firma_electronica:  firma.base64,
+          acepta_tratamiento: true,
+          acepta_declaracion: true,
+          ip_firma:           ip,
+          fecha_firma:        new Date(),
         }, { transaction: t });
         await proveedor.update({ estado: 'en_revision' }, { transaction: t });
       }
@@ -286,10 +287,11 @@ const r44ProveedorController = {
         const ip = req.ip || req.headers['x-forwarded-for'] || null;
         const [fir] = await R44Firma.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
         await fir.update({
-          firma_electronica:   firma.base64,
-          aceptacion_terminos: true,
-          ip_firma:            ip,
-          fecha_firma:         new Date(),
+          firma_electronica:  firma.base64,
+          acepta_tratamiento: true,
+          acepta_declaracion: true,
+          ip_firma:           ip,
+          fecha_firma:        new Date(),
         }, { transaction: t });
       }
 

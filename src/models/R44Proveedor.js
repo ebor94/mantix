@@ -96,7 +96,7 @@ module.exports = (sequelize, DataTypes) => {
     R44Proveedor.hasMany(models.R44Documento,            { foreignKey: 'proveedor_id', as: 'documentos' });
     R44Proveedor.hasMany(models.R44ExtraccionLlm,        { foreignKey: 'proveedor_id', as: 'extracciones' });
     R44Proveedor.hasOne(models.R44Firma,                 { foreignKey: 'proveedor_id', as: 'firma' });
-    R44Proveedor.hasMany(models.R44Revision,             { foreignKey: 'proveedor_id', as: 'revisiones' });
+    R44Proveedor.hasOne(models.R44Revision,              { foreignKey: 'proveedor_id', as: 'revision' });
   };
 
   return R44Proveedor;

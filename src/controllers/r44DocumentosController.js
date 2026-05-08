@@ -100,10 +100,10 @@ const r44DocumentosController = {
       if (proveedor.estado === 'extraccion_completada') {
         const extraccion = await R44ExtraccionLlm.findOne({
           where: { proveedor_id: parseInt(proveedor_id) },
-          order: [['created_at', 'DESC']],
-          attributes: ['datos_extraidos'],
+          order: [['procesado_at', 'DESC']],
+          attributes: ['respuesta_json'],
         });
-        datosExtraidos = extraccion?.datos_extraidos ?? null;
+        datosExtraidos = extraccion?.respuesta_json ?? null;
       }
 
       return res.json({
@@ -140,9 +140,9 @@ const r44DocumentosController = {
       await R44ExtraccionLlm.create({
         proveedor_id:   parseInt(proveedor_id),
         tipo_documento: 'consolidado',
-        estado:         'completado',
-        datos_extraidos: datos_extraidos ?? {},
-        tokens_usados:  logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null,
+        estado:         'ok',
+        respuesta_json: datos_extraidos ?? {},
+        tokens_total:   logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null,
       });
 
       if (datos_extraidos) {

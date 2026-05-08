@@ -1,11 +1,16 @@
 module.exports = (sequelize, DataTypes) => {
   const R44Firma = sequelize.define('R44Firma', {
-    id:                  { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    proveedor_id:        { type: DataTypes.INTEGER, allowNull: false, unique: true },
-    firma_electronica:   DataTypes.TEXT('long'),
-    aceptacion_terminos: { type: DataTypes.BOOLEAN, defaultValue: false },
-    ip_firma:            DataTypes.STRING(50),
-    fecha_firma:         { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    id:           { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
+    proveedor_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, unique: true },
+    nombre_firmante:    DataTypes.STRING(250),
+    documento_firmante: DataTypes.STRING(30),
+    ciudad_firma:       DataTypes.STRING(100),
+    fecha_firma:        DataTypes.DATE,
+    ip_firma:           DataTypes.STRING(45),
+    acepta_tratamiento: { type: DataTypes.BOOLEAN, defaultValue: false },
+    acepta_declaracion: { type: DataTypes.BOOLEAN, defaultValue: false },
+    token_firma:        DataTypes.STRING(100),
+    firma_electronica:  DataTypes.TEXT,
   }, {
     tableName: 'r44_firma_declaracion',
     timestamps: true,
