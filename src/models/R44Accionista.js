@@ -1,15 +1,19 @@
 module.exports = (sequelize, DataTypes) => {
   const R44Accionista = sequelize.define('R44Accionista', {
-    id:          { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    proveedor_id:{ type: DataTypes.INTEGER, allowNull: false },
-    nombre:      { type: DataTypes.STRING(200), allowNull: false },
-    cedula_nit:  DataTypes.STRING(20),
-    porcentaje:  DataTypes.DECIMAL(5, 2),
+    id:           { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    proveedor_id: { type: DataTypes.INTEGER, allowNull: false },
+    orden:        { type: DataTypes.TINYINT, defaultValue: 1 },
+    tipo_documento:          DataTypes.ENUM('CC', 'PAS', 'NIT'),
+    numero_documento:        DataTypes.STRING(30),
+    razon_social_nombre:     DataTypes.STRING(250),
+    administra_rec_publicos: { type: DataTypes.BOOLEAN, defaultValue: false },
+    es_pep:                  { type: DataTypes.BOOLEAN, defaultValue: false },
+    porcentaje_participacion: DataTypes.DECIMAL(5, 2),
   }, {
     tableName: 'r44_accionistas',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: false,
+    updatedAt: 'updated_at',
   });
 
   R44Accionista.associate = (models) => {

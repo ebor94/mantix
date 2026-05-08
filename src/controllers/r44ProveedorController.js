@@ -22,6 +22,19 @@ const INCLUDE_COMPLETO = [
   { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo', 'created_at'] },
 ];
 
+// Mapea un accionista del frontend a columnas reales de r44_accionistas
+function mapearAccionista(a, index) {
+  return {
+    orden:                    a.orden                   ?? (index + 1),
+    tipo_documento:           a.tipo_documento          ?? null,
+    numero_documento:         a.numero_documento        ?? a.cedula_nit ?? null,
+    razon_social_nombre:      a.razon_social_nombre     ?? a.nombre     ?? null,
+    administra_rec_publicos:  a.administra_rec_publicos ?? false,
+    es_pep:                   a.es_pep                  ?? false,
+    porcentaje_participacion: a.porcentaje_participacion ?? a.porcentaje ?? null,
+  };
+}
+
 // Mapea datos_basicos del frontend a columnas reales de r44_proveedores
 function mapearCampos(tipo_persona, db) {
   const campos = {};
@@ -138,7 +151,10 @@ const r44ProveedorController = {
       }
 
       if (Array.isArray(accionistas) && accionistas.length) {
-        await R44Accionista.bulkCreate(accionistas.map(a => ({ proveedor_id: pid, ...a })), { transaction: t });
+        await R44Accionista.bulkCreate(
+          accionistas.map((a, i) => ({ proveedor_id: pid, ...mapearAccionista(a, i) })),
+          { transaction: t }
+        );
       }
 
       if (financiero) {
@@ -253,7 +269,10 @@ const r44ProveedorController = {
       if (Array.isArray(accionistas)) {
         await R44Accionista.destroy({ where: { proveedor_id: pid }, transaction: t });
         if (accionistas.length) {
-          await R44Accionista.bulkCreate(accionistas.map(a => ({ proveedor_id: pid, ...a })), { transaction: t });
+          await R44Accionista.bulkCreate(
+            accionistas.map((a, i) => ({ proveedor_id: pid, ...mapearAccionista(a, i) })),
+            { transaction: t }
+          );
         }
       }
 
