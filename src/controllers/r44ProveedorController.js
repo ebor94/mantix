@@ -34,6 +34,19 @@ function mapearFinanciero(fin) {
   };
 }
 
+// Mapea sarlaft del frontend a columnas reales de r44_sarlaft_datos
+function mapearSarlaft(s) {
+  return {
+    es_pep:                   s.es_pep                ?? null,
+    vinculo_familiar_pep:     s.vinculo_familiar_pep  ?? s.familiar_pep          ?? null,
+    maneja_recursos_publicos: s.maneja_recursos_publicos ?? s.maneja_efectivo     ?? null,
+    opera_moneda_extranjera:  s.opera_moneda_extranjera  ?? s.operaciones_extranjero ?? null,
+    moneda_ext_cuales:        s.moneda_ext_cuales     ?? s.paises_operacion       ?? null,
+    declaracion_origen_fondos: s.declaracion_origen_fondos ?? s.origen_fondos     ?? null,
+    sancionado_laft:          s.sancionado_laft        ?? s.en_listas_restrictivas ?? null,
+  };
+}
+
 // Mapea referencia comercial del frontend a columnas reales
 function mapearRefComercial(r, index) {
   return {
@@ -213,7 +226,7 @@ const r44ProveedorController = {
       }
 
       if (sarlaft) {
-        await R44SarlaftDatos.create({ proveedor_id: pid, ...sarlaft }, { transaction: t });
+        await R44SarlaftDatos.create({ proveedor_id: pid, ...mapearSarlaft(sarlaft) }, { transaction: t });
       }
 
       if (esFirmaCompleta) {
@@ -348,7 +361,7 @@ const r44ProveedorController = {
 
       if (sarlaft) {
         const [sar] = await R44SarlaftDatos.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
-        await sar.update(sarlaft, { transaction: t });
+        await sar.update(mapearSarlaft(sarlaft), { transaction: t });
       }
 
       if (esFirmaCompleta) {
