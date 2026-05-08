@@ -33,6 +33,8 @@ const votacionesRoutes = require('./votaciones.routes');
 const empresaRoutes = require('./empresa.routes');
 const tarifaRoutes = require('./tarifa.routes');
 const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes360
+const r44Routes    = require('./r44Routes');              // ← Módulo R-44 Proveedores Serfunorte
+
 // Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
@@ -63,5 +65,6 @@ router.use('/empresas', empresaRoutes);
 router.use('/tarifas', tarifaRoutes);
 router.use('/h360',   h360Routes);   // ← Módulo Homenajes360
 router.use('/cym',    require('./cym.routes')); // ← Módulo CYM Mantenimiento Predios
+router.use('/r44',    r44Routes);    // ← Módulo R-44 Portal Proveedores Serfunorte
 
 module.exports = router;

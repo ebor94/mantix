@@ -93,6 +93,23 @@ const db = {
   CymHistoricoSq:  require('./CymHistoricoSq')(sequelize, Sequelize.DataTypes),
   CymPareja:       require('./CymPareja')(sequelize, Sequelize.DataTypes),
   CymParejaMiembro:require('./CymParejaMiembro')(sequelize, Sequelize.DataTypes),
+
+  // ============================================
+  // MÓDULO R-44 PROVEEDORES — Serfunorte
+  // Rutas bajo /api/r44/* (prefijo para evitar conflictos)
+  // ============================================
+  R44Usuario:            require('./R44Usuario')(sequelize, Sequelize.DataTypes),
+  R44Proveedor:          require('./R44Proveedor')(sequelize, Sequelize.DataTypes),
+  R44RepresentanteLegal: require('./R44RepresentanteLegal')(sequelize, Sequelize.DataTypes),
+  R44Accionista:         require('./R44Accionista')(sequelize, Sequelize.DataTypes),
+  R44InfoFinanciera:     require('./R44InfoFinanciera')(sequelize, Sequelize.DataTypes),
+  R44RefBancaria:        require('./R44RefBancaria')(sequelize, Sequelize.DataTypes),
+  R44RefComercial:       require('./R44RefComercial')(sequelize, Sequelize.DataTypes),
+  R44SarlaftDatos:       require('./R44SarlaftDatos')(sequelize, Sequelize.DataTypes),
+  R44Documento:          require('./R44Documento')(sequelize, Sequelize.DataTypes),
+  R44ExtraccionLlm:      require('./R44ExtraccionLlm')(sequelize, Sequelize.DataTypes),
+  R44Firma:              require('./R44Firma')(sequelize, Sequelize.DataTypes),
+  R44Revision:           require('./R44Revision')(sequelize, Sequelize.DataTypes),
 };
 
 // Definir asociaciones
