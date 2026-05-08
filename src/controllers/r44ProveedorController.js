@@ -19,7 +19,7 @@ const INCLUDE_COMPLETO = [
   { model: R44RefComercial,       as: 'referencias_comerciales' },
   { model: R44SarlaftDatos,       as: 'sarlaft' },
   { model: R44Firma,              as: 'firma', attributes: ['acepta_tratamiento', 'acepta_declaracion', 'fecha_firma'] },
-  { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo', 'created_at'] },
+  { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo_original', 'estado_extraccion', 'subido_at'] },
 ];
 
 // Mapea financiero del frontend a columnas reales de r44_info_financiera
