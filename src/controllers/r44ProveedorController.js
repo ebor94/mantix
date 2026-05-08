@@ -22,6 +22,18 @@ const INCLUDE_COMPLETO = [
   { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo', 'created_at'] },
 ];
 
+// Mapea financiero del frontend a columnas reales de r44_info_financiera
+function mapearFinanciero(fin) {
+  return {
+    anio_gravable:         fin.anio_gravable         ?? fin.anio_declaracion      ?? null,
+    total_activos:         fin.total_activos         ?? fin.activos_totales        ?? null,
+    total_pasivos:         fin.total_pasivos         ?? fin.pasivos_totales        ?? null,
+    total_patrimonio:      fin.total_patrimonio      ?? fin.patrimonio             ?? null,
+    total_ingresos_brutos: fin.total_ingresos_brutos ?? fin.ingresos_operacionales ?? null,
+    utilidad_operacional:  fin.utilidad_operacional  ?? fin.utilidad_neta          ?? null,
+  };
+}
+
 // Mapea un accionista del frontend a columnas reales de r44_accionistas
 function mapearAccionista(a, index) {
   return {
@@ -158,7 +170,7 @@ const r44ProveedorController = {
       }
 
       if (financiero) {
-        await R44InfoFinanciera.create({ proveedor_id: pid, ...financiero }, { transaction: t });
+        await R44InfoFinanciera.create({ proveedor_id: pid, ...mapearFinanciero(financiero) }, { transaction: t });
       }
 
       if (Array.isArray(referencias_bancarias) && referencias_bancarias.length) {
@@ -278,7 +290,7 @@ const r44ProveedorController = {
 
       if (financiero) {
         const [fin] = await R44InfoFinanciera.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
-        await fin.update(financiero, { transaction: t });
+        await fin.update(mapearFinanciero(financiero), { transaction: t });
       }
 
       if (Array.isArray(referencias_bancarias)) {
