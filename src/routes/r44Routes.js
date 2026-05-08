@@ -34,8 +34,9 @@ router.post('/extraccion/resultado', r44DocCtrl.recibirResultado); // llamado po
 // GET  /api/r44/proveedores/mio — Formulario del proveedor autenticado
 // GET  /api/r44/proveedores/:id — Detalle (revisores/admin)
 router.post('/proveedores',     r44Auth, r44ProvCtrl.crear);
-router.get('/proveedores/mio',  r44Auth, r44ProvCtrl.miFormulario);
-router.get('/proveedores/:id',  r44Auth, r44Authorize('revisor_compras','revisor_excelencia','admin'), r44ProvCtrl.getById);
+router.get('/proveedores/mio',   r44Auth, r44ProvCtrl.miFormulario);
+router.patch('/proveedores/:id', r44Auth, r44ProvCtrl.actualizar);
+router.get('/proveedores/:id',   r44Auth, r44Authorize('revisor_compras','revisor_excelencia','admin'), r44ProvCtrl.getById);
 
 // ── DASHBOARD REVISORES ───────────────────────────────────
 // GET   /api/r44/revisores/proveedores         — Lista paginada

@@ -167,6 +167,139 @@ const r44ProveedorController = {
   },
 
   /**
+   * PATCH /api/r44/proveedores/:id
+   * Actualiza un formulario R-44 en estado 'borrador'.
+   * Solo el proveedor dueño puede modificarlo.
+   * Si el payload incluye firma completa, cambia estado a 'en_revision'.
+   */
+  async actualizar(req, res, next) {
+    const t = await require('../models').sequelize.transaction();
+    try {
+      const usuario = req.r44Usuario;
+      const { id } = req.params;
+      const { tipo_persona, datos_basicos, representante_legal, accionistas,
+              financiero, referencias_bancarias, referencias_comerciales,
+              sarlaft, firma } = req.body;
+
+      const proveedor = await R44Proveedor.findByPk(id);
+      if (!proveedor) {
+        return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
+      }
+      if (proveedor.usuario_id !== usuario.id) {
+        return res.status(403).json({ ok: false, error: 'Sin permisos para modificar este formulario' });
+      }
+      if (proveedor.estado !== 'borrador') {
+        return res.status(409).json({ ok: false, error: 'El formulario ya fue enviado y no puede modificarse' });
+      }
+
+      const db = datos_basicos || {};
+      const tp = tipo_persona || proveedor.tipo_persona;
+      const esFirmaCompleta = firma?.base64 && firma?.aceptacion_terminos;
+
+      const camposProveedor = { tipo_persona: tp };
+      if (tp === 'juridica') {
+        Object.assign(camposProveedor, {
+          pj_nit:                 db.nit,
+          pj_razon_social:        db.razon_social,
+          pj_nombre_comercial:    db.nombre_comercial,
+          pj_tipo_empresa:        db.tipo_empresa,
+          pj_direccion:           db.direccion,
+          pj_ciudad:              db.ciudad,
+          pj_departamento:        db.departamento,
+          pj_telefono:            db.telefono,
+          pj_correo:              db.correo,
+          pj_pagina_web:          db.pagina_web,
+          pj_ciiu:                db.ciiu,
+          pj_matricula_mercantil: db.matricula_mercantil,
+          pj_persona_contacto:    db.persona_contacto,
+          pj_telefono_contacto:   db.telefono_contacto,
+          pj_productos_servicios: db.productos_servicios,
+          pj_empleados_total:     db.empleados_total,
+          pj_sistema_gestion:     db.sistema_gestion,
+        });
+      } else {
+        Object.assign(camposProveedor, {
+          pn_cedula:              db.cedula_numero,
+          pn_nombre_completo:     db.nombre_completo,
+          pn_direccion:           db.direccion,
+          pn_ciudad:              db.ciudad,
+          pn_departamento:        db.departamento,
+          pn_telefono:            db.telefono,
+          pn_correo:              db.correo,
+          pn_ciiu:                db.ciiu,
+          pn_persona_contacto:    db.persona_contacto,
+          pn_telefono_contacto:   db.telefono_contacto,
+          pn_productos_servicios: db.productos_servicios,
+        });
+      }
+
+      if (esFirmaCompleta) camposProveedor.estado = 'en_revision';
+      await proveedor.update(camposProveedor, { transaction: t });
+      const pid = proveedor.id;
+
+      if (representante_legal) {
+        const [rl] = await R44RepresentanteLegal.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
+        await rl.update(representante_legal, { transaction: t });
+      }
+
+      if (Array.isArray(accionistas)) {
+        await R44Accionista.destroy({ where: { proveedor_id: pid }, transaction: t });
+        if (accionistas.length) {
+          await R44Accionista.bulkCreate(accionistas.map(a => ({ proveedor_id: pid, ...a })), { transaction: t });
+        }
+      }
+
+      if (financiero) {
+        const [fin] = await R44InfoFinanciera.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
+        await fin.update(financiero, { transaction: t });
+      }
+
+      if (Array.isArray(referencias_bancarias)) {
+        await R44RefBancaria.destroy({ where: { proveedor_id: pid }, transaction: t });
+        const refs = referencias_bancarias.slice(0, 2);
+        if (refs.length) {
+          await R44RefBancaria.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        }
+      }
+
+      if (Array.isArray(referencias_comerciales)) {
+        await R44RefComercial.destroy({ where: { proveedor_id: pid }, transaction: t });
+        const refs = referencias_comerciales.slice(0, 2);
+        if (refs.length) {
+          await R44RefComercial.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        }
+      }
+
+      if (sarlaft) {
+        const [sar] = await R44SarlaftDatos.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
+        await sar.update(sarlaft, { transaction: t });
+      }
+
+      if (esFirmaCompleta) {
+        const ip = req.ip || req.headers['x-forwarded-for'] || null;
+        const [fir] = await R44Firma.findOrCreate({ where: { proveedor_id: pid }, transaction: t });
+        await fir.update({
+          firma_electronica:   firma.base64,
+          aceptacion_terminos: true,
+          ip_firma:            ip,
+          fecha_firma:         new Date(),
+        }, { transaction: t });
+      }
+
+      await t.commit();
+      await proveedor.reload();
+
+      return res.json({
+        ok: true,
+        data: { id: proveedor.id, radicado: proveedor.radicado, estado: proveedor.estado },
+      });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  },
+
+  /**
    * GET /api/r44/proveedores/:id
    * Revisores/admin acceden al detalle completo.
    */
