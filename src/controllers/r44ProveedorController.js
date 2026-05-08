@@ -34,6 +34,31 @@ function mapearFinanciero(fin) {
   };
 }
 
+// Mapea referencia comercial del frontend a columnas reales
+function mapearRefComercial(r, index) {
+  return {
+    orden:              r.orden              ?? (index + 1),
+    empresa:            r.empresa            ?? null,
+    direccion:          r.direccion          ?? null,
+    telefono:           r.telefono           ?? null,
+    contacto:           r.contacto           ?? null,
+    ciudad:             r.ciudad             ?? null,
+    actividad_relacion: r.actividad_relacion ?? r.actividad ?? null,
+  };
+}
+
+// Mapea referencia bancaria del frontend a columnas reales
+function mapearRefBancaria(r, index) {
+  return {
+    orden:         r.orden         ?? (index + 1),
+    entidad:       r.entidad       ?? null,
+    tipo_cuenta:   r.tipo_cuenta   ?? null,
+    numero_cuenta: r.numero_cuenta ?? null,
+    telefono:      r.telefono      ?? null,
+    ciudad:        r.ciudad        ?? null,
+  };
+}
+
 // Mapea un accionista del frontend a columnas reales de r44_accionistas
 function mapearAccionista(a, index) {
   return {
@@ -174,11 +199,17 @@ const r44ProveedorController = {
       }
 
       if (Array.isArray(referencias_bancarias) && referencias_bancarias.length) {
-        await R44RefBancaria.bulkCreate(referencias_bancarias.slice(0, 2).map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        await R44RefBancaria.bulkCreate(
+          referencias_bancarias.slice(0, 2).map((r, i) => ({ proveedor_id: pid, ...mapearRefBancaria(r, i) })),
+          { transaction: t }
+        );
       }
 
       if (Array.isArray(referencias_comerciales) && referencias_comerciales.length) {
-        await R44RefComercial.bulkCreate(referencias_comerciales.slice(0, 2).map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        await R44RefComercial.bulkCreate(
+          referencias_comerciales.slice(0, 2).map((r, i) => ({ proveedor_id: pid, ...mapearRefComercial(r, i) })),
+          { transaction: t }
+        );
       }
 
       if (sarlaft) {
@@ -297,7 +328,10 @@ const r44ProveedorController = {
         await R44RefBancaria.destroy({ where: { proveedor_id: pid }, transaction: t });
         const refs = referencias_bancarias.slice(0, 2);
         if (refs.length) {
-          await R44RefBancaria.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+          await R44RefBancaria.bulkCreate(
+            refs.map((r, i) => ({ proveedor_id: pid, ...mapearRefBancaria(r, i) })),
+            { transaction: t }
+          );
         }
       }
 
@@ -305,7 +339,10 @@ const r44ProveedorController = {
         await R44RefComercial.destroy({ where: { proveedor_id: pid }, transaction: t });
         const refs = referencias_comerciales.slice(0, 2);
         if (refs.length) {
-          await R44RefComercial.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+          await R44RefComercial.bulkCreate(
+            refs.map((r, i) => ({ proveedor_id: pid, ...mapearRefComercial(r, i) })),
+            { transaction: t }
+          );
         }
       }
 
