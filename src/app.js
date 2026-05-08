@@ -14,6 +14,9 @@ const fs = require('fs');
 
 const app = express();
 
+// El servidor corre detrás de un proxy inverso (nginx) que envía X-Forwarded-For
+app.set('trust proxy', 1);
+
 // ✅ Crear carpeta de uploads FUERA de src
 // Si app.js está en /src, entonces __dirname es /src
 // Necesitamos subir un nivel con ../
