@@ -1,8 +1,9 @@
 // ============================================
 // r44ProveedorController — CRUD del formulario R-44
-// POST /api/r44/proveedores          — crear / enviar formulario completo
-// GET  /api/r44/proveedores/mio      — formulario del proveedor autenticado
-// GET  /api/r44/proveedores/:id      — detalle (revisores/admin)
+// POST   /api/r44/proveedores          — crear / borrador inicial
+// GET    /api/r44/proveedores/mio      — formulario del proveedor autenticado
+// PATCH  /api/r44/proveedores/:id      — actualizar borrador / enviar con firma
+// GET    /api/r44/proveedores/:id      — detalle (revisores/admin)
 // ============================================
 const {
   R44Proveedor, R44RepresentanteLegal, R44Accionista,
@@ -10,7 +11,6 @@ const {
   R44SarlaftDatos, R44Firma, R44Documento,
 } = require('../models');
 
-// Includes completos para respuesta detallada
 const INCLUDE_COMPLETO = [
   { model: R44RepresentanteLegal, as: 'representante_legal' },
   { model: R44Accionista,         as: 'accionistas' },
@@ -22,12 +22,91 @@ const INCLUDE_COMPLETO = [
   { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo', 'created_at'] },
 ];
 
+// Mapea datos_basicos del frontend a columnas reales de r44_proveedores
+function mapearCampos(tipo_persona, db) {
+  const campos = {};
+  if ((tipo_persona || 'juridica') === 'juridica') {
+    Object.assign(campos, {
+      pj_nit:                  db.nit,
+      pj_dv:                   db.dv,
+      pj_razon_social:         db.razon_social,
+      pj_nombre_comercial:     db.nombre_comercial,
+      pj_sigla:                db.sigla,
+      pj_tipo_empresa:         db.tipo_empresa,
+      pj_tipo_empresa_otro:    db.tipo_empresa_otro,
+      pj_fecha_constitucion:   db.fecha_constitucion,
+      pj_pais_constitucion:    db.pais_constitucion,
+      pj_actividad_economica:  db.actividad_economica,
+      pj_ciiu_principal:       db.ciiu_principal || db.ciiu,
+      pj_ciiu_secundario:      db.ciiu_secundario,
+      pj_descripcion_actividad:db.descripcion_actividad,
+      pj_direccion:            db.direccion,
+      pj_municipio:            db.municipio || db.ciudad,
+      pj_departamento:         db.departamento,
+      pj_telefono_fijo:        db.telefono_fijo || db.telefono,
+      pj_celular:              db.celular,
+      pj_correo:               db.correo,
+      pj_persona_contacto:     db.persona_contacto,
+      pj_tel_contacto:         db.tel_contacto || db.telefono_contacto,
+      pj_matricula_numero:     db.matricula_numero || db.matricula_mercantil,
+      pj_fecha_matricula:      db.fecha_matricula,
+      pj_ultimo_anio_renovado: db.ultimo_anio_renovado,
+      pj_grupo_niif:           db.grupo_niif,
+      pj_tamano_empresa:       db.tamano_empresa,
+      // campos compartidos
+      productos_servicios:     db.productos_servicios,
+      tiene_sistema_gestion:   db.tiene_sistema_gestion || db.sistema_gestion,
+      cual_certificacion:      db.cual_certificacion,
+      total_empleados:         db.total_empleados || db.empleados_total,
+    });
+  } else {
+    Object.assign(campos, {
+      pn_nombre_completo:      db.nombre_completo,
+      pn_primer_apellido:      db.primer_apellido,
+      pn_segundo_apellido:     db.segundo_apellido,
+      pn_primer_nombre:        db.primer_nombre,
+      pn_otros_nombres:        db.otros_nombres,
+      pn_tipo_documento:       db.tipo_documento,
+      pn_numero_documento:     db.numero_documento || db.cedula_numero,
+      pn_fecha_expedicion:     db.fecha_expedicion,
+      pn_lugar_expedicion:     db.lugar_expedicion,
+      pn_fecha_nacimiento:     db.fecha_nacimiento,
+      pn_lugar_nacimiento:     db.lugar_nacimiento,
+      pn_departamento:         db.departamento_nacimiento || db.departamento,
+      pn_municipio:            db.municipio_nacimiento || db.municipio,
+      pn_nacionalidad:         db.nacionalidad,
+      pn_direccion_domicilio:  db.direccion_domicilio || db.direccion,
+      pn_municipio_domicilio:  db.municipio_domicilio || db.ciudad,
+      pn_dpto_domicilio:       db.dpto_domicilio || db.departamento_domicilio,
+      pn_nombre_empresa:       db.nombre_empresa,
+      pn_dir_empresa:          db.dir_empresa,
+      pn_municipio_empresa:    db.municipio_empresa,
+      pn_dpto_empresa:         db.dpto_empresa,
+      pn_telefono_domicilio:   db.telefono_domicilio || db.telefono,
+      pn_telefono_empresa:     db.telefono_empresa,
+      pn_estrato:              db.estrato,
+      pn_ocupacion:            db.ocupacion,
+      pn_estado_civil:         db.estado_civil,
+      pn_actividad_economica:  db.actividad_economica,
+      pn_ciiu:                 db.ciiu,
+      pn_correo:               db.correo,
+      // campos compartidos
+      productos_servicios:     db.productos_servicios,
+      tiene_sistema_gestion:   db.tiene_sistema_gestion || db.sistema_gestion,
+      cual_certificacion:      db.cual_certificacion,
+      total_empleados:         db.total_empleados || db.empleados_total,
+    });
+  }
+  // Eliminar claves sin valor para no pisar con NULL innecesariamente
+  Object.keys(campos).forEach(k => { if (campos[k] === undefined) delete campos[k]; });
+  return campos;
+}
+
 const r44ProveedorController = {
 
   /**
    * POST /api/r44/proveedores
-   * Crea un proveedor borrador o envía el formulario completo.
-   * Si lleva firma y aceptacion_terminos, el formulario se considera enviado.
+   * Crea un proveedor borrador (o devuelve el existente si ya fue creado).
    */
   async crear(req, res, next) {
     const t = await require('../models').sequelize.transaction();
@@ -38,49 +117,15 @@ const r44ProveedorController = {
               sarlaft, firma } = req.body;
 
       const db = datos_basicos || {};
+      const tp = tipo_persona || 'juridica';
       const esFirmaCompleta = firma?.base64 && firma?.aceptacion_terminos;
 
-      // Mapear datos_basicos según tipo_persona
-      const camposProveedor = { usuario_id: usuario.id, tipo_persona: tipo_persona || 'juridica' };
-      if ((tipo_persona || 'juridica') === 'juridica') {
-        Object.assign(camposProveedor, {
-          pj_nit:                 db.nit,
-          pj_razon_social:        db.razon_social,
-          pj_nombre_comercial:    db.nombre_comercial,
-          pj_tipo_empresa:        db.tipo_empresa,
-          pj_direccion:           db.direccion,
-          pj_ciudad:              db.ciudad,
-          pj_departamento:        db.departamento,
-          pj_telefono:            db.telefono,
-          pj_correo:              db.correo,
-          pj_pagina_web:          db.pagina_web,
-          pj_ciiu:                db.ciiu,
-          pj_matricula_mercantil: db.matricula_mercantil,
-          pj_persona_contacto:    db.persona_contacto,
-          pj_telefono_contacto:   db.telefono_contacto,
-          pj_productos_servicios: db.productos_servicios,
-          pj_empleados_total:     db.empleados_total,
-          pj_sistema_gestion:     db.sistema_gestion,
-        });
-      } else {
-        Object.assign(camposProveedor, {
-          pn_cedula:              db.cedula_numero,
-          pn_nombre_completo:     db.nombre_completo,
-          pn_direccion:           db.direccion,
-          pn_ciudad:              db.ciudad,
-          pn_departamento:        db.departamento,
-          pn_telefono:            db.telefono,
-          pn_correo:              db.correo,
-          pn_ciiu:                db.ciiu,
-          pn_persona_contacto:    db.persona_contacto,
-          pn_telefono_contacto:   db.telefono_contacto,
-          pn_productos_servicios: db.productos_servicios,
-        });
-      }
+      const camposProveedor = {
+        usuario_id:  usuario.id,
+        tipo_persona: tp,
+        ...mapearCampos(tp, db),
+      };
 
-      // findOrCreate: un proveedor por usuario (constraint uq_r44_prov_usuario)
-      // Si ya existe un borrador, lo devuelve directamente sin duplicar
-      Object.keys(camposProveedor).forEach(k => { if (camposProveedor[k] === undefined) delete camposProveedor[k]; });
       const [proveedor] = await R44Proveedor.findOrCreate({
         where:    { usuario_id: usuario.id },
         defaults: camposProveedor,
@@ -88,39 +133,30 @@ const r44ProveedorController = {
       });
       const pid = proveedor.id;
 
-      // Representante legal
       if (representante_legal) {
         await R44RepresentanteLegal.create({ proveedor_id: pid, ...representante_legal }, { transaction: t });
       }
 
-      // Accionistas
       if (Array.isArray(accionistas) && accionistas.length) {
         await R44Accionista.bulkCreate(accionistas.map(a => ({ proveedor_id: pid, ...a })), { transaction: t });
       }
 
-      // Financiero
       if (financiero) {
         await R44InfoFinanciera.create({ proveedor_id: pid, ...financiero }, { transaction: t });
       }
 
-      // Referencias bancarias (máx. 2)
       if (Array.isArray(referencias_bancarias) && referencias_bancarias.length) {
-        const refs = referencias_bancarias.slice(0, 2);
-        await R44RefBancaria.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        await R44RefBancaria.bulkCreate(referencias_bancarias.slice(0, 2).map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
       }
 
-      // Referencias comerciales (máx. 2)
       if (Array.isArray(referencias_comerciales) && referencias_comerciales.length) {
-        const refs = referencias_comerciales.slice(0, 2);
-        await R44RefComercial.bulkCreate(refs.map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
+        await R44RefComercial.bulkCreate(referencias_comerciales.slice(0, 2).map(r => ({ proveedor_id: pid, ...r })), { transaction: t });
       }
 
-      // SARLAFT
       if (sarlaft) {
         await R44SarlaftDatos.create({ proveedor_id: pid, ...sarlaft }, { transaction: t });
       }
 
-      // Firma
       if (esFirmaCompleta) {
         const ip = req.ip || req.headers['x-forwarded-for'] || null;
         await R44Firma.create({
@@ -130,13 +166,10 @@ const r44ProveedorController = {
           ip_firma:            ip,
           fecha_firma:         new Date(),
         }, { transaction: t });
-
         await proveedor.update({ estado: 'en_revision' }, { transaction: t });
       }
 
       await t.commit();
-
-      // Recargar para obtener el radicado generado por el trigger
       await proveedor.reload();
 
       return res.status(201).json({
@@ -202,45 +235,12 @@ const r44ProveedorController = {
       const tp = tipo_persona || proveedor.tipo_persona;
       const esFirmaCompleta = firma?.base64 && firma?.aceptacion_terminos;
 
-      const camposProveedor = { tipo_persona: tp };
-      if (tp === 'juridica') {
-        Object.assign(camposProveedor, {
-          pj_nit:                 db.nit,
-          pj_razon_social:        db.razon_social,
-          pj_nombre_comercial:    db.nombre_comercial,
-          pj_tipo_empresa:        db.tipo_empresa,
-          pj_direccion:           db.direccion,
-          pj_ciudad:              db.ciudad,
-          pj_departamento:        db.departamento,
-          pj_telefono:            db.telefono,
-          pj_correo:              db.correo,
-          pj_pagina_web:          db.pagina_web,
-          pj_ciiu:                db.ciiu,
-          pj_matricula_mercantil: db.matricula_mercantil,
-          pj_persona_contacto:    db.persona_contacto,
-          pj_telefono_contacto:   db.telefono_contacto,
-          pj_productos_servicios: db.productos_servicios,
-          pj_empleados_total:     db.empleados_total,
-          pj_sistema_gestion:     db.sistema_gestion,
-        });
-      } else {
-        Object.assign(camposProveedor, {
-          pn_cedula:              db.cedula_numero,
-          pn_nombre_completo:     db.nombre_completo,
-          pn_direccion:           db.direccion,
-          pn_ciudad:              db.ciudad,
-          pn_departamento:        db.departamento,
-          pn_telefono:            db.telefono,
-          pn_correo:              db.correo,
-          pn_ciiu:                db.ciiu,
-          pn_persona_contacto:    db.persona_contacto,
-          pn_telefono_contacto:   db.telefono_contacto,
-          pn_productos_servicios: db.productos_servicios,
-        });
-      }
-
+      const camposProveedor = {
+        tipo_persona: tp,
+        ...mapearCampos(tp, db),
+      };
       if (esFirmaCompleta) camposProveedor.estado = 'en_revision';
-      Object.keys(camposProveedor).forEach(k => { if (camposProveedor[k] === undefined) delete camposProveedor[k]; });
+
       await proveedor.update(camposProveedor, { transaction: t });
       const pid = proveedor.id;
 
