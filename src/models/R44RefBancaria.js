@@ -4,7 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     proveedor_id:  { type: DataTypes.INTEGER, allowNull: false },
     orden:         { type: DataTypes.TINYINT, defaultValue: 1 },
     entidad:       DataTypes.STRING(150),
-    tipo_cuenta:   DataTypes.ENUM('corriente', 'ahorros', 'otro'),
+    tipo_cuenta:   DataTypes.ENUM('Corriente', 'Ahorros', 'CDT'),
     numero_cuenta: DataTypes.STRING(30),
     telefono:      DataTypes.STRING(30),
     ciudad:        DataTypes.STRING(100),
