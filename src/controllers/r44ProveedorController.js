@@ -118,8 +118,8 @@ function mapearCampos(tipo_persona, db) {
       pj_tamano_empresa:       db.tamano_empresa,
       // campos compartidos
       productos_servicios:     db.productos_servicios,
-      tiene_sistema_gestion:   db.tiene_sistema_gestion || db.sistema_gestion,
-      cual_certificacion:      db.cual_certificacion,
+      tiene_sistema_gestion:   db.sistema_gestion ? true : (db.tiene_sistema_gestion ?? null),
+      cual_certificacion:      db.cual_certificacion || db.sistema_gestion || null,
       total_empleados:         db.total_empleados || db.empleados_total,
     });
   } else {
@@ -155,8 +155,8 @@ function mapearCampos(tipo_persona, db) {
       pn_correo:               db.correo,
       // campos compartidos
       productos_servicios:     db.productos_servicios,
-      tiene_sistema_gestion:   db.tiene_sistema_gestion || db.sistema_gestion,
-      cual_certificacion:      db.cual_certificacion,
+      tiene_sistema_gestion:   db.sistema_gestion ? true : (db.tiene_sistema_gestion ?? null),
+      cual_certificacion:      db.cual_certificacion || db.sistema_gestion || null,
       total_empleados:         db.total_empleados || db.empleados_total,
     });
   }

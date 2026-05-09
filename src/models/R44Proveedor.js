@@ -75,7 +75,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // Compartidos
     productos_servicios:      DataTypes.TEXT,
-    tiene_sistema_gestion:    DataTypes.STRING(5),
+    tiene_sistema_gestion:    DataTypes.BOOLEAN,
     cual_certificacion:       DataTypes.STRING(200),
     total_empleados:          DataTypes.INTEGER,
   }, {
