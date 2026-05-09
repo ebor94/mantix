@@ -28,8 +28,8 @@ const r44DocumentosController = {
       const { proveedor_id } = req.params;
       const files = req.files || {};
 
-      if (!files.rut || !files.camara || !files.renta || !files.cedula) {
-        return res.status(400).json({ ok: false, error: 'Se requieren los 4 documentos: rut, camara, renta, cedula' });
+      if (!files.rut || !files.cedula) {
+        return res.status(400).json({ ok: false, error: 'Se requieren al menos RUT y Cédula del Representante Legal' });
       }
 
       const proveedor = await R44Proveedor.findByPk(proveedor_id);
