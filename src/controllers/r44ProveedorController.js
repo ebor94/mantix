@@ -320,6 +320,8 @@ const r44ProveedorController = {
       };
       if (esFirmaCompleta) camposProveedor.estado = 'en_revision';
 
+      console.log('[actualizar] camposProveedor.estado =', camposProveedor.estado, '| esFirmaCompleta =', esFirmaCompleta, '| tipo_persona =', camposProveedor.tipo_persona);
+
       await proveedor.update(camposProveedor, { transaction: t });
       const pid = proveedor.id;
 
