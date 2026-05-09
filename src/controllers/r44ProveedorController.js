@@ -244,7 +244,7 @@ const r44ProveedorController = {
           ip_firma:           ip,
           fecha_firma:        new Date(),
         }, { transaction: t });
-        await proveedor.update({ estado: 'en_revision' }, { transaction: t });
+        await proveedor.update({ estado: 'pendiente_revision' }, { transaction: t });
       }
 
       await t.commit();
@@ -287,7 +287,7 @@ const r44ProveedorController = {
    * PATCH /api/r44/proveedores/:id
    * Actualiza un formulario R-44 en estado 'borrador'.
    * Solo el proveedor dueño puede modificarlo.
-   * Si el payload incluye firma completa, cambia estado a 'en_revision'.
+   * Si el payload incluye firma completa, cambia estado a 'pendiente_revision'.
    */
   async actualizar(req, res, next) {
     const t = await require('../models').sequelize.transaction();
@@ -318,7 +318,7 @@ const r44ProveedorController = {
         tipo_persona: tp,
         ...mapearCampos(tp, db),
       };
-      if (esFirmaCompleta) camposProveedor.estado = 'en_revision';
+      if (esFirmaCompleta) camposProveedor.estado = 'pendiente_revision';
 
       console.log('[actualizar] camposProveedor.estado =', camposProveedor.estado, '| esFirmaCompleta =', esFirmaCompleta, '| tipo_persona =', camposProveedor.tipo_persona);
 

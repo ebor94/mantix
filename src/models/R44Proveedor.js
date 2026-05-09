@@ -6,7 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     tipo_vinculacion:        DataTypes.STRING(50),
     tipo_persona:            { type: DataTypes.ENUM('juridica','natural'), defaultValue: 'juridica' },
     estado: {
-      type: DataTypes.ENUM('borrador','documentos_cargados','extraccion_completada','en_revision','aprobado','rechazado'),
+      type: DataTypes.ENUM('borrador','documentos_cargados','extraccion_completada','pendiente_revision','aprobado','rechazado','requiere_correccion'),
       defaultValue: 'borrador',
     },
     ciudad_diligenciamiento: DataTypes.STRING(100),

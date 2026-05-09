@@ -99,7 +99,7 @@ const r44RevisionController = {
     try {
       const revisor = req.r44Usuario;
       const { estado, observaciones } = req.body;
-      const ESTADOS_VALIDOS = ['en_revision','aprobado','rechazado'];
+      const ESTADOS_VALIDOS = ['pendiente_revision','aprobado','rechazado','requiere_correccion'];
 
       if (!estado || !ESTADOS_VALIDOS.includes(estado)) {
         return res.status(400).json({ ok: false, error: `Estado inválido. Valores: ${ESTADOS_VALIDOS.join(', ')}` });
@@ -114,7 +114,7 @@ const r44RevisionController = {
       await proveedor.update({ estado });
 
       // Mapear estado del proveedor al ENUM de resultado_verificacion
-      const resultadoMap = { aprobado: 'aceptado', rechazado: 'rechazado', en_revision: 'pendiente' };
+      const resultadoMap = { aprobado: 'aceptado', rechazado: 'rechazado', pendiente_revision: 'pendiente', requiere_correccion: 'pendiente' };
       await R44Revision.upsert({
         proveedor_id:             proveedor.id,
         resultado_verificacion:   resultadoMap[estado] ?? 'pendiente',
