@@ -28,7 +28,8 @@ const tipoMantenimientoRoutes = require('./tipoMantenimientoRoutes');
 const mantenimientoNovedadesRoutes = require('./mantenimientoNovedadesRoutes'); // NUEVO
 const requisitosRoutes = require('./requisitosRoutes'); // NUEVO
 const dependenciasRoutes = require('./dependenciasRoutes');
-const afiliadoRoutes = require('./afiliado.routes');
+const afiliadoRoutes  = require('./afiliado.routes');
+const borradorRoutes  = require('./borrador.routes');
 const votacionesRoutes = require('./votaciones.routes');
 const empresaRoutes = require('./empresa.routes');
 const tarifaRoutes = require('./tarifa.routes');
@@ -59,6 +60,9 @@ router.use('/tipos-mantenimiento', tipoMantenimientoRoutes);
 router.use('/mantenimiento-novedades', mantenimientoNovedadesRoutes); 
 router.use('/requisitos', requisitosRoutes); // NUEVO
 router.use('/dependencias', dependenciasRoutes); // ✅ NUEVO
+// ⚠️ /afiliados/borradores debe montarse ANTES de /afiliados para evitar que
+//    Express interprete "borradores" como un :id en la ruta /:id de afiliadoRoutes.
+router.use('/afiliados/borradores', borradorRoutes);
 router.use('/afiliados', afiliadoRoutes);
 router.use('/votaciones', votacionesRoutes);
 router.use('/empresas', empresaRoutes);
