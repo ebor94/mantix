@@ -179,6 +179,7 @@ const createAfiliadoSchema = Joi.object({
   referenciaPago1: Joi.string().max(200).allow('', null).trim(),
   referenciaPago2: Joi.string().max(200).allow('', null).trim(),
   referenciaPago3: Joi.string().max(200).allow('', null).trim(),
+  fechaPagoTentativa: Joi.date().iso().allow('', null),
   // soportePago, cedulaFrontal, cedulaReverso se inyectan en el controller desde req.files — no vienen en el body
 
   // ── Afiliado diferente al contratante ───────────────────────
