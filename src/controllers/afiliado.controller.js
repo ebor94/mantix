@@ -1,11 +1,65 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
-const { sendAceptacion, sendOTP } = require('../services/whatsappService');
+const { sendAceptacion, sendOTP, sendDocumentoRecibo } = require('../services/whatsappService');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
-const { Afiliado } = require('../models');
+const pdfService = require('../services/pdfService');
+const { Afiliado, ReciboCaja, Usuario } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
 const { encodeId, decodeId } = require('../utils/hashId');
+const logger = require('../utils/logger');
+
+/**
+ * Construye la URL pública del PDF de un recibo, usando la variable de
+ * entorno PUBLIC_API_URL. En desarrollo (sin variable), retorna ruta relativa.
+ */
+function buildPublicPdfUrl(pdfUrlRelativa) {
+  const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+  if (!base) return pdfUrlRelativa;
+  return `${base}${pdfUrlRelativa}`;
+}
+
+/**
+ * Fire-and-forget: genera el PDF del recibo recién emitido y lo envía
+ * por WhatsApp al cliente. No bloquea la respuesta HTTP de la afiliación.
+ */
+async function emitirPdfYEnviarWhatsapp(afiliadoId) {
+  try {
+    const recibo = await ReciboCaja.findOne({
+      where: { afiliadoId },
+      include: [{ model: Usuario, as: 'asesor' }]
+    });
+    if (!recibo) return; // POSFECHADO u otra forma sin recibo
+
+    const afiliado = await Afiliado.findByPk(afiliadoId);
+    if (!afiliado) return;
+
+    // 1) Generar PDF
+    const pdfInfo = await pdfService.generarReciboCajaPDF(
+      recibo.toJSON(),
+      afiliado.toJSON(),
+      recibo.asesor ? recibo.asesor.toJSON() : null
+    );
+    await recibo.update({ pdfUrl: pdfInfo.url });
+
+    // 2) Enviar por WhatsApp
+    const publicUrl = buildPublicPdfUrl(pdfInfo.url);
+    const result = await sendDocumentoRecibo(
+      afiliado.celular,
+      publicUrl,
+      recibo.numeroRecibo,
+      recibo.valor
+    );
+    if (result.success) {
+      await recibo.update({
+        whatsappEnviado: true,
+        whatsappEnviadoAt: new Date()
+      });
+    }
+  } catch (err) {
+    logger.error('[ReciboCaja] Error en emitirPdfYEnviarWhatsapp:', err.message || err);
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,6 +111,8 @@ async function create(req, res, next) {
     Afiliado.count({ where: { celular: body.celular } })
       .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
       .catch(() => {});
+    // Fire-and-forget: generar PDF del recibo (si se emitió) y enviarlo por WhatsApp
+    emitirPdfYEnviarWhatsapp(result.id).catch(() => {});
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);
@@ -369,6 +425,30 @@ async function getTrazabilidad(req, res, next) {
   }
 }
 
+/**
+ * GET /afiliados/mis-del-dia
+ * Retorna las afiliaciones del asesor logueado en un rango de fechas,
+ * sin filtrar por estado (pendientes, aprobadas y rechazadas).
+ * Query: ?fecha=YYYY-MM-DD | ?fechaDesde&fechaHasta
+ */
+async function getMisDelDia(req, res, next) {
+  try {
+    const { fecha, fechaDesde, fechaHasta } = req.query;
+    const data = await afiliadoService.getMisDelDia(req.usuario, { fecha, fechaDesde, fechaHasta });
+    // Incluir hash de corrección para los rechazados, igual que getRechazados
+    const enriched = data.map(a => {
+      const json = a.toJSON();
+      if (a.rechazado || a.rechazadoParcial) {
+        json.hash = a.hashCorreccion || encodeId(a.id);
+      }
+      return json;
+    });
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   createPublico,
@@ -388,5 +468,6 @@ module.exports = {
   consultarPorDocumento,
   actualizarBeneficiariosConsulta,
   getTrazabilidad,
-  getVeoliaUnidades
+  getVeoliaUnidades,
+  getMisDelDia
 };

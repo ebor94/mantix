@@ -77,6 +77,13 @@ router.get('/pendientes', auth, controller.getPendientes);
 // ── GET /afiliados/rechazados — ídem ──────────────────────────────────────
 router.get('/rechazados', auth, controller.getRechazados);
 
+// ── GET /afiliados/mis-del-dia — afiliaciones del asesor del día (todos los estados) ─
+router.get('/mis-del-dia',
+  auth,
+  requirePermiso('afiliaciones', 'ver_propias'),
+  controller.getMisDelDia
+);
+
 // ── GET /afiliados/veolia-unidades — listado público de unidades de negocio ──
 router.get('/veolia-unidades', controller.getVeoliaUnidades);
 

@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const { sequelize, Afiliado, Beneficiario, Empresa, Seguro, ContratoValor, Tarifa, Trazabilidad } = require('../models');
 const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
+const reciboCajaService = require('./reciboCaja.service');
 const AppError = require('../utils/AppError');
 
 /**
@@ -91,6 +92,18 @@ async function createAfiliadoWithBeneficiarios(data) {
         { ...contrato, afiliadoId: afiliado.id },
         { transaction }
       );
+    }
+
+    // ── 6. Emitir recibo de caja si aplica ──────────────────
+    //      Solo formas EFECTIVO / TRANSFERENCIA / CORRESPONSAL,
+    //      origen ASESOR y asesor con prefijo_recibo configurado.
+    //      POSFECHADO se cobra después con cobrarPosfechado().
+    try {
+      await reciboCajaService.crearReciboParaAfiliacion(afiliado, transaction);
+    } catch (errRecibo) {
+      // Si falla la generación del consecutivo, abortamos toda la
+      // afiliación para mantener la integridad de la serie.
+      throw errRecibo;
     }
 
     await transaction.commit();
@@ -419,6 +432,52 @@ async function actualizarDatosContacto(id, datos, usuarioId) {
 }
 
 /**
+ * Afiliaciones del asesor logueado en un rango de fechas, SIN filtrar
+ * por estado de aprobación (devuelve pendientes, aprobadas y rechazadas).
+ * Si el usuario es super_admin o tiene ver_todas, no filtra por asesorId.
+ *
+ * @param {Usuario} usuario
+ * @param {object} params  { fecha, fechaDesde, fechaHasta }
+ */
+async function getMisDelDia(usuario, params = {}) {
+  const where = {};
+  // Filtro por asesor si no es super_admin / ver_todas
+  if (!usuario.es_super_admin) {
+    const p = getPermisos(usuario).afiliaciones || {};
+    if (!p.ver_todas) where.asesorId = usuario.id;
+  }
+
+  // Filtro de fechas sobre createdAt
+  if (params.fecha) {
+    const ini = new Date(`${params.fecha}T00:00:00`);
+    const fin = new Date(`${params.fecha}T23:59:59.999`);
+    where.createdAt = { [Op.between]: [ini, fin] };
+  } else if (params.fechaDesde || params.fechaHasta) {
+    const rango = {};
+    if (params.fechaDesde) rango[Op.gte] = new Date(`${params.fechaDesde}T00:00:00`);
+    if (params.fechaHasta) rango[Op.lte] = new Date(`${params.fechaHasta}T23:59:59.999`);
+    where.createdAt = rango;
+  } else {
+    // Default: día actual
+    const hoy = new Date();
+    const ini = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0);
+    const fin = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59, 999);
+    where.createdAt = { [Op.between]: [ini, fin] };
+  }
+
+  return Afiliado.findAll({
+    where,
+    include: [
+      { model: Beneficiario, as: 'beneficiarios' },
+      { model: Seguro, as: 'seguros' },
+      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+      { model: Empresa, as: 'empresa' }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+}
+
+/**
  * Retorna el historial de trazabilidad de un afiliado, ordenado de más reciente a más antiguo.
  */
 async function getTrazabilidad(afiliadoId) {
@@ -444,5 +503,6 @@ module.exports = {
   registrarConsulta,
   actualizarBeneficiariosConsulta,
   actualizarDatosContacto,
-  getTrazabilidad
+  getTrazabilidad,
+  getMisDelDia
 };
