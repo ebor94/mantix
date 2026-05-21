@@ -7,7 +7,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const { Afiliado, Beneficiario, Usuario } = require('../models');
+const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro } = require('../models');
 const AppError = require('../utils/AppError');
 
 const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
@@ -66,6 +66,16 @@ async function generar(req, res, next) {
       order: [['parentesco', 'ASC']]
     });
 
+    const contrato = await ContratoValor.findOne({
+      where: { afiliadoId },
+      include: [{ model: Tarifa, as: 'tarifa' }]
+    });
+
+    const seguros = await Seguro.findAll({
+      where: { afiliadoId },
+      order: [['nombre', 'ASC']]
+    });
+
     let nombreAsesor = '';
     if (afiliado.asesorId) {
       const asesor = await Usuario.findByPk(afiliado.asesorId);
@@ -105,10 +115,10 @@ async function generar(req, res, next) {
       .text('SERFUNORTE LOS OLIVOS', 0, 60, { align: 'center' });
 
     doc.fontSize(9).font('Helvetica')
-      .text('NIT: 800.000.000-0', 0, 78, { align: 'center' })
-      .text('Teléfono: (607) 583-6262', 0, 90, { align: 'center' });
+      .text('NIT: 800.254.697-5', 0, 78, { align: 'center' })
+      .text('Teléfono: (607) 578 4777', 0, 90, { align: 'center' });
 
-    doc.moveTo(40, 115).lineTo(555, 115).strokeColor('#1a5490').lineWidth(1).stroke();
+    doc.moveTo(40, 115).lineTo(555, 115).strokeColor('#006838').lineWidth(1).stroke();
 
     let y = 130;
 
@@ -132,7 +142,7 @@ async function generar(req, res, next) {
     y += 25;
 
     // ── INFORMACION DEL CONTRATANTE ────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#1a5490');
+    doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DEL CONTRATANTE', 0, y + 3, { align: 'center' });
     y += 20;
@@ -164,7 +174,7 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DEL TITULAR ────────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#1a5490');
+    doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DEL TITULAR', 0, y + 3, { align: 'center' });
     y += 20;
@@ -196,7 +206,7 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DE AFILIADOS (BENEFICIARIOS) ───────────────────────────
-    doc.rect(40, y, 515, 16).fill('#1a5490');
+    doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DE AFILIADOS', 0, y + 3, { align: 'center' });
     y += 20;
@@ -240,14 +250,10 @@ async function generar(req, res, next) {
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
     if (y > 650) { doc.addPage(); y = 50; }
 
-    doc.rect(40, y, 515, 16).fill('#1a5490');
+    doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('SERVICIOS ADICIONALES', 0, y + 3, { align: 'center' });
     y += 20;
-
-    doc.fontSize(8).font('Helvetica-Oblique').fillColor('black')
-      .text('*La cobertura de repatriación para el titular está registrado en el nombre de la categoría a la cual pertenece (RP)', 40, y, { width: 515 });
-    y += 15;
 
     doc.fontSize(9).font('Helvetica-Bold').fillColor('black')
       .text(`${nombreCompleto(afiliado)} - AFILIADO PRINCIPAL`, 40, y);
@@ -261,29 +267,78 @@ async function generar(req, res, next) {
 
     y += 10;
 
-    // ── DETALLE COSTO ──────────────────────────────────────────────────────
-    if (y > 650) { doc.addPage(); y = 50; }
+    // ── DETALLE COSTO ANUAL ────────────────────────────────────────────────
+    if (y > 600) { doc.addPage(); y = 50; }
 
-    doc.rect(40, y, 515, 16).fill('#1a5490');
+    doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
-      .text('DETALLE COSTO', 0, y + 3, { align: 'center' });
+      .text('DETALLE COSTO ANUAL', 0, y + 3, { align: 'center' });
     y += 20;
 
     doc.fontSize(9).fillColor('black');
-    doc.font('Helvetica-Bold').text(`TITULAR ${productoComercial(afiliado.producto)}`, 40, y);
-    doc.font('Helvetica').text(formatMoneda(afiliado.valorRecibido || 0), 450, y);
+
+    const tarifa = contrato && contrato.tarifa ? contrato.tarifa : null;
+    const valorPlan = Number((contrato && contrato.valorPlanExequial) || (tarifa && tarifa.valorBase) || 0);
+    const valorAdicionales = Number((contrato && contrato.valorAdicionales) || 0);
+    const valorAsistencia = afiliado.asistenciaFueraDeCasa === 'SI' && tarifa ? Number(tarifa.valorAsistencia || 0) : 0;
+    const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0) * 12, 0);
+
+    doc.font('Helvetica-Bold').text(`PLAN ${productoComercial(afiliado.producto)} - TITULAR`, 40, y);
+    doc.font('Helvetica').text(formatMoneda(valorPlan), 450, y);
     y += 15;
 
-    doc.font('Helvetica-Bold').text(`GRUPO ${productoComercial(afiliado.producto)}`, 40, y);
-    doc.font('Helvetica').text('$ 0', 450, y);
-    y += 18;
+    if (valorAdicionales > 0) {
+      const numAdic = beneficiarios.filter(b => b.tipoBeneficiario === 'ADICIONAL').length;
+      doc.font('Helvetica-Bold').text(`BENEFICIARIOS ADICIONALES${numAdic > 0 ? ' (' + numAdic + ')' : ''}`, 40, y);
+      doc.font('Helvetica').text(formatMoneda(valorAdicionales), 450, y);
+      y += 15;
+    }
 
-    doc.font('Helvetica-Bold').text('Modalidad de Pago:', 40, y);
-    doc.font('Helvetica').text(afiliado.formaPago || 'MENSUAL', 140, y);
-    doc.font('Helvetica-Bold').text('Total:', 280, y);
-    doc.font('Helvetica').text(formatMoneda(afiliado.valorRecibido), 320, y);
-    doc.font('Helvetica-Bold').text('Valor:', 420, y);
-    doc.font('Helvetica').text(formatMoneda(afiliado.valorRecibido), 460, y);
+    if (valorAsistencia > 0) {
+      doc.font('Helvetica-Bold').text('ASISTENCIA FUERA DE CASA', 40, y);
+      doc.font('Helvetica').text(formatMoneda(valorAsistencia), 450, y);
+      y += 15;
+    }
+
+    // ── Seguros adquiridos ───────────────────────────────────────────────
+    if (seguros.length > 0) {
+      y += 5;
+      doc.moveTo(40, y).lineTo(555, y).strokeColor('#006838').lineWidth(0.5).stroke();
+      y += 6;
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('#006838')
+        .text('SEGUROS ADQUIRIDOS', 40, y);
+      y += 12;
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
+      doc.text('Seguro', 45, y);
+      doc.text('Valor Asegurado', 230, y);
+      doc.text('Prima Mensual', 400, y);
+      y += 12;
+      doc.font('Helvetica').fontSize(8.5);
+      for (const s of seguros) {
+        if (y > 700) { doc.addPage(); y = 50; }
+        doc.text(s.nombre || '', 45, y);
+        doc.text(formatMoneda(s.monto), 230, y);
+        doc.text(formatMoneda(s.prima) + ' / mes', 400, y);
+        y += 12;
+      }
+    }
+
+    y += 8;
+    doc.moveTo(40, y).lineTo(555, y).strokeColor('#006838').lineWidth(0.5).stroke();
+    y += 6;
+
+    // ── Total y modalidad ────────────────────────────────────────────────
+    doc.fontSize(9).fillColor('black');
+    const periodicidad = (contrato && contrato.periodicidad) || afiliado.formaPago || 'MENSUAL';
+    const valorTotal = Number((contrato && contrato.valorTotal) || 0) + totalSegurosAnual;
+    const valorCuota = Number((contrato && contrato.valorCuota) || 0);
+
+    doc.font('Helvetica-Bold').text('Periodicidad:', 40, y);
+    doc.font('Helvetica').text(periodicidad, 115, y);
+    doc.font('Helvetica-Bold').text('Total Anual:', 230, y);
+    doc.font('Helvetica').text(formatMoneda(valorTotal), 305, y);
+    doc.font('Helvetica-Bold').text('Valor Cuota:', 410, y);
+    doc.font('Helvetica').text(formatMoneda(valorCuota), 480, y);
 
     y += 25;
 
