@@ -21,7 +21,7 @@ const options = {
     },
     servers: [
       {
-        url: 'https://mantix-api.losolivoscucuta.com',
+        url: 'https://mantix-api.losolivoscucuta.com:8444',
         description: 'Servidor de producción (red interna)'
       },
       {
