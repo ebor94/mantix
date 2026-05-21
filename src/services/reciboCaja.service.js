@@ -22,6 +22,31 @@ const logger = require('../utils/logger');
 const FORMAS_PAGO_QUE_GENERAN_RECIBO = ['EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL'];
 const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 
+// Mapping de forma de pago → tipo de aprobación
+//   EFECTIVO              → aprueba CAJERO    (permiso caja.aprobar_efectivo)
+//   TRANSFERENCIA         → aprueba CARTERA   (permiso caja.aprobar_bancarios)
+//   CORRESPONSAL          → aprueba CARTERA   (permiso caja.aprobar_bancarios)
+//   POSFECHADO_COBRADO    → aprueba CARTERA   (típicamente entra como consignación/transferencia)
+const FORMAS_EFECTIVO  = ['EFECTIVO'];
+const FORMAS_BANCARIAS = ['TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO'];
+
+/**
+ * Lee los permisos del módulo caja desde el usuario.
+ * Retorna un resumen booleano para que el llamador decida qué hacer.
+ */
+function permisosCaja(usuario) {
+  if (!usuario) return { efectivo: false, bancarios: false, all: false, superAdmin: false };
+  if (usuario.es_super_admin) {
+    return { efectivo: true, bancarios: true, all: true, superAdmin: true };
+  }
+  const raw = usuario.rol?.permisos;
+  const p = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  const c = p.caja || {};
+  const efectivo  = !!c.aprobar_efectivo;
+  const bancarios = !!c.aprobar_bancarios;
+  return { efectivo, bancarios, all: efectivo && bancarios, superAdmin: false };
+}
+
 /**
  * Formatea consecutivo numérico como string con padding a 6 dígitos.
  *   1 -> "000001"; 42 -> "000042"
@@ -248,12 +273,47 @@ async function listarRecibosAsesor(asesorId, params = {}) {
 }
 
 /**
- * Lista recibos para el cuadre de caja del cajero, con filtros opcionales.
+ * Lista recibos para el cuadre de caja, aplicando el filtro de forma
+ * de pago según los permisos del usuario:
+ *   - Cajero (solo aprobar_efectivo)    → solo EFECTIVO
+ *   - Cartera (solo aprobar_bancarios)  → solo TRANSFERENCIA, CORRESPONSAL, POSFECHADO_COBRADO
+ *   - Admin / super_admin               → todas las formas
+ *
+ * El query param `?tipo=efectivo|bancarios|todos` permite forzar un
+ * subconjunto siempre que el usuario tenga ese permiso.
+ *
+ * @param {Usuario} usuario
+ * @param {object} params { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo }
  */
-async function listarRecibosParaCuadre({ fecha, fechaDesde, fechaHasta, asesorId, estado } = {}) {
+async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = {}) {
   const where = { ...buildWhereFechaEmision({ fecha, fechaDesde, fechaHasta }) };
   if (asesorId) where.asesorId = asesorId;
-  if (estado) where.estadoCuadre = estado;
+  if (estado)   where.estadoCuadre = estado;
+
+  const p = permisosCaja(usuario);
+
+  // Determinar el conjunto de formas a mostrar
+  let formasVisibles = [];
+  if (p.superAdmin || p.all) {
+    formasVisibles = [...FORMAS_EFECTIVO, ...FORMAS_BANCARIAS];
+  } else if (p.efectivo) {
+    formasVisibles = [...FORMAS_EFECTIVO];
+  } else if (p.bancarios) {
+    formasVisibles = [...FORMAS_BANCARIAS];
+  } else {
+    // Sin permisos: lista vacía
+    return [];
+  }
+
+  // Override por query param (intersectado con lo permitido)
+  if (tipo === 'efectivo') {
+    formasVisibles = formasVisibles.filter(f => FORMAS_EFECTIVO.includes(f));
+  } else if (tipo === 'bancarios') {
+    formasVisibles = formasVisibles.filter(f => FORMAS_BANCARIAS.includes(f));
+  } // 'todos' o ausente: no se restringe más
+
+  if (formasVisibles.length === 0) return [];
+  where.formaPago = { [Op.in]: formasVisibles };
 
   return ReciboCaja.findAll({
     where,
@@ -264,16 +324,31 @@ async function listarRecibosParaCuadre({ fecha, fechaDesde, fechaHasta, asesorId
 
 /**
  * Aprueba uno o varios recibos (estado PENDIENTE → APROBADO) con observación opcional.
+ *
+ * Valida permisos por forma de pago:
+ *   - EFECTIVO              → requiere caja.aprobar_efectivo
+ *   - TRANSFERENCIA / CORRESPONSAL / POSFECHADO_COBRADO → requiere caja.aprobar_bancarios
+ *   - super_admin pasa todo
+ *
+ * Si la selección incluye recibos que el usuario NO puede aprobar,
+ * NINGÚN recibo se aprueba (transacción atómica) y se retorna AppError 403
+ * listando los conflictivos.
+ *
  * Inserta una fila en Trazabilidad por cada recibo aprobado.
  *
  * @param {number[]} reciboIds
- * @param {number} cajeroId
+ * @param {Usuario} usuario  El usuario logueado (con rol cargado)
  * @param {string|null} observacion
  * @returns {{ aprobados:number, recibos:ReciboCaja[] }}
  */
-async function aprobarRecibos(reciboIds, cajeroId, observacion = null) {
+async function aprobarRecibos(reciboIds, usuario, observacion = null) {
   if (!Array.isArray(reciboIds) || reciboIds.length === 0) {
     throw new AppError('Debe enviar al menos un reciboId', 400);
+  }
+
+  const p = permisosCaja(usuario);
+  if (!p.efectivo && !p.bancarios) {
+    throw new AppError('No tienes permisos para aprobar recibos', 403);
   }
 
   const transaction = await sequelize.transaction();
@@ -289,11 +364,35 @@ async function aprobarRecibos(reciboIds, cajeroId, observacion = null) {
       throw new AppError('Ningún recibo pendiente encontrado en los IDs provistos', 400);
     }
 
+    // Validación de permiso por forma de pago
+    const conflictivos = [];
+    for (const r of recibos) {
+      const esEfectivo = FORMAS_EFECTIVO.includes(r.formaPago);
+      const esBancario = FORMAS_BANCARIAS.includes(r.formaPago);
+      const puede =
+        p.superAdmin ||
+        (esEfectivo && p.efectivo) ||
+        (esBancario && p.bancarios);
+      if (!puede) conflictivos.push({ id: r.id, numero: r.numeroRecibo, formaPago: r.formaPago });
+    }
+
+    if (conflictivos.length > 0) {
+      await transaction.rollback();
+      const lista = conflictivos.map(c => `${c.numero} (${c.formaPago})`).join(', ');
+      const rolNecesario = conflictivos.some(c => FORMAS_BANCARIAS.includes(c.formaPago))
+        ? 'CARTERA (revisa transferencias/consignaciones)'
+        : 'CAJERO (aprueba efectivo)';
+      throw new AppError(
+        `No puedes aprobar estos recibos por su forma de pago. Requiere rol ${rolNecesario}: ${lista}`,
+        403
+      );
+    }
+
     const ahora = new Date();
     await ReciboCaja.update(
       {
         estadoCuadre: 'APROBADO',
-        aprobadoPor: cajeroId,
+        aprobadoPor: usuario.id,
         aprobadoAt: ahora,
         observacionCajero: observacion
       },
@@ -304,14 +403,14 @@ async function aprobarRecibos(reciboIds, cajeroId, observacion = null) {
     const trazas = recibos.map(r => ({
       afiliadoId: r.afiliadoId,
       tipo: 'APROBACION_RECIBO',
-      descripcion: `Recibo ${r.numeroRecibo} aprobado en cuadre de caja` +
+      descripcion: `Recibo ${r.numeroRecibo} (${r.formaPago}) aprobado en cuadre de caja` +
         (observacion ? ` — ${observacion}` : ''),
-      usuarioId: cajeroId
+      usuarioId: usuario.id
     }));
     await Trazabilidad.bulkCreate(trazas, { transaction });
 
     await transaction.commit();
-    logger.info(`[ReciboCaja] ${recibos.length} recibo(s) aprobados por usuario ${cajeroId}`);
+    logger.info(`[ReciboCaja] ${recibos.length} recibo(s) aprobados por usuario ${usuario.id}`);
 
     const refreshed = await ReciboCaja.findAll({
       where: { id: recibos.map(r => r.id) },
@@ -319,7 +418,7 @@ async function aprobarRecibos(reciboIds, cajeroId, observacion = null) {
     });
     return { aprobados: recibos.length, recibos: refreshed };
   } catch (err) {
-    await transaction.rollback();
+    if (!transaction.finished) await transaction.rollback();
     throw err;
   }
 }
@@ -385,5 +484,8 @@ module.exports = {
   aprobarRecibos,
   listarPosfechadosPendientes,
   getReciboById,
-  FORMAS_PAGO_QUE_GENERAN_RECIBO
+  permisosCaja,
+  FORMAS_PAGO_QUE_GENERAN_RECIBO,
+  FORMAS_EFECTIVO,
+  FORMAS_BANCARIAS
 };

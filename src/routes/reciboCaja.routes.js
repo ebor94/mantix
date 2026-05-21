@@ -39,7 +39,11 @@ router.get('/cuadre',
 // ── Cajero: aprobar recibos seleccionados ────────────────────────
 router.post('/aprobar',
   auth,
-  requirePermiso('caja', 'aprobar_recibos'),
+  // El servicio valida internamente el permiso fino por forma de pago:
+  //   EFECTIVO              → requiere caja.aprobar_efectivo (rol CAJERO)
+  //   TRANSFERENCIA/...     → requiere caja.aprobar_bancarios (rol CARTERA)
+  // Por eso aqui solo se exige autenticacion + ver_cuadre.
+  requirePermiso('caja', 'ver_cuadre'),
   controller.aprobarRecibos
 );
 

@@ -24,34 +24,44 @@ async function getMisRecibos(req, res, next) {
 
 /**
  * GET /api/recibos/cuadre
- * Recibos para el cuadre del cajero. Filtros: ?fecha, ?fechaDesde, ?fechaHasta, ?asesorId, ?estado
+ * Recibos para el cuadre. Filtros:
+ *   ?fecha, ?fechaDesde, ?fechaHasta, ?asesorId, ?estado, ?tipo=efectivo|bancarios|todos
+ * El listado se restringe automáticamente según el permiso del usuario:
+ *   - CAJERO (aprobar_efectivo)  → solo EFECTIVO
+ *   - CARTERA (aprobar_bancarios) → solo TRANSFERENCIA / CORRESPONSAL / POSFECHADO_COBRADO
+ *   - Admin / super_admin         → todos
  * Permiso: caja.ver_cuadre
  */
 async function getCuadre(req, res, next) {
   try {
-    const { fecha, fechaDesde, fechaHasta, asesorId, estado } = req.query;
-    const data = await reciboService.listarRecibosParaCuadre({
+    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = req.query;
+    const data = await reciboService.listarRecibosParaCuadre(req.usuario, {
       fecha,
       fechaDesde,
       fechaHasta,
       asesorId: asesorId ? parseInt(asesorId, 10) : undefined,
-      estado
+      estado,
+      tipo
     });
-    res.json({ success: true, data });
+    // Incluye los permisos resueltos para que el frontend pinte la UI según el rol
+    const permisos = reciboService.permisosCaja(req.usuario);
+    res.json({ success: true, data, permisos });
   } catch (err) { next(err); }
 }
 
 /**
  * POST /api/recibos/aprobar
  * Aprueba uno o varios recibos pendientes.
+ * Valida en el servicio el permiso por forma de pago:
+ *   - EFECTIVO requiere caja.aprobar_efectivo (rol CAJERO)
+ *   - TRANSFERENCIA/CORRESPONSAL/POSFECHADO_COBRADO requiere caja.aprobar_bancarios (rol CARTERA)
  * Body: { reciboIds: number[], observacion?: string }
- * Permiso: caja.aprobar_recibos
  */
 async function aprobarRecibos(req, res, next) {
   try {
     const { reciboIds, observacion } = req.body;
     const result = await reciboService.aprobarRecibos(
-      reciboIds, req.usuario.id, observacion || null
+      reciboIds, req.usuario, observacion || null
     );
     res.json({
       success: true,
