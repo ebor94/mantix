@@ -805,5 +805,168 @@ doc.fontSize(20)
       maximumFractionDigits: 2
     });
   }
+
+  // ============================================
+  // RECIBO DE CAJA — PDF de una sola página
+  // ============================================
+  /**
+   * Genera el PDF del recibo de caja en uploads/recibos/{numeroRecibo}.pdf
+   * @param {object} recibo  Instancia de ReciboCaja (puede ser .toJSON())
+   * @param {object} afiliado Instancia/JSON de Afiliado con datos de identidad
+   * @param {object} asesor  { nombre, apellido }
+   * @returns {Promise<{ fileName:string, filePath:string, url:string }>}
+   */
+  async generarReciboCajaPDF(recibo, afiliado, asesor) {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({
+          size: 'LETTER',
+          margins: { top: 40, bottom: 40, left: 50, right: 50 }
+        });
+
+        const dir = path.join(__dirname, '../../uploads/recibos');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const fileName = `${recibo.numeroRecibo}.pdf`;
+        const filePath = path.join(dir, fileName);
+        const stream = fs.createWriteStream(filePath);
+        doc.pipe(stream);
+
+        // ── Header con logo y datos de la empresa ────────────────
+        const logoPath = path.join(__dirname, '../../assets/logoConv.png');
+        try {
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 50, 35, { width: 110, fit: [110, 70] });
+          }
+        } catch (e) { /* logo opcional */ }
+
+        doc.fontSize(8).fillColor(COLORES.gris_medio)
+          .text(empresaConfig.nombre.toUpperCase(), 180, 40)
+          .text(empresaConfig.slogan || '', 180, 53)
+          .text(empresaConfig.web || '', 180, 66)
+          .text(`Tel: ${empresaConfig.telefono || ''}`, 180, 79)
+          .text(`${empresaConfig.ciudad || ''}, ${empresaConfig.pais || ''}`, 180, 92);
+
+        // ── Número de recibo destacado ────────────────────────────
+        doc.roundedRect(420, 35, 145, 70, 6)
+          .fillAndStroke(COLORES.verde_olivos, COLORES.verde_oscuro);
+        doc.fillColor(COLORES.blanco).fontSize(9).font('Helvetica')
+          .text('RECIBO DE CAJA', 420, 45, { width: 145, align: 'center' });
+        doc.fontSize(18).font('Helvetica-Bold')
+          .text(recibo.numeroRecibo, 420, 62, { width: 145, align: 'center' });
+        doc.fontSize(8).font('Helvetica')
+          .text(`Emitido: ${this.formatearFecha(recibo.fechaEmision)}`, 420, 90, {
+            width: 145, align: 'center'
+          });
+
+        doc.y = 130;
+        doc.fillColor(COLORES.gris_oscuro);
+
+        // ── Línea separadora ─────────────────────────────────────
+        doc.moveTo(50, doc.y).lineTo(562, doc.y)
+          .strokeColor(COLORES.verde_olivos).lineWidth(2).stroke();
+        doc.moveDown(0.8);
+
+        // ── Datos del afiliado ───────────────────────────────────
+        doc.fontSize(11).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
+          .text('DATOS DEL AFILIADO', 50, doc.y);
+        doc.font('Helvetica').moveDown(0.4);
+
+        const boxY1 = doc.y;
+        doc.roundedRect(50, boxY1, 512, 85, 6)
+          .fillAndStroke(COLORES.gris_claro, '#e5e7eb');
+
+        const nombreCompleto = [
+          afiliado.primerNombre, afiliado.segundoNombre,
+          afiliado.primerApellido, afiliado.segundoApellido
+        ].filter(Boolean).join(' ');
+
+        const datosAfi = [
+          { label: 'Documento:', value: `${afiliado.tipoDocumento || ''} ${afiliado.numeroDocumento || ''}` },
+          { label: 'Nombre:', value: nombreCompleto },
+          { label: 'Celular:', value: afiliado.celular || 'N/A' },
+          { label: 'Email:', value: afiliado.email || 'N/A' }
+        ];
+        let y = boxY1 + 10;
+        datosAfi.forEach((d, i) => {
+          const x = (i % 2 === 0) ? 65 : 320;
+          doc.fontSize(8).fillColor(COLORES.gris_medio).text(d.label, x, y);
+          doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
+            .text(d.value, x, y + 11, { width: 230 }).font('Helvetica');
+          if (i % 2 === 1) y += 32;
+        });
+        doc.y = boxY1 + 100;
+
+        // ── Datos del pago ───────────────────────────────────────
+        doc.fontSize(11).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
+          .text('DETALLE DEL PAGO', 50, doc.y);
+        doc.font('Helvetica').moveDown(0.4);
+
+        const boxY2 = doc.y;
+        doc.roundedRect(50, boxY2, 512, 110, 6)
+          .fillAndStroke(COLORES.verde_claro, COLORES.borde_verde);
+
+        const formaPagoLabel = {
+          EFECTIVO: 'Efectivo',
+          TRANSFERENCIA: 'Transferencia bancaria',
+          CORRESPONSAL: 'Corresponsal bancario',
+          POSFECHADO_COBRADO: 'Posfechado (cobrado)'
+        }[recibo.formaPago] || recibo.formaPago;
+
+        const datosPago = [
+          { label: 'Forma de pago:', value: formaPagoLabel },
+          { label: 'Banco:', value: recibo.banco || 'N/A' },
+          { label: 'Referencia:', value: recibo.referencia || 'N/A' },
+          { label: 'Asesor:', value: `${asesor?.nombre || ''} ${asesor?.apellido || ''}`.trim() || 'N/A' }
+        ];
+        y = boxY2 + 10;
+        datosPago.forEach((d, i) => {
+          const x = (i % 2 === 0) ? 65 : 320;
+          doc.fontSize(8).fillColor(COLORES.verde_oscuro).text(d.label, x, y);
+          doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
+            .text(d.value, x, y + 11, { width: 230 }).font('Helvetica');
+          if (i % 2 === 1) y += 32;
+        });
+
+        // Valor destacado al fondo de la box
+        doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORES.verde_oscuro)
+          .text('VALOR RECIBIDO:', 65, boxY2 + 80);
+        doc.fontSize(18).font('Helvetica-Bold').fillColor(COLORES.verde_olivos)
+          .text(`$ ${this.formatearNumero(recibo.valor)}`, 300, boxY2 + 76, {
+            width: 245, align: 'right'
+          });
+        doc.font('Helvetica');
+        doc.y = boxY2 + 125;
+
+        // ── Pie / firma ──────────────────────────────────────────
+        doc.moveDown(1.5);
+        doc.moveTo(80, doc.y).lineTo(290, doc.y).strokeColor(COLORES.gris_medio).stroke();
+        doc.moveTo(322, doc.y).lineTo(532, doc.y).strokeColor(COLORES.gris_medio).stroke();
+        doc.fontSize(8).fillColor(COLORES.gris_medio)
+          .text('Firma del asesor', 80, doc.y + 5, { width: 210, align: 'center' })
+          .text('Firma del afiliado', 322, doc.y + 5, { width: 210, align: 'center' });
+
+        // ── Nota legal ───────────────────────────────────────────
+        doc.moveDown(4);
+        doc.fontSize(7).fillColor(COLORES.gris_medio).font('Helvetica-Oblique')
+          .text(
+            'Este recibo es válido como constancia del pago reportado. El cuadre de caja con el área de auditoría/cajero confirma la conciliación final.',
+            50, doc.y, { width: 512, align: 'center' }
+          );
+
+        doc.end();
+
+        stream.on('finish', () => {
+          resolve({
+            fileName,
+            filePath,
+            url: `/uploads/recibos/${fileName}`
+          });
+        });
+        stream.on('error', reject);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
 }
 module.exports = new PDFService();

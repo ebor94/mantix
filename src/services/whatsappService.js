@@ -145,4 +145,69 @@ async function sendAceptacion(celular) {
   }
 }
 
-module.exports = { sendOTP, sendAceptacion };
+/**
+ * Envía un archivo (PDF/imagen) al cliente por WhatsApp vía 1msg.
+ * Usa el endpoint /sendFile de 1msg.io con la URL pública del archivo.
+ *
+ * No lanza excepción: en caso de error solo registra warn y retorna
+ * { success: false } — el recibo ya fue guardado.
+ *
+ * @param {string} celular     Número del cliente (se formatea)
+ * @param {string} urlArchivo  URL pública completa al archivo (debe ser accesible desde internet)
+ * @param {string} fileName    Nombre del archivo tal como verá el cliente (ej. "MP-000001.pdf")
+ * @param {string} caption     Mensaje opcional que acompaña el archivo
+ * @returns {Promise<{success:boolean,data?:any,error?:any}>}
+ */
+async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
+  const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
+  const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
+  const numero   = formatearTelefono(celular);
+
+  if (!urlArchivo) {
+    logger.warn('[WhatsApp] sendDocumento: urlArchivo vacío — no se envía');
+    return { success: false, error: 'urlArchivo vacío' };
+  }
+
+  // 1msg.io /sendFile espera body con URL pública del archivo.
+  // Verificar la doc oficial al desplegar — algunas instancias usan /sendDocument.
+  const payload = {
+    token,
+    phone: numero,
+    body: urlArchivo,
+    filename: fileName,
+    caption: caption || ''
+  };
+
+  try {
+    const response = await axios.post(
+      `https://api.1msg.io/${instance}/sendFile`,
+      payload,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+    );
+    logger.info(`[WhatsApp] Documento ${fileName} enviado a ${numero} | ID: ${response.data?.id || 'ok'}`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const msg = error.response?.data?.message || error.response?.data || error.message;
+    logger.warn(`[WhatsApp] Error enviando documento a ${numero}: ${JSON.stringify(msg)}`);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Helper específico para enviar el PDF de un recibo de caja por WhatsApp.
+ *
+ * @param {string} celular
+ * @param {string} urlPublicaPdf  URL pública (incluye dominio) del PDF
+ * @param {string} numeroRecibo
+ * @param {number|string} valor
+ */
+async function sendDocumentoRecibo(celular, urlPublicaPdf, numeroRecibo, valor) {
+  const valorFormateado = Number(valor || 0).toLocaleString('es-CO');
+  const caption =
+    `📄 *Recibo de caja ${numeroRecibo}*\n` +
+    `Valor recibido: $${valorFormateado}\n\n` +
+    `Gracias por confiar en nosotros — Los Olivos / Serfunorte.`;
+  return sendDocumento(celular, urlPublicaPdf, `${numeroRecibo}.pdf`, caption);
+}
+
+module.exports = { sendOTP, sendAceptacion, sendDocumento, sendDocumentoRecibo };
