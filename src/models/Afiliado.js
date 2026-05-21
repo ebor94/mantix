@@ -364,6 +364,12 @@ module.exports = (sequelize, DataTypes) => {
       as: 'trazabilidad',
       foreignKey: 'afiliadoId'
     });
+
+    // Recibo de caja (1:1) — un afiliado tiene a lo sumo un recibo emitido
+    Afiliado.hasOne(models.ReciboCaja, {
+      as: 'recibo',
+      foreignKey: 'afiliadoId'
+    });
   };
 
   return Afiliado;

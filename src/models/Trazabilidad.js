@@ -20,7 +20,9 @@ module.exports = (sequelize, DataTypes) => {
         'ACTUALIZACION_DATOS',
         'RECHAZO_PARCIAL',
         'APROBACION',
-        'RECHAZO_TOTAL'
+        'RECHAZO_TOTAL',
+        'APROBACION_RECIBO',
+        'COBRO_POSFECHADO'
       ),
       allowNull: false
     },

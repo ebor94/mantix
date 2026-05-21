@@ -71,6 +71,8 @@ const db = {
   ContratoValor: require('./ContratoValor')(sequelize, Sequelize.DataTypes),
   Trazabilidad: require('./Trazabilidad')(sequelize, Sequelize.DataTypes),
   Borrador: require('./Borrador')(sequelize, Sequelize.DataTypes),
+  ReciboCaja: require('./ReciboCaja')(sequelize, Sequelize.DataTypes),
+  ConsecutivoRecibo: require('./ConsecutivoRecibo')(sequelize, Sequelize.DataTypes),
 
   // ============================================
   // MÓDULO DE VOTACIONES

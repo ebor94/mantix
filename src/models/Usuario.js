@@ -45,6 +45,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       comment: 'Indica si el usuario tiene acceso total al sistema sin restricciones'
     },
+    prefijo_recibo: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+      unique: true,
+      comment: 'Prefijo único para numerar recibos de caja del asesor (ej. MP para María Pérez)'
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
