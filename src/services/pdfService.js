@@ -831,20 +831,13 @@ doc.fontSize(20)
         const stream = fs.createWriteStream(filePath);
         doc.pipe(stream);
 
-        // ── Header con logo y datos de la empresa ────────────────
+        // ── Header con logo (sin bloque de datos de empresa) ─────
         const logoPath = path.join(__dirname, '../../assets/logoConv.png');
         try {
           if (fs.existsSync(logoPath)) {
             doc.image(logoPath, 50, 35, { width: 110, fit: [110, 70] });
           }
         } catch (e) { /* logo opcional */ }
-
-        doc.fontSize(8).fillColor(COLORES.gris_medio)
-          .text(empresaConfig.nombre.toUpperCase(), 180, 40)
-          .text(empresaConfig.slogan || '', 180, 53)
-          .text(empresaConfig.web || '', 180, 66)
-          .text(`Tel: ${empresaConfig.telefono || ''}`, 180, 79)
-          .text(`${empresaConfig.ciudad || ''}, ${empresaConfig.pais || ''}`, 180, 92);
 
         // ── Número de recibo destacado ────────────────────────────
         doc.roundedRect(420, 35, 145, 70, 6)
@@ -902,8 +895,12 @@ doc.fontSize(20)
         doc.font('Helvetica').moveDown(0.4);
 
         const boxY2 = doc.y;
+        // Tono gris neutro profesional (sin tinte verde ni azul)
+        const PAGO_BG     = '#F9FAFB';
+        const PAGO_BORDER = '#9CA3AF';
+        const PAGO_LABEL  = '#4B5563';
         doc.roundedRect(50, boxY2, 512, 110, 6)
-          .fillAndStroke(COLORES.verde_claro, COLORES.borde_verde);
+          .fillAndStroke(PAGO_BG, PAGO_BORDER);
 
         const formaPagoLabel = {
           EFECTIVO: 'Efectivo',
@@ -921,32 +918,24 @@ doc.fontSize(20)
         y = boxY2 + 10;
         datosPago.forEach((d, i) => {
           const x = (i % 2 === 0) ? 65 : 320;
-          doc.fontSize(8).fillColor(COLORES.verde_oscuro).text(d.label, x, y);
+          doc.fontSize(8).fillColor(PAGO_LABEL).text(d.label, x, y);
           doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
             .text(d.value, x, y + 11, { width: 230 }).font('Helvetica');
           if (i % 2 === 1) y += 32;
         });
 
-        // Valor destacado al fondo de la box
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORES.verde_oscuro)
+        // Valor destacado al fondo de la box (gris carbón, sobrio)
+        doc.fontSize(10).font('Helvetica-Bold').fillColor(PAGO_LABEL)
           .text('VALOR RECIBIDO:', 65, boxY2 + 80);
-        doc.fontSize(18).font('Helvetica-Bold').fillColor(COLORES.verde_olivos)
+        doc.fontSize(18).font('Helvetica-Bold').fillColor(COLORES.gris_oscuro)
           .text(`$ ${this.formatearNumero(recibo.valor)}`, 300, boxY2 + 76, {
             width: 245, align: 'right'
           });
         doc.font('Helvetica');
         doc.y = boxY2 + 125;
 
-        // ── Pie / firma ──────────────────────────────────────────
-        doc.moveDown(1.5);
-        doc.moveTo(80, doc.y).lineTo(290, doc.y).strokeColor(COLORES.gris_medio).stroke();
-        doc.moveTo(322, doc.y).lineTo(532, doc.y).strokeColor(COLORES.gris_medio).stroke();
-        doc.fontSize(8).fillColor(COLORES.gris_medio)
-          .text('Firma del asesor', 80, doc.y + 5, { width: 210, align: 'center' })
-          .text('Firma del afiliado', 322, doc.y + 5, { width: 210, align: 'center' });
-
         // ── Nota legal ───────────────────────────────────────────
-        doc.moveDown(4);
+        doc.moveDown(2);
         doc.fontSize(7).fillColor(COLORES.gris_medio).font('Helvetica-Oblique')
           .text(
             'Este recibo es válido como constancia del pago reportado. El cuadre de caja con el área de auditoría/cajero confirma la conciliación final.',
