@@ -76,12 +76,22 @@ async function generarConsecutivo(prefijo, transaction) {
   });
 
   if (!fila) {
-    // Primera emisión para este prefijo
+    // Primera vez que se solicita un consecutivo para este prefijo:
+    // tomamos como base el MÁXIMO consecutivo realmente emitido en
+    // recibos_caja (cubre el caso de recibos insertados manualmente
+    // antes de que existiera la fila del contador, o de borrados de
+    // la tabla consecutivos_recibo sin truncar recibos_caja).
+    const maxExistente = await ReciboCaja.max('consecutivo', {
+      where: { prefijo },
+      transaction
+    });
+    const base = Number(maxExistente) || 0;
+    const siguiente = base + 1;
     fila = await ConsecutivoRecibo.create(
-      { prefijo, ultimoNumero: 1 },
+      { prefijo, ultimoNumero: siguiente },
       { transaction }
     );
-    return { consecutivo: 1, numeroRecibo: `${prefijo}-${formatearConsecutivo(1)}` };
+    return { consecutivo: siguiente, numeroRecibo: `${prefijo}-${formatearConsecutivo(siguiente)}` };
   }
 
   const siguiente = fila.ultimoNumero + 1;
