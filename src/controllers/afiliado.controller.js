@@ -42,11 +42,10 @@ async function emitirPdfYEnviarWhatsapp(afiliadoId) {
     );
     await recibo.update({ pdfUrl: pdfInfo.url });
 
-    // 2) Enviar por WhatsApp
-    const publicUrl = buildPublicPdfUrl(pdfInfo.url);
+    // 2) Enviar por WhatsApp usando base64 (no depende de URL pública accesible)
     const result = await sendDocumentoRecibo(
       afiliado.celular,
-      publicUrl,
+      pdfInfo.filePath,   // ruta absoluta en disco → se codifica en base64 internamente
       recibo.numeroRecibo,
       recibo.valor
     );

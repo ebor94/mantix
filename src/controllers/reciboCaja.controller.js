@@ -205,24 +205,26 @@ async function reenviarWhatsapp(req, res, next) {
     const afiliado = await Afiliado.findByPk(recibo.afiliadoId);
     if (!afiliado) throw new AppError('Afiliado del recibo no encontrado', 404);
 
-    // Generar PDF si aún no existe o fue eliminado
+    // Determinar ruta absoluta del PDF (generar si no existe o fue eliminado)
     let pdfUrl = recibo.pdfUrl;
-    if (!pdfUrl || !fs.existsSync(path.join(__dirname, '../../', pdfUrl))) {
+    let localFilePath = pdfUrl ? path.join(__dirname, '../../', pdfUrl) : null;
+
+    if (!localFilePath || !fs.existsSync(localFilePath)) {
       const pdfInfo = await pdfService.generarReciboCajaPDF(
         recibo.toJSON(),
         afiliado.toJSON(),
         recibo.asesor ? recibo.asesor.toJSON() : null
       );
       pdfUrl = pdfInfo.url;
+      localFilePath = pdfInfo.filePath;
       await recibo.update({ pdfUrl });
     }
 
-    const publicUrl = buildPublicPdfUrl(pdfUrl);
-    logger.info(`[ReciboCaja] Reenvío WhatsApp recibo ${recibo.numeroRecibo} → ${publicUrl}`);
+    logger.info(`[ReciboCaja] Reenvío WhatsApp recibo ${recibo.numeroRecibo} vía base64 desde ${localFilePath}`);
 
     const result = await sendDocumentoRecibo(
       afiliado.celular,
-      publicUrl,
+      localFilePath,   // ruta absoluta → se codifica en base64 internamente
       recibo.numeroRecibo,
       recibo.valor
     );
@@ -241,7 +243,7 @@ async function reenviarWhatsapp(req, res, next) {
       success: false,
       message: 'PDF generado pero falló el envío de WhatsApp',
       error: result.error,
-      pdfUrl: publicUrl
+      pdfUrl: buildPublicPdfUrl(pdfUrl)
     });
   } catch (err) { next(err); }
 }

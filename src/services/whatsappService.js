@@ -4,6 +4,7 @@
 // Usa plantilla "toke_acceso" con sendTemplate
 // ============================================
 const axios = require('axios');
+const fs    = require('fs');
 const logger = require('../utils/logger');
 
 // Datos de la instancia 1msg (hardcoded como fallback, se sobreescriben con .env)
@@ -164,21 +165,11 @@ async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
   const numero   = formatearTelefono(celular);
 
   if (!urlArchivo) {
-    logger.warn('[WhatsApp] sendDocumento: urlArchivo vacío — no se envía');
-    return { success: false, error: 'urlArchivo vacío' };
+    logger.warn('[WhatsApp] sendDocumento: body vacío — no se envía');
+    return { success: false, error: 'body vacío' };
   }
 
-  // 1msg necesita URL absoluta pública — una ruta relativa causará error silencioso
-  if (!urlArchivo.startsWith('http://') && !urlArchivo.startsWith('https://')) {
-    logger.warn(
-      `[WhatsApp] sendDocumento: URL no es absoluta ("${urlArchivo}") — ` +
-      'configura PUBLIC_API_URL en .env para que 1msg pueda descargar el archivo'
-    );
-    return { success: false, error: 'URL no es absoluta — configura PUBLIC_API_URL' };
-  }
-
-  // 1msg.io /sendFile espera body con URL pública del archivo.
-  // Verificar la doc oficial al desplegar — algunas instancias usan /sendDocument.
+  // 1msg acepta URL pública (https://...) o base64 (data:application/pdf;base64,...)
   const payload = {
     token,
     phone: numero,
@@ -203,20 +194,34 @@ async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
 }
 
 /**
- * Helper específico para enviar el PDF de un recibo de caja por WhatsApp.
+ * Envía el PDF de un recibo de caja por WhatsApp usando base64.
+ * Lee el archivo desde el disco (ruta absoluta) y lo codifica para evitar
+ * problemas de acceso de red cuando 1msg no puede descargar la URL pública.
  *
  * @param {string} celular
- * @param {string} urlPublicaPdf  URL pública (incluye dominio) del PDF
+ * @param {string} localFilePath  Ruta absoluta al archivo PDF en el servidor
  * @param {string} numeroRecibo
  * @param {number|string} valor
  */
-async function sendDocumentoRecibo(celular, urlPublicaPdf, numeroRecibo, valor) {
+async function sendDocumentoRecibo(celular, localFilePath, numeroRecibo, valor) {
   const valorFormateado = Number(valor || 0).toLocaleString('es-CO');
   const caption =
     `📄 *Recibo de caja ${numeroRecibo}*\n` +
     `Valor recibido: $${valorFormateado}\n\n` +
     `Gracias por confiar en nosotros — Los Olivos / Serfunorte.`;
-  return sendDocumento(celular, urlPublicaPdf, `${numeroRecibo}.pdf`, caption);
+
+  // Leer archivo y codificar en base64 para evitar dependencia de URL pública
+  let body;
+  try {
+    const fileBuffer = fs.readFileSync(localFilePath);
+    body = `data:application/pdf;base64,${fileBuffer.toString('base64')}`;
+    logger.info(`[WhatsApp] PDF ${numeroRecibo} codificado en base64 (${Math.round(fileBuffer.length / 1024)} KB)`);
+  } catch (readErr) {
+    logger.warn(`[WhatsApp] No se pudo leer el PDF en ${localFilePath}: ${readErr.message}`);
+    return { success: false, error: `No se pudo leer el archivo PDF: ${readErr.message}` };
+  }
+
+  return sendDocumento(celular, body, `${numeroRecibo}.pdf`, caption);
 }
 
 module.exports = { sendOTP, sendAceptacion, sendDocumento, sendDocumentoRecibo };
