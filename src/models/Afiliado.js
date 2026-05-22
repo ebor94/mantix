@@ -328,7 +328,7 @@ module.exports = (sequelize, DataTypes) => {
       field: 'fecha_legalizacion'
     },
     legalizacionAsesorId: {
-      type: DataTypes.INTEGER.UNSIGNED,
+      type: DataTypes.INTEGER,           // signed: usuarios.id es INT signed
       allowNull: true,
       field: 'legalizacion_asesor_id'
     }
