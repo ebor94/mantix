@@ -36,6 +36,13 @@ router.get('/cuadre',
   controller.getCuadre
 );
 
+// Lista de asesores con prefijo (para el dropdown del filtro)
+router.get('/asesores',
+  auth,
+  requirePermiso('caja', 'ver_cuadre'),
+  controller.getAsesoresConPrefijo
+);
+
 // ── Cajero: aprobar recibos seleccionados ────────────────────────
 router.post('/aprobar',
   auth,

@@ -4,6 +4,8 @@
 // ============================================
 const path = require('path');
 const fs = require('fs');
+const { Op } = require('sequelize');
+const { Usuario } = require('../models');
 const reciboService = require('../services/reciboCaja.service');
 const AppError = require('../utils/AppError');
 
@@ -144,6 +146,27 @@ async function descargarPDF(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/recibos/asesores
+ * Lista los usuarios activos que tienen prefijo_recibo configurado
+ * (= asesores que emiten recibos). Se usa para poblar selectores en
+ * la vista de cuadre y reportes.
+ * Permiso: caja.ver_cuadre
+ */
+async function getAsesoresConPrefijo(req, res, next) {
+  try {
+    const asesores = await Usuario.findAll({
+      where: {
+        prefijo_recibo: { [Op.ne]: null },
+        activo: 1
+      },
+      attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo'],
+      order: [['prefijo_recibo', 'ASC']]
+    });
+    res.json({ success: true, data: asesores });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   getMisRecibos,
   getCuadre,
@@ -151,5 +174,6 @@ module.exports = {
   cobrarPosfechado,
   getPosfechadosPendientes,
   getReciboById,
-  descargarPDF
+  descargarPDF,
+  getAsesoresConPrefijo
 };
