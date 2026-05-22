@@ -169,13 +169,19 @@ async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
     return { success: false, error: 'body vacío' };
   }
 
+  // 1msg sendFile rechaza saltos de linea/tabs y >4 espacios consecutivos en caption.
+  const cleanCaption = (caption || '')
+    .replace(/[\r\n\t]+/g, ' · ')
+    .replace(/ {4,}/g, '   ')
+    .trim();
+
   // 1msg acepta URL pública (https://...) o base64 (data:application/pdf;base64,...)
   const payload = {
     token,
     phone: numero,
     body: urlArchivo,
     filename: fileName,
-    caption: caption || ''
+    caption: cleanCaption
   };
 
   try {
@@ -205,10 +211,8 @@ async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
  */
 async function sendDocumentoRecibo(celular, localFilePath, numeroRecibo, valor) {
   const valorFormateado = Number(valor || 0).toLocaleString('es-CO');
-  const caption =
-    `📄 *Recibo de caja ${numeroRecibo}*\n` +
-    `Valor recibido: $${valorFormateado}\n\n` +
-    `Gracias por confiar en nosotros — Los Olivos / Serfunorte.`;
+  // 1msg sendFile rechaza saltos de linea, tabs y >4 espacios consecutivos en el caption.
+  const caption = `📄 Recibo de caja ${numeroRecibo} · Valor recibido: $${valorFormateado} · Gracias por confiar en nosotros — Los Olivos / Serfunorte.`;
 
   // Leer archivo y codificar en base64 para evitar dependencia de URL pública
   let body;
