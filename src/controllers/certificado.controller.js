@@ -132,7 +132,7 @@ async function generar(req, res, next) {
     const icontecBuffer = await obtenerIcontecLogo();
     if (icontecBuffer) {
       try {
-        doc.image(icontecBuffer, 40, 12, { width: 515 });
+        doc.image(icontecBuffer, 79, 12, { width: 438, height: 60 });
       } catch (e) {
         console.error('Error insertando logo Icontec:', e.message);
       }
