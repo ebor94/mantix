@@ -448,6 +448,27 @@ async function getMisDelDia(req, res, next) {
   }
 }
 
+/**
+ * POST /afiliados/legalizar
+ * Marca un lote de afiliaciones como legalizadas con un número de planilla.
+ * Body: { afiliadoIds: number[], numeroPlanilla: string }
+ * Permiso: afiliaciones.legalizar
+ */
+async function legalizarAfiliaciones(req, res, next) {
+  try {
+    const { afiliadoIds, numeroPlanilla } = req.body;
+    const result = await afiliadoService.legalizarAfiliaciones(
+      afiliadoIds,
+      req.usuario,
+      numeroPlanilla
+    );
+    const msg = result.legalizados > 0
+      ? `${result.legalizados} afiliación(es) legalizadas con planilla N° ${numeroPlanilla}`
+      : 'Todas las afiliaciones seleccionadas ya estaban legalizadas';
+    res.json({ success: true, message: msg, data: result });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   create,
   createPublico,
@@ -468,5 +489,6 @@ module.exports = {
   actualizarBeneficiariosConsulta,
   getTrazabilidad,
   getVeoliaUnidades,
-  getMisDelDia
+  getMisDelDia,
+  legalizarAfiliaciones
 };

@@ -84,6 +84,13 @@ router.get('/mis-del-dia',
   controller.getMisDelDia
 );
 
+// ── POST /afiliados/legalizar — marcar lote como legalizado con número de planilla ─
+router.post('/legalizar',
+  auth,
+  requirePermiso('afiliaciones', 'legalizar'),
+  controller.legalizarAfiliaciones
+);
+
 // ── GET /afiliados/veolia-unidades — listado público de unidades de negocio ──
 router.get('/veolia-unidades', controller.getVeoliaUnidades);
 

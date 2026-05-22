@@ -307,6 +307,30 @@ module.exports = (sequelize, DataTypes) => {
     fechaNotificacionAprobacion: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+
+    // ── Legalización (gestión de comisiones) ──────────────────
+    legalizado: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: '1 = legalizado ante el sistema regional'
+    },
+    numeroPlanilla: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: 'numero_planilla',
+      comment: 'Número de planilla asignado por el asesor al legalizar'
+    },
+    fechaLegalizacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'fecha_legalizacion'
+    },
+    legalizacionAsesorId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      field: 'legalizacion_asesor_id'
     }
   }, {
     tableName: 'afiliados',
@@ -369,6 +393,12 @@ module.exports = (sequelize, DataTypes) => {
     Afiliado.hasOne(models.ReciboCaja, {
       as: 'recibo',
       foreignKey: 'afiliadoId'
+    });
+
+    // Usuario que realizó la legalización
+    Afiliado.belongsTo(models.Usuario, {
+      as: 'legalizador',
+      foreignKey: 'legalizacionAsesorId'
     });
   };
 

@@ -465,16 +465,94 @@ async function getMisDelDia(usuario, params = {}) {
     where.createdAt = { [Op.between]: [ini, fin] };
   }
 
+  const { Usuario } = require('../models');
   return Afiliado.findAll({
     where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Usuario, as: 'legalizador', attributes: ['id', 'nombre', 'apellido'] }
     ],
     order: [['createdAt', 'DESC']]
   });
+}
+
+/**
+ * Marca un lote de afiliaciones como legalizadas con un número de planilla.
+ * Solo el asesor dueño de las afiliaciones puede legalizarlas (o super_admin).
+ * Las que ya están legalizadas se ignoran silenciosamente.
+ *
+ * @param {number[]} afiliadoIds
+ * @param {object}   usuario         - Req.usuario con id y es_super_admin
+ * @param {string}   numeroPlanilla  - Número de planilla escrito por el asesor
+ * @returns {{ legalizados: number, ignorados: number }}
+ */
+async function legalizarAfiliaciones(afiliadoIds, usuario, numeroPlanilla) {
+  if (!numeroPlanilla || !String(numeroPlanilla).trim()) {
+    throw new AppError('El número de planilla es obligatorio', 400);
+  }
+  if (!Array.isArray(afiliadoIds) || afiliadoIds.length === 0) {
+    throw new AppError('Debe seleccionar al menos una afiliación', 400);
+  }
+
+  // Cargar las afiliaciones solicitadas
+  const afiliaciones = await Afiliado.findAll({
+    where: { id: { [Op.in]: afiliadoIds } },
+    attributes: ['id', 'asesorId', 'legalizado']
+  });
+
+  if (afiliaciones.length === 0) {
+    throw new AppError('No se encontraron afiliaciones con los IDs indicados', 404);
+  }
+
+  // Validar que todas pertenezcan al asesor (a menos que sea super_admin)
+  if (!usuario.es_super_admin) {
+    const ajena = afiliaciones.find(a => a.asesorId !== usuario.id);
+    if (ajena) {
+      throw new AppError('No tienes permisos para legalizar afiliaciones de otro asesor', 403);
+    }
+  }
+
+  // Separar las ya legalizadas de las pendientes
+  const pendientes = afiliaciones.filter(a => !a.legalizado);
+  const ignorados  = afiliaciones.length - pendientes.length;
+
+  if (pendientes.length === 0) {
+    return { legalizados: 0, ignorados };
+  }
+
+  const pendientesIds = pendientes.map(a => a.id);
+  const ahora = new Date();
+
+  const t = await sequelize.transaction();
+  try {
+    await Afiliado.update(
+      {
+        legalizado:            1,
+        numeroPlanilla:        String(numeroPlanilla).trim(),
+        fechaLegalizacion:     ahora,
+        legalizacionAsesorId:  usuario.id
+      },
+      { where: { id: { [Op.in]: pendientesIds } }, transaction: t }
+    );
+
+    // Trazabilidad: una entrada por cada afiliación
+    const entradas = pendientesIds.map(id => ({
+      afiliadoId:  id,
+      tipo:        'LEGALIZACION',
+      descripcion: `Planilla N° ${String(numeroPlanilla).trim()} — legalizado por ${usuario.nombre || 'asesor'} (id ${usuario.id})`,
+      usuarioId:   usuario.id
+    }));
+    await Trazabilidad.bulkCreate(entradas, { transaction: t });
+
+    await t.commit();
+    return { legalizados: pendientesIds.length, ignorados };
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 }
 
 /**
@@ -504,5 +582,6 @@ module.exports = {
   actualizarBeneficiariosConsulta,
   actualizarDatosContacto,
   getTrazabilidad,
-  getMisDelDia
+  getMisDelDia,
+  legalizarAfiliaciones
 };
