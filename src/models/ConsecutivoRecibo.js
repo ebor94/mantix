@@ -20,7 +20,9 @@ module.exports = (sequelize, DataTypes) => {
     },
     updatedAt: {
       type: DataTypes.DATE,
-      field: 'updated_at'
+      field: 'updated_at',
+      allowNull: false,
+      defaultValue: DataTypes.NOW
     }
   }, {
     tableName: 'consecutivos_recibo',
