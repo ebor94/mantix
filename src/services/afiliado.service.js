@@ -500,7 +500,7 @@ async function legalizarAfiliaciones(afiliadoIds, usuario, numeroPlanilla) {
   // Cargar las afiliaciones solicitadas
   const afiliaciones = await Afiliado.findAll({
     where: { id: { [Op.in]: afiliadoIds } },
-    attributes: ['id', 'asesorId', 'legalizado']
+    attributes: ['id', 'asesorId', 'legalizado', 'estadoRegistro', 'rechazado', 'rechazadoParcial']
   });
 
   if (afiliaciones.length === 0) {
@@ -513,6 +513,19 @@ async function legalizarAfiliaciones(afiliadoIds, usuario, numeroPlanilla) {
     if (ajena) {
       throw new AppError('No tienes permisos para legalizar afiliaciones de otro asesor', 403);
     }
+  }
+
+  // Solo se pueden legalizar afiliaciones APROBADAS:
+  //   estadoRegistro === 1 y sin rechazo (total o parcial)
+  const noAprobadas = afiliaciones.filter(a =>
+    a.estadoRegistro !== 1 || a.rechazado === 1 || a.rechazadoParcial === 1
+  );
+  if (noAprobadas.length > 0) {
+    const ids = noAprobadas.map(a => a.id).join(', ');
+    throw new AppError(
+      `Solo se pueden legalizar afiliaciones aprobadas. Las siguientes no cumplen: ${ids}`,
+      400
+    );
   }
 
   // Separar las ya legalizadas de las pendientes
