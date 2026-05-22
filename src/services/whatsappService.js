@@ -168,6 +168,15 @@ async function sendDocumento(celular, urlArchivo, fileName, caption = '') {
     return { success: false, error: 'urlArchivo vacío' };
   }
 
+  // 1msg necesita URL absoluta pública — una ruta relativa causará error silencioso
+  if (!urlArchivo.startsWith('http://') && !urlArchivo.startsWith('https://')) {
+    logger.warn(
+      `[WhatsApp] sendDocumento: URL no es absoluta ("${urlArchivo}") — ` +
+      'configura PUBLIC_API_URL en .env para que 1msg pueda descargar el archivo'
+    );
+    return { success: false, error: 'URL no es absoluta — configura PUBLIC_API_URL' };
+  }
+
   // 1msg.io /sendFile espera body con URL pública del archivo.
   // Verificar la doc oficial al desplegar — algunas instancias usan /sendDocument.
   const payload = {

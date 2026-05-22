@@ -5,9 +5,21 @@
 const path = require('path');
 const fs = require('fs');
 const { Op } = require('sequelize');
-const { Usuario } = require('../models');
+const { Usuario, Afiliado, ReciboCaja } = require('../models');
 const reciboService = require('../services/reciboCaja.service');
+const pdfService = require('../services/pdfService');
+const { sendDocumentoRecibo } = require('../services/whatsappService');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
+
+/**
+ * Construye la URL pública absoluta del PDF usando PUBLIC_API_URL.
+ */
+function buildPublicPdfUrl(pdfUrlRelativa) {
+  const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+  if (!base) return pdfUrlRelativa;
+  return `${base}${pdfUrlRelativa}`;
+}
 
 /**
  * GET /api/recibos/mios
@@ -167,6 +179,73 @@ async function getAsesoresConPrefijo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * POST /api/recibos/:id/reenviar-whatsapp
+ * Reenvía (o envía por primera vez) el PDF del recibo por WhatsApp.
+ * - Si el recibo ya tiene pdfUrl y el archivo existe, reutiliza el PDF.
+ * - Si no tiene PDF todavía, lo genera primero.
+ * Acceso: el propio asesor del recibo o roles con ver_cuadre / super_admin.
+ */
+async function reenviarWhatsapp(req, res, next) {
+  try {
+    const reciboId = parseInt(req.params.id, 10);
+    const recibo = await ReciboCaja.findByPk(reciboId, {
+      include: [{ model: Usuario, as: 'asesor' }]
+    });
+    if (!recibo) throw new AppError('Recibo no encontrado', 404);
+
+    // Control de acceso: el asesor dueño, cualquier rol con permiso en caja, o super_admin
+    const permisos = reciboService.permisosCaja(req.usuario);
+    const esAsesorDueno = recibo.asesorId === req.usuario.id;
+    const tieneCualquierPermisoCaja = permisos.efectivo || permisos.bancarios || permisos.all || permisos.superAdmin;
+    if (!esAsesorDueno && !tieneCualquierPermisoCaja) {
+      throw new AppError('Sin permisos para reenviar este recibo', 403);
+    }
+
+    const afiliado = await Afiliado.findByPk(recibo.afiliadoId);
+    if (!afiliado) throw new AppError('Afiliado del recibo no encontrado', 404);
+
+    // Generar PDF si aún no existe o fue eliminado
+    let pdfUrl = recibo.pdfUrl;
+    if (!pdfUrl || !fs.existsSync(path.join(__dirname, '../../', pdfUrl))) {
+      const pdfInfo = await pdfService.generarReciboCajaPDF(
+        recibo.toJSON(),
+        afiliado.toJSON(),
+        recibo.asesor ? recibo.asesor.toJSON() : null
+      );
+      pdfUrl = pdfInfo.url;
+      await recibo.update({ pdfUrl });
+    }
+
+    const publicUrl = buildPublicPdfUrl(pdfUrl);
+    logger.info(`[ReciboCaja] Reenvío WhatsApp recibo ${recibo.numeroRecibo} → ${publicUrl}`);
+
+    const result = await sendDocumentoRecibo(
+      afiliado.celular,
+      publicUrl,
+      recibo.numeroRecibo,
+      recibo.valor
+    );
+
+    if (result.success) {
+      await recibo.update({ whatsappEnviado: true, whatsappEnviadoAt: new Date() });
+      return res.json({
+        success: true,
+        message: `WhatsApp enviado a ${afiliado.celular}`,
+        numeroRecibo: recibo.numeroRecibo
+      });
+    }
+
+    // El envío falló pero no queremos lanzar 500 — retornamos 200 con bandera
+    return res.json({
+      success: false,
+      message: 'PDF generado pero falló el envío de WhatsApp',
+      error: result.error,
+      pdfUrl: publicUrl
+    });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   getMisRecibos,
   getCuadre,
@@ -175,5 +254,6 @@ module.exports = {
   getPosfechadosPendientes,
   getReciboById,
   descargarPDF,
-  getAsesoresConPrefijo
+  getAsesoresConPrefijo,
+  reenviarWhatsapp
 };

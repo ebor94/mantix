@@ -60,4 +60,8 @@ router.get('/:id', auth, controller.getReciboById);
 // ── Descarga del PDF (acceso validado dentro del servicio) ───────
 router.get('/:id/pdf', auth, controller.descargarPDF);
 
+// ── Reenvío manual del PDF por WhatsApp ──────────────────────────
+// Útil cuando el envío automático falló (p.ej. PUBLIC_API_URL no configurado)
+router.post('/:id/reenviar-whatsapp', auth, controller.reenviarWhatsapp);
+
 module.exports = router;
