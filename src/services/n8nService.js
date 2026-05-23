@@ -9,6 +9,9 @@ const path  = require('path');
 
 const N8N_URL      = process.env.N8N_WEBHOOK_URL || 'http://192.9.17.10:5678/webhook/procesar-documentos';
 const CALLBACK_URL = process.env.R44_CALLBACK_URL || `${process.env.API_BASE_URL || 'https://mantix-api.losolivoscucuta.com:8444/api'}/r44/extraccion/resultado`;
+const N8N_CERTIFICADO_URL =
+  process.env.N8N_CERTIFICADO_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/certificado-afiliacion';
 
 const MIME_MAP = {
   pdf:  'application/pdf',
@@ -62,4 +65,31 @@ async function notificarN8n(proveedorId, archivos) {
   }
 }
 
-module.exports = { notificarN8n };
+/**
+ * Notifica a n8n para que genere y envíe el certificado de afiliación
+ * cuando un afiliado es aprobado. Fire-and-forget: no bloquea el response.
+ *
+ * @param {number} afiliadoId   ID del afiliado aprobado
+ * @param {string} aprobadoPor  Nombre/identificador del aprobador
+ *                              (ej. "edwin ortega" o "user:5")
+ */
+async function notificarCertificadoAfiliacion(afiliadoId, aprobadoPor) {
+  try {
+    const res = await axios.post(
+      N8N_CERTIFICADO_URL,
+      { afiliadoId, aprobadoPor },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    return res.data;
+  } catch (err) {
+    // No relanzamos: la aprobación ya quedó persistida; el webhook es secundario
+    const msg = err.response?.data || err.message;
+    console.error(
+      `[n8nService] Error notificando certificado para afiliado ${afiliadoId}:`,
+      msg
+    );
+    return null;
+  }
+}
+
+module.exports = { notificarN8n, notificarCertificadoAfiliacion };

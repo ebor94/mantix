@@ -2,6 +2,7 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP, sendDocumentoRecibo } = require('../services/whatsappService');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
+const { notificarCertificadoAfiliacion } = require('../services/n8nService');
 const pdfService = require('../services/pdfService');
 const { Afiliado, ReciboCaja, Usuario } = require('../models');
 const { Op } = require('sequelize');
@@ -216,6 +217,16 @@ async function getRechazados(req, res, next) {
 async function aprobar(req, res, next) {
   try {
     const afiliado = await afiliadoService.aprobarAfiliado(req.params.id, req.usuario.id);
+
+    // Fire-and-forget: disparar webhook de n8n para generar/enviar el
+    // certificado de afiliación. No bloquea la respuesta al frontend
+    // y si falla solo queda en logs (la aprobación ya persistió).
+    const aprobadoPor = [req.usuario?.nombre, req.usuario?.apellido]
+      .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
+    notificarCertificadoAfiliacion(afiliado.id, aprobadoPor).catch((err) => {
+      logger.warn(`[Afiliado.aprobar] Webhook certificado falló: ${err?.message || err}`);
+    });
+
     res.json({ success: true, message: 'Registro aprobado exitosamente', data: afiliado });
   } catch (error) {
     next(error);
