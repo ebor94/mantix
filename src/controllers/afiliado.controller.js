@@ -1,6 +1,6 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
-const { sendAceptacion, sendOTP, sendDocumentoRecibo, sendImagenRecibo } = require('../services/whatsappService');
+const { sendAceptacion, sendOTP, sendImagenRecibo } = require('../services/whatsappService');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
 const { notificarCertificadoAfiliacion } = require('../services/n8nService');
 const pdfService = require('../services/pdfService');
@@ -35,45 +35,30 @@ async function emitirPdfYEnviarWhatsapp(afiliadoId) {
     const afiliado = await Afiliado.findByPk(afiliadoId);
     if (!afiliado) return;
 
-    const reciboJson  = recibo.toJSON();
+    const reciboJson   = recibo.toJSON();
     const afiliadoJson = afiliado.toJSON();
-    const asesorJson  = recibo.asesor ? recibo.asesor.toJSON() : null;
+    const asesorJson   = recibo.asesor ? recibo.asesor.toJSON() : null;
 
-    // 1) Generar PDF (queda disponible para descarga desde la UI)
+    // 1) Generar PDF — solo para que quede disponible en /mis-recibos
     const pdfInfo = await pdfService.generarReciboCajaPDF(reciboJson, afiliadoJson, asesorJson);
     await recibo.update({ pdfUrl: pdfInfo.url });
 
-    // 2) Generar la imagen-voucher PNG para envío por WhatsApp.
-    //    1msg necesita una URL pública accesible: usamos PUBLIC_API_URL.
-    let imgInfo = null;
-    try {
-      imgInfo = await pdfService.generarReciboCajaImagen(reciboJson, afiliadoJson, asesorJson);
-    } catch (imgErr) {
-      logger.warn(`[ReciboCaja] No se pudo generar imagen del voucher: ${imgErr.message}`);
-    }
+    // 2) Generar la imagen-voucher PNG. Se descarga en el servidor en
+    //    uploads/recibos/{numeroRecibo}.png y queda accesible via PUBLIC_API_URL.
+    const imgInfo = await pdfService.generarReciboCajaImagen(
+      reciboJson, afiliadoJson, asesorJson
+    );
 
-    // 3) Enviar imagen por plantilla texto_imagen_generico
-    let result = { success: false, error: 'sin imagen para enviar' };
-    if (imgInfo) {
-      const urlImagenPublica = buildPublicPdfUrl(imgInfo.url);
-      result = await sendImagenRecibo(
-        afiliado.celular,
-        urlImagenPublica,
-        recibo.numeroRecibo,
-        recibo.valor
-      );
-    }
-
-    // 4) Fallback: si la plantilla falla, intentar enviar el PDF como documento (base64)
-    if (!result.success) {
-      logger.warn(`[ReciboCaja] Plantilla imagen falló (${result.error}), intentando PDF como documento`);
-      result = await sendDocumentoRecibo(
-        afiliado.celular,
-        pdfInfo.filePath,
-        recibo.numeroRecibo,
-        recibo.valor
-      );
-    }
+    // 3) Enviar la imagen al cliente por WhatsApp usando la plantilla
+    //    texto_imagen_generico (header=image.link, body=texto). El payload
+    //    se construye exactamente como exige 1msg.
+    const urlImagenPublica = buildPublicPdfUrl(imgInfo.url);
+    const result = await sendImagenRecibo(
+      afiliado.celular,
+      urlImagenPublica,
+      recibo.numeroRecibo,
+      recibo.valor
+    );
 
     if (result.success) {
       await recibo.update({

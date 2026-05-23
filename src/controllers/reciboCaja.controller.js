@@ -8,7 +8,7 @@ const { Op } = require('sequelize');
 const { Usuario, Afiliado, ReciboCaja } = require('../models');
 const reciboService = require('../services/reciboCaja.service');
 const pdfService = require('../services/pdfService');
-const { sendDocumentoRecibo, sendImagenRecibo } = require('../services/whatsappService');
+const { sendImagenRecibo } = require('../services/whatsappService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
@@ -209,49 +209,32 @@ async function reenviarWhatsapp(req, res, next) {
     const afiliadoJson = afiliado.toJSON();
     const asesorJson   = recibo.asesor ? recibo.asesor.toJSON() : null;
 
-    // Determinar ruta absoluta del PDF (generar si no existe o fue eliminado)
+    // Asegurar PDF existente (solo queda para descarga desde /mis-recibos)
     let pdfUrl = recibo.pdfUrl;
-    let pdfFilePath = pdfUrl ? path.join(__dirname, '../../', pdfUrl) : null;
-
+    const pdfFilePath = pdfUrl ? path.join(__dirname, '../../', pdfUrl) : null;
     if (!pdfFilePath || !fs.existsSync(pdfFilePath)) {
       const pdfInfo = await pdfService.generarReciboCajaPDF(reciboJson, afiliadoJson, asesorJson);
       pdfUrl = pdfInfo.url;
-      pdfFilePath = pdfInfo.filePath;
       await recibo.update({ pdfUrl });
     }
 
-    // Generar imagen-voucher (siempre se regenera al reenviar para reflejar datos actuales)
-    let imgUrlPublica = null;
-    try {
-      const imgInfo = await pdfService.generarReciboCajaImagen(reciboJson, afiliadoJson, asesorJson);
-      imgUrlPublica = buildPublicPdfUrl(imgInfo.url);
-    } catch (imgErr) {
-      logger.warn(`[ReciboCaja] No se pudo generar imagen del voucher: ${imgErr.message}`);
-    }
+    // Generar imagen-voucher (se regenera siempre para reflejar datos actuales).
+    // Se descarga en el servidor (uploads/recibos/{numero}.png) y se envía
+    // como link en image.link de la plantilla texto_imagen_generico.
+    const imgInfo = await pdfService.generarReciboCajaImagen(
+      reciboJson, afiliadoJson, asesorJson
+    );
+    const urlImagenPublica = buildPublicPdfUrl(imgInfo.url);
 
-    logger.info(`[ReciboCaja] Reenvío WhatsApp recibo ${recibo.numeroRecibo} — imagen=${!!imgUrlPublica}`);
+    logger.info(`[ReciboCaja] Reenvío WhatsApp recibo ${recibo.numeroRecibo} → ${urlImagenPublica}`);
 
-    // 1) Intentar enviar por plantilla con imagen
-    let result = { success: false, error: 'sin imagen para enviar' };
-    if (imgUrlPublica) {
-      result = await sendImagenRecibo(
-        afiliado.celular,
-        imgUrlPublica,
-        recibo.numeroRecibo,
-        recibo.valor
-      );
-    }
-
-    // 2) Fallback: enviar PDF como documento (base64) si la plantilla falla
-    if (!result.success) {
-      logger.warn(`[ReciboCaja] Plantilla imagen falló (${result.error}), intentando PDF como documento`);
-      result = await sendDocumentoRecibo(
-        afiliado.celular,
-        pdfFilePath,
-        recibo.numeroRecibo,
-        recibo.valor
-      );
-    }
+    // Enviar la imagen al cliente usando la plantilla 1msg (sin fallback).
+    const result = await sendImagenRecibo(
+      afiliado.celular,
+      urlImagenPublica,
+      recibo.numeroRecibo,
+      recibo.valor
+    );
 
     if (result.success) {
       await recibo.update({ whatsappEnviado: true, whatsappEnviadoAt: new Date() });
