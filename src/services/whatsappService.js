@@ -228,4 +228,87 @@ async function sendDocumentoRecibo(celular, localFilePath, numeroRecibo, valor) 
   return sendDocumento(celular, body, `${numeroRecibo}.pdf`, caption);
 }
 
-module.exports = { sendOTP, sendAceptacion, sendDocumento, sendDocumentoRecibo };
+/**
+ * Envía una imagen al cliente usando la plantilla aprobada
+ * "texto_imagen_generico" de 1msg. Esta plantilla tiene:
+ *   - header  → imagen (link público)
+ *   - body    → un parámetro de texto
+ *
+ * Útil para enviar vouchers/comprobantes generados como imagen, evitando
+ * los problemas que tiene /sendFile cuando 1msg no puede descargar el archivo.
+ *
+ * @param {string} celular         Número del cliente (se formatea)
+ * @param {string} urlPublicaImagen URL pública absoluta accesible desde internet
+ * @param {string} textoBody       Texto que reemplaza el parámetro del cuerpo
+ * @returns {Promise<{success:boolean, data?:any, error?:any}>}
+ */
+async function sendTemplateImagenTexto(celular, urlPublicaImagen, textoBody) {
+  const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
+  const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
+  const numero   = formatearTelefono(celular);
+
+  if (!urlPublicaImagen) {
+    logger.warn('[WhatsApp] sendTemplateImagenTexto: url vacía — no se envía');
+    return { success: false, error: 'url vacía' };
+  }
+
+  const payload = {
+    token,
+    namespace: NAMESPACE,
+    template: 'texto_imagen_generico',
+    language: { policy: 'deterministic', code: 'es' },
+    params: [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: { link: urlPublicaImagen }
+          }
+        ]
+      },
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: textoBody || '' }
+        ]
+      }
+    ],
+    phone: numero
+  };
+
+  try {
+    const response = await axios.post(
+      `https://api.1msg.io/${instance}/sendTemplate`,
+      payload,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+    );
+    logger.info(`[WhatsApp] Plantilla texto_imagen_generico enviada a ${numero} | ID: ${response.data?.id || 'ok'}`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const msg = error.response?.data?.message || error.response?.data || error.message;
+    logger.warn(`[WhatsApp] Error enviando plantilla imagen a ${numero}: ${JSON.stringify(msg)}`);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Helper: envía la imagen-voucher del recibo de caja por la plantilla
+ * texto_imagen_generico. Construye un cuerpo amigable con el valor recibido.
+ */
+async function sendImagenRecibo(celular, urlPublicaImagen, numeroRecibo, valor) {
+  const valorFormateado = Number(valor || 0).toLocaleString('es-CO');
+  const body =
+    `Recibo de caja ${numeroRecibo} por $${valorFormateado}. ` +
+    `Gracias por confiar en Los Olivos / Serfunorte.`;
+  return sendTemplateImagenTexto(celular, urlPublicaImagen, body);
+}
+
+module.exports = {
+  sendOTP,
+  sendAceptacion,
+  sendDocumento,
+  sendDocumentoRecibo,
+  sendTemplateImagenTexto,
+  sendImagenRecibo
+};

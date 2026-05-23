@@ -4,6 +4,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const empresaConfig = require('../config/empresa');
 // Paleta de colores de Olivos
 const COLORES = {
@@ -958,6 +959,167 @@ doc.fontSize(20)
         reject(err);
       }
     });
+  }
+
+  /**
+   * Escapa caracteres especiales para uso seguro dentro de elementos <text> en SVG.
+   * @param {*} v
+   * @returns {string}
+   */
+  escapeXml(v) {
+    if (v == null) return '';
+    return String(v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  /**
+   * Genera una imagen PNG con el diseño del recibo de caja en formato voucher
+   * compacto pensado para WhatsApp. Se renderiza desde una plantilla SVG
+   * embebida (con logo en base64) y se convierte a PNG usando sharp.
+   *
+   * Tamaño de salida: 800x1000 px.
+   * Ubicación: uploads/recibos/{numeroRecibo}.png
+   *
+   * @param {object} recibo  Recibo de caja (numeroRecibo, valor, formaPago, banco, referencia, fechaEmision)
+   * @param {object} afiliado Afiliado (primerNombre, segundoNombre, primerApellido, segundoApellido, tipoDocumento, numeroDocumento, celular, email)
+   * @param {object} asesor  { nombre, apellido }
+   * @returns {Promise<{ fileName:string, filePath:string, url:string }>}
+   */
+  async generarReciboCajaImagen(recibo, afiliado, asesor) {
+    // Asegurar carpeta de salida
+    const dir = path.join(__dirname, '../../uploads/recibos');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const fileName = `${recibo.numeroRecibo}.png`;
+    const filePath = path.join(dir, fileName);
+
+    // Logo embebido (opcional): si existe lo metemos como data URI
+    let logoTag = '';
+    const logoPath = path.join(__dirname, '../../assets/logoConv.png');
+    try {
+      if (fs.existsSync(logoPath)) {
+        const logoB64 = fs.readFileSync(logoPath).toString('base64');
+        // 200x90 con preserveAspectRatio para no deformar
+        logoTag = `<image x="40" y="30" width="200" height="90"
+          preserveAspectRatio="xMinYMid meet"
+          href="data:image/png;base64,${logoB64}"/>`;
+      }
+    } catch (_) { /* logo opcional */ }
+
+    // ── Datos calculados ────────────────────────────────────────────
+    const nombre = [
+      afiliado.primerNombre, afiliado.segundoNombre,
+      afiliado.primerApellido, afiliado.segundoApellido
+    ].filter(Boolean).join(' ');
+
+    const formaPagoLabel = {
+      EFECTIVO:           'Efectivo',
+      TRANSFERENCIA:      'Transferencia bancaria',
+      CORRESPONSAL:       'Corresponsal bancario',
+      POSFECHADO_COBRADO: 'Posfechado (cobrado)'
+    }[recibo.formaPago] || (recibo.formaPago || 'N/A');
+
+    const fechaEmision = this.formatearFecha(recibo.fechaEmision);
+    const valorFmt     = this.formatearNumero(recibo.valor);
+    const asesorTxt    = `${asesor?.nombre || ''} ${asesor?.apellido || ''}`.trim() || 'N/A';
+    const docTxt       = `${afiliado.tipoDocumento || 'CC'}: ${afiliado.numeroDocumento || 'N/A'}`;
+    const celTxt       = `Cel: ${afiliado.celular || 'N/A'}`;
+    const banco        = recibo.banco || 'N/A';
+    const referencia   = recibo.referencia || 'N/A';
+
+    const esc = this.escapeXml.bind(this);
+
+    // ── Plantilla SVG ─────────────────────────────────────────────
+    // Paleta: verde corporativo + grises sobrios. Usamos sans-serif
+    // (DejaVu Sans en Linux es el fallback estándar de librsvg).
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .ff { font-family: 'DejaVu Sans', 'Liberation Sans', 'Arial', sans-serif; }
+    .label  { fill: #6B7280; font-size: 13px; letter-spacing: 0.5px; }
+    .value  { fill: #111827; font-size: 17px; font-weight: 700; }
+    .small  { fill: #4B5563; font-size: 13px; }
+    .title  { fill: #FFFFFF; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+    .subtitle { fill: #D1FAE5; font-size: 14px; }
+    .totalLabel { fill: #A7F3D0; font-size: 16px; letter-spacing: 1px; }
+    .totalValue { fill: #FFFFFF; font-size: 46px; font-weight: 800; }
+    .footer { fill: #6B7280; font-size: 11px; }
+    .brand  { fill: #9CA3AF; font-size: 10px; }
+  </style>
+
+  <!-- Fondo -->
+  <rect width="800" height="1000" fill="#FFFFFF"/>
+
+  <!-- Banda superior corporativa -->
+  <rect width="800" height="150" fill="#0F766E"/>
+  ${logoTag}
+  <text x="760" y="60"  class="ff title"    text-anchor="end">RECIBO DE CAJA</text>
+  <text x="760" y="90"  class="ff subtitle" text-anchor="end">No. ${esc(recibo.numeroRecibo)}</text>
+  <text x="760" y="115" class="ff subtitle" text-anchor="end">${esc(fechaEmision)}</text>
+
+  <!-- Datos del cliente -->
+  <text x="40"  y="200" class="ff label">RECIBIDO DE</text>
+  <text x="40"  y="230" class="ff value">${esc(nombre)}</text>
+  <text x="40"  y="255" class="ff small">${esc(docTxt)} · ${esc(celTxt)}</text>
+
+  <line x1="40" y1="290" x2="760" y2="290" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Detalle del pago (caja) -->
+  <text x="40"  y="335" class="ff value" style="font-size:19px">DETALLE DEL PAGO</text>
+
+  <rect x="40"  y="355" width="720" height="240" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1" rx="10"/>
+
+  <text x="65"  y="395" class="ff label">FORMA DE PAGO</text>
+  <text x="65"  y="425" class="ff value">${esc(formaPagoLabel)}</text>
+
+  <text x="65"  y="475" class="ff label">BANCO / ENTIDAD</text>
+  <text x="65"  y="505" class="ff value">${esc(banco)}</text>
+
+  <text x="65"  y="555" class="ff label">ASESOR RESPONSABLE</text>
+  <text x="65"  y="585" class="ff value">${esc(asesorTxt)}</text>
+
+  <text x="420" y="395" class="ff label">REFERENCIA / SOPORTE</text>
+  <text x="420" y="425" class="ff value">${esc(referencia)}</text>
+
+  <text x="420" y="475" class="ff label">ESTADO</text>
+  <text x="420" y="505" class="ff value">Recibido · pendiente de cuadre</text>
+
+  <!-- Total destacado -->
+  <rect x="40" y="635" width="720" height="120" fill="#0F766E" rx="10"/>
+  <text x="65" y="685" class="ff totalLabel">TOTAL RECIBIDO</text>
+  <text x="740" y="720" class="ff totalValue" text-anchor="end">$ ${esc(valorFmt)}</text>
+
+  <!-- Pie -->
+  <text x="400" y="820" class="ff footer" text-anchor="middle">
+    Este documento es la representación válida del recaudo registrado en el sistema.
+  </text>
+  <text x="400" y="838" class="ff footer" text-anchor="middle">
+    El cuadre definitivo está sujeto a la conciliación de auditoría interna.
+  </text>
+
+  <line x1="40" y1="900" x2="760" y2="900" stroke="#E5E7EB" stroke-width="1"/>
+
+  <text x="400" y="935" class="ff brand" text-anchor="middle">
+    SERFUNORTE LOS OLIVOS · NIT: 800.254.697-5 · Tel: (607) 578 4777
+  </text>
+  <text x="400" y="955" class="ff brand" text-anchor="middle">
+    cucuta.losolivos.co
+  </text>
+</svg>`;
+
+    // Render SVG → PNG con sharp
+    await sharp(Buffer.from(svg, 'utf-8'))
+      .png({ quality: 95, compressionLevel: 6 })
+      .toFile(filePath);
+
+    return {
+      fileName,
+      filePath,
+      url: `/uploads/recibos/${fileName}`
+    };
   }
 }
 module.exports = new PDFService();
