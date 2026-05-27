@@ -37,6 +37,7 @@ const certificadoRoutes = require('./certificado.routes');
 const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes360
 const r44Routes    = require('./r44Routes');              // ← Módulo R-44 Proveedores Serfunorte
 const reciboCajaRoutes = require('./reciboCaja.routes');  // ← Módulo de recibos de caja y cuadre
+const svRoutes     = require('../sv/routes');             // ← Módulo SerVentas CRM
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -74,5 +75,6 @@ router.use('/h360',   h360Routes);   // ← Módulo Homenajes360
 router.use('/cym',    require('./cym.routes')); // ← Módulo CYM Mantenimiento Predios
 router.use('/r44',    r44Routes);    // ← Módulo R-44 Portal Proveedores Serfunorte
 router.use('/recibos', reciboCajaRoutes); // ← Recibos de caja y cuadre
+router.use('/sv',     svRoutes);     // ← Módulo SerVentas CRM (Serfunorte)
 
 module.exports = router;

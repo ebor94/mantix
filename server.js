@@ -20,6 +20,15 @@ sequelize.authenticate()
     // Iniciar tareas programadas
     cronService.start();
     logger.info('✅ Tareas programadas iniciadas');
+
+    // SerVentas: cron snapshot diario (placeholder Fase 0)
+    require('./src/sv/jobs/snapshotDiario.job').start();
+
+    // SerVentas: cron tracking GPS (Fase 7 - cierre nocturno + purga 90d)
+    require('./src/sv/jobs/tracking.job').start();
+
+    // SerVentas: cron renovaciones B2B (Fase 8 - crear renovaciones próximas + marcar vencidos)
+    require('./src/sv/jobs/renovaciones.job').start();
     
     // Iniciar servidor
     app.listen(PORT, () => {
