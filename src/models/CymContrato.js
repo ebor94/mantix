@@ -11,7 +11,9 @@ module.exports = (sequelize, DataTypes) => {
     fecha_contratacion:   { type: DataTypes.DATEONLY, allowNull: false },
     fecha_vencimiento:    { type: DataTypes.DATEONLY, allowNull: false },
     estado:               { type: DataTypes.ENUM('activo','vencido','cerrado','cancelado'), defaultValue: 'activo' },
-    motivo_cancelacion:   { type: DataTypes.STRING(500) }
+    motivo_cancelacion:   { type: DataTypes.STRING(500) },
+    estado_aprobacion:    { type: DataTypes.ENUM('pendiente','aprobado'), defaultValue: 'aprobado' },
+    creado_por_id:        { type: DataTypes.INTEGER, allowNull: true }
   }, {
     tableName: 'cym_contratos',
     timestamps: true,
@@ -23,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
     CymContrato.belongsTo(models.CymPredio, { foreignKey: 'predio_id', as: 'predio' });
     CymContrato.hasMany(models.CymMantenimiento, { foreignKey: 'contrato_id', as: 'mantenimientos' });
     CymContrato.hasMany(models.CymCartera, { foreignKey: 'contrato_id', as: 'gestiones_cartera' });
+    CymContrato.belongsTo(models.Usuario,  { foreignKey: 'creado_por_id', as: 'creadoPor' });
   };
 
   return CymContrato;

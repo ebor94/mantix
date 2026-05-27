@@ -50,10 +50,14 @@ const cymContratoController = {
 
       const fecha_vencimiento = calcularVencimiento(fecha_contratacion, vigencia);
 
+      const esComercial = req.usuario.rol?.nombre === 'comercial_cym';
+
       const contrato = await CymContrato.create({
         predio_id, contratante_cedula, contratante_nombre, contratante_telefono,
         contratante_correo, contratante_dir, vigencia, fecha_contratacion,
-        fecha_vencimiento, estado: 'activo'
+        fecha_vencimiento, estado: 'activo',
+        estado_aprobacion: esComercial ? 'pendiente' : 'aprobado',
+        creado_por_id:     esComercial ? req.usuario.id : null
       });
 
       // Reactivar predio si estaba inactivo
@@ -70,7 +74,45 @@ const cymContratoController = {
         ip_address: req.ip
       });
 
-      res.status(201).json({ success: true, data: contrato, message: 'Contrato creado correctamente' });
+      const message = esComercial
+        ? 'Contrato creado (pendiente de aprobación por el coordinador)'
+        : 'Contrato creado correctamente';
+      res.status(201).json({ success: true, data: contrato, message });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async aprobar(req, res, next) {
+    try {
+      const contrato = await CymContrato.findByPk(req.params.id);
+      if (!contrato) throw new AppError('Contrato no encontrado', 404);
+      if (contrato.estado_aprobacion !== 'pendiente') throw new AppError('El contrato no está pendiente de aprobación', 400);
+
+      const { contratante_cedula, contratante_nombre, contratante_telefono,
+              contratante_correo, contratante_dir, vigencia, fecha_contratacion } = req.body;
+
+      parseFecha(fecha_contratacion, 'fecha_contratacion');
+      const fecha_vencimiento = calcularVencimiento(fecha_contratacion, vigencia);
+
+      const antes = contrato.toJSON();
+      await contrato.update({
+        contratante_cedula, contratante_nombre, contratante_telefono,
+        contratante_correo, contratante_dir, vigencia, fecha_contratacion,
+        fecha_vencimiento, estado_aprobacion: 'aprobado'
+      });
+
+      await AuditLog.create({
+        usuario_id: req.usuario.id,
+        accion: 'APROBAR',
+        tabla: 'cym_contratos',
+        registro_id: contrato.id,
+        datos_anteriores: JSON.stringify(antes),
+        datos_nuevos: JSON.stringify(contrato),
+        ip_address: req.ip
+      });
+
+      res.json({ success: true, data: contrato, message: 'Contrato aprobado correctamente' });
     } catch (err) {
       next(err);
     }

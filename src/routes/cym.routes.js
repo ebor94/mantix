@@ -13,6 +13,7 @@ const cymMantenimientoController= require('../controllers/cymMantenimientoContro
 const cymCarteraController      = require('../controllers/cymCarteraController');
 const cymReporteController      = require('../controllers/cymReporteController');
 const cymParejaController       = require('../controllers/cymParejaController');
+const cymAprobacionesController = require('../controllers/cymAprobacionesController');
 
 // Upload de evidencias fotográficas en uploads/cym/
 const uploadDir = path.join(process.env.UPLOAD_PATH || './uploads', 'cym');
@@ -38,30 +39,32 @@ const uploadCym = multer({
 });
 
 // Todos los roles CYM que acceden al sistema
-const ROLES_CYM = ['coordinador_cym','supervisor_cym','auxiliar_cartera_cym'];
-const COORD     = ['coordinador_cym'];
+const ROLES_CYM       = ['coordinador_cym','supervisor_cym','auxiliar_cartera_cym'];
+const COORD           = ['coordinador_cym'];
+const COMERCIAL       = ['comercial_cym'];
+const COORD_COMERCIAL = ['coordinador_cym','comercial_cym'];
 
 // ----------------------------------------------------------------
 // PREDIOS
 // ----------------------------------------------------------------
 router.get('/predios',
-  auth, authorize(...ROLES_CYM),
+  auth, authorize(...ROLES_CYM, ...COMERCIAL),
   cymPredioController.getAll
 );
 router.get('/predios/:id',
-  auth, authorize(...ROLES_CYM),
+  auth, authorize(...ROLES_CYM, ...COMERCIAL),
   cymPredioController.getById
 );
 router.get('/predios/:id/timeline',
-  auth, authorize(...ROLES_CYM),
+  auth, authorize(...ROLES_CYM, ...COMERCIAL),
   cymPredioController.getTimeline
 );
 router.get('/predios/:id/historico-sq',
-  auth, authorize(...ROLES_CYM),
+  auth, authorize(...ROLES_CYM, ...COMERCIAL),
   cymPredioController.getHistoricoSq
 );
 router.post('/predios',
-  auth, authorize(...COORD),
+  auth, authorize(...COORD_COMERCIAL),
   cymPredioController.create
 );
 router.put('/predios/:id',
@@ -72,16 +75,20 @@ router.put('/predios/:id/inactivar',
   auth, authorize(...COORD),
   cymPredioController.inactivar
 );
+router.put('/predios/:id/aprobar',
+  auth, authorize(...COORD),
+  cymPredioController.aprobar
+);
 
 // ----------------------------------------------------------------
 // CONTRATOS
 // ----------------------------------------------------------------
 router.get('/contratos/predio/:predioId',
-  auth, authorize(...ROLES_CYM),
+  auth, authorize(...ROLES_CYM, ...COMERCIAL),
   cymContratoController.getByPredio
 );
 router.post('/contratos',
-  auth, authorize(...COORD),
+  auth, authorize(...COORD_COMERCIAL),
   cymContratoController.crear
 );
 router.put('/contratos/:id',
@@ -91,6 +98,10 @@ router.put('/contratos/:id',
 router.put('/contratos/:id/cancelar',
   auth, authorize(...COORD),
   cymContratoController.cancelar
+);
+router.put('/contratos/:id/aprobar',
+  auth, authorize(...COORD),
+  cymContratoController.aprobar
 );
 
 // ----------------------------------------------------------------
@@ -204,6 +215,14 @@ router.get('/reportes/dashboard',
 router.get('/reportes/timeline/:predioId',
   auth, authorize(...ROLES_CYM),
   cymReporteController.timeline
+);
+
+// ----------------------------------------------------------------
+// APROBACIONES (pendientes de comercial_cym)
+// ----------------------------------------------------------------
+router.get('/aprobaciones',
+  auth, authorize(...COORD),
+  cymAprobacionesController.getAll
 );
 
 module.exports = router;

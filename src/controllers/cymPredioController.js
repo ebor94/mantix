@@ -184,12 +184,16 @@ const cymPredioController = {
               sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
               sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum } = req.body;
 
+      const esComercial = req.usuario.rol?.nombre === 'comercial_cym';
+
       const predio = await CymPredio.create({
         sector, numero_lote, acomodacion,
         sq_cedula,  sq_nombre,  sq_fecha_nac:  d(sq_fecha_nac),  sq_fecha_fall:  d(sq_fecha_fall),  sq_fecha_inhum:  d(sq_fecha_inhum),
         sq2_cedula, sq2_nombre, sq2_fecha_nac: d(sq2_fecha_nac), sq2_fecha_fall: d(sq2_fecha_fall), sq2_fecha_inhum: d(sq2_fecha_inhum),
         sq3_cedula, sq3_nombre, sq3_fecha_nac: d(sq3_fecha_nac), sq3_fecha_fall: d(sq3_fecha_fall), sq3_fecha_inhum: d(sq3_fecha_inhum),
-        activo_mant: true
+        activo_mant: true,
+        estado_registro: esComercial ? 'pendiente' : 'activo',
+        creado_por_id:   esComercial ? req.usuario.id : null
       });
 
       await AuditLog.create({
@@ -201,11 +205,56 @@ const cymPredioController = {
         ip_address: req.ip
       });
 
-      res.status(201).json({ success: true, data: predio, message: 'Predio creado correctamente' });
+      const message = esComercial
+        ? 'Predio creado (pendiente de aprobación por el coordinador)'
+        : 'Predio creado correctamente';
+      res.status(201).json({ success: true, data: predio, message });
     } catch (err) {
       if (err.name === 'SequelizeUniqueConstraintError') {
         return next(new AppError('Ya existe un predio con ese sector y número de lote', 409));
       }
+      next(err);
+    }
+  },
+
+  async aprobar(req, res, next) {
+    try {
+      const predio = await CymPredio.findByPk(req.params.id);
+      if (!predio) throw new AppError('Predio no encontrado', 404);
+      if (predio.estado_registro !== 'pendiente') throw new AppError('El predio no está pendiente de aprobación', 400);
+
+      const { sector, numero_lote, acomodacion,
+              sq_cedula, sq_nombre, sq_fecha_nac, sq_fecha_fall, sq_fecha_inhum,
+              sq2_cedula, sq2_nombre, sq2_fecha_nac, sq2_fecha_fall, sq2_fecha_inhum,
+              sq3_cedula, sq3_nombre, sq3_fecha_nac, sq3_fecha_fall, sq3_fecha_inhum } = req.body;
+
+      const antes = predio.toJSON();
+      const cambiosSq = detectarCambiosSq(antes, req.body, predio.id, req.usuario.id);
+
+      await predio.update({
+        sector, numero_lote, acomodacion,
+        sq_cedula,  sq_nombre,  sq_fecha_nac:  d(sq_fecha_nac),  sq_fecha_fall:  d(sq_fecha_fall),  sq_fecha_inhum:  d(sq_fecha_inhum),
+        sq2_cedula, sq2_nombre, sq2_fecha_nac: d(sq2_fecha_nac), sq2_fecha_fall: d(sq2_fecha_fall), sq2_fecha_inhum: d(sq2_fecha_inhum),
+        sq3_cedula, sq3_nombre, sq3_fecha_nac: d(sq3_fecha_nac), sq3_fecha_fall: d(sq3_fecha_fall), sq3_fecha_inhum: d(sq3_fecha_inhum),
+        estado_registro: 'activo'
+      });
+
+      if (cambiosSq.length > 0) {
+        await CymHistoricoSq.bulkCreate(cambiosSq);
+      }
+
+      await AuditLog.create({
+        usuario_id: req.usuario.id,
+        accion: 'APROBAR',
+        tabla: 'cym_predios',
+        registro_id: predio.id,
+        datos_anteriores: JSON.stringify(antes),
+        datos_nuevos: JSON.stringify(predio),
+        ip_address: req.ip
+      });
+
+      res.json({ success: true, data: predio, message: 'Predio aprobado correctamente' });
+    } catch (err) {
       next(err);
     }
   },

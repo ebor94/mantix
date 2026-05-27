@@ -22,7 +22,9 @@ module.exports = (sequelize, DataTypes) => {
     sq3_fecha_fall:{ type: DataTypes.DATEONLY },
     sq3_fecha_inhum:{ type: DataTypes.DATEONLY },
     activo_mant:          { type: DataTypes.BOOLEAN, defaultValue: true },
-    motivo_inactivacion:  { type: DataTypes.STRING(500) }
+    motivo_inactivacion:  { type: DataTypes.STRING(500) },
+    estado_registro:      { type: DataTypes.ENUM('pendiente','activo'), defaultValue: 'activo' },
+    creado_por_id:        { type: DataTypes.INTEGER, allowNull: true }
   }, {
     tableName: 'cym_predios',
     timestamps: true,
@@ -35,6 +37,7 @@ module.exports = (sequelize, DataTypes) => {
     CymPredio.hasOne(models.CymAsignacion,    { foreignKey: 'predio_id', as: 'asignacion' });
     CymPredio.hasMany(models.CymMantenimiento,{ foreignKey: 'predio_id', as: 'mantenimientos' });
     CymPredio.hasMany(models.CymHistoricoSq,  { foreignKey: 'predio_id', as: 'historico_sq' });
+    CymPredio.belongsTo(models.Usuario,       { foreignKey: 'creado_por_id', as: 'creadoPor' });
   };
 
   return CymPredio;
