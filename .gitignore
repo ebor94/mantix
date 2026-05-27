@@ -5,7 +5,7 @@ tests/
 logs/
 *.log
 dist/
-coverage/  
+coverage/
 .vscode/
 .DS_Store
 npmrc
@@ -17,3 +17,6 @@ npmrc
 uploads/
 /logs/
 *.sql
+# Excepciones: migraciones versionadas
+!src/sv/migrations/*.sql
+!src/scripts/*.sql
