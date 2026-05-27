@@ -1,0 +1,39 @@
+// sv/models/Empresa.js — sv_crm_empresas
+module.exports = (sequelize, DataTypes) => {
+  const Empresa = sequelize.define('SvEmpresa', {
+    empresa_id:                { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    empresa_nit:               { type: DataTypes.STRING(20), allowNull: false },
+    empresa_nit_norm:          { type: DataTypes.STRING(20), allowNull: false, unique: true },
+    empresa_dv:                { type: DataTypes.STRING(2) },
+    empresa_razon_social:      { type: DataTypes.STRING(200), allowNull: false },
+    empresa_nombre_comercial:  { type: DataTypes.STRING(200) },
+    empresa_sector:            { type: DataTypes.STRING(80) },
+    empresa_num_empleados:     { type: DataTypes.INTEGER },
+    empresa_telefono:          { type: DataTypes.STRING(20) },
+    empresa_email_corporativo: { type: DataTypes.STRING(150) },
+    empresa_sitio_web:         { type: DataTypes.STRING(200) },
+    empresa_direccion:         { type: DataTypes.STRING(250) },
+    empresa_ciudad:            { type: DataTypes.STRING(80), defaultValue: 'Cucuta' },
+    empresa_nota:              { type: DataTypes.TEXT },
+    empresa_activa:            { type: DataTypes.TINYINT, defaultValue: 1 }
+  }, {
+    tableName: 'sv_crm_empresas',
+    freezeTableName: true,
+    timestamps: true,
+    createdAt: 'empresa_created_at',
+    updatedAt: 'empresa_updated_at'
+  });
+
+  Empresa.associate = (models) => {
+    Empresa.hasMany(models.SvProspecto, { as: 'prospectos', foreignKey: 'prosp_empresa_id' });
+    Empresa.hasMany(models.SvPropuesta, { as: 'propuestas', foreignKey: 'prop_empresa_id' });
+    // Fase 6: Fidelización
+    if (models.SvContactoFideliz) {
+      Empresa.hasMany(models.SvContactoFideliz, { as: 'contactosFideliz', foreignKey: 'cf_empresa_id' });
+    }
+    if (models.SvEnvio) {
+      Empresa.hasMany(models.SvEnvio, { as: 'envios', foreignKey: 'env_empresa_id' });
+    }
+  };
+  return Empresa;
+};
