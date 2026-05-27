@@ -1,0 +1,19 @@
+# Normalización de fin de línea — repositorio canónico en LF
+# Evita ruido CRLF↔LF al colaborar entre macOS/Linux/Windows
+* text=auto eol=lf
+
+# Binarios — nunca normalizar
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.webp   binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.tar    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
