@@ -490,6 +490,45 @@ async function legalizarAfiliaciones(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * POST /api/afiliados/liquidacion-pdf
+ * Genera y descarga el PDF de liquidación de las afiliaciones seleccionadas.
+ * Body: { afiliadoIds: number[] }
+ * Permiso: afiliaciones.ver_propias (el servicio filtra por asesorId)
+ */
+async function liquidacionPdf(req, res, next) {
+  try {
+    const { afiliadoIds } = req.body || {};
+
+    // Calcula agregados + valida ownership y estado APROBADO
+    const { afiliaciones, totales } = await afiliadoService.calcularLiquidacion(
+      afiliadoIds, req.usuario
+    );
+
+    // Cargar prefijo del asesor para el nombre del archivo
+    const asesor = await Usuario.findByPk(req.usuario.id, {
+      attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo']
+    });
+    const prefijo = asesor?.prefijo_recibo || 'GEN';
+
+    // Nombre con timestamp local (YYYYMMDD-HHmm)
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const fileName = `liquidacion-${prefijo}-${stamp}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    await pdfService.generarLiquidacionPDF(
+      afiliaciones,
+      totales,
+      asesor ? asesor.toJSON() : { nombre: '', apellido: '', prefijo_recibo: prefijo },
+      res
+    );
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   create,
   createPublico,
@@ -511,5 +550,6 @@ module.exports = {
   getTrazabilidad,
   getVeoliaUnidades,
   getMisDelDia,
-  legalizarAfiliaciones
+  legalizarAfiliaciones,
+  liquidacionPdf
 };

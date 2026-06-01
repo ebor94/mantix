@@ -91,6 +91,14 @@ router.post('/legalizar',
   controller.legalizarAfiliaciones
 );
 
+// ── POST /afiliados/liquidacion-pdf — descarga PDF con totales agregados ─
+// Solo lectura: el servicio valida ownership + estado APROBADO
+router.post('/liquidacion-pdf',
+  auth,
+  requirePermiso('afiliaciones', 'ver_propias'),
+  controller.liquidacionPdf
+);
+
 // ── GET /afiliados/veolia-unidades — listado público de unidades de negocio ──
 router.get('/veolia-unidades', controller.getVeoliaUnidades);
 

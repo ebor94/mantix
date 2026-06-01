@@ -1121,5 +1121,224 @@ doc.fontSize(20)
       url: `/uploads/recibos/${fileName}`
     };
   }
+
+  /**
+   * Genera el PDF de "Liquidación de afiliaciones" en el stream provisto.
+   * No escribe a disco — el controlador pipea PDFDocument directo al res.
+   *
+   * Layout (LETTER, 50 pt de margen):
+   *   - Encabezado con logo + título + asesor + fecha
+   *   - Sección 1: tabla con detalle por afiliación
+   *   - Sección 2: tabla de agregados (Concepto / Cantidad / Unitario / Total)
+   *   - Footer: TOTAL GENERAL destacado + nota legal
+   *
+   * @param {object[]} afiliaciones  Instancias Sequelize de Afiliado con includes
+   * @param {object}   totales       Objeto producido por afiliado.service.calcularLiquidacion
+   * @param {object}   asesor        { nombre, apellido, prefijoRecibo }
+   * @param {Writable} outStream     Stream al que se pipea el PDF (res del controller)
+   * @returns {Promise<void>}        Resuelve cuando el stream termina de escribir
+   */
+  generarLiquidacionPDF(afiliaciones, totales, asesor, outStream) {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({
+          size: 'LETTER',
+          margins: { top: 50, bottom: 50, left: 40, right: 40 }
+        });
+
+        const PRIMARY = '#006838';
+        const DARK    = '#111827';
+        const MUTED   = '#6B7280';
+        const BORDER  = '#E5E7EB';
+        const BG_SOFT = '#F9FAFB';
+
+        // Pipear al stream del caller (response HTTP)
+        doc.pipe(outStream);
+        outStream.on('finish', resolve);
+        outStream.on('error', reject);
+
+        // ── Helpers locales ─────────────────────────────────────────
+        const formatearRango = (min, max) => {
+          if (min == null && max == null) return '—';
+          if (min === max) return `$ ${this.formatearNumero(min)}`;
+          return `$ ${this.formatearNumero(min)} – $ ${this.formatearNumero(max)}`;
+        };
+        const nombreCompleto = (a) =>
+          [a.primerNombre, a.segundoNombre, a.primerApellido, a.segundoApellido]
+            .filter(Boolean).join(' ');
+
+        // ── ENCABEZADO ──────────────────────────────────────────────
+        const logoPath = path.join(__dirname, '../../assets/logoConv.png');
+        try {
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 40, 40, { width: 110, fit: [110, 55] });
+          }
+        } catch (_) { /* logo opcional */ }
+
+        doc.fillColor(PRIMARY).font('Helvetica-Bold').fontSize(18)
+          .text('LIQUIDACIÓN DE AFILIACIONES', 200, 45, { align: 'right', width: 372 });
+
+        const prefijo = asesor?.prefijoRecibo || asesor?.prefijo_recibo || '—';
+        const nombreAsesor = `${asesor?.nombre || ''} ${asesor?.apellido || ''}`.trim() || '—';
+        doc.fillColor(MUTED).font('Helvetica').fontSize(10)
+          .text(`Asesor: ${nombreAsesor}  ·  Prefijo: ${prefijo}`, 200, 75, { align: 'right', width: 372 });
+        doc.text(
+          `Generado: ${this.formatearFechaHora(new Date())}  ·  ${totales.cantidadAfiliados} afiliación(es)`,
+          200, 92, { align: 'right', width: 372 }
+        );
+
+        doc.moveTo(40, 120).lineTo(572, 120).strokeColor(BORDER).lineWidth(1).stroke();
+
+        // ── SECCIÓN 1: Detalle por afiliación ───────────────────────
+        let y = 140;
+        doc.fillColor(DARK).font('Helvetica-Bold').fontSize(11)
+          .text('DETALLE DE AFILIACIONES', 40, y);
+        y += 18;
+
+        // Encabezado tabla detalle
+        const detalleCols = [
+          { label: 'ID',         x: 40,  w: 35,  align: 'left'  },
+          { label: 'Afiliado',   x: 75,  w: 140, align: 'left'  },
+          { label: 'Producto',   x: 215, w: 90,  align: 'left'  },
+          { label: 'V. Plan',    x: 305, w: 60,  align: 'right' },
+          { label: 'Asist.',     x: 365, w: 50,  align: 'right' },
+          { label: 'Seguros',    x: 415, w: 55,  align: 'right' },
+          { label: 'Adic.',      x: 470, w: 50,  align: 'right' },
+          { label: 'Total',      x: 520, w: 52,  align: 'right' }
+        ];
+
+        doc.rect(40, y, 532, 18).fill(BG_SOFT);
+        doc.fillColor(DARK).font('Helvetica-Bold').fontSize(8);
+        detalleCols.forEach(c => doc.text(c.label, c.x + 3, y + 5, { width: c.w - 4, align: c.align }));
+        y += 18;
+
+        doc.font('Helvetica').fontSize(8).fillColor(DARK);
+        for (const a of afiliaciones) {
+          if (y > 700) { // salto de página
+            doc.addPage();
+            y = 50;
+          }
+          const contrato = a.contrato || {};
+          const seguros  = Array.isArray(a.seguros) ? a.seguros : [];
+          const benefs   = Array.isArray(a.beneficiarios) ? a.beneficiarios : [];
+          const primaSeg = seguros.reduce((s, x) => s + Number(x.prima || 0), 0);
+          const cantAdic = benefs.filter(b => b.tipoBeneficiario === 'ADICIONAL').length;
+
+          const filas = [
+            `#${a.id}`,
+            nombreCompleto(a),
+            `${a.producto || ''} · ${a.grupo || ''}`,
+            this.formatearNumero(contrato.valorPlanExequial),
+            a.asistenciaFueraDeCasa === 'SI'
+              ? this.formatearNumero(contrato?.tarifa?.valorAsistencia)
+              : '—',
+            seguros.length ? this.formatearNumero(primaSeg) : '—',
+            cantAdic ? `${cantAdic} · ${this.formatearNumero(contrato.valorAdicionales)}` : '—',
+            this.formatearNumero(contrato.valorTotal)
+          ];
+          detalleCols.forEach((c, i) =>
+            doc.text(filas[i], c.x + 3, y + 4, { width: c.w - 4, align: c.align })
+          );
+
+          doc.moveTo(40, y + 16).lineTo(572, y + 16).strokeColor(BORDER).lineWidth(0.3).stroke();
+          y += 17;
+        }
+
+        // ── SECCIÓN 2: Resumen agregado ─────────────────────────────
+        y += 16;
+        if (y > 600) { doc.addPage(); y = 50; }
+
+        doc.fillColor(DARK).font('Helvetica-Bold').fontSize(11)
+          .text('RESUMEN AGREGADO', 40, y);
+        y += 18;
+
+        const resumenCols = [
+          { label: 'Concepto',       x: 40,  w: 230, align: 'left'  },
+          { label: 'Cantidad',       x: 270, w: 70,  align: 'center'},
+          { label: 'Valor unitario', x: 340, w: 130, align: 'right' },
+          { label: 'Valor total',    x: 470, w: 102, align: 'right' }
+        ];
+
+        doc.rect(40, y, 532, 18).fill(BG_SOFT);
+        doc.fillColor(DARK).font('Helvetica-Bold').fontSize(9);
+        resumenCols.forEach(c => doc.text(c.label, c.x + 4, y + 5, { width: c.w - 6, align: c.align }));
+        y += 18;
+
+        const fila = (concepto, cantidad, min, max, total, opts = {}) => {
+          if (y > 720) { doc.addPage(); y = 50; }
+          const isSub = !!opts.subheader;
+          if (isSub) {
+            doc.font('Helvetica-Bold').fontSize(9).fillColor(PRIMARY);
+            doc.text(concepto, resumenCols[0].x + 4, y + 4, { width: resumenCols[0].w - 6 });
+          } else {
+            doc.font('Helvetica').fontSize(9).fillColor(DARK);
+            doc.text(`  ${concepto}`, resumenCols[0].x + 4, y + 4, { width: resumenCols[0].w - 6 });
+            doc.text(String(cantidad), resumenCols[1].x + 4, y + 4, { width: resumenCols[1].w - 6, align: 'center' });
+            doc.text(formatearRango(min, max), resumenCols[2].x + 4, y + 4, { width: resumenCols[2].w - 6, align: 'right' });
+            doc.text(`$ ${this.formatearNumero(total)}`, resumenCols[3].x + 4, y + 4, { width: resumenCols[3].w - 6, align: 'right' });
+          }
+          doc.moveTo(40, y + 16).lineTo(572, y + 16).strokeColor(BORDER).lineWidth(0.3).stroke();
+          y += 17;
+        };
+
+        // Productos
+        fila('PRODUCTOS', null, null, null, null, { subheader: true });
+        const grupos = Object.keys(totales.productosPorGrupo).sort();
+        if (grupos.length === 0) {
+          fila('(sin productos)', 0, null, null, 0);
+        } else {
+          for (const g of grupos) {
+            const s = totales.productosPorGrupo[g];
+            fila(g, s.cantidad, s.min, s.max, s.total);
+          }
+        }
+
+        // Asistencia
+        fila('ASISTENCIA FUERA DE CASA', null, null, null, null, { subheader: true });
+        const a = totales.asistencia;
+        fila('Asistencia fuera de casa', a.cantidad, a.min, a.max, a.total);
+
+        // Seguros
+        fila('SEGUROS', null, null, null, null, { subheader: true });
+        const segs = Object.keys(totales.segurosPorNombre).sort();
+        if (segs.length === 0) {
+          fila('(sin seguros)', 0, null, null, 0);
+        } else {
+          for (const n of segs) {
+            const s = totales.segurosPorNombre[n];
+            fila(n, s.cantidad, s.min, s.max, s.total);
+          }
+        }
+
+        // Beneficiarios adicionales
+        fila('BENEFICIARIOS ADICIONALES', null, null, null, null, { subheader: true });
+        const ad = totales.adicionales;
+        fila('Tarifa adicionales (por afiliación)', ad.cantidad, ad.min, ad.max, ad.total);
+
+        // ── TOTAL GENERAL ───────────────────────────────────────────
+        y += 8;
+        if (y > 720) { doc.addPage(); y = 50; }
+        doc.rect(40, y, 532, 32).fill(PRIMARY);
+        doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(12)
+          .text('TOTAL GENERAL DE LA LIQUIDACIÓN', 50, y + 11);
+        doc.fontSize(14)
+          .text(`$ ${this.formatearNumero(totales.totalGeneral)}`, 350, y + 9, { width: 215, align: 'right' });
+        y += 40;
+
+        // ── Pie ─────────────────────────────────────────────────────
+        if (y > 720) { doc.addPage(); y = 50; }
+        doc.font('Helvetica-Oblique').fontSize(7).fillColor(MUTED)
+          .text(
+            'Documento generado automáticamente para soporte de comisiones y conciliación con cartera. ' +
+            'Los valores reflejan la información registrada en el sistema al momento de la consulta.',
+            40, y, { width: 532, align: 'center', lineGap: 1.5 }
+          );
+
+        doc.end();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
 }
 module.exports = new PDFService();

@@ -580,6 +580,134 @@ async function getTrazabilidad(afiliadoId) {
   });
 }
 
+/**
+ * Carga afiliaciones por IDs y computa los agregados que necesita el PDF
+ * de liquidación: productos por grupo, asistencia, seguros por nombre y
+ * beneficiarios adicionales.
+ *
+ * Validaciones:
+ *   - Todas las afiliaciones deben pertenecer al asesor (salvo super_admin
+ *     o permiso 'afiliaciones.ver_todas').
+ *   - Todas deben estar APROBADAS (estadoRegistro === 1, sin rechazo).
+ *
+ * @param {number[]} afiliadoIds
+ * @param {object}   usuario
+ * @returns {Promise<{ afiliaciones: object[], totales: object }>}
+ */
+async function calcularLiquidacion(afiliadoIds, usuario) {
+  if (!Array.isArray(afiliadoIds) || afiliadoIds.length === 0) {
+    throw new AppError('Debe seleccionar al menos una afiliación', 400);
+  }
+
+  const include = [
+    { model: Beneficiario,   as: 'beneficiarios' },
+    { model: Seguro,         as: 'seguros' },
+    { model: ContratoValor,  as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] }
+  ];
+
+  const afiliaciones = await Afiliado.findAll({
+    where: { id: { [Op.in]: afiliadoIds } },
+    include
+  });
+
+  if (afiliaciones.length === 0) {
+    throw new AppError('No se encontraron afiliaciones con los IDs indicados', 404);
+  }
+
+  // Ownership: solo el asesor dueño (o super_admin / ver_todas)
+  const permisos = getPermisos(usuario).afiliaciones || {};
+  if (!usuario.es_super_admin && !permisos.ver_todas) {
+    const ajena = afiliaciones.find(a => a.asesorId !== usuario.id);
+    if (ajena) {
+      throw new AppError(
+        'No tienes permiso para generar liquidación de afiliaciones de otro asesor',
+        403
+      );
+    }
+  }
+
+  // Solo aprobadas
+  const noAprobadas = afiliaciones.filter(a =>
+    a.estadoRegistro !== 1 || a.rechazado === 1 || a.rechazadoParcial === 1
+  );
+  if (noAprobadas.length > 0) {
+    const ids = noAprobadas.map(a => a.id).join(', ');
+    throw new AppError(
+      `Solo se pueden incluir afiliaciones aprobadas. IDs no aprobados: ${ids}`,
+      400
+    );
+  }
+
+  // ── Agregados ──────────────────────────────────────────────────
+  const totales = {
+    productosPorGrupo: {}, // { BASICO: { cantidad, min, max, total } }
+    asistencia:         { cantidad: 0, min: null, max: null, total: 0 },
+    segurosPorNombre:   {}, // { SOLICANASTA: { cantidad, min, max, total } }
+    adicionales:        { cantidad: 0, min: null, max: null, total: 0 },
+    totalGeneral:       0,
+    cantidadAfiliados:  afiliaciones.length
+  };
+
+  const upsertMinMax = (slot, valor) => {
+    slot.min = slot.min == null ? valor : Math.min(slot.min, valor);
+    slot.max = slot.max == null ? valor : Math.max(slot.max, valor);
+  };
+
+  for (const a of afiliaciones) {
+    const contrato = a.contrato;
+    const tarifa   = contrato?.tarifa;
+    const valorPlan       = Number(contrato?.valorPlanExequial || 0);
+    const valorAsistencia = Number(tarifa?.valorAsistencia || 0);
+    const valorAdic       = Number(contrato?.valorAdicionales || 0);
+    const valorTotalContr = Number(contrato?.valorTotal || 0);
+
+    // Productos por grupo
+    const grupo = a.grupo || '(sin grupo)';
+    if (!totales.productosPorGrupo[grupo]) {
+      totales.productosPorGrupo[grupo] = { cantidad: 0, min: null, max: null, total: 0 };
+    }
+    const slotGrupo = totales.productosPorGrupo[grupo];
+    slotGrupo.cantidad += 1;
+    slotGrupo.total    += valorPlan;
+    upsertMinMax(slotGrupo, valorPlan);
+
+    // Asistencia fuera de casa
+    if (a.asistenciaFueraDeCasa === 'SI') {
+      totales.asistencia.cantidad += 1;
+      totales.asistencia.total    += valorAsistencia;
+      upsertMinMax(totales.asistencia, valorAsistencia);
+    }
+
+    // Seguros agrupados por nombre
+    const seguros = Array.isArray(a.seguros) ? a.seguros : [];
+    for (const s of seguros) {
+      const nombre = s.nombre || '(sin nombre)';
+      const prima  = Number(s.prima || 0);
+      if (!totales.segurosPorNombre[nombre]) {
+        totales.segurosPorNombre[nombre] = { cantidad: 0, min: null, max: null, total: 0 };
+      }
+      const slotSeg = totales.segurosPorNombre[nombre];
+      slotSeg.cantidad += 1;
+      slotSeg.total    += prima;
+      upsertMinMax(slotSeg, prima);
+    }
+
+    // Beneficiarios adicionales
+    const beneficiarios = Array.isArray(a.beneficiarios) ? a.beneficiarios : [];
+    const cantAdicAfil  = beneficiarios.filter(b => b.tipoBeneficiario === 'ADICIONAL').length;
+    if (cantAdicAfil > 0) {
+      totales.adicionales.cantidad += cantAdicAfil;
+      totales.adicionales.total    += valorAdic;
+      // El min/max se mide por afiliación, no por adicional individual
+      upsertMinMax(totales.adicionales, valorAdic);
+    }
+
+    totales.totalGeneral += valorTotalContr;
+  }
+
+  return { afiliaciones, totales };
+}
+
 module.exports = {
   createAfiliadoWithBeneficiarios,
   getAllAfiliados,
@@ -596,5 +724,6 @@ module.exports = {
   actualizarDatosContacto,
   getTrazabilidad,
   getMisDelDia,
-  legalizarAfiliaciones
+  legalizarAfiliaciones,
+  calcularLiquidacion
 };
