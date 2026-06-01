@@ -503,6 +503,91 @@ const mantenimientosController = {
     }
   },
 
+  // Registrar ejecución múltiple (batch) - aplica los mismos datos de cierre a varios mantenimientos
+  async registrarEjecucionMultiple(req, res, next) {
+    const {
+      mantenimiento_ids,
+      fecha_ejecucion,
+      hora_inicio,
+      hora_fin,
+      trabajo_realizado,
+      observaciones,
+      costo_real,
+      nombre_recibe
+    } = req.body;
+
+    if (!Array.isArray(mantenimiento_ids) || mantenimiento_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe enviar al menos un mantenimiento_id'
+      });
+    }
+
+    if (!fecha_ejecucion || !trabajo_realizado) {
+      return res.status(400).json({
+        success: false,
+        message: 'fecha_ejecucion y trabajo_realizado son requeridos'
+      });
+    }
+
+    const t = await db.sequelize.transaction();
+    try {
+      const mantenimientos = await MantenimientoProgramado.findAll({
+        where: { id: { [Op.in]: mantenimiento_ids } },
+        transaction: t
+      });
+
+      if (mantenimientos.length !== mantenimiento_ids.length) {
+        await t.rollback();
+        return res.status(404).json({
+          success: false,
+          message: 'Uno o más mantenimientos no existen'
+        });
+      }
+
+      let duracion = null;
+      if (hora_inicio && hora_fin) {
+        const moment = require('moment');
+        duracion = moment(hora_fin, 'HH:mm').diff(moment(hora_inicio, 'HH:mm'), 'hours', true);
+      }
+
+      const ejecuciones = [];
+      for (const m of mantenimientos) {
+        const ejecucion = await MantenimientoEjecutado.create({
+          mantenimiento_programado_id: m.id,
+          fecha_ejecucion,
+          hora_inicio,
+          hora_fin,
+          duracion_horas: duracion,
+          ejecutado_por_usuario_id: req.usuario ? req.usuario.id : null,
+          trabajo_realizado,
+          observaciones,
+          costo_real,
+          nombre_recibe
+        }, { transaction: t });
+
+        await m.update(
+          { estado_id: ESTADOS_MANTENIMIENTO.EJECUTADO },
+          { transaction: t }
+        );
+
+        ejecuciones.push(ejecucion);
+      }
+
+      await t.commit();
+
+      res.json({
+        success: true,
+        message: `${ejecuciones.length} ejecuciones registradas exitosamente`,
+        data: ejecuciones
+      });
+    } catch (error) {
+      await t.rollback();
+      console.error('Error en registrarEjecucionMultiple:', error);
+      next(error);
+    }
+  },
+
   // Obtener mantenimientos del día
 async obtenerDelDia(req, res, next) {
   try {

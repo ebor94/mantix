@@ -513,6 +513,37 @@ router.put('/:id/reprogramar', mantenimientosController.reprogramar);
  *       '500':
  *         description: Error interno del servidor.
  */
+/**
+ * @swagger
+ * /api/mantenimientos/ejecucion-multiple:
+ *   post:
+ *     summary: Registrar ejecución para múltiples mantenimientos con los mismos datos de cierre
+ *     tags: [Mantenimientos]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [mantenimiento_ids, fecha_ejecucion, trabajo_realizado]
+ *             properties:
+ *               mantenimiento_ids:
+ *                 type: array
+ *                 items: { type: integer }
+ *               fecha_ejecucion: { type: string, format: date }
+ *               hora_inicio: { type: string, example: "08:00" }
+ *               hora_fin: { type: string, example: "10:30" }
+ *               trabajo_realizado: { type: string }
+ *               observaciones: { type: string }
+ *               costo_real: { type: number }
+ *     responses:
+ *       '200': { description: Ejecuciones registradas exitosamente. }
+ *       '400': { description: Datos inválidos. }
+ *       '404': { description: Uno o más mantenimientos no existen. }
+ *       '500': { description: Error interno del servidor. }
+ */
+router.post('/ejecucion-multiple', mantenimientosController.registrarEjecucionMultiple);
+
 router.post('/:id/ejecucion', mantenimientosController.registrarEjecucion);
 
 /**
