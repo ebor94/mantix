@@ -1236,12 +1236,20 @@ doc.fontSize(20)
             cantAdic ? `${cantAdic} · ${this.formatearNumero(contrato.valorAdicionales)}` : '—',
             this.formatearNumero(contrato.valorTotal)
           ];
+
+          // Medir altura máxima de la fila antes de dibujar (evita solapamiento
+          // cuando texto wrappea: ej. "INTEGRAL · UNIPERSONAL" a 2 líneas).
+          const alturas = detalleCols.map((c, i) =>
+            doc.heightOfString(filas[i], { width: c.w - 4, align: c.align })
+          );
+          const rowH = Math.max(14, ...alturas) + 6;
+
           detalleCols.forEach((c, i) =>
             doc.text(filas[i], c.x + 3, y + 4, { width: c.w - 4, align: c.align })
           );
 
-          doc.moveTo(40, y + 16).lineTo(572, y + 16).strokeColor(BORDER).lineWidth(0.3).stroke();
-          y += 17;
+          doc.moveTo(40, y + rowH).lineTo(572, y + rowH).strokeColor(BORDER).lineWidth(0.3).stroke();
+          y += rowH + 1;
         }
 
         // ── SECCIÓN 2: Resumen agregado ─────────────────────────────
