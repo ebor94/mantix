@@ -2,7 +2,7 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP, sendImagenRecibo } = require('../services/whatsappService');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
-const { notificarCertificadoAfiliacion } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
 const pdfService = require('../services/pdfService');
 const { Afiliado, ReciboCaja, Usuario } = require('../models');
 const { Op } = require('sequelize');
@@ -123,6 +123,11 @@ async function create(req, res, next) {
       .catch(() => {});
     // Fire-and-forget: generar PDF del recibo (si se emitió) y enviarlo por WhatsApp
     emitirPdfYEnviarWhatsapp(result.id).catch(() => {});
+
+    // Fire-and-forget: solicitar envío de la firma electrónica via n8n
+    // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto).
+    notificarFirma(result.id).catch(() => {});
+
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);

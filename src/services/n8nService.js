@@ -12,6 +12,9 @@ const CALLBACK_URL = process.env.R44_CALLBACK_URL || `${process.env.API_BASE_URL
 const N8N_CERTIFICADO_URL =
   process.env.N8N_CERTIFICADO_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/certificado-afiliacion';
+const N8N_FIRMA_URL =
+  process.env.N8N_FIRMA_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/afiliado-registro-firma';
 
 const MIME_MAP = {
   pdf:  'application/pdf',
@@ -92,4 +95,33 @@ async function notificarCertificadoAfiliacion(afiliadoId, aprobadoPor) {
   }
 }
 
-module.exports = { notificarN8n, notificarCertificadoAfiliacion };
+/**
+ * Notifica a n8n para que envíe la solicitud de firma electrónica al
+ * afiliado recién registrado por un asesor (canal estándar — NO Veolia).
+ * Fire-and-forget: no bloquea la respuesta al asesor.
+ *
+ * @param {number} afiliadoId
+ */
+async function notificarFirma(afiliadoId) {
+  try {
+    const res = await axios.post(
+      N8N_FIRMA_URL,
+      { afiliadoId },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    return res.data;
+  } catch (err) {
+    const msg = err.response?.data || err.message;
+    console.error(
+      `[n8nService] Error notificando firma para afiliado ${afiliadoId}:`,
+      msg
+    );
+    return null;
+  }
+}
+
+module.exports = {
+  notificarN8n,
+  notificarCertificadoAfiliacion,
+  notificarFirma
+};
