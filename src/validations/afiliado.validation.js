@@ -21,7 +21,7 @@ const beneficiarioSchema = Joi.object({
 
   valorPorPersona: Joi.number().min(0).allow(null),
 
-  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT').required()
+  tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT', 'RC').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
 
   numeroDocumento: Joi.string().pattern(/^\d{5,20}$/).required().trim()
