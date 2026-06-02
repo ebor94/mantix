@@ -309,6 +309,35 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
 
+    // ── Firma electrónica Adobe Sign ──────────────────────────
+    // n8n inicia la solicitud (notificarFirma) y al firmar el cliente
+    // hace callback al backend que pobla estos campos.
+    urlFirmaAdobe: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'URL del documento firmado en Adobe Sign'
+    },
+    fechaFirmaAdobe: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: 'Fecha en la que el cliente firmó (NULL = pendiente)'
+    },
+    transaccionFirmaAdobe: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'ID de transacción de Adobe Sign'
+    },
+    fechaActualizacionFirma: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Última actualización del estado de la firma'
+    },
+    urlCertificadoAfiliacion: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'URL del certificado de afiliación generado tras aprobación'
+    },
+
     // ── Legalización (gestión de comisiones) ──────────────────
     legalizado: {
       type: DataTypes.TINYINT.UNSIGNED,
