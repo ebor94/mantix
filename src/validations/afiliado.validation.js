@@ -110,6 +110,9 @@ const createAfiliadoSchema = Joi.object({
   // Contacto
   celular: Joi.string().pattern(/^\d{7,15}$/).required()
     .messages({ 'string.pattern.base': 'Celular debe tener entre 7 y 15 dígitos' }),
+  celularTieneWhatsapp: Joi.alternatives()
+    .try(Joi.boolean(), Joi.number().valid(0, 1), Joi.string().valid('0', '1', 'true', 'false'))
+    .default(false),
   celular2: Joi.string().pattern(/^\d{7,15}$/).allow('', null)
     .messages({ 'string.pattern.base': 'Celular 2 debe tener entre 7 y 15 dígitos' }),
   email: Joi.string().email().allow('', null)

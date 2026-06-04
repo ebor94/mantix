@@ -76,6 +76,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(15),
       allowNull: false
     },
+    celularTieneWhatsapp: {
+      type: DataTypes.TINYINT(1).UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: 'Indicador informativo: el celular principal tiene WhatsApp activo'
+    },
     celular2: {
       type: DataTypes.STRING(15),
       allowNull: true
