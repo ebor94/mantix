@@ -302,10 +302,9 @@ async function reenviar(req, res, next) {
     extractFiles(req, body);
     const result = await afiliadoService.reenviarAfiliacion(req.params.id, body, req.usuario);
 
-    // Notificación Google Chat — solo para correcciones de Veolia
-    if (result.origen === 'VEOLIA') {
-      notificarCorreccionVeolia(result);
-    }
+    // Notificación Google Chat para toda corrección reenviada (Veolia y Asesor).
+    // Fire-and-forget — si el chat falla no rompe la respuesta al cliente.
+    notificarCorreccionVeolia(result);
 
     res.json({ success: true, message: 'Afiliación reenviada para aprobación', data: result });
   } catch (error) {
