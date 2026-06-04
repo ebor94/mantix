@@ -35,8 +35,9 @@ module.exports = (sequelize, DataTypes) => {
     },
     numeroDocumento: {
       type: DataTypes.STRING(20),
-      allowNull: false,
-      unique: true
+      allowNull: false
+      // Sin unique: una misma persona puede tener varios contratos.
+      // La búsqueda sigue rápida por el índice no-único definido más abajo.
     },
     primerApellido: {
       type: DataTypes.STRING(80),
@@ -371,8 +372,10 @@ module.exports = (sequelize, DataTypes) => {
     tableName: 'afiliados',
     timestamps: true,
     indexes: [
+      // Índice NO único: una persona puede registrar varios contratos.
+      // El antiguo UNIQUE INDEX uq_documento debe eliminarse manualmente
+      // en producción (ver scripts/drop_unique_numerodocumento.sql).
       {
-        unique: true,
         fields: ['numeroDocumento']
       },
       {
