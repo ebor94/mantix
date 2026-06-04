@@ -301,6 +301,7 @@ async function generar(req, res, next) {
     y += 10;
 
     // ── SEGUROS ────────────────────────────────────────────────────────────
+    const nCuotas = Math.max(1, Number((contrato && contrato.nCuotas) || 1));
     if (seguros.length > 0) {
       if (y > 680) { doc.addPage(); y = 120; }
       doc.rect(40, y, 515, 16).fill('#006838');
@@ -312,16 +313,20 @@ async function generar(req, res, next) {
       doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
       doc.text('Seguro', 45, y + 4);
-      doc.text('Valor Asegurado', 230, y + 4);
-      doc.text('Prima Mensual', 400, y + 4);
+      doc.text('Valor Asegurado', 200, y + 4);
+      doc.text('Prima Anual', 340, y + 4);
+      doc.text(`Aporte/Cuota (${nCuotas})`, 450, y + 4);
       y += 15;
 
       doc.font('Helvetica').fontSize(8.5);
       for (const s of seguros) {
         if (y > 720) { doc.addPage(); y = 120; }
+        const primaAnual = Number(s.prima || 0);
+        const aporteCuota = primaAnual / nCuotas;
         doc.text(s.nombre || '', 45, y);
-        doc.text(formatMoneda(s.monto), 230, y);
-        doc.text(formatMoneda(s.prima) + ' / mes', 400, y);
+        doc.text(formatMoneda(s.monto), 200, y);
+        doc.text(formatMoneda(primaAnual), 340, y);
+        doc.text(formatMoneda(aporteCuota), 450, y);
         y += 13;
       }
       y += 10;
@@ -341,7 +346,8 @@ async function generar(req, res, next) {
     const valorPlan = Number((contrato && contrato.valorPlanExequial) || (tarifa && tarifa.valorBase) || 0);
     const valorAdicionales = Number((contrato && contrato.valorAdicionales) || 0);
     const valorAsistencia = afiliado.asistenciaFueraDeCasa === 'SI' && tarifa ? Number(tarifa.valorAsistencia || 0) : 0;
-    const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0) * 12, 0);
+    // La prima viene ANUAL; se distribuye en `nCuotas` para el cobro por cuota.
+    const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0), 0);
 
     doc.font('Helvetica-Bold').text(`PLAN ${productoComercial(afiliado.producto)} - TITULAR`, 40, y);
     doc.font('Helvetica').text(formatMoneda(valorPlan), 450, y);
@@ -361,7 +367,7 @@ async function generar(req, res, next) {
     }
 
     if (totalSegurosAnual > 0) {
-      doc.font('Helvetica-Bold').text('SEGUROS (prima anualizada)', 40, y);
+      doc.font('Helvetica-Bold').text('SEGUROS', 40, y);
       doc.font('Helvetica').text(formatMoneda(totalSegurosAnual), 450, y);
       y += 15;
     }
@@ -373,8 +379,12 @@ async function generar(req, res, next) {
     // ── Total y modalidad ────────────────────────────────────────────────
     doc.fontSize(9).fillColor('black');
     const periodicidad = (contrato && contrato.periodicidad) || afiliado.formaPago || 'MENSUAL';
-    const valorTotal = Number((contrato && contrato.valorTotal) || 0) + totalSegurosAnual;
-    const valorCuota = Number((contrato && contrato.valorCuota) || 0);
+    // Total Anual = suma de los conceptos mostrados. Si contrato.valorTotal ya
+    // incluye los seguros, usar ese; de lo contrario, sumar manualmente.
+    const valorContratoTotal = Number((contrato && contrato.valorTotal) || 0);
+    const sumaConceptos = valorPlan + valorAdicionales + valorAsistencia + totalSegurosAnual;
+    const valorTotal = valorContratoTotal >= sumaConceptos ? valorContratoTotal : sumaConceptos;
+    const valorCuota = Number((contrato && contrato.valorCuota) || (valorTotal / nCuotas) || 0);
 
     doc.font('Helvetica-Bold').text('Periodicidad:', 40, y);
     doc.font('Helvetica').text(periodicidad, 115, y);
