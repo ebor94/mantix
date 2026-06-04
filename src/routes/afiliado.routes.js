@@ -67,6 +67,10 @@ router.post('/consulta/verificar-otp', softAuth, controller.verificarOtp);
 // ── GET /afiliados/consulta/:numerodocumento — consulta pública por documento ─
 router.get('/consulta/:numerodocumento', softAuth, controller.consultarPorDocumento);
 
+// ── GET /afiliados/buscar/:numeroDocumento — búsqueda interna para asesor ─
+// (devuelve 200 con data=null si no hay coincidencias, en vez de 404)
+router.get('/buscar/:numeroDocumento', auth, controller.buscarPorDocumento);
+
 // ── GET /afiliados — acceso ADMIN (super_admin) para ver todos ─────────────
 router.get('/', auth, controller.getAll);
 

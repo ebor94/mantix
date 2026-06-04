@@ -415,6 +415,33 @@ async function consultarPorDocumento(req, res, next) {
   }
 }
 
+/**
+ * GET /api/afiliados/buscar/:numeroDocumento
+ * Búsqueda interna usada por el formulario de registro cuando el asesor
+ * quiere precargar los datos personales de un cliente recurrente.
+ *
+ * - Devuelve 200 con data=null si no hay coincidencias (en vez de 404)
+ *   para que la UI muestre un toast info sin tratar como error.
+ * - Retorna el afiliado MÁS RECIENTE con ese documento (orden por createdAt DESC).
+ * - Registra la consulta en trazabilidad.
+ */
+async function buscarPorDocumento(req, res, next) {
+  try {
+    const { numeroDocumento } = req.params;
+    const afiliado = await afiliadoService.getAfiliadoByDocumento(numeroDocumento);
+    if (!afiliado) {
+      return res.json({ success: true, data: null, message: 'Sin coincidencias' });
+    }
+    afiliadoService.registrarConsulta(
+      afiliado.id, req.usuario?.id || null,
+      `Búsqueda en formulario por documento: ${numeroDocumento}`
+    ).catch(() => {});
+    res.json({ success: true, data: afiliado });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function actualizarBeneficiariosConsulta(req, res, next) {
   try {
     const { beneficiarios = [] } = req.body;
@@ -551,6 +578,7 @@ module.exports = {
   actualizarDatosContacto,
   solicitarOtpReenvio,
   consultarPorDocumento,
+  buscarPorDocumento,
   actualizarBeneficiariosConsulta,
   getTrazabilidad,
   getVeoliaUnidades,
