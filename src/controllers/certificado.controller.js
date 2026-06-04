@@ -12,24 +12,24 @@ const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro } = requi
 const AppError = require('../utils/AppError');
 
 const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
-const ICONTEC_LOGO_URL = 'https://losolivoscucuta.com/img/icontec.png';
+const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
+const PIE_URL = 'https://losolivoscucuta.com/difusiones/img/pie%20de%20pagina.png';
 
-let icontecLogoCache = null;
-let icontecLogoFailed = false;
+// Cache simple en memoria de imagenes remotas — una descarga por reinicio del proceso.
+const imgCache = new Map();      // url -> Buffer
+const imgFailed = new Set();      // urls que ya fallaron
 
-async function obtenerIcontecLogo() {
-  if (icontecLogoCache) return icontecLogoCache;
-  if (icontecLogoFailed) return null;
+async function obtenerImagenRemota(url, label) {
+  if (imgCache.has(url)) return imgCache.get(url);
+  if (imgFailed.has(url)) return null;
   try {
-    const response = await axios.get(ICONTEC_LOGO_URL, {
-      responseType: 'arraybuffer',
-      timeout: 5000
-    });
-    icontecLogoCache = Buffer.from(response.data);
-    return icontecLogoCache;
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
+    const buf = Buffer.from(response.data);
+    imgCache.set(url, buf);
+    return buf;
   } catch (err) {
-    console.error('No se pudo descargar logo Icontec:', err.message);
-    icontecLogoFailed = true;
+    console.error(`No se pudo descargar imagen ${label || url}:`, err.message);
+    imgFailed.add(url);
     return null;
   }
 }
@@ -127,39 +127,37 @@ async function generar(req, res, next) {
     res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
     doc.pipe(res);
 
-    // ── ENCABEZADO ─────────────────────────────────────────────────────────
-    // Banner Icontec full-width al tope (aspect ratio 512:82 preservado por PDFKit con solo `width`)
-    const icontecBuffer = await obtenerIcontecLogo();
-    if (icontecBuffer) {
+    // ── ENCABEZADO / PIE DE PAGINA (imagenes remotas, render en cada pagina) ──
+    // Cabecera: 767x148 -> a 515px de ancho queda ~99px de alto. Top: y=10.
+    // Pie:      772x115 -> a 515px de ancho queda ~77px de alto. Bottom: y=740.
+    const cabeceraBuffer = await obtenerImagenRemota(CABECERA_URL, 'Cabecera Olivos');
+    const pieBuffer = await obtenerImagenRemota(PIE_URL, 'Pie de Pagina Olivos');
+
+    const drawCabecera = () => {
+      if (!cabeceraBuffer) return;
       try {
-        doc.image(icontecBuffer, 79, 12, { width: 438, height: 60 });
+        doc.image(cabeceraBuffer, 40, 10, { width: 515 });
       } catch (e) {
-        console.error('Error insertando logo Icontec:', e.message);
+        console.error('Error insertando cabecera:', e.message);
       }
-    }
+    };
 
-    // Logo Olivos a la izquierda, debajo del banner
-    if (fs.existsSync(LOGO_PATH)) {
+    const drawPie = () => {
+      if (!pieBuffer) return;
       try {
-        doc.image(LOGO_PATH, 40, 105, { width: 70 });
+        doc.image(pieBuffer, 40, 740, { width: 515 });
       } catch (e) {
-        console.error('Error insertando logo Olivos:', e.message);
+        console.error('Error insertando pie:', e.message);
       }
-    }
+    };
 
-    doc.fontSize(14).font('Helvetica-Bold')
-      .text('CERTIFICADO DE AFILIACION EXEQUIAL', 0, 115, { align: 'center' });
+    // pageAdded NO se dispara para la primera pagina, asi que hay que dibujar manual.
+    // Las paginas siguientes (manuales o por overflow) si lo disparan.
+    doc.on('pageAdded', () => { drawCabecera(); drawPie(); });
+    drawCabecera();
+    drawPie();
 
-    doc.fontSize(12).font('Helvetica-Bold')
-      .text('SERFUNORTE LOS OLIVOS', 0, 135, { align: 'center' });
-
-    doc.fontSize(9).font('Helvetica')
-      .text('NIT: 800.254.697-5', 0, 153, { align: 'center' })
-      .text('Teléfono: (607) 578 4777', 0, 165, { align: 'center' });
-
-    doc.moveTo(40, 190).lineTo(555, 190).strokeColor('#006838').lineWidth(1).stroke();
-
-    let y = 205;
+    let y = 120;
 
     // ── CABECERA: PUNTO DE VENTA / TIPO / CONTRATO ─────────────────────────
     doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
@@ -261,9 +259,9 @@ async function generar(req, res, next) {
 
       doc.font('Helvetica').fontSize(7.5);
       for (const ben of beneficiarios) {
-        if (y > 700) {
+        if (y > 720) {
           doc.addPage();
-          y = 50;
+          y = 120;
         }
         doc.text(`${ben.tipoDocumento || ''} ${ben.numeroDocumento || ''}`.trim(), 45, y);
         doc.text(nombreCompleto(ben), 130, y, { width: 155 });
@@ -283,7 +281,7 @@ async function generar(req, res, next) {
     y += 10;
 
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
-    if (y > 650) { doc.addPage(); y = 50; }
+    if (y > 700) { doc.addPage(); y = 120; }
 
     doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
@@ -304,7 +302,7 @@ async function generar(req, res, next) {
 
     // ── SEGUROS ────────────────────────────────────────────────────────────
     if (seguros.length > 0) {
-      if (y > 620) { doc.addPage(); y = 50; }
+      if (y > 680) { doc.addPage(); y = 120; }
       doc.rect(40, y, 515, 16).fill('#006838');
       doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
         .text('SEGUROS', 0, y + 3, { align: 'center' });
@@ -320,7 +318,7 @@ async function generar(req, res, next) {
 
       doc.font('Helvetica').fontSize(8.5);
       for (const s of seguros) {
-        if (y > 700) { doc.addPage(); y = 50; }
+        if (y > 720) { doc.addPage(); y = 120; }
         doc.text(s.nombre || '', 45, y);
         doc.text(formatMoneda(s.monto), 230, y);
         doc.text(formatMoneda(s.prima) + ' / mes', 400, y);
@@ -330,7 +328,7 @@ async function generar(req, res, next) {
     }
 
     // ── DETALLE COSTO ANUAL ────────────────────────────────────────────────
-    if (y > 600) { doc.addPage(); y = 50; }
+    if (y > 680) { doc.addPage(); y = 120; }
 
     doc.rect(40, y, 515, 16).fill('#006838');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
@@ -395,15 +393,10 @@ async function generar(req, res, next) {
     y += 50;
 
     // ── ASESOR ─────────────────────────────────────────────────────────────
-    if (y > 740) { doc.addPage(); y = 50; }
+    if (y > 720) { doc.addPage(); y = 120; }
 
     doc.fontSize(9).font('Helvetica-Bold').fillColor('black').text('Asesor:', 40, y);
     doc.font('Helvetica').text(nombreAsesor || 'Asesor Serfunorte', 90, y, { width: 400 });
-
-    // ── PIE DE PAGINA ──────────────────────────────────────────────────────
-    doc.fontSize(7).font('Helvetica-Oblique').fillColor('gray')
-      .text(`Documento generado automáticamente el ${formatFecha(new Date())} - Serfunorte Los Olivos`,
-        40, 800, { width: 515, align: 'center' });
 
     doc.end();
   } catch (error) {
