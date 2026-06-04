@@ -298,10 +298,19 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
     await Beneficiario.destroy({ where: { afiliadoId }, transaction });
     if (beneficiarios.length > 0) {
       const conId = beneficiarios.map(b => {
-        const { id, afiliadoId: _ignore, ...rest } = b;
+        // Misma regla que reenviarAfiliacion: reset activo=1, motivoRechazo=null
+        const {
+          id,
+          afiliadoId: _ignore,
+          activo: _activoIgnored,
+          motivoRechazo: _motivoIgnored,
+          ...rest
+        } = b;
         return {
           ...rest,
           afiliadoId,
+          activo: 1,
+          motivoRechazo: null,
           documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
         };
       });
@@ -382,18 +391,29 @@ async function reenviarAfiliacion(id, data, usuario) {
     const cleanData = nullifyEmpty(afiliadoData);
     await afiliado.update(cleanData, { transaction });
 
-    // Reemplazar beneficiarios — preservando documentoUrl previo
+    // Reemplazar beneficiarios — preservando documentoUrl previo y
+    // reactivándolos para que entren al pool de revisión del aprobador.
     if (beneficiarios.length > 0) {
       const prev = await Beneficiario.findAll({ where: { afiliadoId: id }, transaction });
       const prevDocByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoUrl]));
 
       await Beneficiario.destroy({ where: { afiliadoId: id }, transaction });
       const bConId = beneficiarios.map(b => {
-        // Quitar id/afiliadoId del payload por seguridad (vienen del front)
-        const { id: _idIgnored, afiliadoId: _afIgnored, ...rest } = b;
+        // Quitar id/afiliadoId/activo/motivoRechazo del payload — vienen
+        // del front, pero la corrección debe resetear esos campos siempre
+        // a "activo=1, sin motivo" para que el aprobador vuelva a evaluar.
+        const {
+          id: _idIgnored,
+          afiliadoId: _afIgnored,
+          activo: _activoIgnored,
+          motivoRechazo: _motivoIgnored,
+          ...rest
+        } = b;
         return {
           ...rest,
           afiliadoId: id,
+          activo: 1,
+          motivoRechazo: null,
           documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
         };
       });
