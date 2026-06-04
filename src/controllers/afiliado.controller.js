@@ -280,19 +280,33 @@ async function reenviar(req, res, next) {
   try {
     const body = { ...req.body };
 
-    // Validar OTP antes de procesar
-    const { otp } = body;
-    if (!otp) throw new AppError('Se requiere el código OTP para reenviar', 400);
-    if (!otpStore.verify(`reenvio:${req.params.id}`, otp)) {
-      return res.status(401).json({ success: false, message: 'Código OTP inválido o expirado' });
+    // Cargar el origen del afiliado para decidir el flujo
+    const afiliadoActual = await Afiliado.findByPk(req.params.id, {
+      attributes: ['id', 'origen']
+    });
+    if (!afiliadoActual) throw new AppError('Afiliado no encontrado', 404);
+    const esVeolia = afiliadoActual.origen === 'VEOLIA';
+
+    // OTP solo es obligatorio para VEOLIA (cliente externo sin JWT).
+    // El canal ASESOR se controla por sesión autenticada (req.usuario).
+    if (esVeolia) {
+      const { otp } = body;
+      if (!otp) throw new AppError('Se requiere el código OTP para reenviar', 400);
+      if (!otpStore.verify(`reenvio:${req.params.id}`, otp)) {
+        return res.status(401).json({ success: false, message: 'Código OTP inválido o expirado' });
+      }
     }
 
-    // Eliminar otp del body antes de pasarlo al servicio
+    // Eliminar otp del body antes de pasarlo al servicio (si vino)
     delete body.otp;
     extractFiles(req, body);
     const result = await afiliadoService.reenviarAfiliacion(req.params.id, body, req.usuario);
-    // Notificación Google Chat — fire-and-forget
-    notificarCorreccionVeolia(result);
+
+    // Notificación Google Chat — solo para correcciones de Veolia
+    if (result.origen === 'VEOLIA') {
+      notificarCorreccionVeolia(result);
+    }
+
     res.json({ success: true, message: 'Afiliación reenviada para aprobación', data: result });
   } catch (error) {
     next(error);

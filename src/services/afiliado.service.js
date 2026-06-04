@@ -290,9 +290,21 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
 
   const transaction = await sequelize.transaction();
   try {
+    // Mapear documentoUrl previo por numeroDocumento para preservarlo si la
+    // corrección no trae uno nuevo (evita borrar archivos ya subidos).
+    const prev = await Beneficiario.findAll({ where: { afiliadoId }, transaction });
+    const prevDocByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoUrl]));
+
     await Beneficiario.destroy({ where: { afiliadoId }, transaction });
     if (beneficiarios.length > 0) {
-      const conId = beneficiarios.map(b => ({ ...b, afiliadoId }));
+      const conId = beneficiarios.map(b => {
+        const { id, afiliadoId: _ignore, ...rest } = b;
+        return {
+          ...rest,
+          afiliadoId,
+          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
+        };
+      });
       await Beneficiario.bulkCreate(conId, { transaction });
     }
     await Trazabilidad.create({
@@ -370,10 +382,21 @@ async function reenviarAfiliacion(id, data, usuario) {
     const cleanData = nullifyEmpty(afiliadoData);
     await afiliado.update(cleanData, { transaction });
 
-    // Reemplazar beneficiarios
+    // Reemplazar beneficiarios — preservando documentoUrl previo
     if (beneficiarios.length > 0) {
+      const prev = await Beneficiario.findAll({ where: { afiliadoId: id }, transaction });
+      const prevDocByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoUrl]));
+
       await Beneficiario.destroy({ where: { afiliadoId: id }, transaction });
-      const bConId = beneficiarios.map(b => ({ ...b, afiliadoId: id }));
+      const bConId = beneficiarios.map(b => {
+        // Quitar id/afiliadoId del payload por seguridad (vienen del front)
+        const { id: _idIgnored, afiliadoId: _afIgnored, ...rest } = b;
+        return {
+          ...rest,
+          afiliadoId: id,
+          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
+        };
+      });
       await Beneficiario.bulkCreate(bConId, { transaction });
     }
 

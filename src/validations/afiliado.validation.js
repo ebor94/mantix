@@ -39,7 +39,20 @@ const beneficiarioSchema = Joi.object({
   edad: Joi.number().integer().min(0).max(150).required(),
 
   estado: Joi.string().valid('ACTUALIZACION', 'RETIRO', 'INGRESO').required()
-    .messages({ 'any.only': 'Estado debe ser ACTUALIZACION, RETIRO o INGRESO' })
+    .messages({ 'any.only': 'Estado debe ser ACTUALIZACION, RETIRO o INGRESO' }),
+
+  // ── Campos opcionales que ya existen en BD ──
+  // Sin esto, stripUnknown:true del middleware Joi los elimina del payload
+  // antes de llegar al controller (y se pierde el documentoUrl al corregir).
+  documentoUrl:  Joi.string().max(500).allow('', null).optional(),
+  activo:        Joi.alternatives()
+                   .try(Joi.boolean(), Joi.number().valid(0, 1))
+                   .optional(),
+  motivoRechazo: Joi.string().allow('', null).optional(),
+  // id / afiliadoId solo vienen en correcciones; se ignoran en bulkCreate
+  // pero deben pasar la validación para no ser eliminados silenciosamente.
+  id:            Joi.number().integer().positive().optional(),
+  afiliadoId:    Joi.number().integer().positive().optional()
 });
 
 // ── Esquema de seguro ─────────────────────────────────────────
