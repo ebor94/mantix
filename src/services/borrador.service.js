@@ -35,10 +35,41 @@ async function crear(asesorId, payload) {
 
 /**
  * Actualiza un borrador existente (solo si pertenece al asesor).
+ * Preserva los nombres de archivo previamente subidos cuando el nuevo
+ * payload no los incluye (caso típico: el asesor edita el formulario
+ * sin volver a adjuntar los archivos).
  */
 async function actualizar(id, asesorId, payload) {
   const borrador = await Borrador.findOne({ where: { id, asesorId } });
   if (!borrador) throw new AppError('Borrador no encontrado o no autorizado', 404);
+
+  const prev = borrador.datos || {};
+  const prevAfiliado = prev.afiliado || {};
+  const prevBeneficiarios = Array.isArray(prev.beneficiarios) ? prev.beneficiarios : [];
+
+  // Conservar nombres de archivo previos para los slots que no llegaron nuevos.
+  payload.afiliado = payload.afiliado || {};
+  const camposArchivo = ['soportePago', 'cedulaFrontal', 'cedulaReverso', 'contratoCompetencia'];
+  for (const campo of camposArchivo) {
+    if (!payload.afiliado[campo] && prevAfiliado[campo]) {
+      payload.afiliado[campo] = prevAfiliado[campo];
+    }
+  }
+
+  // Para beneficiarios: emparejar por numeroDocumento y conservar documentoUrl previo
+  if (Array.isArray(payload.beneficiarios)) {
+    const prevDocByNumero = new Map(
+      prevBeneficiarios
+        .filter(b => b.numeroDocumento)
+        .map(b => [b.numeroDocumento, b.documentoUrl])
+    );
+    payload.beneficiarios = payload.beneficiarios.map(b => {
+      if (!b.documentoUrl && b.numeroDocumento && prevDocByNumero.get(b.numeroDocumento)) {
+        return { ...b, documentoUrl: prevDocByNumero.get(b.numeroDocumento) };
+      }
+      return b;
+    });
+  }
 
   const summary = extractSummary(payload);
   await borrador.update({ ...summary, datos: payload });
