@@ -4,6 +4,7 @@ const { sendAceptacion, sendOTP, sendImagenRecibo } = require('../services/whats
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
 const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
 const pdfService = require('../services/pdfService');
+const { sincronizarAfiliado } = require('../services/crmSync.service');
 const { Afiliado, ReciboCaja, Usuario } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
@@ -128,6 +129,9 @@ async function create(req, res, next) {
     // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto).
     notificarFirma(result.id).catch(() => {});
 
+    // Fire-and-forget: sincronizar con sv_crm_personas
+    sincronizarAfiliado(result).catch(() => {});
+
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);
@@ -147,6 +151,10 @@ async function createPublico(req, res, next) {
       .catch(() => {});
     // Notificación Google Chat — fire-and-forget
     notificarNuevoVeolia({ ...body, beneficiarios: body.beneficiarios || [] });
+
+    // Fire-and-forget: sincronizar con sv_crm_personas
+    sincronizarAfiliado(result).catch(() => {});
+
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);
