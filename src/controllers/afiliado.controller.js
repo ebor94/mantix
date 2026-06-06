@@ -152,9 +152,6 @@ async function createPublico(req, res, next) {
     // Notificación Google Chat — fire-and-forget
     notificarNuevoVeolia({ ...body, beneficiarios: body.beneficiarios || [] });
 
-    // Fire-and-forget: sincronizar con sv_crm_personas
-    sincronizarAfiliado(result).catch(() => {});
-
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
     next(error);
