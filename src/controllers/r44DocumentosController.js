@@ -182,6 +182,11 @@ const r44DocumentosController = {
             pn_telefono_domicilio:  d.telefono_1               ?? proveedor.pn_telefono_domicilio,
             pn_correo:              d.correo_electronico       ?? proveedor.pn_correo,
             pn_ciiu:                d.actividad_principal_ciiu ?? proveedor.pn_ciiu,
+            // Datos de la Cédula (en campos_r44 vienen con prefijo rl_)
+            pn_fecha_expedicion:    d.rl_fecha_expedicion      ?? proveedor.pn_fecha_expedicion,
+            pn_lugar_expedicion:    d.rl_lugar_expedicion      ?? proveedor.pn_lugar_expedicion,
+            pn_fecha_nacimiento:    d.rl_fecha_nacimiento      ?? proveedor.pn_fecha_nacimiento,
+            pn_lugar_nacimiento:    d.rl_lugar_nacimiento      ?? proveedor.pn_lugar_nacimiento,
             estado: 'extraccion_completada',
           });
         }
