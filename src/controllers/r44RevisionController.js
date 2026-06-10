@@ -178,6 +178,76 @@ const r44RevisionController = {
       next(err);
     }
   },
+
+  /**
+   * GET /api/r44/revisores/indicadores
+   * Indicadores para gerencia: agregados por año, estado y tipo de persona.
+   */
+  async indicadores(req, res, next) {
+    try {
+      const { sequelize } = require('../models');
+      const [rows] = await sequelize.query(`
+        SELECT COALESCE(anio_vinculacion, YEAR(created_at)) AS anio,
+               estado,
+               tipo_persona,
+               COUNT(*) AS total
+        FROM r44_proveedores
+        GROUP BY COALESCE(anio_vinculacion, YEAR(created_at)), estado, tipo_persona
+      `);
+
+      const data = rows.map(r => ({
+        anio: r.anio != null ? Number(r.anio) : null,
+        estado: r.estado || 'sin_estado',
+        tipo_persona: r.tipo_persona || 'sin_tipo',
+        total: Number(r.total),
+      }));
+
+      const sum = (arr) => arr.reduce((s, x) => s + x.total, 0);
+      const groupCount = (arr, key) => arr.reduce((m, x) => {
+        const k = x[key];
+        m[k] = (m[k] || 0) + x.total;
+        return m;
+      }, {});
+
+      const total = sum(data);
+      const por_estado = groupCount(data, 'estado');
+      const por_anio = groupCount(data, 'anio');
+      const por_tipo = groupCount(data, 'tipo_persona');
+
+      const anios = [...new Set(data.map(d => d.anio).filter(a => a != null))].sort((a, b) => b - a);
+
+      const aprobados = por_estado['aprobado'] || 0;
+      const rechazados = por_estado['rechazado'] || 0;
+      const pendientes = por_estado['pendiente_revision'] || 0;
+      const correccion = por_estado['requiere_correccion'] || 0;
+      const en_proceso = (por_estado['borrador'] || 0)
+        + (por_estado['documentos_cargados'] || 0)
+        + (por_estado['extraccion_completada'] || 0);
+      const decididos = aprobados + rechazados;
+
+      return res.json({
+        ok: true,
+        data: {
+          total,
+          anios,
+          por_estado,
+          por_anio,
+          por_tipo,
+          matriz: data,            // [{anio, estado, tipo_persona, total}] para filtrar en el front
+          kpis: {
+            aprobados,
+            rechazados,
+            pendientes,
+            correccion,
+            en_proceso,
+            tasa_aprobacion: decididos ? Math.round((aprobados / decididos) * 100) : null,
+          },
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
 };
 
 module.exports = r44RevisionController;

@@ -63,4 +63,7 @@ router.get('/revisores/documentos/:id/descargar',
 router.get('/revisores/estadisticas',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.estadisticas);
 
+router.get('/revisores/indicadores',
+  r44Auth, r44Authorize(...REVISORES), r44RevCtrl.indicadores);
+
 module.exports = router;
