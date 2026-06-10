@@ -6,7 +6,8 @@
 // GET   /api/r44/revisores/estadisticas
 // ============================================
 const { Op } = require('sequelize');
-const { R44Proveedor, R44Revision } = require('../models');
+const fs = require('fs');
+const { R44Proveedor, R44Revision, R44Documento } = require('../models');
 
 const r44RevisionController = {
 
@@ -77,6 +78,8 @@ const r44RevisionController = {
           { model: R44Firma,              as: 'firma',
             attributes: ['acepta_tratamiento','acepta_declaracion','fecha_firma','ip_firma',
                          'nombre_firmante','documento_firmante','ciudad_firma','firma_electronica'] },
+          { model: R44Documento,          as: 'documentos',
+            attributes: ['id','tipo_documento','nombre_archivo_original','mime_type','estado_extraccion','subido_at'] },
           { model: R44Revision,           as: 'revision' },
         ],
       });
@@ -133,6 +136,30 @@ const r44RevisionController = {
           estado_nuevo: estado,
         },
       });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * GET /api/r44/revisores/documentos/:id/descargar
+   * Sirve el archivo adjunto (RUT, Cámara, Renta, Cédula) desde disco.
+   * Solo revisores/admin. Se muestra inline (PDF/imagen) en el navegador.
+   */
+  async descargarDocumento(req, res, next) {
+    try {
+      const doc = await R44Documento.findByPk(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+      }
+      const ruta = doc.ruta_almacenamiento;
+      if (!ruta || !fs.existsSync(ruta)) {
+        return res.status(404).json({ ok: false, error: 'El archivo no está disponible en el servidor' });
+      }
+      res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition',
+        `inline; filename="${doc.nombre_archivo_original || ('documento_' + doc.id)}"`);
+      fs.createReadStream(ruta).pipe(res);
     } catch (err) {
       next(err);
     }

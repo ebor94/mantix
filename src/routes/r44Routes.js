@@ -56,6 +56,9 @@ router.get('/revisores/proveedores/:id',
 router.patch('/revisores/proveedores/:id/estado',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.actualizarEstado);
 
+router.get('/revisores/documentos/:id/descargar',
+  r44Auth, r44Authorize(...REVISORES), r44RevCtrl.descargarDocumento);
+
 router.get('/revisores/estadisticas',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.estadisticas);
 
