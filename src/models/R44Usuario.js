@@ -15,7 +15,11 @@ module.exports = (sequelize, DataTypes) => {
 
   R44Usuario.associate = (models) => {
     R44Usuario.hasMany(models.R44Proveedor, { foreignKey: 'usuario_id', as: 'proveedores' });
-    R44Usuario.hasMany(models.R44Revision,  { foreignKey: 'revisor_id', as: 'revisiones' });
+    // Nota: la tabla r44_revision_serfunorte desplegada no tiene la columna
+    // revisor_id (sí está en migration.sql, pero no en el esquema en uso).
+    // El revisor se registra por nombre en funcionario_verificacion, así que
+    // esta asociación no se usa y, al añadir revisor_id como atributo, rompía
+    // los SELECT que incluyen 'revision' (detalle, aprobación). Se elimina.
   };
 
   return R44Usuario;
