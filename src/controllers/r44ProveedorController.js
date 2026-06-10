@@ -198,16 +198,20 @@ const r44ProveedorController = {
 
       const db = datos_basicos || {};
       const tp = tipo_persona || 'juridica';
+      const anioActual = new Date().getFullYear();
       const esFirmaCompleta = firma?.base64 && firma?.aceptacion_terminos;
 
       const camposProveedor = {
         usuario_id:  usuario.id,
         tipo_persona: tp,
+        anio_vinculacion: anioActual,
         ...mapearCampos(tp, db),
       };
 
+      // Una vinculación por (usuario, año): cada año es un registro nuevo;
+      // no se reemplaza el del año anterior (queda en historial).
       const [proveedor] = await R44Proveedor.findOrCreate({
-        where:    { usuario_id: usuario.id },
+        where:    { usuario_id: usuario.id, anio_vinculacion: anioActual },
         defaults: camposProveedor,
         transaction: t,
       });
@@ -279,8 +283,10 @@ const r44ProveedorController = {
   async miFormulario(req, res, next) {
     try {
       const usuario = req.r44Usuario;
+      const anioActual = new Date().getFullYear();
+      // Solo la vinculación del año en curso; las anteriores quedan en historial.
       const proveedor = await R44Proveedor.findOne({
-        where: { usuario_id: usuario.id },
+        where: { usuario_id: usuario.id, anio_vinculacion: anioActual },
         include: INCLUDE_COMPLETO,
         order: [['created_at', 'DESC']],
       });
@@ -290,6 +296,24 @@ const r44ProveedorController = {
       }
 
       return res.json({ ok: true, data: proveedor });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * GET /api/r44/proveedores/mias
+   * Historial de vinculaciones del proveedor autenticado (todos los años).
+   */
+  async misFormularios(req, res, next) {
+    try {
+      const usuario = req.r44Usuario;
+      const vinculaciones = await R44Proveedor.findAll({
+        where: { usuario_id: usuario.id },
+        attributes: ['id', 'radicado', 'anio_vinculacion', 'estado', 'tipo_persona', 'created_at', 'updated_at'],
+        order: [['anio_vinculacion', 'DESC'], ['created_at', 'DESC']],
+      });
+      return res.json({ ok: true, data: vinculaciones });
     } catch (err) {
       next(err);
     }

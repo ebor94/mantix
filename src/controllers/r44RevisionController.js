@@ -37,7 +37,7 @@ const r44RevisionController = {
       const { count, rows } = await R44Proveedor.findAndCountAll({
         where,
         attributes: [
-          'id','radicado','tipo_persona','estado',
+          'id','radicado','anio_vinculacion','tipo_persona','estado',
           'pj_razon_social','pj_nit','pj_municipio',
           'pn_nombre_completo','pn_numero_documento','pn_municipio_domicilio',
           'created_at',

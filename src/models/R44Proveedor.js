@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     radicado:   { type: DataTypes.STRING(20), unique: true },
     usuario_id: { type: DataTypes.INTEGER },
     tipo_vinculacion:        DataTypes.STRING(50),
+    anio_vinculacion:        DataTypes.INTEGER,   // periodo anual: un registro por (usuario, año)
     tipo_persona:            { type: DataTypes.ENUM('juridica','natural'), defaultValue: 'juridica' },
     estado: {
       type: DataTypes.ENUM('borrador','documentos_cargados','extraccion_completada','pendiente_revision','aprobado','rechazado','requiere_correccion'),
