@@ -127,7 +127,7 @@ const r44DocumentosController = {
     try {
       // n8n (workflow v3) envía la clave `campos_extraidos`.
       // `campos_r44` y `datos_extraidos` se mantienen por compatibilidad hacia atrás.
-      const { proveedor_id, campos_r44, campos_extraidos, datos_extraidos, total_tokens, logs } = req.body;
+      const { proveedor_id, campos_r44, campos_extraidos, datos_extraidos } = req.body;
 
       if (!proveedor_id) {
         return res.status(400).json({ ok: false, error: 'proveedor_id requerido' });
@@ -138,16 +138,11 @@ const r44DocumentosController = {
         return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
       }
 
-      const d      = campos_r44 || campos_extraidos || datos_extraidos;
-      const tokens = total_tokens ?? logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null;
-
-      await R44ExtraccionLlm.create({
-        proveedor_id:   parseInt(proveedor_id),
-        tipo_documento: 'consolidado',
-        estado:         'ok',
-        respuesta_json: d ?? {},
-        tokens_total:   tokens,
-      });
+      // Fuente única de escritura por tabla: n8n persiste directamente
+      // r44_extraccion_llm, r44_datos_representante_legal y r44_info_financiera.
+      // El backend es el ÚNICO que escribe r44_proveedores, porque aquí se
+      // distingue Persona Jurídica vs Natural (n8n solo escribía columnas pj_*).
+      const d = campos_r44 || campos_extraidos || datos_extraidos;
 
       if (d) {
         if (proveedor.tipo_persona === 'juridica') {
@@ -168,6 +163,9 @@ const r44DocumentosController = {
             pj_ultimo_anio_renovado: d.ultimo_anio_renovado     ?? proveedor.pj_ultimo_anio_renovado,
             pj_grupo_niif:           d.grupo_niif               ?? proveedor.pj_grupo_niif,
             pj_tamano_empresa:       d.tamano_empresa           ?? proveedor.pj_tamano_empresa,
+            pj_celular:              d.telefono_2               ?? proveedor.pj_celular,
+            pj_dv:                   d.dv                       ?? proveedor.pj_dv,
+            pj_sigla:                d.sigla                    ?? proveedor.pj_sigla,
             estado: 'extraccion_completada',
           });
         } else {
@@ -185,37 +183,6 @@ const r44DocumentosController = {
             pn_correo:              d.correo_electronico       ?? proveedor.pn_correo,
             pn_ciiu:                d.actividad_principal_ciiu ?? proveedor.pn_ciiu,
             estado: 'extraccion_completada',
-          });
-        }
-
-        const { R44RepresentanteLegal } = require('../models');
-        if (d.rl_nombre || d.rl_numero_doc) {
-          await R44RepresentanteLegal.upsert({
-            proveedor_id:        parseInt(proveedor_id),
-            nombres_apellidos:   d.rl_nombre             ?? null,
-            tipo_documento:      d.rl_tipo_doc           ?? 'CC',
-            numero_documento:    d.rl_numero_doc         ?? null,
-            correo:              d.rl_correo             ?? null,
-            telefono:            d.rl_telefono           ?? null,
-            direccion_domicilio: d.rl_direccion          ?? null,
-            ciudad_expedicion:   d.rl_lugar_expedicion   ?? null,
-            fecha_expedicion:    d.rl_fecha_expedicion   ?? null,
-            fecha_nacimiento:    d.rl_fecha_nacimiento   ?? null,
-            lugar_nacimiento:    d.rl_lugar_nacimiento   ?? null,
-            cedula_numero_serie: d.rl_cedula_serie       ?? null,
-          });
-        }
-
-        if (d.total_activos || d.total_patrimonio) {
-          const { R44InfoFinanciera } = require('../models');
-          await R44InfoFinanciera.upsert({
-            proveedor_id:           parseInt(proveedor_id),
-            activos_totales:        d.total_activos           ?? null,
-            pasivos_totales:        d.total_pasivos           ?? null,
-            patrimonio:             d.total_patrimonio        ?? null,
-            ingresos_operacionales: d.total_ingresos_brutos   ?? null,
-            utilidad_neta:          d.utilidad_operacional    ?? null,
-            anio_declaracion:       d.anio_gravable           ?? null,
           });
         }
       } else {
