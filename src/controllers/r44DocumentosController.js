@@ -125,8 +125,9 @@ const r44DocumentosController = {
    */
   async recibirResultado(req, res, next) {
     try {
-      // n8n envía campos_r44; datos_extraidos es compatibilidad hacia atrás
-      const { proveedor_id, campos_r44, datos_extraidos, total_tokens, logs } = req.body;
+      // n8n (workflow v3) envía la clave `campos_extraidos`.
+      // `campos_r44` y `datos_extraidos` se mantienen por compatibilidad hacia atrás.
+      const { proveedor_id, campos_r44, campos_extraidos, datos_extraidos, total_tokens, logs } = req.body;
 
       if (!proveedor_id) {
         return res.status(400).json({ ok: false, error: 'proveedor_id requerido' });
@@ -137,7 +138,7 @@ const r44DocumentosController = {
         return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
       }
 
-      const d      = campos_r44 || datos_extraidos;
+      const d      = campos_r44 || campos_extraidos || datos_extraidos;
       const tokens = total_tokens ?? logs?.reduce((s, l) => s + (l.tokens ?? 0), 0) ?? null;
 
       await R44ExtraccionLlm.create({
@@ -180,6 +181,7 @@ const r44DocumentosController = {
             pn_direccion_domicilio: d.direccion_principal      ?? proveedor.pn_direccion_domicilio,
             pn_municipio_domicilio: d.municipio_nombre         ?? proveedor.pn_municipio_domicilio,
             pn_dpto_domicilio:      d.departamento_nombre      ?? proveedor.pn_dpto_domicilio,
+            pn_telefono_domicilio:  d.telefono_1               ?? proveedor.pn_telefono_domicilio,
             pn_correo:              d.correo_electronico       ?? proveedor.pn_correo,
             pn_ciiu:                d.actividad_principal_ciiu ?? proveedor.pn_ciiu,
             estado: 'extraccion_completada',
