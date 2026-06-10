@@ -75,7 +75,8 @@ const r44RevisionController = {
           { model: R44RefComercial,       as: 'referencias_comerciales' },
           { model: R44SarlaftDatos,       as: 'sarlaft' },
           { model: R44Firma,              as: 'firma',
-            attributes: ['acepta_tratamiento','acepta_declaracion','fecha_firma','ip_firma'] },
+            attributes: ['acepta_tratamiento','acepta_declaracion','fecha_firma','ip_firma',
+                         'nombre_firmante','documento_firmante','ciudad_firma','firma_electronica'] },
           { model: R44Revision,           as: 'revision' },
         ],
       });
