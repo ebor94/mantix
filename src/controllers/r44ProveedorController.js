@@ -171,6 +171,17 @@ function mapearCampos(tipo_persona, db) {
   return campos;
 }
 
+// MySQL rechaza '' en columnas numéricas, decimales y de fecha.
+// Convierte recursivamente las cadenas vacías del payload en null.
+function sanitizeEmpty(value) {
+  if (Array.isArray(value)) return value.map(sanitizeEmpty);
+  if (value && typeof value === 'object') {
+    for (const k of Object.keys(value)) value[k] = sanitizeEmpty(value[k]);
+    return value;
+  }
+  return value === '' ? null : value;
+}
+
 const r44ProveedorController = {
 
   /**
@@ -183,7 +194,7 @@ const r44ProveedorController = {
       const usuario = req.r44Usuario;
       const { tipo_persona, datos_basicos, representante_legal, accionistas,
               financiero, referencias_bancarias, referencias_comerciales,
-              sarlaft, firma } = req.body;
+              sarlaft, firma } = sanitizeEmpty(req.body);
 
       const db = datos_basicos || {};
       const tp = tipo_persona || 'juridica';
@@ -297,7 +308,7 @@ const r44ProveedorController = {
       const { id } = req.params;
       const { tipo_persona, datos_basicos, representante_legal, accionistas,
               financiero, referencias_bancarias, referencias_comerciales,
-              sarlaft, firma } = req.body;
+              sarlaft, firma } = sanitizeEmpty(req.body);
 
       const proveedor = await R44Proveedor.findByPk(id);
       if (!proveedor) {
