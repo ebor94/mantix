@@ -8,7 +8,7 @@
 const {
   R44Proveedor, R44RepresentanteLegal, R44Accionista,
   R44InfoFinanciera, R44RefBancaria, R44RefComercial,
-  R44SarlaftDatos, R44Firma, R44Documento,
+  R44SarlaftDatos, R44Firma, R44Documento, R44Revision,
 } = require('../models');
 
 const INCLUDE_COMPLETO = [
@@ -20,6 +20,7 @@ const INCLUDE_COMPLETO = [
   { model: R44SarlaftDatos,       as: 'sarlaft' },
   { model: R44Firma,              as: 'firma', attributes: ['acepta_tratamiento', 'acepta_declaracion', 'fecha_firma'] },
   { model: R44Documento,          as: 'documentos', attributes: ['tipo_documento', 'nombre_archivo_original', 'estado_extraccion', 'subido_at'] },
+  { model: R44Revision,           as: 'revision', attributes: ['observaciones', 'resultado_verificacion', 'fecha_verificacion'] },
 ];
 
 // Mapea financiero del frontend a columnas reales de r44_info_financiera

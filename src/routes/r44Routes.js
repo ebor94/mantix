@@ -17,9 +17,11 @@ const r44RevCtrl                     = require('../controllers/r44RevisionContro
 // POST /api/r44/auth/login     — Login proveedor/revisor
 // POST /api/r44/auth/registro  — Registro de nuevo proveedor
 // POST /api/r44/auth/logout    — Logout (stateless)
+// POST /api/r44/auth/password  — Cambiar contraseña (autenticado)
 router.post('/auth/login',    r44AuthCtrl.login);
 router.post('/auth/registro', r44AuthCtrl.registro);
 router.post('/auth/logout',   r44Auth, r44AuthCtrl.logout);
+router.post('/auth/password', r44Auth, r44AuthCtrl.cambiarPassword);
 
 // ── DOCUMENTOS ────────────────────────────────────────────
 // POST /api/r44/documentos/:proveedor_id — Subir 4 documentos + notificar n8n

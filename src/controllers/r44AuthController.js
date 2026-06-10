@@ -62,6 +62,42 @@ const r44AuthController = {
   },
 
   /**
+   * POST /api/r44/auth/password
+   * Cambia la contraseña del usuario autenticado.
+   * Body: { password_actual, password_nueva }
+   */
+  async cambiarPassword(req, res, next) {
+    try {
+      const { password_actual, password_nueva } = req.body;
+
+      if (!password_actual || !password_nueva) {
+        return res.status(400).json({ ok: false, error: 'Contraseña actual y nueva requeridas' });
+      }
+      if (String(password_nueva).length < 8) {
+        return res.status(400).json({ ok: false, error: 'La nueva contraseña debe tener al menos 8 caracteres' });
+      }
+
+      // req.r44Usuario no trae password_hash (lo omite el middleware) — recargamos el registro.
+      const usuario = await R44Usuario.findByPk(req.r44Usuario.id);
+      if (!usuario) {
+        return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+      }
+
+      const valid = await bcrypt.compare(password_actual, usuario.password_hash);
+      if (!valid) {
+        return res.status(401).json({ ok: false, error: 'La contraseña actual es incorrecta' });
+      }
+
+      usuario.password_hash = await bcrypt.hash(password_nueva, 10);
+      await usuario.save();
+
+      return res.json({ ok: true, message: 'Contraseña actualizada' });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
    * POST /api/r44/auth/registro
    * Crea un nuevo usuario proveedor.
    * Body: { nombre, email, password }
