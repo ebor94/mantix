@@ -15,6 +15,13 @@ const N8N_CERTIFICADO_URL =
 const N8N_FIRMA_URL =
   process.env.N8N_FIRMA_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/afiliado-registro-firma';
+const N8N_DRIVE_URL =
+  process.env.N8N_DRIVE_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/archivar-r44-drive';
+const DRIVE_ROOT_FOLDER_ID =
+  process.env.R44_DRIVE_ROOT_FOLDER_ID || '1PN4TRzIfT45vQiD2Q23cD_D66OujQSDn';
+const API_BASE =
+  process.env.API_BASE_URL || 'https://mantix-api.losolivoscucuta.com:8444/api';
 
 const MIME_MAP = {
   pdf:  'application/pdf',
@@ -120,8 +127,49 @@ async function notificarFirma(afiliadoId) {
   }
 }
 
+/**
+ * Archiva los documentos del proveedor en Google Drive (organizados por año)
+ * vía un workflow n8n dedicado. Fire-and-forget.
+ *
+ * @param {object} opts
+ * @param {number} opts.proveedorId
+ * @param {number} opts.anio         año de vinculación (carpeta de primer nivel)
+ * @param {string} opts.carpeta      nombre de la subcarpeta del proveedor: "Nombre (NIT)"
+ * @param {Array<{tipo:string, ruta:string}>} opts.documentos
+ */
+async function archivarDocumentosEnDrive({ proveedorId, anio, carpeta, documentos }) {
+  const archivos = [];
+  for (const d of documentos || []) {
+    try {
+      const info = archivoABase64(d.ruta);
+      archivos.push({ tipo: d.tipo, nombre: info.nombre, mime_type: info.mime_type, base64: info.base64 });
+    } catch (e) {
+      console.error(`[drive] No se pudo leer ${d.tipo}: ${e.message}`);
+    }
+  }
+  if (!archivos.length) return null;
+
+  const payload = {
+    proveedor_id:   proveedorId,
+    anio:           anio || new Date().getFullYear(),
+    carpeta,
+    root_folder_id: DRIVE_ROOT_FOLDER_ID,
+    callback_url:   `${API_BASE}/r44/documentos/drive`,
+    archivos,
+  };
+
+  try {
+    const res = await axios.post(N8N_DRIVE_URL, payload, { timeout: 15000 });
+    return res.data;
+  } catch (err) {
+    console.error('[drive] Error notificando archivado a n8n:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
-  notificarFirma
+  notificarFirma,
+  archivarDocumentosEnDrive,
 };

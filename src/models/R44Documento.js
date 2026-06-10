@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
     intentos_extraccion: { type: DataTypes.TINYINT, defaultValue: 0 },
     error_mensaje:  DataTypes.TEXT,
     procesado_at:   DataTypes.DATE,
+    drive_url:      DataTypes.TEXT,    // enlace en Google Drive (archivado por año)
   }, {
     tableName: 'r44_documentos_adjuntos',
     timestamps: true,

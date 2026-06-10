@@ -6,7 +6,11 @@
 // ============================================
 const path = require('path');
 const { R44Proveedor, R44Documento, R44ExtraccionLlm } = require('../models');
-const { notificarN8n } = require('../services/n8nService');
+const { notificarN8n, archivarDocumentosEnDrive } = require('../services/n8nService');
+
+// tipo_documento (BD) -> clave corta usada en el archivado / nombres en Drive
+const TIPO_CORTO = { rut: 'rut', camara_comercio: 'camara', declaracion_renta: 'renta', cedula_rl: 'cedula' };
+const TIPO_LARGO = { rut: 'rut', camara: 'camara_comercio', renta: 'declaracion_renta', cedula: 'cedula_rl' };
 
 // Mapeo de fieldnames del frontend a ENUM de r44_documentos_adjuntos
 const TIPO_DOCUMENTO_MAP = {
@@ -194,7 +198,63 @@ const r44DocumentosController = {
         await proveedor.update({ estado: 'extraccion_completada' });
       }
 
+      // Archivar los documentos en Google Drive por año (fire-and-forget).
+      // Se usa el nombre/NIT ya extraídos para nombrar la carpeta del proveedor.
+      try {
+        const esJuridica = proveedor.tipo_persona === 'juridica';
+        const nombre = esJuridica
+          ? (proveedor.pj_razon_social || proveedor.pj_nombre_comercial)
+          : proveedor.pn_nombre_completo;
+        const ident = esJuridica ? proveedor.pj_nit : proveedor.pn_numero_documento;
+        const carpeta = `${nombre || ('Proveedor ' + proveedor.id)}${ident ? ' (' + ident + ')' : ''}`
+          .replace(/[\\/]/g, '-').trim();
+
+        const docs = await R44Documento.findAll({
+          where: { proveedor_id: parseInt(proveedor_id) },
+          attributes: ['tipo_documento', 'ruta_almacenamiento'],
+        });
+        const documentos = docs
+          .filter(x => x.ruta_almacenamiento)
+          .map(x => ({ tipo: TIPO_CORTO[x.tipo_documento] || x.tipo_documento, ruta: x.ruta_almacenamiento }));
+
+        if (documentos.length) {
+          archivarDocumentosEnDrive({
+            proveedorId: parseInt(proveedor_id),
+            anio: proveedor.anio_vinculacion,
+            carpeta,
+            documentos,
+          }).catch(e => console.error('[drive] archivado falló:', e.message));
+        }
+      } catch (e) {
+        console.error('[drive] no se pudo preparar el archivado:', e.message);
+      }
+
       return res.json({ ok: true, message: 'Resultado procesado' });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * POST /api/r44/documentos/drive
+   * Callback del workflow de archivado: guarda los enlaces de Drive por documento.
+   * Body: { proveedor_id, enlaces: [{ tipo, url }] }
+   */
+  async recibirEnlacesDrive(req, res, next) {
+    try {
+      const { proveedor_id, enlaces } = req.body;
+      if (!proveedor_id || !Array.isArray(enlaces)) {
+        return res.status(400).json({ ok: false, error: 'proveedor_id y enlaces[] requeridos' });
+      }
+      for (const e of enlaces) {
+        if (!e || !e.url) continue;
+        const tipoDB = TIPO_LARGO[e.tipo] || e.tipo;
+        await R44Documento.update(
+          { drive_url: e.url },
+          { where: { proveedor_id: parseInt(proveedor_id), tipo_documento: tipoDB } }
+        );
+      }
+      return res.json({ ok: true, message: 'Enlaces de Drive actualizados' });
     } catch (err) {
       next(err);
     }

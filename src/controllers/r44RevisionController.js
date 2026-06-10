@@ -79,7 +79,7 @@ const r44RevisionController = {
             attributes: ['acepta_tratamiento','acepta_declaracion','fecha_firma','ip_firma',
                          'nombre_firmante','documento_firmante','ciudad_firma','firma_electronica'] },
           { model: R44Documento,          as: 'documentos',
-            attributes: ['id','tipo_documento','nombre_archivo_original','mime_type','estado_extraccion','subido_at'] },
+            attributes: ['id','tipo_documento','nombre_archivo_original','mime_type','estado_extraccion','subido_at','drive_url'] },
           { model: R44Revision,           as: 'revision' },
         ],
       });

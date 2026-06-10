@@ -30,6 +30,7 @@ router.post('/auth/password', r44Auth, r44AuthCtrl.cambiarPassword);
 router.post('/documentos/:proveedor_id', r44Auth, uploadR44, r44DocCtrl.subirDocumentos);
 router.get('/extraccion/estado/:proveedor_id', r44Auth, r44DocCtrl.estadoExtraccion);
 router.post('/extraccion/resultado', r44DocCtrl.recibirResultado); // llamado por n8n (IP interna)
+router.post('/documentos/drive',     r44DocCtrl.recibirEnlacesDrive); // callback de archivado Drive (n8n)
 
 // ── FORMULARIO PROVEEDOR ──────────────────────────────────
 // POST /api/r44/proveedores     — Crear / enviar formulario R-44
