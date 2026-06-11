@@ -94,14 +94,45 @@ SELECT * FROM (
     SELECT
         1 AS orden_registro,
         '1'                                                       AS \`TIPO DE REGISTRO\`,
-        a.primerApellido                                          AS \`PRIMER APELLIDO\`,
-        a.segundoApellido                                         AS \`SEGUNDO APELLIDO\`,
-        a.primerNombre                                            AS \`NOMBRE1\`,
-        a.segundoNombre                                           AS \`NOMBRE2\`,
-        DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')                AS \`FECHA DE NACIMIENTO\`,
-        a.sexo                                                    AS \`SEXO\`,
-        ${TIPO_DOC('a.tipoDocumento')}                            AS \`TIPO DOCUMENTO\`,
-        CASE WHEN a.tipoDocumento = 'ADT' THEN '' ELSE a.numeroDocumento END AS \`NUMERO DE DOCUMENTO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.primerApellido FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.primerApellido
+        END                                                       AS \`PRIMER APELLIDO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.segundoApellido FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.segundoApellido
+        END                                                       AS \`SEGUNDO APELLIDO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.primerNombre FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.primerNombre
+        END                                                       AS \`NOMBRE1\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.segundoNombre FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.segundoNombre
+        END                                                       AS \`NOMBRE2\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN DATE_FORMAT(
+                (SELECT bp.fechaNacimiento FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1),
+                '%e/%c/%Y')
+            ELSE DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')
+        END                                                       AS \`FECHA DE NACIMIENTO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.genero FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.sexo
+        END                                                       AS \`SEXO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT CASE bp.tipoDocumento
+                      WHEN 'CC'  THEN '1'  WHEN 'TI'  THEN '4'  WHEN 'RC'  THEN '9'
+                      WHEN 'PPT' THEN '20' WHEN 'PA'  THEN '5'  WHEN 'CE'  THEN '2'
+                      WHEN 'ADT' THEN '12' ELSE bp.tipoDocumento END
+                  FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE ${TIPO_DOC('a.tipoDocumento')}
+        END                                                       AS \`TIPO DOCUMENTO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT CASE WHEN bp.tipoDocumento = 'ADT' THEN '' ELSE bp.numeroDocumento END
+                  FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE CASE WHEN a.tipoDocumento = 'ADT' THEN '' ELSE a.numeroDocumento END
+        END                                                       AS \`NUMERO DE DOCUMENTO\`,
         DATE_FORMAT(a.createdAt,    '%e/%c/%Y')                   AS \`FECHA VINCULACION\`,
         DATE_FORMAT(a.vigenciaDesde,'%e/%c/%Y')                   AS \`FECHA INGRESO POLIZA\`,
         0                                                         AS \`SALARIO REAL\`,
