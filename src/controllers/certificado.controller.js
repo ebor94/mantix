@@ -177,7 +177,7 @@ async function generar(req, res, next) {
     y += 25;
 
     // ── INFORMACION DEL CONTRATANTE ────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#006838');
+    doc.rect(40, y, 515, 16).fill('#00a57e');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DEL CONTRATANTE', 0, y + 3, { align: 'center' });
     y += 20;
@@ -209,7 +209,7 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DEL TITULAR ────────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#006838');
+    doc.rect(40, y, 515, 16).fill('#00a57e');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DEL TITULAR', 0, y + 3, { align: 'center' });
     y += 20;
@@ -239,14 +239,14 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DE AFILIADOS (BENEFICIARIOS) ───────────────────────────
-    doc.rect(40, y, 515, 16).fill('#006838');
+    doc.rect(40, y, 515, 16).fill('#00a57e');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('INFORMACIÓN DE AFILIADOS', 0, y + 3, { align: 'center' });
     y += 20;
 
     if (beneficiarios.length > 0) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
-      doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
+      doc.rect(40, y, 515, 15).fillColor('#cad0d1').fill();
       doc.fillColor('black');
       doc.text('Documento', 45, y + 4);
       doc.text('Nombres', 130, y + 4);
@@ -283,7 +283,7 @@ async function generar(req, res, next) {
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
     if (y > 700) { doc.addPage(); y = 120; }
 
-    doc.rect(40, y, 515, 16).fill('#006838');
+    doc.rect(40, y, 515, 16).fill('#00a57e');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('SERVICIOS ADICIONALES', 0, y + 3, { align: 'center' });
     y += 20;
@@ -304,13 +304,13 @@ async function generar(req, res, next) {
     const nCuotas = Math.max(1, Number((contrato && contrato.nCuotas) || 1));
     if (seguros.length > 0) {
       if (y > 680) { doc.addPage(); y = 120; }
-      doc.rect(40, y, 515, 16).fill('#006838');
+      doc.rect(40, y, 515, 16).fill('#00a57e');
       doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
         .text('SEGUROS', 0, y + 3, { align: 'center' });
       y += 20;
 
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
-      doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
+      doc.rect(40, y, 515, 15).fillColor('#cad0d1').fill();
       doc.fillColor('black');
       doc.text('Seguro', 45, y + 4);
       doc.text('Valor Asegurado', 200, y + 4);
@@ -335,7 +335,7 @@ async function generar(req, res, next) {
     // ── DETALLE COSTO ANUAL ────────────────────────────────────────────────
     if (y > 680) { doc.addPage(); y = 120; }
 
-    doc.rect(40, y, 515, 16).fill('#006838');
+    doc.rect(40, y, 515, 16).fill('#00a57e');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
       .text('DETALLE COSTO ANUAL', 0, y + 3, { align: 'center' });
     y += 20;
@@ -373,7 +373,7 @@ async function generar(req, res, next) {
     }
 
     y += 5;
-    doc.moveTo(40, y).lineTo(555, y).strokeColor('#006838').lineWidth(0.5).stroke();
+    doc.moveTo(40, y).lineTo(555, y).strokeColor('#00a57e').lineWidth(0.5).stroke();
     y += 8;
 
     // ── Total y modalidad ────────────────────────────────────────────────
@@ -400,7 +400,27 @@ async function generar(req, res, next) {
       .text('El contratante declara que ha leído, analizado, revisado y comprendido a cabalidad las presentes condiciones generales, las cláusulas que la componen y la asesoría brindada aceptándolas en su integridad. Este certificado hace parte integral del contrato de previsión exequial adquirido con SERFUNORTE LOS OLIVOS.',
         40, y, { width: 515, align: 'justify' });
 
-    y += 50;
+    y += 15;
+
+    // ── LEYENDA DE SEGUROS ─────────────────────────────────────────────────
+    const tieneSinergia    = seguros.some(s => s.nombre && s.nombre.toUpperCase().includes('SINERGIA OP'));
+    const tieneSolicanasta = seguros.some(s => s.nombre && s.nombre.toUpperCase().includes('SOLICANASTA'));
+    const sinSeguros       = seguros.length === 0;
+
+    if (tieneSinergia || tieneSolicanasta || sinSeguros) {
+      if (y > 710) { doc.addPage(); y = 120; }
+      doc.fontSize(7.5).font('Helvetica-Oblique').fillColor('#444444');
+      if (tieneSinergia) {
+        doc.text('Sinergia Forma SO-01-03-12 04/2021', 40, y);
+        y += 11;
+      }
+      if (tieneSolicanasta || sinSeguros) {
+        doc.text('Solicanasta Forma PEX-SO-03-30 03/2021', 40, y);
+        y += 11;
+      }
+    }
+
+    y += 20;
 
     // ── ASESOR ─────────────────────────────────────────────────────────────
     if (y > 720) { doc.addPage(); y = 120; }
