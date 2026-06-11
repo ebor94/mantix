@@ -15,22 +15,22 @@ const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
 const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
 const PIE_URL = 'https://losolivoscucuta.com/difusiones/img/pie%20de%20pagina.png';
 
-// Cache simple en memoria de imagenes remotas — una descarga por reinicio del proceso.
-const imgCache = new Map();      // url -> Buffer
-const imgFailed = new Set();      // urls que ya fallaron
+// Cache con TTL de 5 minutos — permite actualizar las imágenes remotas sin reiniciar.
+const imgCache = new Map();   // url -> { buf, ts }
+const TTL_MS   = 5 * 60 * 1000;
 
 async function obtenerImagenRemota(url, label) {
-  if (imgCache.has(url)) return imgCache.get(url);
-  if (imgFailed.has(url)) return null;
+  const cached = imgCache.get(url);
+  if (cached && (Date.now() - cached.ts) < TTL_MS) return cached.buf;
   try {
     const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
     const buf = Buffer.from(response.data);
-    imgCache.set(url, buf);
+    imgCache.set(url, { buf, ts: Date.now() });
     return buf;
   } catch (err) {
     console.error(`No se pudo descargar imagen ${label || url}:`, err.message);
-    imgFailed.add(url);
-    return null;
+    // Si hay versión en caché (aunque expirada) la usamos como fallback
+    return cached ? cached.buf : null;
   }
 }
 
@@ -400,7 +400,9 @@ async function generar(req, res, next) {
       .text('El contratante declara que ha leído, analizado, revisado y comprendido a cabalidad las presentes condiciones generales, las cláusulas que la componen y la asesoría brindada aceptándolas en su integridad. Este certificado hace parte integral del contrato de previsión exequial adquirido con SERFUNORTE LOS OLIVOS.',
         40, y, { width: 515, align: 'justify' });
 
-    y += 15;
+    // El párrafo legal ocupa ~4 líneas a 8pt (~11px/línea = ~44px).
+    // Usamos doc.y (cursor interno de PDFKit) para saber dónde terminó realmente.
+    y = doc.y + 10;
 
     // ── LEYENDA DE SEGUROS ─────────────────────────────────────────────────
     const tieneSinergia    = seguros.some(s => s.nombre && s.nombre.toUpperCase().includes('SINERGIA OP'));
