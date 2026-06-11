@@ -3,7 +3,8 @@ const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP, sendImagenRecibo } = require('../services/whatsappService');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
 const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
-const pdfService = require('../services/pdfService');
+const pdfService   = require('../services/pdfService');
+const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
 const { Afiliado, ReciboCaja, Usuario } = require('../models');
 const { Op } = require('sequelize');
@@ -602,5 +603,22 @@ module.exports = {
   getVeoliaUnidades,
   getMisDelDia,
   legalizarAfiliaciones,
-  liquidacionPdf
+  liquidacionPdf,
+  planoExcel
 };
+
+/**
+ * GET /api/afiliados/:id/plano-excel
+ * Genera y descarga el plano de póliza en formato Excel (.xlsx).
+ * Permiso: afiliaciones.aprobar
+ */
+async function planoExcel(req, res, next) {
+  try {
+    const { id } = req.params;
+    const fileName = `plano-afiliado-${id}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    await excelService.generarPlanoExcel(Number(id), res);
+    res.end();
+  } catch (err) { next(err); }
+}

@@ -109,6 +109,13 @@ router.get('/veolia-unidades', controller.getVeoliaUnidades);
 // ── GET /afiliados/por-hash/:hash — carga pública de afiliación via hash cifrado ─
 router.get('/por-hash/:hash', softAuth, controller.getByHash);
 
+// ── GET /afiliados/:id/plano-excel — descarga plano de póliza en Excel ────────
+router.get('/:id/plano-excel',
+  auth,
+  requirePermiso('afiliaciones.aprobar'),
+  controller.planoExcel
+);
+
 // ── GET /afiliados/:id/trazabilidad — historial de auditoría del afiliado ─────
 router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 
