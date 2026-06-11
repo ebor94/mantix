@@ -419,14 +419,21 @@ async function generarPlanoExcel(afiliadoId, outStream) {
 
   if (rows.length > 0) {
     const cols = Object.keys(rows[0]).filter(k => k !== 'orden_registro');
-    sheet.columns = cols.map(k => ({ header: k, key: k, width: 22 }));
 
-    const headerRow = sheet.getRow(1);
+    // Definir columnas sin header para controlar la posición manualmente
+    sheet.columns = cols.map(k => ({ key: k, width: 22 }));
+
+    // Fila 1: vacía (requerimiento del plano)
+    sheet.addRow({});
+
+    // Fila 2: cabecera con estilos
+    const headerRow = sheet.addRow(cols.reduce((acc, k) => { acc[k] = k; return acc; }, {}));
     headerRow.font      = { bold: true };
     headerRow.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     headerRow.height    = 36;
 
+    // Filas 3+: datos
     rows.forEach(r => {
       const row = {};
       cols.forEach(k => { row[k] = r[k] ?? ''; });
