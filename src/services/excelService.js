@@ -92,6 +92,7 @@ SELECT * FROM (
     -- ==========================================
     SELECT
         1 AS orden_registro,
+        '1'                                                       AS \`TIPO DE REGISTRO\`,
         a.primerApellido                                          AS \`PRIMER APELLIDO\`,
         a.segundoApellido                                         AS \`SEGUNDO APELLIDO\`,
         a.primerNombre                                            AS \`NOMBRE1\`,
@@ -235,6 +236,7 @@ SELECT * FROM (
     -- ==========================================
     SELECT
         2 AS orden_registro,
+        '2'                                                       AS \`TIPO DE REGISTRO\`,
         b.primerApellido                                          AS \`PRIMER APELLIDO\`,
         b.segundoApellido                                         AS \`SEGUNDO APELLIDO\`,
         b.primerNombre                                            AS \`NOMBRE1\`,
