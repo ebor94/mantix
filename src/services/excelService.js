@@ -80,6 +80,7 @@ const TIPO_DOC = (campo) => `CASE ${campo}
     WHEN 'PPT' THEN '20'
     WHEN 'PA'  THEN '5'
     WHEN 'CE'  THEN '2'
+    WHEN 'ADT' THEN '12'
     ELSE ${campo}
 END`;
 
@@ -100,7 +101,7 @@ SELECT * FROM (
         DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')                AS \`FECHA DE NACIMIENTO\`,
         a.sexo                                                    AS \`SEXO\`,
         ${TIPO_DOC('a.tipoDocumento')}                            AS \`TIPO DOCUMENTO\`,
-        a.numeroDocumento                                         AS \`NUMERO DE DOCUMENTO\`,
+        CASE WHEN a.tipoDocumento = 'ADT' THEN '' ELSE a.numeroDocumento END AS \`NUMERO DE DOCUMENTO\`,
         DATE_FORMAT(a.createdAt,    '%e/%c/%Y')                   AS \`FECHA VINCULACION\`,
         DATE_FORMAT(a.vigenciaDesde,'%e/%c/%Y')                   AS \`FECHA INGRESO POLIZA\`,
         0                                                         AS \`SALARIO REAL\`,
@@ -244,7 +245,7 @@ SELECT * FROM (
         DATE_FORMAT(b.fechaNacimiento, '%e/%c/%Y')                AS \`FECHA DE NACIMIENTO\`,
         b.genero                                                  AS \`SEXO\`,
         ${TIPO_DOC('b.tipoDocumento')}                            AS \`TIPO DOCUMENTO\`,
-        b.numeroDocumento                                         AS \`NUMERO DE DOCUMENTO\`,
+        CASE WHEN b.tipoDocumento = 'ADT' THEN '' ELSE b.numeroDocumento END AS \`NUMERO DE DOCUMENTO\`,
         DATE_FORMAT(a.createdAt,    '%e/%c/%Y')                   AS \`FECHA VINCULACION\`,
         DATE_FORMAT(a.vigenciaDesde,'%e/%c/%Y')                   AS \`FECHA INGRESO POLIZA\`,
         0                                                         AS \`SALARIO REAL\`,
