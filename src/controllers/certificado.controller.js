@@ -12,7 +12,7 @@ const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro } = requi
 const AppError = require('../utils/AppError');
 
 const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
-const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
+const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos2.png';
 const PIE_URL = 'https://losolivoscucuta.com/difusiones/img/pie%20de%20pagina.png';
 
 // Cache con TTL de 5 minutos — permite actualizar las imágenes remotas sin reiniciar.
