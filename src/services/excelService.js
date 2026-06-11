@@ -455,6 +455,7 @@ SELECT * FROM (
     FROM beneficiarios b
     INNER JOIN afiliados a ON b.afiliadoId = a.id
     WHERE b.afiliadoId = :afiliadoId
+      AND NOT (a.diferenteAlContratante = 1 AND b.parentesco = 'ASEGURADO PRINCIPAL')
 
 ) AS plano_estructurado
 ORDER BY orden_registro ASC`;
