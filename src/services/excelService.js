@@ -166,7 +166,14 @@ SELECT * FROM (
         135                                                       AS \`AGENCIA\`,
         '135000450289'                                            AS \`POLIZA AGRUPADORA\`,
         0                                                         AS \`POLIZA\`,
-        'PENDIENTE'                                               AS \`UNIDAD COMERCIAL\`,
+        CASE UPPER(a.sucursal)
+            WHEN 'PAMPLONA'   THEN '492'
+            WHEN 'OCAÑA'      THEN '493'
+            WHEN 'ARAUCA'     THEN '491'
+            WHEN 'CUCUTA'     THEN '5'
+            WHEN 'CRISTO REY' THEN '1353'
+            ELSE a.sucursal
+        END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
         DATE_FORMAT(a.vigenciaHasta,'%e/%c/%Y')                   AS \`VIGENCIA HASTA\`,
         0                                                         AS \`S/N RIESGO COMPARTIDO\`,
@@ -378,7 +385,14 @@ SELECT * FROM (
         135                                                       AS \`AGENCIA\`,
         '135000450289'                                            AS \`POLIZA AGRUPADORA\`,
         0                                                         AS \`POLIZA\`,
-        'PENDIENTE'                                               AS \`UNIDAD COMERCIAL\`,
+        CASE UPPER(a.sucursal)
+            WHEN 'PAMPLONA'   THEN '492'
+            WHEN 'OCAÑA'      THEN '493'
+            WHEN 'ARAUCA'     THEN '491'
+            WHEN 'CUCUTA'     THEN '5'
+            WHEN 'CRISTO REY' THEN '1353'
+            ELSE a.sucursal
+        END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
         DATE_FORMAT(a.vigenciaHasta,'%e/%c/%Y')                   AS \`VIGENCIA HASTA\`,
         0                                                         AS \`S/N RIESGO COMPARTIDO\`,
