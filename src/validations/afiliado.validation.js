@@ -34,8 +34,8 @@ const beneficiarioSchema = Joi.object({
     .messages({ 'string.empty': 'Primer nombre es obligatorio' }),
   segundoNombre: Joi.string().max(80).allow('', null).trim(),
 
-  fechaNacimiento: Joi.date().iso().max('now').required()
-    .messages({ 'date.max': 'Fecha de nacimiento no puede ser futura' }),
+  fechaNacimiento: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required()
+    .messages({ 'string.pattern.base': 'Fecha de nacimiento debe tener formato YYYY-MM-DD' }),
   edad: Joi.number().integer().min(0).max(150).required(),
 
   estado: Joi.string().valid('ACTUALIZACION', 'RETIRO', 'INGRESO').required()
@@ -96,9 +96,8 @@ const createAfiliadoSchema = Joi.object({
     .valid('CUCUTA', 'PAMPLONA', 'OCAÑA', 'SARAVENA', 'ARAUCA', 'TAME', 'CRISTO REY', 'ARAUQUITA')
     .allow('', null),
   novedad: Joi.string().valid('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA').allow('', null),
-  vigenciaDesde: Joi.date().iso().allow('', null),
-  vigenciaHasta: Joi.date().iso().min(Joi.ref('vigenciaDesde')).allow('', null)
-    .messages({ 'date.min': 'Vigencia hasta no puede ser anterior a Vigencia desde' }),
+  vigenciaDesde: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
+  vigenciaHasta: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
 
   // Identificación
   tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT').required()
@@ -111,8 +110,8 @@ const createAfiliadoSchema = Joi.object({
   primerNombre: Joi.string().max(80).required().trim()
     .messages({ 'string.empty': 'Primer nombre es obligatorio' }),
   segundoNombre: Joi.string().max(80).allow('', null).trim(),
-  fechaNacimiento: Joi.date().iso().max('now').required()
-    .messages({ 'date.max': 'Fecha de nacimiento no puede ser futura' }),
+  fechaNacimiento: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required()
+    .messages({ 'string.pattern.base': 'Fecha de nacimiento debe tener formato YYYY-MM-DD' }),
   edad: Joi.number().integer().min(0).max(150).required(),
   sexo: Joi.string().valid('F', 'M', 'X').required()
     .messages({ 'any.only': 'Sexo debe ser F, M o X' }),
@@ -195,7 +194,7 @@ const createAfiliadoSchema = Joi.object({
   referenciaPago1: Joi.string().max(200).allow('', null).trim(),
   referenciaPago2: Joi.string().max(200).allow('', null).trim(),
   referenciaPago3: Joi.string().max(200).allow('', null).trim(),
-  fechaPagoTentativa: Joi.date().iso().allow('', null),
+  fechaPagoTentativa: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
   // soportePago, cedulaFrontal, cedulaReverso se inyectan en el controller desde req.files — no vienen en el body
 
   // ── Afiliado diferente al contratante ───────────────────────
