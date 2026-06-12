@@ -402,33 +402,21 @@ async function generar(req, res, next) {
     y += 25;
 
     // ── TEXTO LEGAL ────────────────────────────────────────────────────────
-    doc.fontSize(8).font('Helvetica').fillColor('black')
-      .text('El contratante declara que ha leído, analizado, revisado y comprendido a cabalidad las presentes condiciones generales, las cláusulas que la componen y la asesoría brindada aceptándolas en su integridad. Este certificado hace parte integral del contrato de previsión exequial adquirido con SERFUNORTE LOS OLIVOS.',
-        40, y, { width: 515, align: 'justify' });
-
-    // El párrafo legal ocupa ~4 líneas a 8pt (~11px/línea = ~44px).
-    // Usamos doc.y (cursor interno de PDFKit) para saber dónde terminó realmente.
-    y = doc.y + 10;
-
-    // ── LEYENDA DE SEGUROS ─────────────────────────────────────────────────
     const tieneSinergia    = seguros.some(s => s.nombre && s.nombre.toUpperCase().includes('SINERGIA OP'));
     const tieneSolicanasta = seguros.some(s => s.nombre && s.nombre.toUpperCase().includes('SOLICANASTA'));
     const sinSeguros       = seguros.length === 0;
 
-    if (tieneSinergia || tieneSolicanasta || sinSeguros) {
-      if (y > 710) { doc.addPage(); y = 120; }
-      doc.fontSize(7.5).font('Helvetica-Oblique').fillColor('#444444');
-      if (tieneSinergia) {
-        doc.text('Sinergia Forma SO-01-03-12 04/2021', 40, y);
-        y += 11;
-      }
-      if (tieneSolicanasta || sinSeguros) {
-        doc.text('Solicanasta Forma PEX-SO-03-30 03/2021', 40, y);
-        y += 11;
-      }
-    }
+    const formas = [];
+    if (tieneSinergia)              formas.push('Sinergia Forma SO-01-03-12 04/2021');
+    if (tieneSolicanasta || sinSeguros) formas.push('Solicanasta Forma PEX-SO-03-30 03/2021');
+    const formaRef = formas.join(' y ');
 
-    y += 20;
+    const textoLegal = `El contratante declara que ha leído, analizado, revisado y comprendido a cabalidad las Condiciones Generales y las cláusulas contenidas en la ${formaRef}, así como la asesoría brindada, aceptándolas en su integridad. El presente certificado hace parte integral del contrato de previsión exequial adquirido con SERFUNORTE LOS OLIVOS y se encuentra sujeto a las disposiciones contenidas en dicho documento.`;
+
+    doc.fontSize(8).font('Helvetica').fillColor('black')
+      .text(textoLegal, 40, y, { width: 515, align: 'justify' });
+
+    y = doc.y + 20;
 
     // ── ASESOR ─────────────────────────────────────────────────────────────
     if (y > 720) { doc.addPage(); y = 120; }
