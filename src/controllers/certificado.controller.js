@@ -294,11 +294,10 @@ async function generar(req, res, next) {
       .text('SERVICIOS ADICIONALES', 0, y + 3, { align: 'center' });
     y += 20;
 
-    doc.fontSize(9).font('Helvetica-Bold').fillColor('black')
-      .text(`${nombreCompleto(afiliado)} - AFILIADO PRINCIPAL`, 40, y);
-    y += 15;
-
     if (afiliado.asistenciaFueraDeCasa === 'SI') {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('black')
+        .text(`${nombreCompleto(afiliado)} - AFILIADO PRINCIPAL`, 40, y);
+      y += 15;
       doc.font('Helvetica').text('Asistencia fuera de casa', 40, y);
       doc.text('Con servicio', 450, y);
       y += 15;
