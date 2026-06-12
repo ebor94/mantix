@@ -196,7 +196,7 @@ SELECT * FROM (
         ''                                                        AS \`% PARTICIPACION\`,
         135                                                       AS \`AGENCIA\`,
         '135000450289'                                            AS \`POLIZA AGRUPADORA\`,
-        0                                                         AS \`POLIZA\`,
+        ''                                                        AS \`POLIZA\`,
         CASE UPPER(a.sucursal)
             WHEN 'PAMPLONA'   THEN '492'
             WHEN 'OCAÑA'      THEN '493'
@@ -207,17 +207,17 @@ SELECT * FROM (
         END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
         DATE_FORMAT(a.vigenciaHasta,'%e/%c/%Y')                   AS \`VIGENCIA HASTA\`,
-        0                                                         AS \`S/N RIESGO COMPARTIDO\`,
-        0                                                         AS \`S/N CONDONACION DEUDA\`,
+        ''                                                        AS \`S/N RIESGO COMPARTIDO\`,
+        ''                                                        AS \`S/N CONDONACION DEUDA\`,
         1                                                         AS \`CONDUCTO DE PAGO\`,
         ${PLAN_PAGO}                                              AS \`PLAN DE PAGO\`,
-        0                                                         AS \`CODIGO BANCO\`,
-        0                                                         AS \`NRO CUENTA/TARJETA\`,
+        ''                                                        AS \`CODIGO BANCO\`,
+        ''                                                        AS \`NRO CUENTA/TARJETA\`,
         1                                                         AS \`PERIODO FACTURACION\`,
         1                                                         AS \`CANT PERIODOS FACTURAR\`,
         '-1'                                                      AS \`CANAL DE RECAUDO\`,
-        0                                                         AS \`COBRADOR\`,
-        0                                                         AS \`ZONA\`,
+        ''                                                        AS \`COBRADOR\`,
+        ''                                                        AS \`ZONA\`,
         -- AMPARO 1
         CASE
             WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre='SOLICANASTA')    THEN '25'
@@ -418,7 +418,7 @@ SELECT * FROM (
         ''                                                        AS \`% PARTICIPACION\`,
         135                                                       AS \`AGENCIA\`,
         '135000450289'                                            AS \`POLIZA AGRUPADORA\`,
-        0                                                         AS \`POLIZA\`,
+        ''                                                        AS \`POLIZA\`,
         CASE UPPER(a.sucursal)
             WHEN 'PAMPLONA'   THEN '492'
             WHEN 'OCAÑA'      THEN '493'
@@ -429,17 +429,17 @@ SELECT * FROM (
         END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
         DATE_FORMAT(a.vigenciaHasta,'%e/%c/%Y')                   AS \`VIGENCIA HASTA\`,
-        0                                                         AS \`S/N RIESGO COMPARTIDO\`,
-        0                                                         AS \`S/N CONDONACION DEUDA\`,
+        ''                                                        AS \`S/N RIESGO COMPARTIDO\`,
+        ''                                                        AS \`S/N CONDONACION DEUDA\`,
         1                                                         AS \`CONDUCTO DE PAGO\`,
         ${PLAN_PAGO}                                              AS \`PLAN DE PAGO\`,
-        0                                                         AS \`CODIGO BANCO\`,
-        0                                                         AS \`NRO CUENTA/TARJETA\`,
+        ''                                                        AS \`CODIGO BANCO\`,
+        ''                                                        AS \`NRO CUENTA/TARJETA\`,
         1                                                         AS \`PERIODO FACTURACION\`,
         1                                                         AS \`CANT PERIODOS FACTURAR\`,
         '-1'                                                      AS \`CANAL DE RECAUDO\`,
-        0                                                         AS \`COBRADOR\`,
-        0                                                         AS \`ZONA\`,
+        ''                                                        AS \`COBRADOR\`,
+        ''                                                        AS \`ZONA\`,
         ''                                                        AS \`CODIGO AMPARO\`,
         ''                                                        AS \`FORMA LIQ 1\`,
         ''                                                        AS \`VALOR  1\`,
