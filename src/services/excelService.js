@@ -139,6 +139,10 @@ SELECT * FROM (
         0                                                         AS \`NUMERO SALARIOS\`,
         0                                                         AS \`EXTRAPRIMA\`,
         CASE
+            -- UNIFAMILIAR
+            WHEN a.grupo = 'UNIFAMILIAR'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId = a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '28'
             WHEN a.grupo = 'UNIFAMILIAR' AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId = a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '8'
@@ -149,8 +153,13 @@ SELECT * FROM (
                 THEN '4'
             WHEN a.grupo = 'UNIFAMILIAR'
                 THEN '1'
-            WHEN a.grupo = 'UNIPERSONAL'
-                THEN '10'
+            -- UNIPERSONAL / INDIVIDUAL
+            WHEN a.grupo = 'UNIPERSONAL' THEN '10'
+            WHEN a.grupo = 'INDIVIDUAL'  THEN '27'
+            -- BASICO
+            WHEN a.grupo = 'BASICO'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId = a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '31'
             WHEN a.grupo = 'BASICO' AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId = a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '17'
@@ -295,6 +304,10 @@ SELECT * FROM (
         0                                                         AS \`NUMERO SALARIOS\`,
         0                                                         AS \`EXTRAPRIMA\`,
         CASE
+            -- ======== UNIFAMILIAR DE_LEY ========
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'DE_LEY'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '28'
             WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'DE_LEY'
                  AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
@@ -307,20 +320,49 @@ SELECT * FROM (
                 THEN '4'
             WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'DE_LEY'
                 THEN '1'
-            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL'
+            -- ======== UNIFAMILIAR ADICIONAL mayor 50 ========
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '30'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
+                THEN '22'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
+                THEN '25'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SOLICANASTA%')
+                THEN '20'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                THEN '3'
+            -- ======== UNIFAMILIAR ADICIONAL menor 50 ========
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '29'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                  AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '9'
-            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
-                THEN '7'
-            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL'
+                THEN '21'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SOLICANASTA%')
+                THEN '19'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                  AND a.asistenciaFueraDeCasa = 'SI'
                 THEN '5'
-            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL'
-                THEN '3'
-            WHEN a.grupo = 'UNIPERSONAL' AND b.tipoBeneficiario = 'DE_LEY'
-                THEN '10'
+            WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                THEN '23'
+            -- ======== UNIPERSONAL / INDIVIDUAL ========
+            WHEN a.grupo = 'UNIPERSONAL' THEN '10'
+            WHEN a.grupo = 'INDIVIDUAL'  THEN '27'
+            -- ======== BASICO DE_LEY ========
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'DE_LEY'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '31'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'DE_LEY'
                  AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
@@ -333,18 +375,28 @@ SELECT * FROM (
                 THEN '13'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'DE_LEY'
                 THEN '11'
-            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL'
+            -- ======== BASICO ADICIONAL mayor 50 ========
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '33'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
+                THEN '16'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                THEN '14'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                THEN '12'
+            -- ======== BASICO ADICIONAL menor 50 ========
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
+                THEN '32'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                  AND a.asistenciaFueraDeCasa = 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '18'
-            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL'
-                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
-                THEN '16'
-            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL'
-                 AND a.asistenciaFueraDeCasa = 'SI'
-                THEN '14'
-            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL'
-                THEN '12'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                THEN 'PENDIENTE'
             ELSE 'PENDIENTE'
         END                                                       AS \`CATEGORIA\`,
         1                                                         AS \`CENTRO DE COSTO\`,
