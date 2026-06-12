@@ -129,9 +129,9 @@ SELECT * FROM (
             ELSE ${TIPO_DOC('a.tipoDocumento')}
         END                                                       AS \`TIPO DOCUMENTO\`,
         CASE WHEN a.diferenteAlContratante = 1
-            THEN (SELECT CASE WHEN bp.tipoDocumento = 'ADT' THEN '' ELSE bp.numeroDocumento END
+            THEN (SELECT CASE WHEN bp.tipoDocumento = 'ADT' THEN '0' ELSE bp.numeroDocumento END
                   FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
-            ELSE CASE WHEN a.tipoDocumento = 'ADT' THEN '' ELSE a.numeroDocumento END
+            ELSE CASE WHEN a.tipoDocumento = 'ADT' THEN '0' ELSE a.numeroDocumento END
         END                                                       AS \`NUMERO DE DOCUMENTO\`,
         DATE_FORMAT(a.createdAt,    '%e/%c/%Y')                   AS \`FECHA VINCULACION\`,
         DATE_FORMAT(a.vigenciaDesde,'%e/%c/%Y')                   AS \`FECHA INGRESO POLIZA\`,
@@ -285,7 +285,7 @@ SELECT * FROM (
         DATE_FORMAT(b.fechaNacimiento, '%e/%c/%Y')                AS \`FECHA DE NACIMIENTO\`,
         b.genero                                                  AS \`SEXO\`,
         ${TIPO_DOC('b.tipoDocumento')}                            AS \`TIPO DOCUMENTO\`,
-        CASE WHEN b.tipoDocumento = 'ADT' THEN '' ELSE b.numeroDocumento END AS \`NUMERO DE DOCUMENTO\`,
+        CASE WHEN b.tipoDocumento = 'ADT' THEN '0' ELSE b.numeroDocumento END AS \`NUMERO DE DOCUMENTO\`,
         DATE_FORMAT(a.createdAt,    '%e/%c/%Y')                   AS \`FECHA VINCULACION\`,
         DATE_FORMAT(a.vigenciaDesde,'%e/%c/%Y')                   AS \`FECHA INGRESO POLIZA\`,
         0                                                         AS \`SALARIO REAL\`,
