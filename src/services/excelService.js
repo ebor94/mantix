@@ -175,7 +175,7 @@ SELECT * FROM (
         a.segundoNombre                                           AS \`NOMBRE 2 PAGADOR\`,
         DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')                AS \`FECHA DE NACIMIENTO PAGADOR\`,
         a.sexo                                                    AS \`SEXO PAGADOR\`,
-        (SELECT u.codigo FROM usuarios u WHERE u.id = a.asesorId LIMIT 1) AS \`CODIGO ASESOR\`,
+        IFNULL((SELECT u.codigo FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
         99999                                                     AS \`COD ZONA ASESOR\`,
         8                                                         AS \`CODIGO TELEFONO\`,
         a.celular                                                 AS \`TELEFONO\`,
