@@ -183,8 +183,8 @@ async function generar(req, res, next) {
     y += 25;
 
     // ── INFORMACION DEL CONTRATANTE ────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#00a57e');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+    doc.rect(40, y, 515, 16).fill('#cbcfd2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
       .text('INFORMACIÓN DEL CONTRATANTE', 0, y + 3, { align: 'center' });
     y += 20;
 
@@ -215,8 +215,8 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DEL TITULAR ────────────────────────────────────────────
-    doc.rect(40, y, 515, 16).fill('#00a57e');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+    doc.rect(40, y, 515, 16).fill('#cbcfd2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
       .text('INFORMACIÓN DEL TITULAR', 0, y + 3, { align: 'center' });
     y += 20;
 
@@ -245,14 +245,14 @@ async function generar(req, res, next) {
     y += 20;
 
     // ── INFORMACION DE AFILIADOS (BENEFICIARIOS) ───────────────────────────
-    doc.rect(40, y, 515, 16).fill('#00a57e');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+    doc.rect(40, y, 515, 16).fill('#cbcfd2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
       .text('INFORMACIÓN DE AFILIADOS', 0, y + 3, { align: 'center' });
     y += 20;
 
     if (beneficiarios.length > 0) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
-      doc.rect(40, y, 515, 15).fillColor('#cad0d1').fill();
+      doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
       doc.text('Documento', 45, y + 4);
       doc.text('Nombres', 130, y + 4);
@@ -289,8 +289,8 @@ async function generar(req, res, next) {
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
     if (y > 700) { doc.addPage(); y = 120; }
 
-    doc.rect(40, y, 515, 16).fill('#00a57e');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+    doc.rect(40, y, 515, 16).fill('#cbcfd2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
       .text('SERVICIOS ADICIONALES', 0, y + 3, { align: 'center' });
     y += 20;
 
@@ -309,13 +309,13 @@ async function generar(req, res, next) {
     const nCuotas = Math.max(1, Number((contrato && contrato.nCuotas) || 1));
     if (seguros.length > 0) {
       if (y > 680) { doc.addPage(); y = 120; }
-      doc.rect(40, y, 515, 16).fill('#00a57e');
-      doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+      doc.rect(40, y, 515, 16).fill('#cbcfd2');
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
         .text('SEGUROS', 0, y + 3, { align: 'center' });
       y += 20;
 
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
-      doc.rect(40, y, 515, 15).fillColor('#cad0d1').fill();
+      doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
       doc.text('Seguro', 45, y + 4);
       doc.text('Valor Asegurado', 200, y + 4);
@@ -340,8 +340,8 @@ async function generar(req, res, next) {
     // ── DETALLE COSTO ANUAL ────────────────────────────────────────────────
     if (y > 680) { doc.addPage(); y = 120; }
 
-    doc.rect(40, y, 515, 16).fill('#00a57e');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('white')
+    doc.rect(40, y, 515, 16).fill('#cbcfd2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
       .text('DETALLE COSTO ANUAL', 0, y + 3, { align: 'center' });
     y += 20;
 
@@ -378,7 +378,7 @@ async function generar(req, res, next) {
     }
 
     y += 5;
-    doc.moveTo(40, y).lineTo(555, y).strokeColor('#00a57e').lineWidth(0.5).stroke();
+    doc.moveTo(40, y).lineTo(555, y).strokeColor('#cbcfd2').lineWidth(0.5).stroke();
     y += 8;
 
     // ── Total y modalidad ────────────────────────────────────────────────
