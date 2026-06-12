@@ -159,9 +159,9 @@ async function generar(req, res, next) {
 
     // ── TÍTULO CERTIFICADO ─────────────────────────────────────────────────
     doc.fontSize(10).font('Helvetica-Bold').fillColor('black');
-    doc.text('CERTIFICADO DE AFILIACIÓN EXEQUIAL.', 40, 113, { width: 515, align: 'center' });
-    doc.text('SERFUNORTE – CÚCUTA',              40, 126, { width: 515, align: 'center' });
-    doc.text('NIT. 800254697-5',                      40, 139, { width: 515, align: 'center' });
+    doc.text('SERFUNORTE – CÚCUTA',               40, 113, { width: 515, align: 'center' });
+    doc.text('NIT. 800254697-5',                       40, 126, { width: 515, align: 'center' });
+    doc.text('CERTIFICADO DE AFILIACIÓN EXEQUIAL', 40, 139, { width: 515, align: 'center' });
 
     let y = 158;
 
