@@ -406,8 +406,8 @@ async function generar(req, res, next) {
     const sinSeguros       = seguros.length === 0;
 
     const formas = [];
-    if (tieneSinergia)              formas.push('Sinergia Forma SO-01-03-12 04/2021');
-    if (tieneSolicanasta || sinSeguros) formas.push('Solicanasta Forma PEX-SO-03-30 03/2021');
+    if (tieneSinergia)              formas.push('Forma SO-01-03-12 04/2021');
+    if (tieneSolicanasta || sinSeguros) formas.push('Forma PEX-SO-03-30 03/2021');
     const formaRef = formas.join(' y ');
 
     const textoLegal = `El contratante declara que ha leído, analizado, revisado y comprendido a cabalidad las Condiciones Generales y las cláusulas contenidas en la ${formaRef}, así como la asesoría brindada, aceptándolas en su integridad. El presente certificado hace parte integral del contrato de previsión exequial adquirido con SERFUNORTE LOS OLIVOS y se encuentra sujeto a las disposiciones contenidas en dicho documento.`;
