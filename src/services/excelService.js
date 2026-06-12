@@ -375,7 +375,10 @@ SELECT * FROM (
         ''                                                        AS \`DIRECCION \`,
         ''                                                        AS \`DIVIPOLA  \`,
         ${TIPO_DOC('a.tipoDocumento')}                            AS \`TIPO DOCUMENTO RELACIONADO\`,
-        a.numeroDocumento                                         AS \`NUMERO DOCUMENTO RELACIONADO\`,
+        CASE WHEN a.diferenteAlContratante = 1
+            THEN (SELECT bp.numeroDocumento FROM beneficiarios bp WHERE bp.afiliadoId = a.id AND bp.parentesco = 'ASEGURADO PRINCIPAL' LIMIT 1)
+            ELSE a.numeroDocumento
+        END                                                       AS \`NUMERO DOCUMENTO RELACIONADO\`,
         CASE b.parentesco
             WHEN 'HIJO (A)'                  THEN '1'
             WHEN 'HIJO ADOPTIVO'             THEN '28'
