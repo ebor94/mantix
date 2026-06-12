@@ -419,7 +419,7 @@ SELECT * FROM (
         99999                                                     AS \`COD ZONA ASESOR\`,
         8                                                         AS \`CODIGO TELEFONO\`,
         a.celular                                                 AS \`TELEFONO\`,
-        ''                                                        AS \`CODIGO TELEFONO \`,
+        CASE WHEN a.celular2 IS NOT NULL AND a.celular2 != '' THEN 27 ELSE '' END AS \`CODIGO TELEFONO \`,
         IFNULL(a.celular2, '')                                    AS \`TELEFONO \`,
         ''                                                        AS \`CODIGO TELEFONO  \`,
         ''                                                        AS \`TELEFONO  \`,
