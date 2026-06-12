@@ -203,6 +203,9 @@ SELECT * FROM (
             WHEN 'ARAUCA'     THEN '491'
             WHEN 'CUCUTA'     THEN '5'
             WHEN 'CRISTO REY' THEN '1353'
+            WHEN 'SARAVENA'  THEN '1356'
+            WHEN 'TAME'      THEN '1355'
+            WHEN 'ARAUQUITA' THEN '1357'
             ELSE a.sucursal
         END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
@@ -425,6 +428,9 @@ SELECT * FROM (
             WHEN 'ARAUCA'     THEN '491'
             WHEN 'CUCUTA'     THEN '5'
             WHEN 'CRISTO REY' THEN '1353'
+            WHEN 'SARAVENA'  THEN '1356'
+            WHEN 'TAME'      THEN '1355'
+            WHEN 'ARAUQUITA' THEN '1357'
             ELSE a.sucursal
         END                                                       AS \`UNIDAD COMERCIAL\`,
         4                                                         AS \`TIPO ENDOSO\`,
