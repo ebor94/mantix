@@ -415,7 +415,16 @@ async function generar(req, res, next) {
     doc.fontSize(8).font('Helvetica').fillColor('black')
       .text(textoLegal, 40, y, { width: 515, align: 'justify' });
 
-    y = doc.y + 20;
+    y = doc.y + 12;
+
+    // ── OBSERVACIONES ──────────────────────────────────────────────────────
+    if (afiliado.observaciones) {
+      if (y > 700) { doc.addPage(); y = 120; }
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('black').text('Observaciones:', 40, y);
+      y = doc.y + 3;
+      doc.font('Helvetica').text(afiliado.observaciones, 40, y, { width: 515, align: 'justify' });
+      y = doc.y + 12;
+    }
 
     // ── ASESOR ─────────────────────────────────────────────────────────────
     if (y > 720) { doc.addPage(); y = 120; }
