@@ -380,6 +380,10 @@ SELECT * FROM (
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
                 THEN '33'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
+                THEN '26'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '16'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad >= 50
