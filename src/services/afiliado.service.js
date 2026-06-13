@@ -162,7 +162,7 @@ async function getPendientes(usuario) {
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
-      { model: ContratoValor, as: 'contrato' },
+      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' }
     ],
     order: [['createdAt', 'DESC']]
