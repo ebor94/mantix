@@ -400,6 +400,9 @@ SELECT * FROM (
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '18'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                 AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
+                THEN '25'
+            WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                 THEN '23'
             ELSE 'PENDIENTE'
         END                                                       AS \`CATEGORIA\`,
