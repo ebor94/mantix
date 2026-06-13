@@ -1085,7 +1085,7 @@ doc.fontSize(20)
   <text x="420" y="425" class="ff value">${esc(referencia)}</text>
 
   <text x="420" y="475" class="ff label">ESTADO</text>
-  <text x="420" y="505" class="ff value">Recibido · pendiente de cuadre</text>
+  <text x="420" y="505" class="ff value">Recibido</text>
 
   <!-- Total destacado -->
   <rect x="40" y="635" width="720" height="120" fill="#0F766E" rx="10"/>
