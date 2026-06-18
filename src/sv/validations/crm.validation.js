@@ -101,7 +101,8 @@ const prospectos = {
     prosp_fuente_id:          Joi.number().integer().allow(null)
   }).min(1),
   reasignar: Joi.object({
-    nuevo_asesor_id: Joi.number().integer().required()
+    nuevo_asesor_id: Joi.number().integer().required(),
+    motivo:          Joi.string().max(250).allow('').optional()
   })
 };
 

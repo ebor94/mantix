@@ -297,10 +297,27 @@ async function actualizarProductos(prospId, productos = []) {
   return obtenerCompleto(prospId);
 }
 
-async function reasignar(id, nuevoAsesorId) {
+async function reasignar(id, nuevoAsesorId, { actorId = null, motivo = '' } = {}) {
   const p = await SvProspecto.findByPk(id);
   if (!p) { const e = new Error('Prospecto no encontrado'); e.code = 'NOT_FOUND'; throw e; }
-  await p.update({ prosp_asesor_id: nuevoAsesorId });
+  const asesorAnterior = p.prosp_asesor_id;
+
+  const t = await sequelize.transaction();
+  try {
+    await p.update({ prosp_asesor_id: nuevoAsesorId }, { transaction: t });
+    // Gestión inmutable como traza de auditoría (mismo patrón que reasignación masiva)
+    await SvGestion.create({
+      gest_prosp_id:   p.prosp_id,
+      gest_asesor_id:  actorId,
+      gest_canal:      'sistema',
+      gest_comentario: `[Reasignación] de asesor #${asesorAnterior ?? '—'} a #${nuevoAsesorId}` +
+                       (motivo ? `. Motivo: ${motivo}` : '')
+    }, { transaction: t });
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
   return obtenerCompleto(id);
 }
 

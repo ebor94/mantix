@@ -4,6 +4,7 @@
 const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
+const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 
 async function list(req, res) {
   const r = await prospectos.list({
@@ -43,11 +44,13 @@ async function getOne(req, res) {
   const p = await prospectos.obtenerCompleto(parseInt(req.params.id));
   if (!p) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Prospecto no encontrado');
 
-  // Verificar scope
+  // Verificar scope (respetando multi-grupo y multi-área del usuario)
   const s = req.scope;
+  const gruposOk = grupoIdsAccesibles(req.user); // null = SUPER_ADMIN (acceso total)
+  const areasOk  = areaIdsAccesibles(req.user);
   if (s.asesorId && p.prosp_asesor_id !== s.asesorId) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu alcance');
-  if (s.grupoId  && !s.asesorId && p.prosp_grupo_id !== s.grupoId) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu grupo');
-  if (s.areaId   && !s.grupoId  && p.prosp_area_id  !== s.areaId)  return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
+  if (s.grupoId  && !s.asesorId && gruposOk !== null && !gruposOk.includes(p.prosp_grupo_id)) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu grupo');
+  if (s.areaId   && !s.grupoId  && areasOk  !== null && !areasOk.includes(p.prosp_area_id))  return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
 
   return ok(res, p);
 }
@@ -98,7 +101,34 @@ async function reasignar(req, res) {
   if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior pueden reasignar');
   }
-  const r = await prospectos.reasignar(parseInt(req.params.id), parseInt(req.body.nuevo_asesor_id));
+
+  const prospId        = parseInt(req.params.id);
+  const nuevoAsesorId  = parseInt(req.body.nuevo_asesor_id);
+  const motivo         = (req.body.motivo || '').toString().slice(0, 250);
+
+  // 1. Cargar prospecto y verificar acceso por grupo (respeta multi-grupo del supervisor)
+  const p = await prospectos.obtenerCompleto(prospId);
+  if (!p) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Prospecto no encontrado');
+
+  const gruposOk = grupoIdsAccesibles(req.user); // null = SUPER_ADMIN (acceso total)
+  if (gruposOk !== null && !gruposOk.includes(p.prosp_grupo_id)) {
+    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu grupo');
+  }
+
+  // 2. Verificar asesor destino: existe, activo y pertenece al mismo grupo del prospecto
+  const { SvUsuario } = require('../models');
+  const destino = await SvUsuario.findByPk(nuevoAsesorId);
+  if (!destino || !destino.usr_activo) {
+    return fail(res, 400, ERROR_CODES.VALIDATION_ERROR, 'Asesor destino inválido o inactivo');
+  }
+  if (destino.usr_grupo_id !== p.prosp_grupo_id) {
+    return fail(res, 400, ERROR_CODES.VALIDATION_ERROR, 'El asesor destino no pertenece al grupo del prospecto');
+  }
+  if (p.prosp_asesor_id === nuevoAsesorId) {
+    return fail(res, 400, ERROR_CODES.VALIDATION_ERROR, 'El prospecto ya está asignado a ese asesor');
+  }
+
+  const r = await prospectos.reasignar(prospId, nuevoAsesorId, { actorId: req.user.usr_id, motivo });
   return ok(res, r);
 }
 
