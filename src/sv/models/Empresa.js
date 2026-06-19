@@ -15,7 +15,11 @@ module.exports = (sequelize, DataTypes) => {
     empresa_direccion:         { type: DataTypes.STRING(250) },
     empresa_ciudad:            { type: DataTypes.STRING(80), defaultValue: 'Cucuta' },
     empresa_nota:              { type: DataTypes.TEXT },
-    empresa_activa:            { type: DataTypes.TINYINT, defaultValue: 1 }
+    empresa_activa:            { type: DataTypes.TINYINT, defaultValue: 1 },
+    // Categoría de fidelización (manual por empresa) — migración 015
+    empresa_categoria:             { type: DataTypes.STRING(20) }, // BRONCE|PLATA|ORO|PLATINO|DIAMANTE
+    empresa_presupuesto_fideliz:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    empresa_presupuesto_gastado:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 }
   }, {
     tableName: 'sv_crm_empresas',
     freezeTableName: true,
@@ -33,6 +37,16 @@ module.exports = (sequelize, DataTypes) => {
     }
     if (models.SvEnvio) {
       Empresa.hasMany(models.SvEnvio, { as: 'envios', foreignKey: 'env_empresa_id' });
+    }
+    // Migración 015: documentos, propuestas archivo, movimientos presupuesto
+    if (models.SvEmpresaDocumento) {
+      Empresa.hasMany(models.SvEmpresaDocumento, { as: 'documentos', foreignKey: 'doc_empresa_id' });
+    }
+    if (models.SvEmpresaPropuestaArchivo) {
+      Empresa.hasMany(models.SvEmpresaPropuestaArchivo, { as: 'propuestasArchivo', foreignKey: 'prop_empresa_id' });
+    }
+    if (models.SvFidelizMovimiento) {
+      Empresa.hasMany(models.SvFidelizMovimiento, { as: 'movimientosFideliz', foreignKey: 'mov_empresa_id' });
     }
   };
   return Empresa;

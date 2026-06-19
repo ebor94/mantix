@@ -465,7 +465,8 @@ async function registrarEnvio(payload, agenteId) {
   const {
     persona_id, empresa_id, fecha_especial_id = null,
     evento_anio, evento_tipo, tipo_detalle, direccion_entrega,
-    estado = 'enviado', evidencia_url, comentario
+    estado = 'enviado', evidencia_url, comentario,
+    costo = null   // migración 015: si se indica, descuenta del presupuesto fideliz de la empresa
   } = payload;
 
   if (!persona_id || !empresa_id || !evento_anio || !evento_tipo) {
@@ -488,19 +489,64 @@ async function registrarEnvio(payload, agenteId) {
     throw new FidelizError('DUPLICATE_ENVIO', 'Ya existe un envío para este contacto/evento/año');
   }
 
-  return SvEnvio.create({
-    env_persona_id:        persona_id,
-    env_empresa_id:        empresa_id,
-    env_fecha_especial_id: fecha_especial_id,
-    env_evento_anio:       evento_anio,
-    env_evento_tipo:       evento_tipo,
-    env_agente_id:         agenteId,
-    env_tipo_detalle:      tipo_detalle || null,
-    env_direccion_entrega: direccion_entrega || null,
-    env_estado:            estado,
-    env_evidencia_url:     evidencia_url || null,
-    env_comentario:        comentario || null
-  });
+  // Si el envío tiene costo, validar presupuesto disponible en la empresa
+  const costoNum = costo != null ? parseFloat(costo) : 0;
+  if (costoNum > 0) {
+    const { SvEmpresa } = require('../models');
+    const empresa = await SvEmpresa.findByPk(empresa_id);
+    if (empresa) {
+      const presupuesto = parseFloat(empresa.empresa_presupuesto_fideliz) || 0;
+      const gastado    = parseFloat(empresa.empresa_presupuesto_gastado) || 0;
+      const disponible = presupuesto - gastado;
+      if (costoNum > disponible) {
+        throw new FidelizError(
+          'PRESUPUESTO_INSUFICIENTE',
+          `Presupuesto insuficiente. Disponible: $${disponible.toFixed(0)}, requerido: $${costoNum.toFixed(0)}`
+        );
+      }
+    }
+  }
+
+  const { sequelize, SvEmpresa, SvFidelizMovimiento } = require('../models');
+  const t = await sequelize.transaction();
+  try {
+    const envio = await SvEnvio.create({
+      env_persona_id:        persona_id,
+      env_empresa_id:        empresa_id,
+      env_fecha_especial_id: fecha_especial_id,
+      env_evento_anio:       evento_anio,
+      env_evento_tipo:       evento_tipo,
+      env_agente_id:         agenteId,
+      env_tipo_detalle:      tipo_detalle || null,
+      env_direccion_entrega: direccion_entrega || null,
+      env_estado:            estado,
+      env_evidencia_url:     evidencia_url || null,
+      env_comentario:        comentario || null,
+      env_costo:             costoNum > 0 ? costoNum : null
+    }, { transaction: t });
+
+    // Descontar del presupuesto si hay costo
+    if (costoNum > 0) {
+      const empresa = await SvEmpresa.findByPk(empresa_id, { transaction: t });
+      await empresa.update({
+        empresa_presupuesto_gastado: parseFloat(empresa.empresa_presupuesto_gastado) + costoNum
+      }, { transaction: t });
+      await SvFidelizMovimiento.create({
+        mov_empresa_id:  empresa_id,
+        mov_envio_id:    envio.env_id,
+        mov_tipo:        'CONSUMO',
+        mov_monto:       -costoNum,   // negativo: descuenta
+        mov_descripcion: `Envío fidelización ${evento_tipo} ${evento_anio}` + (tipo_detalle ? ` (${tipo_detalle})` : ''),
+        mov_usuario_id:  agenteId
+      }, { transaction: t });
+    }
+
+    await t.commit();
+    return envio;
+  } catch (e) {
+    await t.rollback();
+    throw e;
+  }
 }
 
 /** Permite cambiar SOLO estado/evidencia_url/comentario (hook del modelo bloquea el resto). */

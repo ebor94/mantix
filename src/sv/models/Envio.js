@@ -14,7 +14,8 @@ module.exports = (sequelize, DataTypes) => {
     env_direccion_entrega: { type: DataTypes.STRING(250) },
     env_estado:            { type: DataTypes.STRING(20), defaultValue: 'enviado' },  // enviado | confirmado | devuelto
     env_evidencia_url:     { type: DataTypes.STRING(255) },
-    env_comentario:        { type: DataTypes.TEXT }
+    env_comentario:        { type: DataTypes.TEXT },
+    env_costo:             { type: DataTypes.DECIMAL(15, 2) }   // migración 015: descuenta del presupuesto fideliz si está presente
   }, {
     tableName: 'sv_fideliz_envios',
     freezeTableName: true,
