@@ -230,8 +230,93 @@ async function movimientosPresupuesto(empresaId, { page = 1, limit = 50 } = {}) 
   return { items: rows, total: count };
 }
 
+/**
+ * Reporte agregado de presupuesto de fidelización por categoría.
+ * Devuelve, para cada categoría (BRONCE/PLATA/ORO/PLATINO/DIAMANTE + "Sin categoría"):
+ *   - count_empresas
+ *   - total_asignado, total_gastado, total_disponible
+ *   - pct_consumido
+ *   - num_envios (todos los envíos hechos a empresas de esa categoría)
+ *   - num_envios_con_costo (los que descontaron presupuesto)
+ *   - total_descuento_envios (suma de env_costo)
+ * Devuelve además los totales globales.
+ */
+async function reportePresupuestoFidelizPorCategoria() {
+  // 1. Agregado de empresas por categoría
+  const empresasAgg = await SvEmpresa.findAll({
+    attributes: [
+      'empresa_categoria',
+      [sequelize.fn('COUNT', sequelize.col('empresa_id')), 'count_empresas'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('empresa_presupuesto_fideliz')), 0), 'total_asignado'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('empresa_presupuesto_gastado')), 0), 'total_gastado']
+    ],
+    where: { empresa_activa: 1 },
+    group: ['empresa_categoria'],
+    raw: true
+  });
+
+  // 2. Agregado de envíos por categoría (vía JOIN con empresas)
+  // Usamos query SQL nativa porque agrupar por columna de tabla joineada con Sequelize es engorroso.
+  const [enviosAgg] = await sequelize.query(`
+    SELECT
+      e.empresa_categoria,
+      COUNT(env.env_id)                         AS num_envios,
+      SUM(CASE WHEN env.env_costo IS NOT NULL AND env.env_costo > 0 THEN 1 ELSE 0 END) AS num_envios_con_costo,
+      COALESCE(SUM(env.env_costo), 0)           AS total_descuento_envios
+    FROM sv_fideliz_envios env
+    JOIN sv_crm_empresas e ON e.empresa_id = env.env_empresa_id
+    WHERE e.empresa_activa = 1
+    GROUP BY e.empresa_categoria
+  `);
+
+  // 3. Fusionar y normalizar
+  const NIVELES = ['BRONCE', 'PLATA', 'ORO', 'PLATINO', 'DIAMANTE', null];
+  const enviosMap = new Map(enviosAgg.map(r => [r.empresa_categoria || '__null__', r]));
+
+  const porCategoria = NIVELES.map(cat => {
+    const empBase = empresasAgg.find(e => (e.empresa_categoria || '__null__') === (cat || '__null__'));
+    const envBase = enviosMap.get(cat || '__null__') || {};
+    const totalAsignado  = parseFloat(empBase?.total_asignado || 0);
+    const totalGastado   = parseFloat(empBase?.total_gastado || 0);
+    const disponible     = totalAsignado - totalGastado;
+    const pct            = totalAsignado > 0 ? (totalGastado / totalAsignado) * 100 : 0;
+    return {
+      categoria:               cat,                          // null = sin categoría
+      categoria_label:         cat || 'Sin categoría',
+      count_empresas:          parseInt(empBase?.count_empresas || 0),
+      total_asignado:          totalAsignado,
+      total_gastado:           totalGastado,
+      total_disponible:        disponible,
+      pct_consumido:           Math.round(pct * 10) / 10,    // 1 decimal
+      num_envios:              parseInt(envBase.num_envios || 0),
+      num_envios_con_costo:    parseInt(envBase.num_envios_con_costo || 0),
+      total_descuento_envios:  parseFloat(envBase.total_descuento_envios || 0)
+    };
+  });
+
+  // 4. Totales globales
+  const totales = porCategoria.reduce((acc, r) => ({
+    count_empresas:         acc.count_empresas + r.count_empresas,
+    total_asignado:         acc.total_asignado + r.total_asignado,
+    total_gastado:          acc.total_gastado + r.total_gastado,
+    total_disponible:       acc.total_disponible + r.total_disponible,
+    num_envios:             acc.num_envios + r.num_envios,
+    num_envios_con_costo:   acc.num_envios_con_costo + r.num_envios_con_costo,
+    total_descuento_envios: acc.total_descuento_envios + r.total_descuento_envios
+  }), {
+    count_empresas: 0, total_asignado: 0, total_gastado: 0, total_disponible: 0,
+    num_envios: 0, num_envios_con_costo: 0, total_descuento_envios: 0
+  });
+  totales.pct_consumido = totales.total_asignado > 0
+    ? Math.round((totales.total_gastado / totales.total_asignado) * 1000) / 10
+    : 0;
+
+  return { por_categoria: porCategoria, totales };
+}
+
 module.exports = {
   buscarPorNit, crear, actualizar, list, obtenerConDetalle,
   reasignarAsesor, actualizarCategoria, ajustarPresupuesto, movimientosPresupuesto,
+  reportePresupuestoFidelizPorCategoria,
   DuplicateError, CATEGORIAS_VALIDAS
 };

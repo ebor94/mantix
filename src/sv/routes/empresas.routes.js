@@ -8,6 +8,9 @@ router.use(ctrl.requireAreaEmp);
 router.get ('/',        validate(v.list, 'query'),   ctrl.list);
 router.get ('/buscar',  validate(v.buscar, 'query'), ctrl.buscar);
 
+// Reportes (antes de /:id para no chocar con la ruta dinámica)
+router.get   ('/reportes/presupuesto-fideliz', ctrl.reportePresupuestoFideliz);
+
 // Catálogo de tipos de documento (debe ir antes de /:id para no chocar)
 router.get   ('/tipos-documento',          ctrl.listarTipos);
 router.post  ('/tipos-documento',          ctrl.crearTipo);

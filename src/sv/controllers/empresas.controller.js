@@ -154,6 +154,16 @@ async function listarMovimientos(req, res) {
   return ok(res, r);
 }
 
+// ─── Reporte agregado de presupuesto fidelización por categoría ───
+async function reportePresupuestoFideliz(req, res) {
+  const c = req.user.rol?.rol_codigo;
+  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Reporte solo disponible para SUPERVISOR o superior');
+  }
+  const r = await empresas.reportePresupuestoFidelizPorCategoria();
+  return ok(res, r);
+}
+
 // ─── Documentos ───
 async function listarDocumentos(req, res) {
   const docs = await documentos.listarPorEmpresa(parseInt(req.params.id));
@@ -269,6 +279,7 @@ async function eliminarTipo(req, res) {
 module.exports = {
   list, buscar, getOne, create, update,
   reasignarAsesor, actualizarCategoria, ajustarPresupuesto, listarMovimientos,
+  reportePresupuestoFideliz,
   listarDocumentos, subirDocumento, eliminarDocumento,
   listarPropuestasArchivo, subirPropuestaArchivo, eliminarPropuestaArchivo,
   listarTipos, crearTipo, actualizarTipo, eliminarTipo,
