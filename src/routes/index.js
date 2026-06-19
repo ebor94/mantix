@@ -38,6 +38,7 @@ const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes
 const r44Routes    = require('./r44Routes');              // ← Módulo R-44 Proveedores Serfunorte
 const reciboCajaRoutes = require('./reciboCaja.routes');  // ← Módulo de recibos de caja y cuadre
 const svRoutes     = require('../sv/routes');             // ← Módulo SerVentas CRM
+const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (identidad compartida)
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -76,5 +77,6 @@ router.use('/cym',    require('./cym.routes')); // ← Módulo CYM Mantenimiento
 router.use('/r44',    r44Routes);    // ← Módulo R-44 Portal Proveedores Serfunorte
 router.use('/recibos', reciboCajaRoutes); // ← Recibos de caja y cuadre
 router.use('/sv',     svRoutes);     // ← Módulo SerVentas CRM (Serfunorte)
+router.use('/identidad', identidadRoutes); // ← SSO compartido entre apps (afiliaciones, genflow, h360...)
 
 module.exports = router;

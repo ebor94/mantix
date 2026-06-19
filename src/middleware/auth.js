@@ -5,10 +5,42 @@ const jwt = require('jsonwebtoken');
 const { Usuario, Rol, UsuarioCategoria } = require('../models');
 const { MENSAJES } = require('../config/constants');
 
+// SSO: secret del módulo de identidad compartido (puede estar ausente si SSO no se inicia)
+const IDENTIDAD_JWT_SECRET = process.env.IDENTIDAD_JWT_SECRET || process.env.JWT_SECRET;
+
+/**
+ * Resuelve el JWT en `usuarios` aceptando dos formatos:
+ *   - JWT viejo (legacy): firmado con JWT_SECRET, payload { id }
+ *   - JWT SSO (nuevo): firmado con IDENTIDAD_JWT_SECRET, payload { kind:'identidad', id_identidad }
+ *     → resuelve el usuario local vía la FK id_identidad.
+ */
+async function resolverUsuarioDesdeToken(token) {
+  // Intento 1: token viejo (firmado con JWT_SECRET)
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded && !decoded.kind && decoded.id) {
+      return Usuario.findByPk(decoded.id, { include: [{ model: Rol, as: 'rol' }] });
+    }
+  } catch (_) { /* fall through */ }
+
+  // Intento 2: token SSO de identidad
+  try {
+    const decoded = jwt.verify(token, IDENTIDAD_JWT_SECRET);
+    if (decoded && decoded.kind === 'identidad' && decoded.id_identidad) {
+      return Usuario.findOne({
+        where: { id_identidad: decoded.id_identidad },
+        include: [{ model: Rol, as: 'rol' }]
+      });
+    }
+  } catch (_) { /* fall through */ }
+
+  return null;
+}
+
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    
+
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -16,10 +48,7 @@ const auth = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const usuario = await Usuario.findByPk(decoded.id, {
-      include: [{ model: Rol, as: 'rol' }]
-    });
+    const usuario = await resolverUsuarioDesdeToken(token);
 
     if (!usuario || !usuario.activo) {
       throw new Error();
@@ -361,10 +390,7 @@ const softAuth = async (req, res, next) => {
       req.usuario = null;
       return next();
     }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const usuario = await Usuario.findByPk(decoded.id, {
-      include: [{ model: Rol, as: 'rol' }]
-    });
+    const usuario = await resolverUsuarioDesdeToken(token);
     req.usuario = (usuario?.activo) ? usuario : null;
   } catch {
     req.usuario = null;
