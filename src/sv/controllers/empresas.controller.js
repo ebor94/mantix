@@ -9,7 +9,7 @@ const path = require('path');
 const multer = require('multer');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES, AREAS, ROLES } = require('../config/constants');
-const { tieneAccesoArea } = require('../utils/acceso');
+const { tieneAccesoArea, grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 
 // Multer: subir documentos / propuestas archivo de empresas
 const UPLOAD_DIR_DOC = process.env.SV_UPLOAD_DIR
@@ -44,7 +44,7 @@ function requireAreaEmp(req, res, next) {
 
 async function list(req, res) {
   const r = await empresas.list({
-    filtros: req.query, scope: req.scope, page: req.query.page, limit: req.query.limit
+    filtros: req.query, scope: req.scope, user: req.user, page: req.query.page, limit: req.query.limit
   });
   return ok(res, r);
 }
@@ -59,6 +59,26 @@ async function getOne(req, res) {
   const id = parseInt(req.params.id);
   const r = await empresas.obtenerConDetalle(id);
   if (!r) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Empresa no encontrada');
+
+  // Validar que la empresa esté en el alcance del usuario
+  const rol = req.user.rol?.rol_codigo;
+  if (rol !== ROLES.SUPER_ADMIN) {
+    const prospectos = r.prospectos || [];
+    let permitido = false;
+    if (rol === ROLES.ASESOR || rol === ROLES.AGENTE_SVC) {
+      permitido = prospectos.some(p => p.prosp_asesor_id === req.user.usr_id);
+    } else if (rol === ROLES.SUPERVISOR || rol === ROLES.JEFE_PAP) {
+      const grupos = grupoIdsAccesibles(req.user) || [];
+      permitido = prospectos.some(p => grupos.includes(p.prosp_grupo_id));
+    } else if (rol === ROLES.ADMIN_AREA) {
+      const areas = areaIdsAccesibles(req.user) || [];
+      permitido = prospectos.some(p => areas.includes(p.prosp_area_id));
+    }
+    if (!permitido) {
+      return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Empresa fuera de tu alcance');
+    }
+  }
+
   // Fase 6: bandera para mostrar banner de Fidelización en la ficha
   try {
     const fideliz = require('../services/fidelizacion.service');

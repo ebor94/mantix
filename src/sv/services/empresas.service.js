@@ -6,8 +6,47 @@
 const { Op } = require('sequelize');
 const { sequelize, SvEmpresa, SvProspecto, SvPersona, SvEstado, SvUsuario, SvGestion, SvResultado, SvFidelizMovimiento } = require('../models');
 const { parse, normalizar, esValido } = require('../utils/nit');
+const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
+const { ROLES } = require('../config/constants');
 
 const CATEGORIAS_VALIDAS = ['BRONCE', 'PLATA', 'ORO', 'PLATINO', 'DIAMANTE'];
+
+/**
+ * Devuelve el array de IDs de empresas que el usuario puede ver según su rol:
+ *   - SUPER_ADMIN → null (sin filtro)
+ *   - ASESOR / AGENTE_SVC → empresas con al menos un prospecto activo donde es asesor
+ *   - SUPERVISOR / JEFE_PAP → empresas con prospectos en grupos accesibles (multi-grupo)
+ *   - ADMIN_AREA / GERENTE_GENERAL → empresas con prospectos en áreas accesibles
+ */
+async function empresaIdsAccesibles(user) {
+  const rol = user?.rol?.rol_codigo;
+  if (!rol || rol === ROLES.SUPER_ADMIN) return null; // sin filtro
+
+  const prospWhere = { prosp_activo: 1 };
+  if (rol === ROLES.ASESOR || rol === ROLES.AGENTE_SVC) {
+    prospWhere.prosp_asesor_id = user.usr_id;
+  } else if (rol === ROLES.SUPERVISOR || rol === ROLES.JEFE_PAP) {
+    const grupos = grupoIdsAccesibles(user);
+    if (grupos === null) return null;
+    if (!grupos.length) return [];
+    prospWhere.prosp_grupo_id = { [Op.in]: grupos };
+  } else if (rol === ROLES.ADMIN_AREA) {
+    const areas = areaIdsAccesibles(user);
+    if (areas === null) return null;
+    if (!areas.length) return [];
+    prospWhere.prosp_area_id = { [Op.in]: areas };
+  } else {
+    // Rol desconocido: cerrar acceso por defecto
+    return [];
+  }
+
+  const rows = await SvProspecto.findAll({
+    where: prospWhere,
+    attributes: [[sequelize.fn('DISTINCT', sequelize.col('prosp_empresa_id')), 'empresa_id']],
+    raw: true
+  });
+  return rows.map(r => r.empresa_id).filter(Boolean);
+}
 
 class DuplicateError extends Error {
   constructor(empresa) { super('DUPLICATE_NIT'); this.code = 'DUPLICATE_NIT'; this.empresa = empresa; }
@@ -54,8 +93,20 @@ async function actualizar(id, payload) {
   return e;
 }
 
-async function list({ filtros = {}, scope, page = 1, limit = 20 }) {
+async function list({ filtros = {}, scope, user, page = 1, limit = 20 }) {
   const where = { empresa_activa: 1 };
+
+  // Restringir por scope del usuario (ASESOR ve solo sus empresas, etc.)
+  if (user) {
+    const idsAccesibles = await empresaIdsAccesibles(user);
+    if (idsAccesibles !== null) {
+      if (!idsAccesibles.length) {
+        return { items: [], total: 0, page: parseInt(page), limit: parseInt(limit) };
+      }
+      where.empresa_id = { [Op.in]: idsAccesibles };
+    }
+  }
+
   if (filtros.q) {
     const q = `%${filtros.q}%`;
     where[Op.or] = [
@@ -317,6 +368,6 @@ async function reportePresupuestoFidelizPorCategoria() {
 module.exports = {
   buscarPorNit, crear, actualizar, list, obtenerConDetalle,
   reasignarAsesor, actualizarCategoria, ajustarPresupuesto, movimientosPresupuesto,
-  reportePresupuestoFidelizPorCategoria,
+  reportePresupuestoFidelizPorCategoria, empresaIdsAccesibles,
   DuplicateError, CATEGORIAS_VALIDAS
 };
