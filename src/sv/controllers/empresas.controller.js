@@ -160,6 +160,9 @@ async function reportePresupuestoFideliz(req, res) {
   if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Reporte solo disponible para SUPERVISOR o superior');
   }
+  // Los reportes deben ser siempre frescos: Express envía 304 con body vacío
+  // si el ETag coincide, lo que rompe los consumidores que esperan JSON.
+  res.set('Cache-Control', 'no-store');
   const r = await empresas.reportePresupuestoFidelizPorCategoria();
   return ok(res, r);
 }
