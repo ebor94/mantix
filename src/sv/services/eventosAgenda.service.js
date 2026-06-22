@@ -99,6 +99,16 @@ async function marcarCompletado(id, completado, actor) {
     evento_completado:    completado ? 1 : 0,
     evento_completado_at: completado ? new Date() : null
   });
+  // Hook: si era un SEGUIMIENTO automático y se acaba de completar, encadenar
+  // el siguiente. No bloquear si falla — log silencioso.
+  if (completado && ev.evento_tipo === 'SEGUIMIENTO' && ev.evento_empresa_id) {
+    try {
+      const seg = require('./seguimientosEmpresa.service');
+      await seg.programarSiguiente(ev);
+    } catch (e) {
+      /* log silencioso */
+    }
+  }
   return ev;
 }
 

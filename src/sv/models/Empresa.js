@@ -22,7 +22,9 @@ module.exports = (sequelize, DataTypes) => {
     empresa_presupuesto_gastado:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     // Migración 017: categorización + grupo económico
     empresa_tipo_id:               { type: DataTypes.INTEGER },
-    empresa_grupo_empresarial_id:  { type: DataTypes.INTEGER }
+    empresa_grupo_empresarial_id:  { type: DataTypes.INTEGER },
+    // Migración 019: periodicidad de seguimiento post-firma
+    empresa_periodicidad_seguimiento: { type: DataTypes.STRING(20) }   // BIMENSUAL|TRIMESTRAL|ANUAL|null
   }, {
     tableName: 'sv_crm_empresas',
     freezeTableName: true,

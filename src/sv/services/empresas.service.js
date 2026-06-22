@@ -242,7 +242,17 @@ async function reasignarAsesor(empresaId, nuevoAsesorId, { actorId, motivo = '' 
     }
     await t.commit();
   } catch (e) { await t.rollback(); throw e; }
-  return { reasignados: prospectos.length, nuevoAsesor: destino.usr_id };
+
+  // Hook migración 019: mover seguimientos futuros no completados al nuevo asesor.
+  let seguimientosReasignados = 0;
+  try {
+    const seg = require('./seguimientosEmpresa.service');
+    seguimientosReasignados = await seg.reasignarFuturos({
+      empresaId, nuevoAsesorId
+    });
+  } catch (_) { /* no bloquear */ }
+
+  return { reasignados: prospectos.length, nuevoAsesor: destino.usr_id, seguimientos_reasignados: seguimientosReasignados };
 }
 
 async function actualizarCategoria(empresaId, categoria) {

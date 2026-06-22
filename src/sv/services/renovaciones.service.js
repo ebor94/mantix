@@ -75,6 +75,22 @@ async function marcarConvenioFirmado(prospId, { fecha_inicio, fecha_vencimiento 
     await t.commit();
   } catch (e) { await t.rollback(); throw e; }
 
+  // Hook: programar el primer seguimiento si la empresa tiene periodicidad
+  try {
+    if (p.prosp_empresa_id) {
+      const seg = require('./seguimientosEmpresa.service');
+      await seg.programarPrimero({
+        empresaId:  p.prosp_empresa_id,
+        asesorId:   p.prosp_asesor_id,
+        fechaFirma: aISO(fecha_inicio),
+        creadoPor:  actorId
+      });
+    }
+  } catch (e) {
+    // No bloquear la firma si falla el agendamiento; queda log para revisión.
+    require('../utils/logger')?.warn?.(`[seguimiento] programarPrimero falló: ${e.message}`);
+  }
+
   return p.reload();
 }
 

@@ -24,7 +24,9 @@ module.exports = {
     empresa_nota:              Joi.string().allow('', null),
     // Migración 017
     empresa_tipo_id:               Joi.number().integer().required(),
-    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null)
+    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null),
+    // Migración 019
+    empresa_periodicidad_seguimiento: Joi.string().valid('BIMENSUAL','TRIMESTRAL','ANUAL').allow(null, '')
   }),
   update: Joi.object({
     empresa_nit:               Joi.string().min(5).max(20),
@@ -41,6 +43,8 @@ module.exports = {
     empresa_activa:            Joi.number().valid(0, 1),
     // Migración 017
     empresa_tipo_id:               Joi.number().integer(),
-    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null)
+    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null),
+    // Migración 019
+    empresa_periodicidad_seguimiento: Joi.string().valid('BIMENSUAL','TRIMESTRAL','ANUAL').allow(null, '')
   }).min(1)
 };
