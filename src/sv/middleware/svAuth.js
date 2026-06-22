@@ -14,6 +14,7 @@ const { verifyAccess } = require('../utils/jwt');
 const { fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
 const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto } = require('../models');
+const { enriquecerAccesoCruzado } = require('../utils/accesoCruzado');
 
 const IDENTIDAD_JWT_SECRET = process.env.IDENTIDAD_JWT_SECRET || process.env.JWT_SECRET;
 
@@ -62,6 +63,8 @@ async function svAuth(req, res, next) {
     if (!usuario || !usuario.usr_activo) {
       return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Token inválido o usuario inactivo');
     }
+
+    await enriquecerAccesoCruzado(usuario);
 
     req.user   = usuario;
     req.svUser = usuario;

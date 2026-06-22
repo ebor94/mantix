@@ -9,6 +9,7 @@ const { compare } = require('../utils/password');
 const { sha256 } = require('../utils/hashRefresh');
 const { ok, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, JWT } = require('../config/constants');
+const { enriquecerAccesoCruzado } = require('../utils/accesoCruzado');
 
 // Parser ligero de duraciones tipo "7d", "15m", "12h", "30s"
 function parseDuration(str) {
@@ -137,6 +138,8 @@ async function login(req, res) {
   if (!okPwd) {
     return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Credenciales inválidas');
   }
+
+  await enriquecerAccesoCruzado(usuario);
 
   const accessToken  = signAccess({
     usr_id:       usuario.usr_id,

@@ -56,11 +56,23 @@ async function getOne(req, res) {
 }
 
 async function create(req, res) {
-  // ASESOR solo puede crear para sí mismo
+  // ASESOR solo puede crear para sí mismo; respeta grupo enviado si está en su scope
+  // (acceso cruzado EMP↔PAP), si no usa el grupo principal.
   if (req.user.rol?.rol_codigo === ROLES.ASESOR) {
     req.body.prosp_asesor_id = req.user.usr_id;
-    req.body.prosp_area_id  = req.user.usr_area_id;
-    req.body.prosp_grupo_id = req.user.usr_grupo_id;
+    const gruposOk      = grupoIdsAccesibles(req.user);
+    const grupoPedido   = parseInt(req.body.prosp_grupo_id);
+    if (gruposOk && grupoPedido && gruposOk.includes(grupoPedido)) {
+      const { SvGrupo } = require('../models');
+      const g = await SvGrupo.findByPk(grupoPedido);
+      if (g) {
+        req.body.prosp_grupo_id = g.grupo_id;
+        req.body.prosp_area_id  = g.grupo_area_id;
+      }
+    } else {
+      req.body.prosp_area_id  = req.user.usr_area_id;
+      req.body.prosp_grupo_id = req.user.usr_grupo_id;
+    }
   }
   const p = await prospectos.crear(req.body, req.user.usr_id);
   return created(res, p);
