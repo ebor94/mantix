@@ -29,6 +29,9 @@ router.use('/buscar',     svAuth, svAreaGuard, require('./buscador.routes'));
 router.use('/empresas',   svAuth, svAreaGuard, require('./empresas.routes'));
 router.use('/propuestas', svAuth, svAreaGuard, require('./propuestas.routes'));
 
+// ─── Categorización empresas + grupos empresariales (Migración 017) ───
+router.use('/',           svAuth, require('./categorizacionEmpresa.routes'));
+
 // ─── PAP - Puerta a Puerta (Fase 3) ───
 router.use('/pap',        svAuth, svAreaGuard, require('./pap.routes'));
 

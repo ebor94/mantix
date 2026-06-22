@@ -30,6 +30,9 @@ const db = {
   SvEmpresa:           require('./Empresa')(sequelize, Sequelize.DataTypes),
   SvPropuesta:         require('./Propuesta')(sequelize, Sequelize.DataTypes),
   SvPropuestaItem:     require('./PropuestaItem')(sequelize, Sequelize.DataTypes),
+  // ─── Categorización empresas (Migración 017) ───
+  SvTipoEmpresa:       require('./TipoEmpresa')(sequelize, Sequelize.DataTypes),
+  SvGrupoEmpresarial:  require('./GrupoEmpresarial')(sequelize, Sequelize.DataTypes),
   // ─── Fidelización Empresas (Fase 6) ───
   SvContactoFideliz:   require('./ContactoFideliz')(sequelize, Sequelize.DataTypes),
   SvFechaEspecial:     require('./FechaEspecial')(sequelize, Sequelize.DataTypes),

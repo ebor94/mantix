@@ -4,7 +4,7 @@
  * UNIQUE real: empresa_nit_norm (solo dígitos sin DV).
  */
 const { Op } = require('sequelize');
-const { sequelize, SvEmpresa, SvProspecto, SvPersona, SvEstado, SvUsuario, SvGestion, SvResultado, SvFidelizMovimiento } = require('../models');
+const { sequelize, SvEmpresa, SvProspecto, SvPersona, SvEstado, SvUsuario, SvGestion, SvResultado, SvFidelizMovimiento, SvTipoEmpresa, SvGrupoEmpresarial } = require('../models');
 const { parse, normalizar, esValido } = require('../utils/nit');
 const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 const { ROLES } = require('../config/constants');
@@ -117,10 +117,17 @@ async function list({ filtros = {}, scope, user, page = 1, limit = 20 }) {
   }
   if (filtros.sector) where.empresa_sector = filtros.sector;
 
+  if (filtros.tipo_id) where.empresa_tipo_id = parseInt(filtros.tipo_id);
+  if (filtros.grupo_empresarial_id) where.empresa_grupo_empresarial_id = parseInt(filtros.grupo_empresarial_id);
+
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const { rows, count } = await SvEmpresa.findAndCountAll({
     where, order: [['empresa_razon_social', 'ASC']],
-    limit: parseInt(limit), offset
+    limit: parseInt(limit), offset,
+    include: [
+      { model: SvTipoEmpresa,       as: 'tipo',             required: false, attributes: ['tipoemp_id','tipoemp_codigo','tipoemp_nombre'] },
+      { model: SvGrupoEmpresarial,  as: 'grupoEmpresarial', required: false, attributes: ['grupemp_id','grupemp_nombre'] }
+    ]
   });
 
   // Agregar conteo de prospectos activos por empresa (1 query adicional)
@@ -140,7 +147,12 @@ async function list({ filtros = {}, scope, user, page = 1, limit = 20 }) {
 }
 
 async function obtenerConDetalle(id) {
-  const empresa = await SvEmpresa.findByPk(id);
+  const empresa = await SvEmpresa.findByPk(id, {
+    include: [
+      { model: SvTipoEmpresa,       as: 'tipo',             required: false },
+      { model: SvGrupoEmpresarial,  as: 'grupoEmpresarial', required: false }
+    ]
+  });
   if (!empresa) return null;
 
   const [prospectos, contactos] = await Promise.all([

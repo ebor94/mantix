@@ -21,7 +21,10 @@ module.exports = {
     empresa_sitio_web:         Joi.string().max(200).allow('', null),
     empresa_direccion:         Joi.string().max(250).allow('', null),
     empresa_ciudad:            Joi.string().max(80).default('Cucuta'),
-    empresa_nota:              Joi.string().allow('', null)
+    empresa_nota:              Joi.string().allow('', null),
+    // Migración 017
+    empresa_tipo_id:               Joi.number().integer().required(),
+    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null)
   }),
   update: Joi.object({
     empresa_nit:               Joi.string().min(5).max(20),
@@ -35,6 +38,9 @@ module.exports = {
     empresa_direccion:         Joi.string().max(250).allow('', null),
     empresa_ciudad:            Joi.string().max(80),
     empresa_nota:              Joi.string().allow('', null),
-    empresa_activa:            Joi.number().valid(0, 1)
+    empresa_activa:            Joi.number().valid(0, 1),
+    // Migración 017
+    empresa_tipo_id:               Joi.number().integer(),
+    empresa_grupo_empresarial_id:  Joi.number().integer().allow(null)
   }).min(1)
 };

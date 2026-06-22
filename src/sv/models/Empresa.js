@@ -19,7 +19,10 @@ module.exports = (sequelize, DataTypes) => {
     // Categoría de fidelización (manual por empresa) — migración 015
     empresa_categoria:             { type: DataTypes.STRING(20) }, // BRONCE|PLATA|ORO|PLATINO|DIAMANTE
     empresa_presupuesto_fideliz:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
-    empresa_presupuesto_gastado:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 }
+    empresa_presupuesto_gastado:   { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    // Migración 017: categorización + grupo económico
+    empresa_tipo_id:               { type: DataTypes.INTEGER },
+    empresa_grupo_empresarial_id:  { type: DataTypes.INTEGER }
   }, {
     tableName: 'sv_crm_empresas',
     freezeTableName: true,
@@ -31,6 +34,13 @@ module.exports = (sequelize, DataTypes) => {
   Empresa.associate = (models) => {
     Empresa.hasMany(models.SvProspecto, { as: 'prospectos', foreignKey: 'prosp_empresa_id' });
     Empresa.hasMany(models.SvPropuesta, { as: 'propuestas', foreignKey: 'prop_empresa_id' });
+    // Migración 017
+    if (models.SvTipoEmpresa) {
+      Empresa.belongsTo(models.SvTipoEmpresa, { as: 'tipo', foreignKey: 'empresa_tipo_id' });
+    }
+    if (models.SvGrupoEmpresarial) {
+      Empresa.belongsTo(models.SvGrupoEmpresarial, { as: 'grupoEmpresarial', foreignKey: 'empresa_grupo_empresarial_id' });
+    }
     // Fase 6: Fidelización
     if (models.SvContactoFideliz) {
       Empresa.hasMany(models.SvContactoFideliz, { as: 'contactosFideliz', foreignKey: 'cf_empresa_id' });

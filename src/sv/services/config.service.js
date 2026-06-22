@@ -3,7 +3,7 @@
  * getBootstrap: carga en una sola respuesta toda la configuración requerida
  * por el frontend para operar dentro de un área específica.
  */
-const { SvArea, SvGrupo, SvProducto, SvEstado, SvResultado, SvFuente, SvPunto } = require('../models');
+const { SvArea, SvGrupo, SvProducto, SvEstado, SvResultado, SvFuente, SvPunto, SvTipoEmpresa } = require('../models');
 
 async function getBootstrap(areaId) {
   const area = await SvArea.findByPk(areaId);
@@ -22,7 +22,14 @@ async function getBootstrap(areaId) {
     SvResultado.findAll({ where: { resultado_grupo_id: grupoIds, resultado_activo: 1 }, order: [['resultado_grupo_id', 'ASC'], ['resultado_orden', 'ASC']] })
   ]);
 
-  return { area, grupos, productos, estados, resultados, fuentes, puntos };
+  // Catálogo de tipos / categorías de empresa (sólo relevante para PREV-EMP, pero
+  // se incluye siempre para evitar requests adicionales y no contamina nada).
+  const tiposEmpresa = await SvTipoEmpresa.findAll({
+    where: { tipoemp_activo: 1 },
+    order: [['tipoemp_orden', 'ASC'], ['tipoemp_nombre', 'ASC']]
+  });
+
+  return { area, grupos, productos, estados, resultados, fuentes, puntos, tipos_empresa: tiposEmpresa };
 }
 
 async function getAllAreas() {
