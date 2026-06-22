@@ -165,13 +165,22 @@ async function obtenerConDetalle(id) {
       ],
       order: [['prosp_updated_at', 'DESC']]
     }),
-    // Contactos = personas que son contacto de algún prospecto de esta empresa
+    // Contactos = personas referenciadas como contacto-empresa en algún prospecto.
+    // Los contactos B2B se guardan en prosp_contacto_empresa_id (NO en prosp_persona_id,
+    // que es la persona principal para Prenec/individual). Usamos subquery directa
+    // para no depender de un alias de asociación extra.
     SvPersona.findAll({
-      include: [{
-        model: SvProspecto, as: 'prospectos', required: true, attributes: [],
-        where: { prosp_empresa_id: id }
-      }],
-      group: ['SvPersona.persona_id']
+      where: {
+        persona_id: {
+          [Op.in]: sequelize.literal(
+            `(SELECT DISTINCT prosp_contacto_empresa_id
+                FROM sv_crm_prospectos
+               WHERE prosp_empresa_id = ${parseInt(id)}
+                 AND prosp_contacto_empresa_id IS NOT NULL)`
+          )
+        }
+      },
+      order: [['persona_nombre', 'ASC']]
     })
   ]);
 
