@@ -32,6 +32,9 @@ router.use('/propuestas', svAuth, svAreaGuard, require('./propuestas.routes'));
 // ─── Categorización empresas + grupos empresariales (Migración 017) ───
 router.use('/',           svAuth, require('./categorizacionEmpresa.routes'));
 
+// ─── Agenda transversal + eventos (Migración 018) ───
+router.use('/',           svAuth, require('./agenda.routes'));
+
 // ─── PAP - Puerta a Puerta (Fase 3) ───
 router.use('/pap',        svAuth, svAreaGuard, require('./pap.routes'));
 
