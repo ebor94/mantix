@@ -6,9 +6,23 @@ const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
 const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 
+// Supervisor+ puede filtrar por un asesor específico vía ?asesor_id=.
+// Los ASESOR / AGENTE_SVC ya tienen scope.asesorId forzado al propio usr_id
+// desde svAreaGuard, así que aunque pasen el param el helper lo ignora.
+const ROLES_FILTRO_ASESOR = [
+  ROLES.SUPER_ADMIN, ROLES.GERENTE_GENERAL,
+  ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR
+];
+function aplicarFiltroAsesor(req, scope) {
+  if (!req.query.asesor_id) return scope;
+  if (!ROLES_FILTRO_ASESOR.includes(req.user.rol?.rol_codigo)) return scope;
+  return { ...scope, asesorId: parseInt(req.query.asesor_id) };
+}
+
 async function list(req, res) {
+  const scope = aplicarFiltroAsesor(req, req.scope);
   const r = await prospectos.list({
-    scope:   req.scope,
+    scope,
     filtros: req.query,
     page:    req.query.page,
     limit:   req.query.limit
@@ -17,10 +31,7 @@ async function list(req, res) {
 }
 
 async function panelDia(req, res) {
-  const scope = { ...req.scope };
-  if (req.query.asesor_id && (req.user.rol?.rol_codigo === ROLES.SUPERVISOR || req.user.rol?.rol_codigo === ROLES.ADMIN_AREA || req.user.rol?.rol_codigo === ROLES.SUPER_ADMIN)) {
-    scope.asesorId = parseInt(req.query.asesor_id);
-  }
+  const scope = aplicarFiltroAsesor(req, { ...req.scope });
   const r = await prospectos.panelDia({
     scope,
     fecha:      req.query.fecha,
