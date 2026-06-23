@@ -14,9 +14,20 @@ const ROLES_FILTRO_ASESOR = [
   ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR
 ];
 function aplicarFiltroAsesor(req, scope) {
+  // [DIAG-FILTRO-ASESOR v2] — log temporal para confirmar que este código
+  // está activo en producción. Si NO aparece en pm2 logs, PM2 corre código viejo.
+  if (req.query.asesor_id) {
+    console.log('[DIAG-FILTRO-ASESOR v2]',
+      'rol:', req.user.rol?.rol_codigo,
+      'asesor_id query:', req.query.asesor_id,
+      'scope ANTES:', JSON.stringify(scope),
+      'permitido:', ROLES_FILTRO_ASESOR.includes(req.user.rol?.rol_codigo));
+  }
   if (!req.query.asesor_id) return scope;
   if (!ROLES_FILTRO_ASESOR.includes(req.user.rol?.rol_codigo)) return scope;
-  return { ...scope, asesorId: parseInt(req.query.asesor_id) };
+  const nuevoScope = { ...scope, asesorId: parseInt(req.query.asesor_id) };
+  console.log('[DIAG-FILTRO-ASESOR v2] scope DESPUÉS:', JSON.stringify(nuevoScope));
+  return nuevoScope;
 }
 
 async function list(req, res) {
