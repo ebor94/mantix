@@ -60,23 +60,11 @@ async function getOne(req, res) {
   const r = await empresas.obtenerConDetalle(id);
   if (!r) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Empresa no encontrada');
 
-  // Validar que la empresa esté en el alcance del usuario
-  const rol = req.user.rol?.rol_codigo;
-  if (rol !== ROLES.SUPER_ADMIN) {
-    const prospectos = r.prospectos || [];
-    let permitido = false;
-    if (rol === ROLES.ASESOR || rol === ROLES.AGENTE_SVC) {
-      permitido = prospectos.some(p => p.prosp_asesor_id === req.user.usr_id);
-    } else if (rol === ROLES.SUPERVISOR || rol === ROLES.JEFE_PAP) {
-      const grupos = grupoIdsAccesibles(req.user) || [];
-      permitido = prospectos.some(p => grupos.includes(p.prosp_grupo_id));
-    } else if (rol === ROLES.ADMIN_AREA) {
-      const areas = areaIdsAccesibles(req.user) || [];
-      permitido = prospectos.some(p => areas.includes(p.prosp_area_id));
-    }
-    if (!permitido) {
-      return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Empresa fuera de tu alcance');
-    }
+  // Validar acceso usando el mismo helper que filtra el listado /empresas.
+  // Así getOne y list quedan consistentes: si aparece en la lista, se puede abrir.
+  const idsAccesibles = await empresas.empresaIdsAccesibles(req.user);
+  if (idsAccesibles !== null && !idsAccesibles.includes(id)) {
+    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Empresa fuera de tu alcance');
   }
 
   // Fase 6: bandera para mostrar banner de Fidelización en la ficha
