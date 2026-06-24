@@ -10,12 +10,16 @@ const { ERROR_CODES, ROLES } = require('../config/constants');
 
 function adminAreaFilter(req) {
   const c = req.user.rol?.rol_codigo;
-  if (c === ROLES.SUPER_ADMIN) return {};
+  // Visión global: sin filtro.
+  if (c === ROLES.SUPER_ADMIN
+   || c === ROLES.GERENTE_GENERAL
+   || c === ROLES.DIRECTOR_COMERCIAL) return {};
   if (c === ROLES.ADMIN_AREA)  return { usr_area_id: req.user.usr_area_id };
   // JEFE_PAP: solo ve usuarios del grupo PAP (3)
   if (c === ROLES.JEFE_PAP) return { usr_grupo_id: 3 };
-  // SUPERVISOR: ve usuarios de su área principal y de sus áreas extra (multi-área)
-  if (c === ROLES.SUPERVISOR) {
+  // SUPERVISOR / COORDINADOR_PREVISION: ven usuarios del área principal +
+  // áreas extra (multi-área). Coord típicamente solo PREV-EMP.
+  if (c === ROLES.SUPERVISOR || c === ROLES.COORDINADOR_PREVISION) {
     const areaIds = new Set();
     if (req.user.usr_area_id) areaIds.add(req.user.usr_area_id);
     for (const a of (req.user.areasExtra || [])) areaIds.add(a.area_id);
