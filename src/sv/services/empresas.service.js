@@ -13,19 +13,29 @@ const CATEGORIAS_VALIDAS = ['BRONCE', 'PLATA', 'ORO', 'PLATINO', 'DIAMANTE'];
 
 /**
  * Devuelve el array de IDs de empresas que el usuario puede ver según su rol:
- *   - SUPER_ADMIN → null (sin filtro)
+ *   - SUPER_ADMIN / GERENTE_GENERAL / DIRECTOR_COMERCIAL → null (sin filtro)
  *   - ASESOR / AGENTE_SVC → empresas con al menos un prospecto activo donde es asesor
- *   - SUPERVISOR / JEFE_PAP → empresas con prospectos en grupos accesibles (multi-grupo)
- *   - ADMIN_AREA / GERENTE_GENERAL → empresas con prospectos en áreas accesibles
+ *   - SUPERVISOR / COORDINADOR_PREVISION / JEFE_PAP → empresas con prospectos
+ *     en cualquiera de los grupos accesibles (multi-grupo)
+ *   - ADMIN_AREA → empresas con prospectos en las áreas accesibles
  */
 async function empresaIdsAccesibles(user) {
   const rol = user?.rol?.rol_codigo;
-  if (!rol || rol === ROLES.SUPER_ADMIN) return null; // sin filtro
+  if (!rol) return [];
+  // Roles con visión global o cross-área amplia: sin filtro en la query base.
+  // Si quieren restringir, lo hacen con ?asesor_id= o ?grupo_id= en el query.
+  if (rol === ROLES.SUPER_ADMIN
+   || rol === ROLES.GERENTE_GENERAL
+   || rol === ROLES.DIRECTOR_COMERCIAL) {
+    return null; // sin filtro
+  }
 
   const prospWhere = { prosp_activo: 1 };
   if (rol === ROLES.ASESOR || rol === ROLES.AGENTE_SVC) {
     prospWhere.prosp_asesor_id = user.usr_id;
-  } else if (rol === ROLES.SUPERVISOR || rol === ROLES.JEFE_PAP) {
+  } else if (rol === ROLES.SUPERVISOR
+          || rol === ROLES.COORDINADOR_PREVISION
+          || rol === ROLES.JEFE_PAP) {
     const grupos = grupoIdsAccesibles(user);
     if (grupos === null) return null;
     if (!grupos.length) return [];
