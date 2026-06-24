@@ -12,6 +12,24 @@ const { notificarN8n, archivarDocumentosEnDrive } = require('../services/n8nServ
 const TIPO_CORTO = { rut: 'rut', camara_comercio: 'camara', declaracion_renta: 'renta', cedula_rl: 'cedula' };
 const TIPO_LARGO = { rut: 'rut', camara: 'camara_comercio', renta: 'declaracion_renta', cedula: 'cedula_rl' };
 
+// Normaliza fechas que la IA puede devolver en varios formatos a 'YYYY-MM-DD'.
+// Si no se puede interpretar, devuelve null (evita que MySQL rechace la columna DATE).
+const MESES_ES = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7,
+  agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+};
+function toISODate(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);                       // YYYY-MM-DD
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);               // DD/MM/YYYY
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  m = s.toLowerCase().match(/(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})/); // DD de MES de YYYY
+  if (m && MESES_ES[m[2]]) return `${m[3]}-${String(MESES_ES[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
 // Mapeo de fieldnames del frontend a ENUM de r44_documentos_adjuntos
 const TIPO_DOCUMENTO_MAP = {
   rut:    'rut',
@@ -163,7 +181,7 @@ const r44DocumentosController = {
             pj_ciiu_secundario:      d.actividad_secundaria_ciiu ?? proveedor.pj_ciiu_secundario,
             pj_descripcion_actividad: d.descripcion_actividad   ?? proveedor.pj_descripcion_actividad,
             pj_matricula_numero:     d.matricula_numero         ?? proveedor.pj_matricula_numero,
-            pj_fecha_matricula:      d.fecha_matricula          ?? proveedor.pj_fecha_matricula,
+            pj_fecha_matricula:      toISODate(d.fecha_matricula) ?? proveedor.pj_fecha_matricula,
             pj_ultimo_anio_renovado: d.ultimo_anio_renovado     ?? proveedor.pj_ultimo_anio_renovado,
             pj_grupo_niif:           d.grupo_niif               ?? proveedor.pj_grupo_niif,
             pj_tamano_empresa:       d.tamano_empresa           ?? proveedor.pj_tamano_empresa,
@@ -187,9 +205,9 @@ const r44DocumentosController = {
             pn_correo:              d.correo_electronico       ?? proveedor.pn_correo,
             pn_ciiu:                d.actividad_principal_ciiu ?? proveedor.pn_ciiu,
             // Datos de la Cédula (en campos_r44 vienen con prefijo rl_)
-            pn_fecha_expedicion:    d.rl_fecha_expedicion      ?? proveedor.pn_fecha_expedicion,
+            pn_fecha_expedicion:    toISODate(d.rl_fecha_expedicion) ?? proveedor.pn_fecha_expedicion,
             pn_lugar_expedicion:    d.rl_lugar_expedicion      ?? proveedor.pn_lugar_expedicion,
-            pn_fecha_nacimiento:    d.rl_fecha_nacimiento      ?? proveedor.pn_fecha_nacimiento,
+            pn_fecha_nacimiento:    toISODate(d.rl_fecha_nacimiento) ?? proveedor.pn_fecha_nacimiento,
             pn_lugar_nacimiento:    d.rl_lugar_nacimiento      ?? proveedor.pn_lugar_nacimiento,
             estado: 'extraccion_completada',
           });
