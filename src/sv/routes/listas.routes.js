@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/listas.controller');
 const { authorize } = require('../middleware/svAuthorize');
+const { ROLES_SUPERVISORES } = require('../config/constants');
 
-const supervisorOMas = authorize('SUPER_ADMIN', 'ADMIN_AREA', 'SUPERVISOR');
+const supervisorOMas = authorize(...ROLES_SUPERVISORES);
 
 router.get ('/',                  ctrl.list);
 router.post('/cargar',            supervisorOMas, ctrl.uploadMiddleware, ctrl.cargar);
