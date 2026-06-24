@@ -10,19 +10,25 @@ const { ERROR_CODES, ROLES } = require('../config/constants');
 
 function adminAreaFilter(req) {
   const c = req.user.rol?.rol_codigo;
-  // Visión global: sin filtro.
-  if (c === ROLES.SUPER_ADMIN
-   || c === ROLES.GERENTE_GENERAL
-   || c === ROLES.DIRECTOR_COMERCIAL) return {};
+  // Visión absolutamente global: solo SUPER_ADMIN.
+  if (c === ROLES.SUPER_ADMIN) return {};
   if (c === ROLES.ADMIN_AREA)  return { usr_area_id: req.user.usr_area_id };
   // JEFE_PAP: solo ve usuarios del grupo PAP (3)
   if (c === ROLES.JEFE_PAP) return { usr_grupo_id: 3 };
-  // SUPERVISOR / COORDINADOR_PREVISION: ven usuarios del área principal +
-  // áreas extra (multi-área). Coord típicamente solo PREV-EMP.
-  if (c === ROLES.SUPERVISOR || c === ROLES.COORDINADOR_PREVISION) {
+  // Roles multi-área: filtran por área principal + áreas extra (asignadas en
+  // sv_org_usuario_areas). Cubre SUPERVISOR, COORDINADOR_PREVISION, DIRECTOR_COMERCIAL
+  // y GERENTE_GENERAL. La diferencia entre ellos es CUÁNTAS áreas tienen:
+  //   - SUPERVISOR / COORDINADOR: típicamente 1 (su área principal).
+  //   - DIRECTOR_COMERCIAL: 3 (EMP+PAP+SVC, sin PRENEC).
+  //   - GERENTE_GENERAL: típicamente 4 (todas).
+  if (c === ROLES.SUPERVISOR
+   || c === ROLES.COORDINADOR_PREVISION
+   || c === ROLES.DIRECTOR_COMERCIAL
+   || c === ROLES.GERENTE_GENERAL) {
     const areaIds = new Set();
     if (req.user.usr_area_id) areaIds.add(req.user.usr_area_id);
     for (const a of (req.user.areasExtra || [])) areaIds.add(a.area_id);
+    if (areaIds.size === 0) return null;  // sin áreas asignadas = sin acceso
     return { usr_area_id: { [Op.in]: [...areaIds] } };
   }
   return null;
