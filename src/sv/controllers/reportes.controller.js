@@ -3,7 +3,7 @@
  */
 const reportes = require('../services/reportes.service');
 const { ok, fail } = require('../utils/response');
-const { ERROR_CODES, ROLES } = require('../config/constants');
+const { ERROR_CODES, ROLES, ROLES_SUPERVISORES } = require('../config/constants');
 
 async function dashboard(req, res) {
   const scope = { ...req.scope };
@@ -32,7 +32,7 @@ async function asesor(req, res) {
 
 async function equipo(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR+ pueden ver el equipo');
   }
 

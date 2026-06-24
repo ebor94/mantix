@@ -3,16 +3,14 @@
  */
 const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
-const { ERROR_CODES, ROLES } = require('../config/constants');
+const { ERROR_CODES, ROLES, ROLES_SUPERVISORES } = require('../config/constants');
 const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 
 // Supervisor+ puede filtrar por un asesor específico vía ?asesor_id=.
 // Los ASESOR / AGENTE_SVC ya tienen scope.asesorId forzado al propio usr_id
 // desde svAreaGuard, así que aunque pasen el param el helper lo ignora.
-const ROLES_FILTRO_ASESOR = [
-  ROLES.SUPER_ADMIN, ROLES.GERENTE_GENERAL,
-  ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR
-];
+// Alias por compatibilidad — apunta al set canónico ROLES_SUPERVISORES.
+const ROLES_FILTRO_ASESOR = ROLES_SUPERVISORES;
 function aplicarFiltroAsesor(req, scope) {
   // [DIAG-FILTRO-ASESOR v2] — log temporal para confirmar que este código
   // está activo en producción. Si NO aparece en pm2 logs, PM2 corre código viejo.
@@ -132,7 +130,7 @@ async function actualizarProductos(req, res) {
 async function reasignar(req, res) {
   // Solo SUPERVISOR+ puede reasignar
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior pueden reasignar');
   }
 
@@ -169,7 +167,7 @@ async function reasignar(req, res) {
 // GET /prospectos/por-asesor?area_id=&grupo_id= — conteo por asesor para vista reasignación
 async function porAsesor(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede consultar');
   }
   const r = await prospectos.prospectosPorAsesor({
@@ -182,7 +180,7 @@ async function porAsesor(req, res) {
 // POST /prospectos/reasignacion-masiva — reasigna todos los prospectos de un asesor (vacaciones, retiro)
 async function reasignacionMasiva(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede reasignar masivamente');
   }
   try {
@@ -197,7 +195,7 @@ async function reasignacionMasiva(req, res) {
 // GET /prospectos/sin-asignar?area_id=4&grupo_id=4 — cola del supervisor
 async function sinAsignar(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede ver la cola sin asignar');
   }
   const r = await prospectos.sinAsignar({
@@ -219,7 +217,7 @@ async function sinAsignarCount(req, res) {
 // PATCH /prospectos/:id/asignar — body { asesor_id } — asignar a agente (idem reasignar pero semánticamente para sin-asignar)
 async function asignar(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.JEFE_PAP, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede asignar');
   }
   const r = await prospectos.reasignar(parseInt(req.params.id), parseInt(req.body.asesor_id));

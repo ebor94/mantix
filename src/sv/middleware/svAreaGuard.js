@@ -34,6 +34,13 @@ function svAreaGuard(req, res, next) {
 
   if (codigo === ROLES.SUPER_ADMIN) {
     scope.crossArea = true;
+  } else if (codigo === ROLES.GERENTE_GENERAL || codigo === ROLES.DIRECTOR_COMERCIAL) {
+    // Cross-área pero limitados por sv_org_usuario_areas (cargado en login como
+    // areasExtra). El sidebar y los acceso.areaIdsAccesibles ya respetan ese
+    // listado: GERENTE_GENERAL típicamente las 4; DIRECTOR_COMERCIAL solo
+    // EMP+PAP+SVC (NO PRENEC) — esta restricción se modela por asignación de
+    // área/grupo al usuario, no por el rol en sí.
+    scope.crossArea = true;
   } else if (codigo === ROLES.ADMIN_AREA) {
     scope.areaId = req.user.usr_area_id;
   } else if (codigo === ROLES.JEFE_PAP) {
@@ -41,7 +48,10 @@ function svAreaGuard(req, res, next) {
     // qué tenga en usr_area_id / usr_grupo_id (es un rol fijo al dominio PAP).
     scope.areaId  = AREA_PAP_ID;
     scope.grupoId = GRUPO_PAP_ID;
-  } else if (codigo === ROLES.SUPERVISOR) {
+  } else if (codigo === ROLES.SUPERVISOR || codigo === ROLES.COORDINADOR_PREVISION) {
+    // El Coordinador de Previsión opera igual que un SUPERVISOR pero
+    // semánticamente dedicado al grupo Empresariales (la asignación se hace
+    // poniéndole usr_grupo_id = EMPRESARIALES al crear el usuario).
     scope.areaId  = req.user.usr_area_id;
     scope.grupoId = req.user.usr_grupo_id;
   } else if (codigo === ROLES.ASESOR || codigo === ROLES.AGENTE_SVC) {

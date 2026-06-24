@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { ok, created, fail } = require('../utils/response');
-const { ERROR_CODES, AREAS, ROLES } = require('../config/constants');
+const { ERROR_CODES, AREAS, ROLES, ROLES_SUPERVISORES } = require('../config/constants');
 const { tieneAccesoArea, grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 
 // Multer: subir documentos / propuestas archivo de empresas
@@ -115,7 +115,7 @@ async function update(req, res) {
 // ─── Reasignar asesor de la empresa (mueve todos los prospectos al nuevo asesor) ───
 async function reasignarAsesor(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior pueden reasignar empresas');
   }
   try {
@@ -133,7 +133,7 @@ async function reasignarAsesor(req, res) {
 // ─── Categoría manual de fidelización ───
 async function actualizarCategoria(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior pueden cambiar la categoría');
   }
   try {
@@ -149,7 +149,7 @@ async function actualizarCategoria(req, res) {
 // ─── Ajustar presupuesto de fidelización (ASIGNACION inicial o AJUSTE manual +/-) ───
 async function ajustarPresupuesto(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior pueden ajustar presupuesto');
   }
   try {
@@ -177,7 +177,7 @@ async function listarMovimientos(req, res) {
 // ─── Reporte agregado de presupuesto fidelización por categoría ───
 async function reportePresupuestoFideliz(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Reporte solo disponible para SUPERVISOR o superior');
   }
   // Los reportes deben ser siempre frescos: Express envía 304 con body vacío
@@ -210,7 +210,7 @@ async function subirDocumento(req, res) {
 
 async function eliminarDocumento(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede eliminar documentos');
   }
   try {
@@ -248,7 +248,7 @@ async function subirPropuestaArchivo(req, res) {
 
 async function eliminarPropuestaArchivo(req, res) {
   const c = req.user.rol?.rol_codigo;
-  if (![ROLES.SUPER_ADMIN, ROLES.ADMIN_AREA, ROLES.SUPERVISOR].includes(c)) {
+  if (!ROLES_SUPERVISORES.includes(c)) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo SUPERVISOR o superior puede eliminar propuestas');
   }
   try {

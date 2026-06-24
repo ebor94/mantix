@@ -4,22 +4,42 @@
  */
 
 const ROLES = {
-  SUPER_ADMIN: 'SUPER_ADMIN',
-  ADMIN_AREA:  'ADMIN_AREA',
-  JEFE_PAP:    'JEFE_PAP',
-  SUPERVISOR:  'SUPERVISOR',
-  ASESOR:      'ASESOR',
-  AGENTE_SVC:  'AGENTE_SVC'
+  SUPER_ADMIN:           'SUPER_ADMIN',
+  GERENTE_GENERAL:       'GERENTE_GENERAL',
+  ADMIN_AREA:            'ADMIN_AREA',
+  DIRECTOR_COMERCIAL:    'DIRECTOR_COMERCIAL',
+  JEFE_PAP:              'JEFE_PAP',
+  SUPERVISOR:            'SUPERVISOR',
+  COORDINADOR_PREVISION: 'COORDINADOR_PREVISION',
+  ASESOR:                'ASESOR',
+  AGENTE_SVC:            'AGENTE_SVC'
 };
 
 const NIVELES = {
-  SUPER_ADMIN: 1,
-  ADMIN_AREA:  2,
-  JEFE_PAP:    2,
-  SUPERVISOR:  3,
-  ASESOR:      4,
-  AGENTE_SVC:  4
+  SUPER_ADMIN:           1,
+  GERENTE_GENERAL:       2,
+  ADMIN_AREA:            2,
+  DIRECTOR_COMERCIAL:    2,
+  JEFE_PAP:              2,
+  SUPERVISOR:            3,
+  COORDINADOR_PREVISION: 3,
+  ASESOR:                4,
+  AGENTE_SVC:            4
 };
+
+// Set canónico de roles con capacidades de supervisión (filtrar por asesor,
+// reasignar prospectos, ver agenda del equipo, exportar reportes, etc.).
+// Usar este array en lugar de listar uno por uno en cada controller para que
+// agregar/quitar un rol jefe sea un solo cambio.
+const ROLES_SUPERVISORES = [
+  ROLES.SUPER_ADMIN,
+  ROLES.GERENTE_GENERAL,
+  ROLES.DIRECTOR_COMERCIAL,
+  ROLES.ADMIN_AREA,
+  ROLES.JEFE_PAP,
+  ROLES.SUPERVISOR,
+  ROLES.COORDINADOR_PREVISION
+];
 
 const AREAS = {
   PRENEC:   'PRENEC',
@@ -53,6 +73,7 @@ const BCRYPT_ROUNDS = parseInt(process.env.SV_BCRYPT_ROUNDS || '10');
 module.exports = {
   ROLES,
   NIVELES,
+  ROLES_SUPERVISORES,
   AREAS,
   ERROR_CODES,
   JWT,
