@@ -1,8 +1,12 @@
 const Joi = require('joi');
 
+// tlds:{allow:false} permite TLDs no estándar como `.local` o `.internal`
+// que se usan en dominios corporativos privados (ej: jparada@olivos.local).
+const EMAIL = Joi.string().email({ tlds: { allow: false } });
+
 module.exports = {
   login: Joi.object({
-    email:    Joi.string().email().required(),
+    email:    EMAIL.required(),
     password: Joi.string().min(4).max(200).required()
   }),
   refresh: Joi.object({
