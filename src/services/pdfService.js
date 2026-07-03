@@ -1050,8 +1050,8 @@ doc.fontSize(20)
     .label  { fill: #6B7280; font-size: 13px; letter-spacing: 0.5px; }
     .value  { fill: #111827; font-size: 17px; font-weight: 700; }
     .small  { fill: #4B5563; font-size: 13px; }
-    .title  { fill: #FFFFFF; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
-    .subtitle { fill: #D1FAE5; font-size: 14px; }
+    .title  { fill: #1A3C2E; font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+    .subtitle { fill: #4B5563; font-size: 14px; }
     .totalLabel { fill: #A7F3D0; font-size: 16px; letter-spacing: 1px; }
     .totalValue { fill: #FFFFFF; font-size: 46px; font-weight: 800; }
     .footer { fill: #6B7280; font-size: 11px; }
@@ -1061,12 +1061,12 @@ doc.fontSize(20)
   <!-- Fondo -->
   <rect width="800" height="1000" fill="#FFFFFF"/>
 
-  <!-- Banda superior corporativa -->
-  <rect width="800" height="150" fill="#0F766E"/>
+  <!-- Encabezado blanco con separador -->
   ${logoTag}
+  <line x1="40" y1="148" x2="760" y2="148" stroke="#E5E7EB" stroke-width="1"/>
   <text x="760" y="60"  class="ff title"    text-anchor="end">RECIBO DE CAJA</text>
   <text x="760" y="90"  class="ff subtitle" text-anchor="end">No. ${esc(recibo.numeroRecibo)}</text>
-  <text x="760" y="115" class="ff subtitle" text-anchor="end">${esc(fechaEmision)}</text>
+  <text x="760" y="115" class="ff subtitle" text-anchor="end">Fecha de Emisión: ${esc(fechaEmision)}</text>
 
   <!-- Datos del cliente -->
   <text x="40"  y="200" class="ff label">RECIBIDO DE</text>
