@@ -12,7 +12,7 @@ const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro } = requi
 const AppError = require('../utils/AppError');
 
 const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
-const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos2.png';
+const CABECERA_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
 const PIE_URL = 'https://losolivoscucuta.com/difusiones/img/pie%20de%20pagina.png';
 
 // Cache con TTL de 5 minutos — permite actualizar las imágenes remotas sin reiniciar.
@@ -136,7 +136,7 @@ async function generar(req, res, next) {
     const drawCabecera = () => {
       if (!cabeceraBuffer) return;
       try {
-        doc.image(cabeceraBuffer, 40, 10, { width: 515 });
+        doc.image(cabeceraBuffer, 0, 0, { width: 595 });
       } catch (e) {
         console.error('Error insertando cabecera:', e.message);
       }
@@ -159,11 +159,12 @@ async function generar(req, res, next) {
 
     // ── TÍTULO CERTIFICADO ─────────────────────────────────────────────────
     doc.fontSize(10).font('Helvetica-Bold').fillColor('black');
-    doc.text('SERFUNORTE – CÚCUTA',               40, 113, { width: 515, align: 'center' });
-    doc.text('NIT. 800254697-5',                       40, 126, { width: 515, align: 'center' });
-    doc.text('CERTIFICADO DE AFILIACIÓN EXEQUIAL', 40, 139, { width: 515, align: 'center' });
+    doc.text('SERFUNORTE – LOS OLIVOS',            40, 122, { width: 515, align: 'center' });
+    doc.text('CÚCUTA',                              40, 135, { width: 515, align: 'center' });
+    doc.text('NIT. 800254697-5',                   40, 148, { width: 515, align: 'center' });
+    doc.text('CERTIFICADO DE AFILIACIÓN EXEQUIAL', 40, 161, { width: 515, align: 'center' });
 
-    let y = 158;
+    let y = 178;
 
     // ── CABECERA: PUNTO DE VENTA / TIPO / CONTRATO ─────────────────────────
     doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
