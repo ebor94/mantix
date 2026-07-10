@@ -27,10 +27,12 @@ router.post('/auth/password', r44Auth, r44AuthCtrl.cambiarPassword);
 // POST /api/r44/documentos/:proveedor_id — Subir 4 documentos + notificar n8n
 // GET  /api/r44/extraccion/estado/:proveedor_id — Polling de estado
 // POST /api/r44/extraccion/resultado — Callback de n8n (sin auth)
+// IMPORTANTE: /documentos/drive debe ir ANTES de /documentos/:proveedor_id,
+// si no Express captura "drive" como :proveedor_id y exige token (401).
+router.post('/documentos/drive',     r44DocCtrl.recibirEnlacesDrive); // callback de archivado Drive (n8n, sin auth)
 router.post('/documentos/:proveedor_id', r44Auth, uploadR44, r44DocCtrl.subirDocumentos);
 router.get('/extraccion/estado/:proveedor_id', r44Auth, r44DocCtrl.estadoExtraccion);
 router.post('/extraccion/resultado', r44DocCtrl.recibirResultado); // llamado por n8n (IP interna)
-router.post('/documentos/drive',     r44DocCtrl.recibirEnlacesDrive); // callback de archivado Drive (n8n)
 
 // ── FORMULARIO PROVEEDOR ──────────────────────────────────
 // POST /api/r44/proveedores     — Crear / enviar formulario R-44
