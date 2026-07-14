@@ -54,11 +54,11 @@ async function cerrarTicket(ticketId) {
 
 // Mensajes de followup por transición de estado
 const FOLLOWUP_ESTADOS = {
-  TRASLADO:    (a) => `🚐 *Traslado iniciado*\nEl asistente recogió el cuerpo de ${a.nombre_ser_querido} en ${a.lugar_asistencia}. Inventario en proceso.`,
-  PREPARACION: (a) => `🔬 *Tanatopraxia en curso*\nCuerpo recibido en sala. El tanatólogo inició el proceso de ${a.nombre_ser_querido}.`,
-  ENTREGA:     (a) => `📦 *Listo para entrega*\nTanatopraxia completada. Supervisora validará y coordinará la entrega de ${a.nombre_ser_querido}.`,
-  APROBACION:  (a) => `⏳ *En aprobación*\nEntrega realizada. El caso ${a.codigo} está pendiente de aprobación contable.`,
-  CERRADO:     (a) => `✅ *Caso cerrado*\nEl servicio de ${a.nombre_ser_querido} (${a.codigo}) fue completado y facturado.`,
+  ASISTENCIA:   (a) => `🚑 *Asistencia iniciada*\nEl asistente recogió el cuerpo de ${a.nombre_ser_querido} en ${a.lugar_asistencia}. Inventario en proceso.`,
+  PRESERVACION: (a) => `🧪 *Preservación en curso*\nCuerpo recibido en sala. El tanatólogo inició el proceso de ${a.nombre_ser_querido}.`,
+  ENCOFRADO:    (a) => `⚰️ *Listo para encofrado*\nPreservación completada. Supervisora validará y coordinará el encofrado de ${a.nombre_ser_querido}.`,
+  APROBACION:   (a) => `⏳ *En aprobación*\nEncofrado realizado. El caso ${a.codigo} está pendiente de aprobación contable.`,
+  CERRADO:      (a) => `✅ *Caso cerrado*\nEl servicio de ${a.nombre_ser_querido} (${a.codigo}) fue completado y facturado.`,
 }
 
 async function agregarFollowup(ticketId, mensaje) {

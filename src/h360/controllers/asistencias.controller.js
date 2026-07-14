@@ -3,10 +3,10 @@ const glpi = require('../services/glpi.service')
 
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
-  asistente:            ['TRASLADO'],
-  tanatologo:           ['PREPARACION'],
-  asistente_tanatologo: ['TRASLADO', 'PREPARACION'], // doble rol
-  supervisora:          ['ENTREGA'],
+  asistente:            ['ASISTENCIA'],
+  tanatologo:           ['PRESERVACION'],
+  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION'], // doble rol
+  supervisora:          ['ENCOFRADO'],
 }
 
 // Rol → etapas que puede guardar
@@ -20,23 +20,23 @@ const ETAPAS_POR_ROL = {
 
 // Etapas requeridas para cerrar cada estado por rol
 const ETAPAS_PARA_CERRAR = {
-  asistente:            { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
-  tanatologo:           { PREPARACION: ['F04_TANATOPRAXIA'] },
-  asistente_tanatologo: { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
-                          PREPARACION: ['F04_TANATOPRAXIA'] },
-  supervisora:          { ENTREGA:     ['F05_ENTREGA'] },
-  admin:                { TRASLADO:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
-                          PREPARACION: ['F04_TANATOPRAXIA'],
-                          ENTREGA:     ['F05_ENTREGA'],
+  asistente:            { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
+  tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA'] },
+  asistente_tanatologo: { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+                          PRESERVACION: ['F04_TANATOPRAXIA'] },
+  supervisora:          { ENCOFRADO:     ['F05_ENTREGA'] },
+  admin:                { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+                          PRESERVACION: ['F04_TANATOPRAXIA'],
+                          ENCOFRADO:     ['F05_ENTREGA'],
                           APROBACION:  [] },
 }
 
 // Transiciones del flujo — cada rol puede avanzar desde su estado
 const TRANSICIONES = {
-  NUEVO:       { siguiente: 'TRASLADO',    roles: ['admin'] },
-  TRASLADO:    { siguiente: 'PREPARACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
-  PREPARACION: { siguiente: 'ENTREGA',     roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
-  ENTREGA:     { siguiente: 'APROBACION',  roles: ['supervisora', 'admin'] },
+  NUEVO:       { siguiente: 'ASISTENCIA',    roles: ['admin'] },
+  ASISTENCIA:    { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
+  PRESERVACION: { siguiente: 'ENCOFRADO',     roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
+  ENCOFRADO:     { siguiente: 'APROBACION',  roles: ['supervisora', 'admin'] },
   APROBACION:  { siguiente: 'CERRADO',     roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
@@ -71,15 +71,15 @@ async function listar(req, res, next) {
     if (rol === 'asistente') {
       conditions.push('(asistente_id = ? OR asistente_id IS NULL)')
       params.push(usuario)
-      if (!estado) { conditions.push("estado IN ('NUEVO','TRASLADO')") }
+      if (!estado) { conditions.push("estado IN ('NUEVO','ASISTENCIA')") }
     } else if (rol === 'tanatologo') {
       conditions.push('(tanatologo_id = ? OR tanatologo_id IS NULL)')
       params.push(usuario)
-      if (!estado) { conditions.push("estado = 'PREPARACION'") }
+      if (!estado) { conditions.push("estado = 'PRESERVACION'") }
     } else if (rol === 'asistente_tanatologo') {
-      if (!estado) { conditions.push("estado IN ('TRASLADO','PREPARACION')") }
+      if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION')") }
     } else if (rol === 'supervisora') {
-      if (!estado) { conditions.push("estado = 'ENTREGA'") }
+      if (!estado) { conditions.push("estado = 'ENCOFRADO'") }
     }
 
     if (estado)        { conditions.push('estado = ?');            params.push(estado) }
@@ -206,11 +206,11 @@ async function asignarActores(req, res, next) {
     const updates = {}
     if (asistente_id)  updates.asistente_id  = asistente_id
     if (tanatologo_id) updates.tanatologo_id = tanatologo_id
-    updates.estado = 'TRASLADO'
+    updates.estado = 'ASISTENCIA'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
     await insertarHistorial(
-      id, 'NUEVO', 'TRASLADO', usuario, nombre,
+      id, 'NUEVO', 'ASISTENCIA', usuario, nombre,
       `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`
     )
 
