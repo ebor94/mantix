@@ -95,7 +95,7 @@ const createAfiliadoSchema = Joi.object({
   sucursal: Joi.string()
     .valid('CUCUTA', 'PAMPLONA', 'OCAÑA', 'SARAVENA', 'ARAUCA', 'TAME', 'CRISTO REY', 'ARAUQUITA')
     .allow('', null),
-  novedad: Joi.string().valid('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA').allow('', null),
+  novedad: Joi.string().valid('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA', 'TRASLADO_CANAL').allow('', null),
   vigenciaDesde: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
   vigenciaHasta: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
 

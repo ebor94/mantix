@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     novedad: {
-      type: DataTypes.ENUM('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA'),
+      type: DataTypes.ENUM('NUEVO', 'CAMBIO', 'TRASLADO', 'ACTUALIZACION', 'TRASLADO_COMPETENCIA', 'TRASLADO_CANAL'),
       allowNull: true
     },
     vigenciaDesde: {
