@@ -1192,8 +1192,8 @@ doc.fontSize(20)
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
   <style>
-    .lbl { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#7a1f2b; }
-    .val { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#2b2b2b; }
+    .lbl { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#FFFFFF; }
+    .val { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#FFFFFF; }
   </style>
   <text x="${xL}" y="${py(P.yEmpresa)}"  class="lbl" font-size="${fsL}">Empresa:</text>
   <text x="${xV}" y="${py(P.yEmpresa)}"  class="val" font-size="${fsV}">${esc(empresa)}</text>
