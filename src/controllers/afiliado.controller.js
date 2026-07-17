@@ -26,7 +26,7 @@ function buildPublicPdfUrl(pdfUrlRelativa) {
 // ── Carné digital de afiliación ──────────────────────────────────────────────
 const CARNET_BASE_URL =
   process.env.CARNET_BASE_URL ||
-  'https://losolivoscucuta.com/difusiones/img/carnet-base.png';
+  'https://losolivoscucuta.com/difusiones/img/carnet.png';
 
 // Cache de la imagen base con TTL de 5 min (permite actualizar el diseño sin reiniciar)
 let _carnetBaseCache = { buf: null, ts: 0 };

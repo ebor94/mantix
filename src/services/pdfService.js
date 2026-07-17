@@ -1177,9 +1177,9 @@ doc.fontSize(20)
     // ── Posiciones fraccionales (calibrables) ────────────────────
     // x/y en fracción de W/H; fs en fracción de W.
     const P = {
-      xLabel: 0.07, xValue: 0.30,
-      yEmpresa: 0.205, yNombre: 0.255, yCedula: 0.315, yVigencia: 0.365,
-      fsLabel: 0.030, fsValue: 0.030
+      xLabel: 0.07, xValue: 0.295,
+      yEmpresa: 0.245, yNombre: 0.297, yCedula: 0.345, yVigencia: 0.393,
+      fsLabel: 0.036, fsValue: 0.036
     };
     const px = (f) => Math.round(W * f);
     const py = (f) => Math.round(H * f);
