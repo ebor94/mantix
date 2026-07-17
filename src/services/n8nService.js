@@ -82,12 +82,14 @@ async function notificarN8n(proveedorId, archivos) {
  * @param {number} afiliadoId   ID del afiliado aprobado
  * @param {string} aprobadoPor  Nombre/identificador del aprobador
  *                              (ej. "edwin ortega" o "user:5")
+ * @param {string|null} carnetUrl  URL pública del carné digital (para que n8n
+ *                              lo adjunte al correo y lo suba a Drive)
  */
-async function notificarCertificadoAfiliacion(afiliadoId, aprobadoPor) {
+async function notificarCertificadoAfiliacion(afiliadoId, aprobadoPor, carnetUrl = null) {
   try {
     const res = await axios.post(
       N8N_CERTIFICADO_URL,
-      { afiliadoId, aprobadoPor },
+      { afiliadoId, aprobadoPor, carnetUrl },
       { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
     );
     return res.data;

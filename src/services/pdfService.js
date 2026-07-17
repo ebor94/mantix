@@ -1133,6 +1133,94 @@ doc.fontSize(20)
   }
 
   /**
+   * Genera el carné digital de afiliación superponiendo los datos del afiliado
+   * (Empresa, Nombre, Cédula, Vigencia) sobre la imagen base de la plantilla.
+   * La base se recibe como Buffer (descargada de CARNET_BASE_URL). Se usa
+   * sharp.composite con un overlay SVG transparente — así no se re-codifica la
+   * foto de fondo y el texto queda nítido.
+   *
+   * Las coordenadas son fraccionales respecto al tamaño real de la plantilla,
+   * definidas en CARNET_POS (calibrables sin tocar la lógica).
+   *
+   * @param {object} afiliado  { id, nombreEmpresa, primerNombre, segundoNombre, primerApellido, segundoApellido, numeroDocumento, vigenciaDesde, vigenciaHasta }
+   * @param {Buffer} baseBuffer  imagen base de la plantilla (PNG/JPG)
+   * @returns {Promise<{ fileName:string, filePath:string, url:string }>}
+   */
+  async generarCarnetImagen(afiliado, baseBuffer) {
+    const dir = path.join(__dirname, '../../uploads/carnets');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const fileName = `${afiliado.id}.png`;
+    const filePath = path.join(dir, fileName);
+
+    const meta = await sharp(baseBuffer).metadata();
+    const W = meta.width  || 850;
+    const H = meta.height || 1400;
+
+    const esc = this.escapeXml.bind(this);
+
+    // ── Datos ────────────────────────────────────────────────────
+    const empresa = (afiliado.nombreEmpresa || 'SERFUNORTE LOS OLIVOS').toUpperCase();
+    const nombre  = [
+      afiliado.primerNombre, afiliado.segundoNombre,
+      afiliado.primerApellido, afiliado.segundoApellido
+    ].filter(Boolean).join(' ').toUpperCase();
+    const cedula  = String(afiliado.numeroDocumento || '')
+      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // separadores de miles
+
+    const anio = (d) => (d ? new Date(d).getFullYear() : null);
+    const vDesde = anio(afiliado.vigenciaDesde);
+    const vHasta = anio(afiliado.vigenciaHasta);
+    const vigencia = (vDesde && vHasta)
+      ? (vDesde === vHasta ? `${vDesde}` : `${vDesde} - ${vHasta}`)
+      : String(vDesde || vHasta || new Date().getFullYear());
+
+    // ── Posiciones fraccionales (calibrables) ────────────────────
+    // x/y en fracción de W/H; fs en fracción de W.
+    const P = {
+      xLabel: 0.07, xValue: 0.30,
+      yEmpresa: 0.205, yNombre: 0.255, yCedula: 0.315, yVigencia: 0.365,
+      fsLabel: 0.030, fsValue: 0.030
+    };
+    const px = (f) => Math.round(W * f);
+    const py = (f) => Math.round(H * f);
+    const xL = px(P.xLabel), xV = px(P.xValue);
+    const fsL = px(P.fsLabel), fsV = px(P.fsValue);
+
+    // Nombre puede ser largo: si excede ~22 chars, reduce un poco la fuente.
+    const fsNombre = nombre.length > 22 ? Math.round(fsV * 0.85) : fsV;
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .lbl { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#7a1f2b; }
+    .val { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#2b2b2b; }
+  </style>
+  <text x="${xL}" y="${py(P.yEmpresa)}"  class="lbl" font-size="${fsL}">Empresa:</text>
+  <text x="${xV}" y="${py(P.yEmpresa)}"  class="val" font-size="${fsV}">${esc(empresa)}</text>
+
+  <text x="${xL}" y="${py(P.yNombre)}"   class="lbl" font-size="${fsL}">Nombre:</text>
+  <text x="${xV}" y="${py(P.yNombre)}"   class="val" font-size="${fsNombre}">${esc(nombre)}</text>
+
+  <text x="${xL}" y="${py(P.yCedula)}"   class="lbl" font-size="${fsL}">Cédula:</text>
+  <text x="${xV}" y="${py(P.yCedula)}"   class="val" font-size="${fsV}">${esc(cedula)}</text>
+
+  <text x="${xL}" y="${py(P.yVigencia)}" class="lbl" font-size="${fsL}">Vigencia:</text>
+  <text x="${xV}" y="${py(P.yVigencia)}" class="val" font-size="${fsV}">${esc(vigencia)}</text>
+</svg>`;
+
+    await sharp(baseBuffer)
+      .composite([{ input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 }])
+      .png({ quality: 95, compressionLevel: 6 })
+      .toFile(filePath);
+
+    return {
+      fileName,
+      filePath,
+      url: `/uploads/carnets/${fileName}`
+    };
+  }
+
+  /**
    * Genera el PDF de "Liquidación de afiliaciones" en el stream provisto.
    * No escribe a disco — el controlador pipea PDFDocument directo al res.
    *

@@ -116,6 +116,13 @@ router.get('/:id/plano-excel',
   controller.planoExcel
 );
 
+// ── GET /afiliados/:id/carnet — PNG del carné digital (validación de diseño) ──
+router.get('/:id/carnet',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.carnet
+);
+
 // ── GET /afiliados/:id/trazabilidad — historial de auditoría del afiliado ─────
 router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 

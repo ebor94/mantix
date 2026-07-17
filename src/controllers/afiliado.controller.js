@@ -1,6 +1,7 @@
 const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
-const { sendAceptacion, sendOTP, sendImagenRecibo } = require('../services/whatsappService');
+const { sendAceptacion, sendOTP, sendImagenRecibo, sendTemplateImagenTexto } = require('../services/whatsappService');
+const axios = require('axios');
 const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
 const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
@@ -20,6 +21,56 @@ function buildPublicPdfUrl(pdfUrlRelativa) {
   const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
   if (!base) return pdfUrlRelativa;
   return `${base}${pdfUrlRelativa}`;
+}
+
+// ── Carné digital de afiliación ──────────────────────────────────────────────
+const CARNET_BASE_URL =
+  process.env.CARNET_BASE_URL ||
+  'https://losolivoscucuta.com/difusiones/img/carnet-base.png';
+
+// Cache de la imagen base con TTL de 5 min (permite actualizar el diseño sin reiniciar)
+let _carnetBaseCache = { buf: null, ts: 0 };
+const CARNET_BASE_TTL_MS = 5 * 60 * 1000;
+
+async function obtenerCarnetBase() {
+  if (_carnetBaseCache.buf && (Date.now() - _carnetBaseCache.ts) < CARNET_BASE_TTL_MS) {
+    return _carnetBaseCache.buf;
+  }
+  const res = await axios.get(CARNET_BASE_URL, { responseType: 'arraybuffer', timeout: 10000 });
+  const buf = Buffer.from(res.data);
+  _carnetBaseCache = { buf, ts: Date.now() };
+  return buf;
+}
+
+function captionCarnet(afiliado) {
+  const nombre = [afiliado.primerNombre, afiliado.primerApellido].filter(Boolean).join(' ');
+  return `¡Bienvenido(a) a Los Olivos${nombre ? ', ' + nombre : ''}! Este es tu carné digital de afiliación. Guárdalo para futuras consultas.`;
+}
+
+/**
+ * Fire-and-forget tras la aprobación: genera el carné digital, lo envía por
+ * WhatsApp al afiliado (solo si celularTieneWhatsapp === 1) y dispara el
+ * webhook n8n del certificado incluyendo la URL del carné para que n8n lo
+ * envíe por correo y lo archive en la carpeta Drive del afiliado.
+ */
+async function emitirCarnetYCertificado(afiliadoId, aprobadoPor) {
+  let carnetUrl = null;
+  try {
+    const afiliado = await Afiliado.findByPk(afiliadoId);
+    if (afiliado) {
+      const base   = await obtenerCarnetBase();
+      const carnet = await pdfService.generarCarnetImagen(afiliado.toJSON(), base);
+      carnetUrl    = buildPublicPdfUrl(carnet.url);
+
+      if (Number(afiliado.celularTieneWhatsapp) === 1 && afiliado.celular) {
+        await sendTemplateImagenTexto(afiliado.celular, carnetUrl, captionCarnet(afiliado));
+      }
+    }
+  } catch (e) {
+    logger.warn(`[Carnet] No se pudo generar/enviar el carné del afiliado ${afiliadoId}: ${e.message || e}`);
+  }
+  // Siempre disparar el certificado (con carnetUrl si se generó → correo + Drive en n8n)
+  await notificarCertificadoAfiliacion(afiliadoId, aprobadoPor, carnetUrl);
 }
 
 /**
@@ -249,8 +300,10 @@ async function aprobar(req, res, next) {
     // y si falla solo queda en logs (la aprobación ya persistió).
     const aprobadoPor = [req.usuario?.nombre, req.usuario?.apellido]
       .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
-    notificarCertificadoAfiliacion(afiliado.id, aprobadoPor).catch((err) => {
-      logger.warn(`[Afiliado.aprobar] Webhook certificado falló: ${err?.message || err}`);
+    // Genera el carné (WhatsApp al afiliado) y dispara el certificado n8n
+    // (correo + Drive) incluyendo la URL del carné. Fire-and-forget.
+    emitirCarnetYCertificado(afiliado.id, aprobadoPor).catch((err) => {
+      logger.warn(`[Afiliado.aprobar] Carné/certificado falló: ${err?.message || err}`);
     });
 
     res.json({ success: true, message: 'Registro aprobado exitosamente', data: afiliado });
@@ -609,7 +662,8 @@ module.exports = {
   getMisDelDia,
   legalizarAfiliaciones,
   liquidacionPdf,
-  planoExcel
+  planoExcel,
+  carnet
 };
 
 /**
@@ -625,5 +679,23 @@ async function planoExcel(req, res, next) {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     await excelService.generarPlanoExcel(Number(id), res);
     res.end();
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/afiliados/:id/carnet
+ * Genera y devuelve el PNG del carné digital del afiliado. Útil para validar
+ * el diseño sin re-aprobar. El mismo carné se envía automáticamente en la
+ * aprobación (WhatsApp + n8n correo/Drive).
+ */
+async function carnet(req, res, next) {
+  try {
+    const afiliado = await Afiliado.findByPk(Number(req.params.id));
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+    const base   = await obtenerCarnetBase();
+    const carnetInfo = await pdfService.generarCarnetImagen(afiliado.toJSON(), base);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `inline; filename="carnet-${afiliado.numeroDocumento}.png"`);
+    require('fs').createReadStream(carnetInfo.filePath).pipe(res);
   } catch (err) { next(err); }
 }
