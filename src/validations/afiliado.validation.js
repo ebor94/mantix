@@ -187,7 +187,7 @@ const createAfiliadoSchema = Joi.object({
 
   // ── Primera cuota / soporte de pago ─────────────────────────
   formaPago: Joi.string()
-    .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO')
+    .valid('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO', 'PAGO_EN_CAJA')
     .allow('', null)
     .messages({ 'any.only': 'Forma de pago no válida' }),
   valorRecibido: Joi.number().min(0).allow(null),
