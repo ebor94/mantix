@@ -112,7 +112,7 @@ router.get('/por-hash/:hash', softAuth, controller.getByHash);
 // ── GET /afiliados/:id/plano-excel — descarga plano de póliza en Excel ────────
 router.get('/:id/plano-excel',
   auth,
-  requirePermiso('afiliaciones.aprobar'),
+  requirePermiso('afiliaciones', 'aprobar'),
   controller.planoExcel
 );
 
