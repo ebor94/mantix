@@ -910,6 +910,7 @@ doc.fontSize(20)
         // Filas
         const formaPagoLabel = {
           EFECTIVO:           'Efectivo',
+          PAGO_EN_CAJA:       'Pago en caja',
           TRANSFERENCIA:      'Transferencia bancaria',
           CORRESPONSAL:       'Corresponsal bancario',
           POSFECHADO_COBRADO: 'Posfechado (cobrado)'
@@ -1025,6 +1026,7 @@ doc.fontSize(20)
 
     const formaPagoLabel = {
       EFECTIVO:           'Efectivo',
+      PAGO_EN_CAJA:       'Pago en caja',
       TRANSFERENCIA:      'Transferencia bancaria',
       CORRESPONSAL:       'Corresponsal bancario',
       POSFECHADO_COBRADO: 'Posfechado (cobrado)'

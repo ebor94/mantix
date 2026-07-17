@@ -45,6 +45,10 @@ async function emitirPdfYEnviarWhatsapp(afiliadoId) {
     const pdfInfo = await pdfService.generarReciboCajaPDF(reciboJson, afiliadoJson, asesorJson);
     await recibo.update({ pdfUrl: pdfInfo.url });
 
+    // Pago en caja: el recibo existe para el cuadre de la cajera, pero NO se
+    // envía el voucher por WhatsApp al cliente.
+    if (recibo.formaPago === 'PAGO_EN_CAJA') return;
+
     // 2) Generar la imagen-voucher PNG. Se descarga en el servidor en
     //    uploads/recibos/{numeroRecibo}.png y queda accesible via PUBLIC_API_URL.
     const imgInfo = await pdfService.generarReciboCajaImagen(
@@ -130,8 +134,9 @@ async function create(req, res, next) {
     // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto).
     notificarFirma(result.id).catch(() => {});
 
-    // Fire-and-forget: sincronizar con sv_crm_personas
-    sincronizarAfiliado(result).catch(() => {});
+    // Fire-and-forget: sincronizar con sv_crm_personas + prospecto (estado AFILIADO,
+    // asignado al equivalente del asesor en el CRM vía el puente de identidad SSO).
+    sincronizarAfiliado(result, req.usuario).catch(() => {});
 
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
