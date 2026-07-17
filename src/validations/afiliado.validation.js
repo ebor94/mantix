@@ -38,8 +38,8 @@ const beneficiarioSchema = Joi.object({
     .messages({ 'string.pattern.base': 'Fecha de nacimiento debe tener formato YYYY-MM-DD' }),
   edad: Joi.number().integer().min(0).max(150).required(),
 
-  estado: Joi.string().valid('ACTUALIZACION', 'RETIRO', 'INGRESO').required()
-    .messages({ 'any.only': 'Estado debe ser ACTUALIZACION, RETIRO o INGRESO' }),
+  estado: Joi.string().valid('ACTUALIZACION', 'RETIRO', 'INGRESO', 'TRASLADO').required()
+    .messages({ 'any.only': 'Estado debe ser ACTUALIZACION, RETIRO, INGRESO o TRASLADO' }),
 
   // ── Campos opcionales que ya existen en BD ──
   // Sin esto, stripUnknown:true del middleware Joi los elimina del payload

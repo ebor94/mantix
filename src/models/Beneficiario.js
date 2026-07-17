@@ -76,7 +76,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     estado: {
-      type: DataTypes.ENUM('ACTUALIZACION', 'RETIRO', 'INGRESO'),
+      type: DataTypes.ENUM('ACTUALIZACION', 'RETIRO', 'INGRESO', 'TRASLADO'),
       allowNull: false,
       defaultValue: 'INGRESO'
     },
