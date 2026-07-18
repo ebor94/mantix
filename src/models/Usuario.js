@@ -155,11 +155,9 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'responsable_id',
       as: 'sedes_responsable'
     });
-
-    Usuario.belongsTo(models.Sede, {
-      foreignKey: 'sede_id',
-      as: 'sede'
-    });
+    // Nota: NO se define belongsTo(Sede) por sede_id para evitar un ciclo
+    // Usuario↔Sede que dispara _syncModelsWithCyclicReferences en el arranque.
+    // El filtro del cuadre usa la columna asesor.sede_id directamente.
     
     Usuario.hasMany(models.Notificacion, {
       foreignKey: 'usuario_id',
