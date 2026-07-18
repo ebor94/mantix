@@ -266,7 +266,7 @@ const INCLUDE_RECIBO_COMPLETO = [
     as: 'afiliado',
     attributes: ['id', 'numeroDocumento', 'primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido', 'celular', 'estadoRegistro', 'rechazado', 'rechazadoParcial']
   },
-  { model: Usuario, as: 'asesor',     attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo'] },
+  { model: Usuario, as: 'asesor',     attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo', 'sede_id'] },
   { model: Usuario, as: 'aprobador',  attributes: ['id', 'nombre', 'apellido'] }
 ];
 
@@ -302,6 +302,11 @@ async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta,
 
   const p = permisosCaja(usuario);
 
+  // Cajero de efectivo (no admin, no cartera): solo ve recibos de su sede.
+  // Sin sede asignada → no ve nada.
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+  if (esCajeroScoped && !usuario.sede_id) return [];
+
   // Determinar el conjunto de formas a mostrar
   let formasVisibles = [];
   if (p.superAdmin || p.all) {
@@ -325,9 +330,18 @@ async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta,
   if (formasVisibles.length === 0) return [];
   where.formaPago = { [Op.in]: formasVisibles };
 
+  // Si es cajero acotado por sede, forzar que el asesor del recibo sea de su sede.
+  const include = esCajeroScoped
+    ? INCLUDE_RECIBO_COMPLETO.map(inc =>
+        inc.as === 'asesor'
+          ? { ...inc, where: { sede_id: usuario.sede_id }, required: true }
+          : inc
+      )
+    : INCLUDE_RECIBO_COMPLETO;
+
   return ReciboCaja.findAll({
     where,
-    include: INCLUDE_RECIBO_COMPLETO,
+    include,
     order: [['fechaEmision', 'ASC'], ['id', 'ASC']]
   });
 }
@@ -361,6 +375,13 @@ async function aprobarRecibos(reciboIds, usuario, observacion = null) {
     throw new AppError('No tienes permisos para aprobar recibos', 403);
   }
 
+  // Cajero de efectivo acotado por sede: solo puede aprobar recibos de asesores
+  // de su propia sede. Sin sede asignada → no puede aprobar nada.
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+  if (esCajeroScoped && !usuario.sede_id) {
+    throw new AppError('No tienes una sede asignada para aprobar recibos', 403);
+  }
+
   const transaction = await sequelize.transaction();
   try {
     const recibos = await ReciboCaja.findAll({
@@ -372,6 +393,31 @@ async function aprobarRecibos(reciboIds, usuario, observacion = null) {
     if (recibos.length === 0) {
       await transaction.rollback();
       throw new AppError('Ningún recibo pendiente encontrado en los IDs provistos', 400);
+    }
+
+    // Mapa asesorId → sede_id para validar la sede del cajero (si aplica)
+    let sedePorAsesor = {};
+    if (esCajeroScoped) {
+      const asesorIds = [...new Set(recibos.map(r => r.asesorId).filter(Boolean))];
+      const asesores = await Usuario.findAll({
+        where: { id: asesorIds },
+        attributes: ['id', 'sede_id'],
+        transaction
+      });
+      sedePorAsesor = Object.fromEntries(asesores.map(a => [a.id, a.sede_id]));
+    }
+
+    // Validación de sede (cajero acotado): recibos de asesores de otra sede.
+    if (esCajeroScoped) {
+      const otraSede = recibos.filter(r => sedePorAsesor[r.asesorId] !== usuario.sede_id);
+      if (otraSede.length > 0) {
+        await transaction.rollback();
+        const lista = otraSede.map(r => r.numeroRecibo).join(', ');
+        throw new AppError(
+          `No puedes aprobar recibos de otra sede: ${lista}`,
+          403
+        );
+      }
     }
 
     // Validación de permiso por forma de pago

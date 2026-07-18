@@ -14,6 +14,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    sede_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Sede a la que pertenece el usuario. Usado para acotar el cuadre de caja del cajero a su sede.'
+    },
     nombre: {
       type: DataTypes.STRING(100),
       allowNull: false
@@ -39,6 +44,11 @@ module.exports = (sequelize, DataTypes) => {
     },
     avatar: {
       type: DataTypes.STRING(255)
+    },
+    id_identidad: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'FK opcional a org_identidad (SSO compartido). Permite resolver este usuario desde un token de identidad.'
     },
     es_super_admin: {
       type: DataTypes.BOOLEAN,
@@ -144,6 +154,11 @@ module.exports = (sequelize, DataTypes) => {
     Usuario.hasMany(models.Sede, {
       foreignKey: 'responsable_id',
       as: 'sedes_responsable'
+    });
+
+    Usuario.belongsTo(models.Sede, {
+      foreignKey: 'sede_id',
+      as: 'sede'
     });
     
     Usuario.hasMany(models.Notificacion, {
