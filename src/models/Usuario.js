@@ -61,6 +61,11 @@ module.exports = (sequelize, DataTypes) => {
       unique: true,
       comment: 'Prefijo único para numerar recibos de caja del asesor (ej. MP para María Pérez)'
     },
+    codigo: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+      comment: 'Código del asesor usado en el plano Excel (columna CODIGO ASESOR)'
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
