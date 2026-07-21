@@ -275,19 +275,26 @@ async function generar(req, res, next) {
 
       doc.font('Helvetica').fontSize(7.5);
       for (const ben of beneficiarios) {
-        if (y > 720) {
+        const nombre     = nombreCompleto(ben);
+        const parentesco = ben.parentesco || '';
+        // Altura de la fila según la celda más alta (nombre/parentesco pueden envolver)
+        const hNombre = doc.heightOfString(nombre,     { width: 108 });
+        const hParent = doc.heightOfString(parentesco, { width: 58 });
+        const rowH    = Math.max(12, hNombre, hParent) + 6; // +6 de respiro entre filas
+
+        if (y + rowH > 730) {
           doc.addPage();
           y = 120;
         }
         doc.text(`${ben.tipoDocumento || ''} ${ben.numeroDocumento || ''}`.trim(), 44, y, { width: 76 });
-        doc.text(nombreCompleto(ben), 122, y, { width: 108 });
+        doc.text(nombre, 122, y, { width: 108 });
         doc.text(formatFecha(ben.fechaNacimiento), 232, y, { width: 38 });
         doc.text(String(ben.edad || calcularEdad(ben.fechaNacimiento) || ''), 272, y, { width: 20 });
         doc.text(ben.genero || '', 296, y, { width: 22 });
-        doc.text(ben.parentesco || '', 320, y, { width: 58 });
+        doc.text(parentesco, 320, y, { width: 58 });
         doc.text(tipoBeneficiarioLabel(ben.tipoBeneficiario), 380, y, { width: 50 });
         doc.text(tipoSolicitudLabel(ben.estado), 432, y, { width: 120 });
-        y += 14;
+        y += rowH;
       }
     } else {
       doc.fontSize(9).font('Helvetica-Oblique').fillColor('gray')
