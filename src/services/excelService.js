@@ -408,7 +408,7 @@ SELECT * FROM (
         END                                                       AS \`CATEGORIA\`,
         1                                                         AS \`CENTRO DE COSTO\`,
         ''                                                        AS \`EMAIL\`,
-        0                                                         AS \`S/N CONDICION PARTICULAR\`,
+        CASE b.estado WHEN 'TRASLADO' THEN -1 ELSE 0 END          AS \`S/N CONDICION PARTICULAR\`,
         -- Datos del Pagador (heredados del afiliado cuando diferenteAlContratante=1)
         CASE WHEN a.diferenteAlContratante = 1
             THEN ${TIPO_DOC('a.tipoDocumento')}
@@ -524,6 +524,7 @@ SELECT * FROM (
     INNER JOIN afiliados a ON b.afiliadoId = a.id
     WHERE b.afiliadoId = :afiliadoId
       AND NOT (a.diferenteAlContratante = 1 AND b.parentesco = 'ASEGURADO PRINCIPAL')
+      AND IFNULL(b.estado, '') <> 'RETIRO'
 
 ) AS plano_estructurado
 ORDER BY orden_registro ASC`;
