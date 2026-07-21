@@ -174,7 +174,7 @@ SELECT * FROM (
         END                                                       AS \`CATEGORIA\`,
         1                                                         AS \`CENTRO DE COSTO\`,
         a.email                                                   AS \`EMAIL\`,
-        CASE WHEN a.novedad = 'TRASLADO' THEN -1 ELSE 0 END       AS \`S/N CONDICION PARTICULAR\`,
+        CASE WHEN a.novedad IN ('TRASLADO','TRASLADO_CANAL') THEN -1 ELSE 0 END AS \`S/N CONDICION PARTICULAR\`,
         -- Datos del Pagador (solo cuando el asegurado es diferente al contratante)
         CASE WHEN a.diferenteAlContratante = 1 THEN ${TIPO_DOC('a.tipoDocumento')} ELSE '' END AS \`TIPO DOCUMENTO PAGADOR\`,
         CASE WHEN a.diferenteAlContratante = 1 THEN a.numeroDocumento  ELSE '' END AS \`NRO DOCUMENTO PAGADOR\`,
