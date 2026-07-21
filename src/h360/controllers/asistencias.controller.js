@@ -14,8 +14,8 @@ const ETAPAS_POR_ROL = {
   asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   tanatologo:           ['F04_TANATOPRAXIA'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA'],
-  supervisora:          ['F05_ENTREGA'],
-  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F05_ENTREGA'],
+  supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA'],
+  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA'],
 }
 
 // Etapas requeridas para cerrar cada estado por rol
@@ -24,10 +24,10 @@ const ETAPAS_PARA_CERRAR = {
   tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA'] },
   asistente_tanatologo: { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'] },
-  supervisora:          { ENCOFRADO:     ['F05_ENTREGA'] },
+  supervisora:          { ENCOFRADO:     ['F06_ENCOFRADO', 'F05_ENTREGA'] },
   admin:                { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'],
-                          ENCOFRADO:     ['F05_ENTREGA'],
+                          ENCOFRADO:     ['F06_ENCOFRADO', 'F05_ENTREGA'],
                           APROBACION:  [] },
 }
 
@@ -160,19 +160,22 @@ async function crear(req, res, next) {
     const codigo = await generarCodigo()
     const {
       nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-      peso_aproximado, causa_fallecimiento, nombre_contacto, telefono_contacto,
+      peso_aproximado, causa_fallecimiento, categoria_sanitaria,
+      nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto,
     } = req.body
 
     const [result] = await db.query(
       `INSERT INTO asistencias
        (codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-        peso_aproximado, causa_fallecimiento, nombre_contacto, telefono_contacto,
+        peso_aproximado, causa_fallecimiento, categoria_sanitaria,
+        nombre_contacto, telefono_contacto,
         lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-        peso_aproximado, causa_fallecimiento, nombre_contacto, telefono_contacto,
+        peso_aproximado, causa_fallecimiento, categoria_sanitaria || null,
+        nombre_contacto, telefono_contacto,
         lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
         conductor, fecha_contacto || null, usuario,
       ]
@@ -255,12 +258,41 @@ async function cambiarEstado(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Registra el uso del cofre al completar F-06 (fire-and-forget, no bloquea el guardado)
+async function registrarUsoCofre(datos, asistencia_id, usuario_id) {
+  const consecutivo = String(datos?.consecutivo_cofre || '').trim()
+  const tipo = datos?.destino_final
+  if (!consecutivo || !['INHUMACION', 'CREMACION'].includes(tipo)) return
+
+  await db.query(
+    `INSERT INTO cofres (consecutivo, ultimo_tipo, veces_usado, primer_uso_at, ultimo_uso_at)
+     VALUES (?, ?, 1, NOW(), NOW())
+     ON DUPLICATE KEY UPDATE
+       veces_usado = veces_usado + 1,
+       ultimo_tipo = VALUES(ultimo_tipo),
+       ultimo_uso_at = NOW()`,
+    [consecutivo, tipo]
+  )
+
+  const [rows] = await db.query('SELECT id FROM cofres WHERE consecutivo = ?', [consecutivo])
+  if (!rows.length) return
+  const cofre_id = rows[0].id
+
+  await db.query(
+    `INSERT INTO cofre_usos (cofre_id, asistencia_id, tipo, observaciones, usuario_id)
+     VALUES (?,?,?,?,?)`,
+    [cofre_id, asistencia_id, tipo, datos?.observaciones || null, usuario_id]
+  )
+}
+
 // POST /asistencias/:id/etapa
 async function guardarEtapa(req, res, next) {
   try {
     const { id } = req.params
-    const { etapa, datos, completar = false } = req.body
+    const { etapa, datos, completar: completarRaw = false } = req.body
     const { rol, usuario, nombre } = req.user
+    let completar = completarRaw
+    let reprocesoDetectado = false
 
     const permitidas = ETAPAS_POR_ROL[rol] || []
     if (!permitidas.includes(etapa))
@@ -269,6 +301,13 @@ async function guardarEtapa(req, res, next) {
     const [asist] = await db.query('SELECT estado FROM asistencias WHERE id = ?', [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
+    // Reproceso: si F-05 marca requiere_reproceso=true al cerrar, no completar y no avanzar
+    if (etapa === 'F05_ENTREGA' && completar && datos?.requiere_reproceso === true) {
+      completar = false
+      reprocesoDetectado = true
+    }
+
+    // Persistir la etapa
     await db.query(
       `INSERT INTO asistencia_etapas (asistencia_id, etapa, datos, usuario_id, completado)
        VALUES (?,?,?,?,?)
@@ -277,13 +316,31 @@ async function guardarEtapa(req, res, next) {
       [id, etapa, JSON.stringify(datos), usuario, completar ? 1 : 0]
     )
 
-    // Si completar=true, avanzar estado
+    // Registro de uso de cofre al completar F-06 (fire-and-forget)
+    if (etapa === 'F06_ENCOFRADO' && completar) {
+      registrarUsoCofre(datos, id, usuario).catch(e => console.warn('[cofres]', e.message))
+    }
+
+    // Avance de estado: solo si TODAS las etapas requeridas del estado actual están completas
     if (completar) {
       const estadoActual  = asist[0].estado
       const transicion    = TRANSICIONES[estadoActual]
       const estadosPorRol = ESTADOS_POR_ROL[rol] || []
+      const requeridas    = (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || []
 
-      if (transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
+      let puedeAvanzar = true
+      if (requeridas.length > 0) {
+        const placeholders = requeridas.map(() => '?').join(',')
+        const [rows] = await db.query(
+          `SELECT etapa FROM asistencia_etapas
+           WHERE asistencia_id=? AND completado=1 AND etapa IN (${placeholders})`,
+          [id, ...requeridas]
+        )
+        const completadas = new Set(rows.map(r => r.etapa))
+        puedeAvanzar = requeridas.every(e => completadas.has(e))
+      }
+
+      if (puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
         await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
         await insertarHistorial(id, estadoActual, transicion.siguiente, usuario, nombre)
         glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
@@ -292,7 +349,14 @@ async function guardarEtapa(req, res, next) {
     }
 
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
-    res.json({ ok: true, mensaje: `Etapa ${etapa} guardada`, asistencia: actualizada[0] })
+    res.json({
+      ok: true,
+      mensaje: reprocesoDetectado
+        ? 'Reproceso registrado — permanece en Encofrado'
+        : `Etapa ${etapa} guardada`,
+      reproceso: reprocesoDetectado,
+      asistencia: actualizada[0],
+    })
   } catch (err) { next(err) }
 }
 
