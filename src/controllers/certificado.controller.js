@@ -40,6 +40,14 @@ const tipoBeneficiarioLabel = (tipo) => {
   return tipo || '';
 };
 
+// Tipo de solicitud del beneficiario (columna del certificado)
+const tipoSolicitudLabel = (estado) => ({
+  INGRESO:       'Ingreso',
+  ACTUALIZACION: 'Actualización',
+  RETIRO:        'Retiro',
+  TRASLADO:      'Traslado'
+}[estado] || estado || '');
+
 // ── Helpers de formato ─────────────────────────────────────────────────────
 const formatFecha = (fecha) => {
   if (!fecha) return '';
@@ -255,13 +263,14 @@ async function generar(req, res, next) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
       doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
-      doc.text('Documento', 45, y + 4);
-      doc.text('Nombres', 130, y + 4);
-      doc.text('F. Nac.', 290, y + 4);
-      doc.text('Edad', 340, y + 4);
-      doc.text('Gén.', 370, y + 4);
-      doc.text('Parentesco', 400, y + 4);
-      doc.text('Tipo', 480, y + 4);
+      doc.text('Documento', 44, y + 4);
+      doc.text('Nombres', 122, y + 4);
+      doc.text('F. Nac.', 232, y + 4);
+      doc.text('Edad', 272, y + 4);
+      doc.text('Gén.', 296, y + 4);
+      doc.text('Parentesco', 320, y + 4);
+      doc.text('Tipo', 380, y + 4);
+      doc.text('Solicitud', 432, y + 4);
       y += 15;
 
       doc.font('Helvetica').fontSize(7.5);
@@ -270,13 +279,14 @@ async function generar(req, res, next) {
           doc.addPage();
           y = 120;
         }
-        doc.text(`${ben.tipoDocumento || ''} ${ben.numeroDocumento || ''}`.trim(), 45, y);
-        doc.text(nombreCompleto(ben), 130, y, { width: 155 });
-        doc.text(formatFecha(ben.fechaNacimiento), 290, y);
-        doc.text(String(ben.edad || calcularEdad(ben.fechaNacimiento) || ''), 340, y);
-        doc.text(ben.genero || '', 370, y);
-        doc.text(ben.parentesco || '', 400, y, { width: 75 });
-        doc.text(tipoBeneficiarioLabel(ben.tipoBeneficiario), 480, y, { width: 75 });
+        doc.text(`${ben.tipoDocumento || ''} ${ben.numeroDocumento || ''}`.trim(), 44, y, { width: 76 });
+        doc.text(nombreCompleto(ben), 122, y, { width: 108 });
+        doc.text(formatFecha(ben.fechaNacimiento), 232, y, { width: 38 });
+        doc.text(String(ben.edad || calcularEdad(ben.fechaNacimiento) || ''), 272, y, { width: 20 });
+        doc.text(ben.genero || '', 296, y, { width: 22 });
+        doc.text(ben.parentesco || '', 320, y, { width: 58 });
+        doc.text(tipoBeneficiarioLabel(ben.tipoBeneficiario), 380, y, { width: 50 });
+        doc.text(tipoSolicitudLabel(ben.estado), 432, y, { width: 120 });
         y += 14;
       }
     } else {
