@@ -12,10 +12,10 @@ const ESTADOS_POR_ROL = {
 // Rol → etapas que puede guardar
 const ETAPAS_POR_ROL = {
   asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
-  tanatologo:           ['F04_TANATOPRAXIA'],
+  tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA'],
-  supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA'],
-  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA'],
+  supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
+  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
 }
 
 // Etapas requeridas para cerrar cada estado por rol
@@ -75,7 +75,15 @@ async function listar(req, res, next) {
     } else if (rol === 'tanatologo') {
       conditions.push('(tanatologo_id = ? OR tanatologo_id IS NULL)')
       params.push(usuario)
-      if (!estado) { conditions.push("estado = 'PRESERVACION'") }
+      if (!estado) {
+        // También ver casos en ENCOFRADO con salida no conforme pendiente (F-07)
+        conditions.push(`(estado = 'PRESERVACION' OR EXISTS (
+          SELECT 1 FROM asistencia_etapas ae
+          WHERE ae.asistencia_id = asistencias.id
+            AND ae.etapa = 'F07_SALIDA_NO_CONFORME'
+            AND ae.completado = 0
+        ))`)
+      }
     } else if (rol === 'asistente_tanatologo') {
       if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION')") }
     } else if (rol === 'supervisora') {
@@ -305,6 +313,21 @@ async function guardarEtapa(req, res, next) {
     if (etapa === 'F05_ENTREGA' && completar && datos?.requiere_reproceso === true) {
       completar = false
       reprocesoDetectado = true
+    }
+
+    // Salida no conforme pendiente: si al cerrar F-05 (sin reproceso) hay una F-07
+    // sin completar, bloquear hasta que se resuelva.
+    if (etapa === 'F05_ENTREGA' && completar && datos?.requiere_reproceso !== true) {
+      const [f07] = await db.query(
+        `SELECT completado FROM asistencia_etapas
+         WHERE asistencia_id=? AND etapa='F07_SALIDA_NO_CONFORME'`,
+        [id]
+      )
+      if (f07.length && f07[0].completado !== 1) {
+        return res.status(400).json({
+          mensaje: 'Hay una salida no conforme pendiente. Resuelve F-07 antes de cerrar el encuentro.'
+        })
+      }
     }
 
     // Persistir la etapa
