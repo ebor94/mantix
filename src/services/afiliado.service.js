@@ -135,8 +135,15 @@ async function createAfiliadoWithBeneficiarios(data) {
   }
 }
 
-async function getAllAfiliados() {
+/**
+ * Lista afiliados. Si se pasa `usuario`, se aplica el mismo filtro de asesor
+ * que getPendientes/getRechazados (whereConFiltroAsesor): un asesor sin
+ * permiso ver_todas solo ve las suyas.
+ */
+async function getAllAfiliados(usuario) {
+  const where = usuario ? whereConFiltroAsesor({}, usuario) : {};
   return Afiliado.findAll({
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -268,11 +275,19 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
 }
 
 /**
- * Busca el afiliado más reciente por número de documento (consulta pública).
+ * Busca el afiliado más reciente por número de documento.
+ *
+ * Se usa tanto desde la consulta pública (OTP, sin `usuario`, sin filtro —
+ * comportamiento sin cambios) como desde la búsqueda interna del asesor
+ * (`buscarPorDocumento`, con `usuario`): en ese segundo caso se aplica
+ * whereConFiltroAsesor para que un asesor sin permiso ver_todas no vea
+ * afiliados de otro asesor.
  */
-async function getAfiliadoByDocumento(numeroDocumento) {
+async function getAfiliadoByDocumento(numeroDocumento, usuario) {
+  const baseWhere = { numeroDocumento };
+  const where = usuario ? whereConFiltroAsesor(baseWhere, usuario) : baseWhere;
   return Afiliado.findOne({
-    where: { numeroDocumento },
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -649,9 +664,19 @@ async function legalizarAfiliaciones(afiliadoIds, usuario, numeroPlanilla) {
 
 /**
  * Retorna el historial de trazabilidad de un afiliado, ordenado de más reciente a más antiguo.
+ *
+ * Si se pasa `usuario`, primero se valida que el afiliado exista y pase
+ * whereConFiltroAsesor (mismo criterio que getPendientes/getRechazados). Si
+ * no pasa el filtro se retorna `null` — el controlador lo traduce en 404, no
+ * 403, para no revelar que el registro existe.
  */
-async function getTrazabilidad(afiliadoId) {
+async function getTrazabilidad(afiliadoId, usuario) {
   const { Usuario } = require('../models');
+  if (usuario) {
+    const where = whereConFiltroAsesor({ id: afiliadoId }, usuario);
+    const visible = await Afiliado.findOne({ where, attributes: ['id'] });
+    if (!visible) return null;
+  }
   return Trazabilidad.findAll({
     where: { afiliadoId },
     include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'email'] }],

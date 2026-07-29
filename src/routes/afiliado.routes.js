@@ -3,6 +3,7 @@ const controller = require('../controllers/afiliado.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { auth, requirePermiso, softAuth } = require('../middleware/auth');
+const strictRateLimit = require('../middleware/strictRateLimit');
 const { createAfiliadoSchema } = require('../validations/afiliado.validation');
 
 const router = Router();
@@ -73,8 +74,8 @@ router.post(
 
 // ── Rutas OTP consulta pública ─────────────────────────────────────────────
 // ⚠️ TODAS las rutas /consulta/* y rutas fijas deben ir ANTES de /:id
-router.post('/consulta/solicitar-otp', softAuth, controller.solicitarOtp);
-router.post('/consulta/verificar-otp', softAuth, controller.verificarOtp);
+router.post('/consulta/solicitar-otp', strictRateLimit, softAuth, controller.solicitarOtp);
+router.post('/consulta/verificar-otp', strictRateLimit, softAuth, controller.verificarOtp);
 
 // ── GET /afiliados/consulta/:numerodocumento — consulta pública por documento ─
 router.get('/consulta/:numerodocumento', softAuth, controller.consultarPorDocumento);
@@ -172,7 +173,7 @@ router.put('/:id/actualizar-beneficiarios',
 router.put('/:id/datos-contacto', softAuth, controller.actualizarDatosContacto);
 
 // ── POST /:id/solicitar-otp-reenvio — OTP para confirmar reenvío (público via hash) ─
-router.post('/:id/solicitar-otp-reenvio', softAuth, controller.solicitarOtpReenvio);
+router.post('/:id/solicitar-otp-reenvio', strictRateLimit, softAuth, controller.solicitarOtpReenvio);
 
 // ── PUT /:id/reenviar — público via hash cifrado; OTP es el control de acceso ─
 router.put(

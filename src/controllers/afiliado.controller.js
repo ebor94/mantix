@@ -312,7 +312,7 @@ async function notificarRegistroConvenio(destinatario, convenio, afiliado) {
 
 async function getAll(req, res, next) {
   try {
-    const afiliados = await afiliadoService.getAllAfiliados();
+    const afiliados = await afiliadoService.getAllAfiliados(req.usuario);
     res.json({ success: true, data: afiliados });
   } catch (error) {
     next(error);
@@ -604,7 +604,11 @@ async function consultarPorDocumento(req, res, next) {
 async function buscarPorDocumento(req, res, next) {
   try {
     const { numeroDocumento } = req.params;
-    const afiliado = await afiliadoService.getAfiliadoByDocumento(numeroDocumento);
+    // Se pasa req.usuario para aplicar whereConFiltroAsesor: un asesor sin
+    // permiso ver_todas no debe ver afiliados de otro asesor. Si el afiliado
+    // existe pero es de otro asesor, se responde igual que "sin coincidencias"
+    // (mismo contrato de la UI) en vez de revelar que el registro existe.
+    const afiliado = await afiliadoService.getAfiliadoByDocumento(numeroDocumento, req.usuario);
     if (!afiliado) {
       return res.json({ success: true, data: null, message: 'Sin coincidencias' });
     }
@@ -646,7 +650,10 @@ async function getVeoliaUnidades(req, res, next) {
 
 async function getTrazabilidad(req, res, next) {
   try {
-    const registros = await afiliadoService.getTrazabilidad(req.params.id);
+    const registros = await afiliadoService.getTrazabilidad(req.params.id, req.usuario);
+    // null = el afiliado no existe o no pasa whereConFiltroAsesor. Se responde
+    // 404 (no 403) para no revelar a un asesor que el registro existe.
+    if (registros === null) throw new AppError('Afiliado no encontrado', 404);
     res.json({ success: true, data: registros });
   } catch (err) {
     next(err);
