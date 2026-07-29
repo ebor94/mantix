@@ -23,9 +23,20 @@ async function sendMessage(text) {
 }
 
 /**
- * Notificación: nuevo afiliado Veolia registrado.
+ * Notificación: nuevo registro desde un formulario público (Veolia o convenio).
+ *
+ * @param {object} afiliado
+ * @param {object} [opciones]
+ * @param {string} [opciones.etiqueta='Veolia'] Nombre que se muestra en el
+ *        título del mensaje: 'Veolia', 'CONYCA', etc.
+ * @param {boolean} [opciones.mostrarAsistencia=true] La asistencia fuera de
+ *        casa no la ofrecen todos los convenios. Por defecto se muestra, para
+ *        que el mensaje de Veolia quede exactamente igual que antes.
  */
-function notificarNuevoVeolia(afiliado) {
+function notificarNuevoPublico(afiliado, opciones) {
+  const opts = opciones || {};
+  const etiqueta = opts.etiqueta || 'Veolia';
+  const mostrarAsistencia = opts.mostrarAsistencia !== false;
   const nombre = [afiliado.primerNombre, afiliado.segundoNombre, afiliado.primerApellido, afiliado.segundoApellido]
     .filter(Boolean).join(' ');
   const doc  = `${afiliado.tipoDocumento} ${afiliado.numeroDocumento}`;
@@ -33,16 +44,29 @@ function notificarNuevoVeolia(afiliado) {
   const benef = afiliado.beneficiarios?.length ?? 0;
   const asist = afiliado.asistenciaFueraDeCasa === 'SI' ? '✅ Sí' : afiliado.asistenciaFueraDeCasa === 'NO' ? '❌ No' : '—';
 
-  const text = [
-    `🟢 *Nuevo registro Veolia*`,
+  const lineas = [
+    `🟢 *Nuevo registro ${etiqueta}*`,
     `👤 *Afiliado:* ${nombre}`,
     `🪪 *Documento:* ${doc}`,
     `📱 *Celular:* ${cel}`,
-    `👨‍👩‍👧 *Beneficiarios:* ${benef}`,
-    `🏠 *Asistencia fuera de casa:* ${asist}`
-  ].join('\n');
+    `👨‍👩‍👧 *Beneficiarios:* ${benef}`
+  ];
+  // La asistencia fuera de casa no la ofrecen todos los convenios; cuando el
+  // formulario no la incluye se omite la línea en vez de mostrar un guion.
+  if (mostrarAsistencia) {
+    lineas.push(`🏠 *Asistencia fuera de casa:* ${asist}`);
+  }
 
-  sendMessage(text).catch(() => {});
+  sendMessage(lineas.join('\n')).catch(() => {});
+}
+
+/**
+ * Notificación: nuevo afiliado Veolia registrado.
+ * Se conserva con el mismo nombre y comportamiento para no tocar el flujo de
+ * Veolia, que está en producción.
+ */
+function notificarNuevoVeolia(afiliado) {
+  return notificarNuevoPublico(afiliado, { etiqueta: 'Veolia' });
 }
 
 /**
@@ -64,4 +88,4 @@ function notificarCorreccionVeolia(afiliado) {
   sendMessage(text).catch(() => {});
 }
 
-module.exports = { notificarNuevoVeolia, notificarCorreccionVeolia };
+module.exports = { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico };

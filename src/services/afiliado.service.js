@@ -1,8 +1,9 @@
 const { Op } = require('sequelize');
-const { sequelize, Afiliado, Beneficiario, Empresa, Seguro, ContratoValor, Tarifa, Trazabilidad } = require('../models');
+const { sequelize, Afiliado, Beneficiario, Empresa, Convenio, Seguro, ContratoValor, Tarifa, Trazabilidad } = require('../models');
 const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const reciboCajaService = require('./reciboCaja.service');
+const convenioService = require('./convenio.service');
 const AppError = require('../utils/AppError');
 
 /**
@@ -50,6 +51,14 @@ function nullifyEmpty(obj) {
 async function createAfiliadoWithBeneficiarios(data) {
   const { beneficiarios = [], seguros = [], contrato = {}, ...raw } = data;
   const afiliadoData = nullifyEmpty(raw);
+
+  // ── 0. Reglas del convenio ───────────────────────────────
+  // Antes de abrir la transacción: si el grupo familiar no cumple, no tiene
+  // sentido empezar a escribir. No hace nada cuando convenioId es null, que es
+  // el caso de todas las afiliaciones de asesor y de Veolia.
+  await convenioService.assertReglasConvenio(
+    afiliadoData.convenioId, afiliadoData, beneficiarios
+  );
 
   const transaction = await sequelize.transaction();
 
@@ -114,7 +123,8 @@ async function createAfiliadoWithBeneficiarios(data) {
         { model: Beneficiario, as: 'beneficiarios' },
         { model: Seguro, as: 'seguros' },
         { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-        { model: Empresa, as: 'empresa' }
+        { model: Empresa, as: 'empresa' },
+        { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
       ]
     });
 
@@ -131,7 +141,8 @@ async function getAllAfiliados() {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato' },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ],
     order: [['createdAt', 'DESC']]
   });
@@ -143,7 +154,8 @@ async function getAfiliadoById(id) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ]
   });
 }
@@ -163,7 +175,8 @@ async function getPendientes(usuario) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ],
     order: [['createdAt', 'DESC']]
   });
@@ -248,7 +261,8 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato' },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ]
   });
 }
@@ -263,7 +277,8 @@ async function getAfiliadoByDocumento(numeroDocumento) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ],
     order: [['createdAt', 'DESC']]
   });
@@ -287,6 +302,13 @@ async function registrarConsulta(afiliadoId, usuarioId, descripcion) {
 async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuarioId) {
   const afiliado = await Afiliado.findByPk(afiliadoId);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+  // Este camino reemplaza el grupo familiar completo desde la consulta pública
+  // sin pasar por createAfiliadoWithBeneficiarios, así que necesita su propia
+  // verificación de reglas. (Esta ruta además no tiene validación Joi.)
+  await convenioService.assertReglasConvenio(
+    afiliado.convenioId, afiliado.get({ plain: true }), beneficiarios
+  );
 
   const transaction = await sequelize.transaction();
   try {
@@ -353,7 +375,8 @@ async function getRechazados(usuario) {
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' }
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
     ],
     order: [['updatedAt', 'DESC']]
   });
@@ -377,6 +400,17 @@ async function reenviarAfiliacion(id, data, usuario) {
   }
 
   const { beneficiarios = [], seguros = [], contrato = {}, otp: _otp, ...afiliadoData } = data;
+
+  // El convenio se toma SIEMPRE de la base, nunca del cuerpo: corregir una
+  // afiliación no puede ser una vía para cambiarla de convenio y así esquivar
+  // las reglas del original.
+  afiliadoData.convenioId = afiliado.convenioId;
+  await convenioService.assertReglasConvenio(
+    afiliado.convenioId,
+    { ...afiliado.get({ plain: true }), ...afiliadoData },
+    beneficiarios
+  );
+
   const transaction = await sequelize.transaction();
 
   try {
@@ -440,7 +474,8 @@ async function reenviarAfiliacion(id, data, usuario) {
         { model: Beneficiario, as: 'beneficiarios' },
         { model: Seguro, as: 'seguros' },
         { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-        { model: Empresa, as: 'empresa' }
+        { model: Empresa, as: 'empresa' },
+        { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
       ]
     });
   } catch (error) {
@@ -516,6 +551,7 @@ async function getMisDelDia(usuario, params = {}) {
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
       { model: Usuario, as: 'legalizador', attributes: ['id', 'nombre', 'apellido'] }
     ],
     order: [['createdAt', 'DESC']]

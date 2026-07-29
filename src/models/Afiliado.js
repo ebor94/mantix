@@ -131,6 +131,21 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
 
+    // ── Convenio empresarial ───────────────────────────────────
+    // Discriminador real del formulario público por el que entró la afiliación.
+    // `origen` solo distingue el canal (asesor / público); el convenio concreto
+    // se identifica por esta FK, para no tener que hacer un ALTER del ENUM cada
+    // vez que se da de alta una empresa.
+    convenioId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: 'convenios',
+        key: 'id'
+      },
+      comment: 'Convenio empresarial por el que se registró (null = asesor o Veolia)'
+    },
+
     // ── Unidad de negocio Veolia ───────────────────────────────
     unidadNegocio: {
       type: DataTypes.STRING(300),
@@ -200,10 +215,11 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Usuario (asesor) que registró la afiliación'
     },
     origen: {
-      type: DataTypes.ENUM('ASESOR', 'VEOLIA'),
+      type: DataTypes.ENUM('ASESOR', 'VEOLIA', 'CONVENIO'),
       allowNull: false,
       defaultValue: 'ASESOR',
-      comment: 'VEOLIA = registro público; ASESOR = registrado por asesor'
+      comment: 'ASESOR = registrado por asesor; VEOLIA y CONVENIO = registro público sin sesión. ' +
+               'Un solo valor CONVENIO para todos los convenios: el cuál se identifica con convenioId.'
     },
 
     // ── Primera cuota / soporte de pago ───────────────────────
@@ -399,6 +415,12 @@ module.exports = (sequelize, DataTypes) => {
     Afiliado.belongsTo(models.Empresa, {
       as: 'empresa',
       foreignKey: 'empresaId'
+    });
+
+    // Un afiliado puede provenir de un convenio empresarial (opcional)
+    Afiliado.belongsTo(models.Convenio, {
+      as: 'convenio',
+      foreignKey: 'convenioId'
     });
 
     // Un afiliado puede tener muchos seguros

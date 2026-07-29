@@ -32,6 +32,7 @@ const afiliadoRoutes  = require('./afiliado.routes');
 const borradorRoutes  = require('./borrador.routes');
 const votacionesRoutes = require('./votaciones.routes');
 const empresaRoutes = require('./empresa.routes');
+const convenioRoutes = require('./convenio.routes');
 const tarifaRoutes = require('./tarifa.routes');
 const certificadoRoutes = require('./certificado.routes');
 const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes360
@@ -70,6 +71,7 @@ router.use('/afiliados/borradores', borradorRoutes);
 router.use('/afiliados', afiliadoRoutes);
 router.use('/votaciones', votacionesRoutes);
 router.use('/empresas', empresaRoutes);
+router.use('/convenios', convenioRoutes); // ← Convenios empresariales parametrizables
 router.use('/tarifas', tarifaRoutes);
 router.use('/certificados', certificadoRoutes);
 router.use('/h360',   h360Routes);   // ← Módulo Homenajes360

@@ -45,10 +45,14 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Error genérico
-  res.status(err.statusCode || 500).json({
+  const cuerpo = {
     success: false,
     message: err.message || MENSAJES.ERROR_SERVIDOR
-  });
+  };
+  // Datos estructurados opcionales (ver AppError). Solo se incluyen si el error
+  // los trae, así que ningún error existente cambia de forma.
+  if (err.detalles !== undefined) cuerpo.detalles = err.detalles;
+  res.status(err.statusCode || 500).json(cuerpo);
 };
 
 module.exports = errorHandler;
