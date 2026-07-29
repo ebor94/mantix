@@ -145,6 +145,17 @@ const createAfiliadoSchema = Joi.object({
   unidadNegocio: Joi.string().max(300).allow('', null).trim(),
   planVeolia: Joi.string().valid('PLATINO', 'ORO').allow('', null),
 
+  // Convenio empresarial.
+  // Hace falta declararlo porque el middleware de validación usa stripUnknown:
+  // el formulario de corrección reenvía el payload completo de la afiliación
+  // (incluido convenioId, que llegó al cargarla), y sin esta línea Joi lo
+  // descartaría en silencio.
+  //
+  // Que esté aquí NO significa que el cliente pueda elegir su convenio: en el
+  // alta lo fija el controlador desde el slug de la URL, y en el reenvío el
+  // servicio lo toma de la base ignorando lo que venga en el cuerpo.
+  convenioId: Joi.number().integer().positive().allow(null),
+
   // Comercial
   canal: Joi.string().valid('EMPRESARIAL', 'INDIVIDUAL', 'CENS').allow('', null)
     .messages({ 'any.only': 'Canal debe ser EMPRESARIAL, INDIVIDUAL o CENS' }),

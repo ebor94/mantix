@@ -1,0 +1,778 @@
+{
+  "_comentario": [
+    "CONTRATO del motor de reglas de convenios. Este archivo, no el código, es la",
+    "fuente de verdad: la implementación canónica (src/rules/convenioRules.js) y su",
+    "espejo del frontend (afiliacion-frontend/src/utils/convenioRules.js) deben pasar",
+    "los mismos casos. Si se toca uno de los dos motores, correr `npm test` aquí.",
+    "",
+    "Todos los casos fijan fechaReferencia = 2026-07-29 para que las edades sean",
+    "deterministas y los tests no se rompan al pasar un cumpleaños.",
+    "",
+    "En `esperado`, `codigos` es la lista de códigos de error en el orden en que el",
+    "motor los devuelve (ordenados por índice de beneficiario y luego por orden de",
+    "regla). `indices` compara los índices señalados del primer error.",
+    "",
+    "rulesetsDesdeSeed carga rulesets desde src/seeds/convenios/*.json, es decir desde",
+    "las reglas REALES que se insertan en produccion. Asi, un cambio en el seed que",
+    "rompa una condicion pactada con el cliente hace fallar estos tests."
+  ],
+  "fechaReferencia": "2026-07-29T00:00:00",
+  "rulesetsDesdeSeed": {
+    "conyca": "convenios/conyca.json"
+  },
+  "rulesets": {
+    "rangoEdad": {
+      "version": 1,
+      "grupos": {
+        "DE_LEY_TODOS": [
+          "HIJO (A)",
+          "PADRE",
+          "MADRE",
+          "HERMANO (A)"
+        ]
+      },
+      "reglas": [
+        {
+          "id": "max_dos_mayores",
+          "tipo": "cupoPorRangoEdad",
+          "aplicaA": [
+            "*"
+          ],
+          "edadMin": 61,
+          "edadMax": 75,
+          "max": 2,
+          "etiqueta": "de 61 a 75 años",
+          "mensaje": "Solo {max} beneficiarios pueden ser {etiqueta} (ya registró {usado})."
+        }
+      ]
+    },
+    "requerido": {
+      "version": 1,
+      "reglas": [
+        {
+          "id": "exige_principal",
+          "tipo": "requerido",
+          "aplicaA": [
+            "ASEGURADO PRINCIPAL"
+          ],
+          "min": 1,
+          "etiqueta": "Asegurado principal",
+          "mensaje": "Debe registrar al menos {min} Asegurado Principal."
+        }
+      ]
+    },
+    "cicloGrupos": {
+      "version": 1,
+      "grupos": {
+        "A": [
+          "@B",
+          "PADRE"
+        ],
+        "B": [
+          "@A",
+          "MADRE"
+        ]
+      },
+      "parentescosPermitidos": [
+        "@A"
+      ],
+      "reglas": []
+    },
+    "tipoDesconocido": {
+      "version": 1,
+      "reglas": [
+        {
+          "id": "rara",
+          "tipo": "conjuroArcano",
+          "aplicaA": [
+            "*"
+          ]
+        }
+      ]
+    }
+  },
+  "titulares": {
+    "casado40": {
+      "estadoCivil": "CASADO",
+      "fechaNacimiento": "1986-01-01"
+    },
+    "soltero40": {
+      "estadoCivil": "SOLTERO",
+      "fechaNacimiento": "1986-01-01"
+    },
+    "casado65": {
+      "estadoCivil": "CASADO",
+      "fechaNacimiento": "1961-01-01"
+    },
+    "casado64": {
+      "estadoCivil": "CASADO",
+      "fechaNacimiento": "1962-01-01"
+    }
+  },
+  "casos": [
+    {
+      "nombre": "padre sin tope de edad junto a un suegro de 70 ocupa los 2 cupos",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1938-01-01"
+        },
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1956-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true,
+        "cupos": {
+          "cupo_padres_suegros": {
+            "usado": 2,
+            "max": 2
+          }
+        }
+      }
+    },
+    {
+      "nombre": "padre y madre ocupan los dos cupos sin suegros",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "MADRE",
+          "fechaNacimiento": "1968-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "padre + madre + suegro excede el cupo combinado de 2",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "MADRE",
+          "fechaNacimiento": "1968-01-01"
+        },
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1956-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_EXCEDIDO"
+        ],
+        "indices": [
+          2
+        ]
+      }
+    },
+    {
+      "nombre": "suegro de 76 supera el tope de 75",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1950-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ],
+        "indices": [
+          0
+        ]
+      }
+    },
+    {
+      "nombre": "suegro de 74 pasa: borde inclusivo de edadMax",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1952-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "suegro de 75 no pasa: borde superior",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1951-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ]
+      }
+    },
+    {
+      "nombre": "con hijo y sin padres ni suegros la cuota de 4º grado es 2",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1986-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1990-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true,
+        "cupos": {
+          "cupo_cuarto_grado": {
+            "usado": 2,
+            "max": 2,
+            "casoAplicado": "Sin padres ni suegros reportados"
+          }
+        }
+      }
+    },
+    {
+      "nombre": "un tercer tío excede la cuota de 2",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1986-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1990-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1992-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_CONDICIONAL_EXCEDIDO"
+        ],
+        "indices": [
+          3
+        ]
+      }
+    },
+    {
+      "nombre": "sin ningún beneficiario del grupo básico se permiten 4 sobrinos",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1996-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1997-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1998-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1999-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true,
+        "cupos": {
+          "cupo_cuarto_grado": {
+            "usado": 4,
+            "max": 4,
+            "casoAplicado": "Sin ningún beneficiario del grupo básico reportado"
+          }
+        }
+      }
+    },
+    {
+      "nombre": "un quinto primo excede la cuota de 4",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PRIMO (A)",
+          "fechaNacimiento": "1996-01-01"
+        },
+        {
+          "parentesco": "PRIMO (A)",
+          "fechaNacimiento": "1997-01-01"
+        },
+        {
+          "parentesco": "PRIMO (A)",
+          "fechaNacimiento": "1998-01-01"
+        },
+        {
+          "parentesco": "PRIMO (A)",
+          "fechaNacimiento": "1999-01-01"
+        },
+        {
+          "parentesco": "PRIMO (A)",
+          "fechaNacimiento": "2000-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_CONDICIONAL_EXCEDIDO"
+        ],
+        "indices": [
+          4
+        ]
+      }
+    },
+    {
+      "nombre": "REGRESIÓN RETROACTIVA: 4 sobrinos válidos se invalidan al agregar un hijo",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1996-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1997-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1998-01-01"
+        },
+        {
+          "parentesco": "SOBRINO (A)",
+          "fechaNacimiento": "1999-01-01"
+        },
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_CONDICIONAL_EXCEDIDO"
+        ],
+        "indices": [
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nombre": "con padres reportados la cuota de 4º grado cae a 0",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1986-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_CONDICIONAL_EXCEDIDO"
+        ],
+        "indices": [
+          1
+        ]
+      }
+    },
+    {
+      "nombre": "tío de 55 supera el tope de 50 de los familiares de 4º grado",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1971-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ]
+      }
+    },
+    {
+      "nombre": "tío de 49 pasa: borde inclusivo",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1977-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "hijo de 31 supera el tope estándar de Integral Básico",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "1995-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ]
+      }
+    },
+    {
+      "nombre": "hijo de 29 pasa",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "1997-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "hijo con incapacidad de 45 pasa: no hay regla de edad sobre ese grupo",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO CON INCAPACIDAD",
+          "fechaNacimiento": "1981-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "cónyuge de 66 supera el tope de 65",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "CONYUGE",
+          "fechaNacimiento": "1960-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ]
+      }
+    },
+    {
+      "nombre": "no se puede registrar dos veces el mismo parentesco único",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1967-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "PARENTESCO_DUPLICADO"
+        ],
+        "indices": [
+          1
+        ]
+      }
+    },
+    {
+      "nombre": "titular soltero no puede agregar cónyuge",
+      "reglas": "conyca",
+      "titular": "soltero40",
+      "beneficiarios": [
+        {
+          "parentesco": "CONYUGE",
+          "fechaNacimiento": "1996-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "PARENTESCO_NO_PERMITIDO"
+        ]
+      }
+    },
+    {
+      "nombre": "titular soltero sí puede agregar un hermano menor de 30",
+      "reglas": "conyca",
+      "titular": "soltero40",
+      "beneficiarios": [
+        {
+          "parentesco": "HERMANO (A)",
+          "fechaNacimiento": "2001-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "parentesco fuera de la lista del convenio",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "YERNO/NUERA",
+          "fechaNacimiento": "1996-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "PARENTESCO_NO_PERMITIDO"
+        ]
+      }
+    },
+    {
+      "nombre": "el convenio no permite beneficiarios adicionales",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "TIO (A)",
+          "fechaNacimiento": "1986-01-01",
+          "tipoBeneficiario": "ADICIONAL"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "LIMITE_ADICIONALES"
+        ]
+      }
+    },
+    {
+      "nombre": "cero beneficiarios es válido",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "titular de 65 supera el tope del convenio",
+      "reglas": "conyca",
+      "titular": "casado65",
+      "beneficiarios": [],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "TITULAR_EDAD"
+        ]
+      }
+    },
+    {
+      "nombre": "titular de 64 pasa: borde inclusivo",
+      "reglas": "conyca",
+      "titular": "casado64",
+      "beneficiarios": [],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "un beneficiario en estado RETIRO no consume cupo",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "MADRE",
+          "fechaNacimiento": "1968-01-01"
+        },
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1956-01-01",
+          "estado": "RETIRO"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "SEGURIDAD: la edad se recalcula desde fechaNacimiento e ignora la edad enviada",
+      "reglas": "conyca",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "SUEGRO (A)",
+          "fechaNacimiento": "1950-01-01",
+          "edad": 30
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "EDAD_FUERA_DE_RANGO"
+        ]
+      }
+    },
+    {
+      "nombre": "cupoPorRangoEdad: solo 2 beneficiarios entre 61 y 75 años",
+      "reglas": "rangoEdad",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1961-01-01"
+        },
+        {
+          "parentesco": "MADRE",
+          "fechaNacimiento": "1962-01-01"
+        },
+        {
+          "parentesco": "HERMANO (A)",
+          "fechaNacimiento": "1963-01-01"
+        },
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "CUPO_RANGO_EDAD_EXCEDIDO"
+        ],
+        "indices": [
+          2
+        ]
+      }
+    },
+    {
+      "nombre": "requerido: falta el asegurado principal exigido",
+      "reglas": "requerido",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "REQUERIDO_FALTANTE"
+        ]
+      }
+    },
+    {
+      "nombre": "requerido: se cumple cuando está presente",
+      "reglas": "requerido",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "ASEGURADO PRINCIPAL",
+          "fechaNacimiento": "1996-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "un ciclo entre grupos no desborda la pila y resuelve los literales",
+      "reglas": "cicloGrupos",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "PADRE",
+          "fechaNacimiento": "1966-01-01"
+        },
+        {
+          "parentesco": "MADRE",
+          "fechaNacimiento": "1968-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": true
+      }
+    },
+    {
+      "nombre": "un tipo de regla desconocido no deja pasar la afiliación en silencio",
+      "reglas": "tipoDesconocido",
+      "titular": "casado40",
+      "beneficiarios": [
+        {
+          "parentesco": "HIJO (A)",
+          "fechaNacimiento": "2016-01-01"
+        }
+      ],
+      "esperado": {
+        "valido": false,
+        "codigos": [
+          "REGLAS_INVALIDAS"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "_comentario": [
+    "Convenio CONYCA SOLUCIONES SAS — fila semilla de la tabla `convenios`.",
+    "",
+    "Este archivo es la fuente de la fila que inserta src/scripts/apply-convenios.js.",
+    "Los tests del motor (tests/convenioRules.test.js) corren sus casos contra el",
+    "bloque `reglas` de ESTE archivo, no contra una copia: si alguien cambia una",
+    "regla de producción y rompe una condición pactada, el test falla.",
+    "",
+    "Condiciones pactadas con el cliente:",
+    "  1. Padres y suegros comparten un cupo combinado de 2. Los padres no tienen",
+    "     límite de edad; los suegros deben ser menores de 75.",
+    "     (1 padre -> 1 suegro; padre + madre -> ningún suegro)",
+    "  2. Si no reporta padres ni suegros, puede incluir 2 familiares hasta 4º",
+    "     grado de consanguinidad menores de 50.",
+    "  3. Si no reporta ningún beneficiario del grupo básico, hasta 4 familiares",
+    "     hasta 4º grado menores de 50.",
+    "  + Aplican los topes estándar de Integral Grupo Básico (cónyuge < 65,",
+    "    hijos < 30, hermanos < 30) y la restricción de parentescos por estado civil.",
+    "  + Sin beneficiarios adicionales y sin asistencia fuera de casa.",
+    "",
+    "OJO con dos convenciones del motor, explicadas en src/rules/convenioRules.js:",
+    "  · edadMax es INCLUSIVO: 'menor de 75' se escribe 74.",
+    "  · en cupoCondicional los `casos` se evalúan EN ORDEN y gana el primero que",
+    "    coincide, así que el más permisivo (el de 4) DEBE ir primero. Si se",
+    "    invierten, la cuota de 4 nunca se alcanza porque 'sin padres ni suegros'",
+    "    también es cierto cuando el núcleo entero está vacío.",
+    "",
+    "Limitación conocida: un convenio puede RESTRINGIR la lista de parentescos,",
+    "no AMPLIARLA. Los valores deben existir en el ENUM de beneficiarios.parentesco."
+  ],
+
+  "slug": "conyca",
+  "nombre": "CONYCA SOLUCIONES SAS",
+  "nit": "900701968",
+  "canal": "EMPRESARIAL",
+  "producto": "INTEGRAL",
+  "grupo": "BASICO",
+  "planNombre": "Plan Integral Grupo Básico",
+  "activo": 0,
+
+  "reglas": {
+    "version": 1,
+    "titular": { "edadMin": null, "edadMax": 64, "etiqueta": "menor de 65 años" },
+
+    "grupos": {
+      "PADRES": ["PADRE", "MADRE"],
+      "SUEGROS": ["SUEGRO (A)", "SUEGRASTRO"],
+      "CONYUGE": ["CONYUGE", "COMPAÑERO (A)"],
+      "HIJOS": ["HIJO (A)", "HIJO ADOPTIVO", "HIJASTRO (A)"],
+      "HIJOS_INCAPACIDAD": ["HIJO CON INCAPACIDAD"],
+      "HERMANOS": ["HERMANO (A)", "HERMANASTRO (A)"],
+      "HERMANOS_INCAPACIDAD": ["HERMANO CON INCAPACIDAD"],
+      "NUCLEO_BASICO": [
+        "@PADRES", "@SUEGROS", "@CONYUGE", "@HIJOS",
+        "@HIJOS_INCAPACIDAD", "@HERMANOS", "@HERMANOS_INCAPACIDAD"
+      ],
+      "CUARTO_GRADO": [
+        "TIO (A)", "PRIMO (A)", "SOBRINO (A)", "ABUELO (A)",
+        "NIETO (A)", "BISABUELO (A)", "BISNIETO (A)", "ABUELASTRO (A)"
+      ]
+    },
+
+    "parentescosPermitidos": {
+      "porEstadoCivil": {
+        "SOLTERO": ["@PADRES", "@HERMANOS", "@HERMANOS_INCAPACIDAD", "@CUARTO_GRADO"],
+        "CASADO": ["@CONYUGE", "@HIJOS", "@HIJOS_INCAPACIDAD", "@PADRES", "@SUEGROS", "@CUARTO_GRADO"],
+        "UNION_LIBRE": ["@CONYUGE", "@HIJOS", "@HIJOS_INCAPACIDAD", "@PADRES", "@SUEGROS", "@CUARTO_GRADO"],
+        "*": ["@HIJOS", "@HIJOS_INCAPACIDAD", "@PADRES", "@CUARTO_GRADO"]
+      }
+    },
+
+    "limites": { "beneficiarios": null, "deLey": null, "adicionales": 0 },
+    "documentos": { "requiereDocumentoDesdeEdad": null },
+
+    "reglas": [
+      {
+        "id": "unicos",
+        "tipo": "cupoPorParentesco",
+        "max": 1,
+        "aplicaA": ["@PADRES", "@SUEGROS", "@CONYUGE"],
+        "mensaje": "Ya registró un beneficiario con parentesco \"{parentesco}\"."
+      },
+      {
+        "id": "edad_suegros",
+        "tipo": "edad",
+        "aplicaA": ["@SUEGROS"],
+        "edadMax": 74,
+        "etiqueta": "menores de 75 años",
+        "mensaje": "Los suegros deben ser {etiqueta} (edad registrada: {edad})."
+      },
+      {
+        "id": "edad_conyuge",
+        "tipo": "edad",
+        "aplicaA": ["@CONYUGE"],
+        "edadMax": 64,
+        "etiqueta": "menor de 65 años",
+        "mensaje": "El cónyuge / compañero(a) debe ser {etiqueta} (edad registrada: {edad})."
+      },
+      {
+        "id": "edad_hijos",
+        "tipo": "edad",
+        "aplicaA": ["@HIJOS"],
+        "edadMax": 29,
+        "etiqueta": "menores de 30 años",
+        "mensaje": "Los hijos deben ser {etiqueta} (edad registrada: {edad}). Para hijos con incapacidad use el parentesco \"HIJO CON INCAPACIDAD\", que no tiene límite de edad."
+      },
+      {
+        "id": "edad_hermanos",
+        "tipo": "edad",
+        "aplicaA": ["@HERMANOS"],
+        "edadMax": 29,
+        "etiqueta": "menores de 30 años",
+        "mensaje": "Los hermanos deben ser {etiqueta} (edad registrada: {edad})."
+      },
+      {
+        "id": "cupo_padres_suegros",
+        "tipo": "cupo",
+        "max": 2,
+        "aplicaA": ["@PADRES", "@SUEGROS"],
+        "filtro": { "tipoBeneficiario": "DE_LEY" },
+        "etiqueta": "Padres y suegros",
+        "mensaje": "Entre padres y suegros solo puede incluir {max} personas en total (ya registró {usado})."
+      },
+      {
+        "id": "edad_cuarto_grado",
+        "tipo": "edad",
+        "aplicaA": ["@CUARTO_GRADO"],
+        "filtro": { "tipoBeneficiario": "DE_LEY" },
+        "edadMax": 49,
+        "etiqueta": "menores de 50 años",
+        "mensaje": "Los familiares hasta 4º grado deben ser {etiqueta} (edad registrada: {edad})."
+      },
+      {
+        "id": "cupo_cuarto_grado",
+        "tipo": "cupoCondicional",
+        "aplicaA": ["@CUARTO_GRADO"],
+        "filtro": { "tipoBeneficiario": "DE_LEY" },
+        "maxPorDefecto": 0,
+        "etiqueta": "Familiares hasta 4º grado",
+        "casos": [
+          {
+            "si": { "gruposVacios": ["@NUCLEO_BASICO"] },
+            "max": 4,
+            "descripcion": "Sin ningún beneficiario del grupo básico reportado"
+          },
+          {
+            "si": { "gruposVacios": ["@PADRES", "@SUEGROS"] },
+            "max": 2,
+            "descripcion": "Sin padres ni suegros reportados"
+          }
+        ],
+        "mensaje": "Con las personas que ya reportó puede incluir máximo {max} familiar(es) hasta 4º grado de consanguinidad. Ya registró {usado}."
+      }
+    ],
+
+    "avisos": [
+      {
+        "tono": "info",
+        "titulo": "Padres y suegros",
+        "texto": "Puede incluir hasta 2 personas entre padre, madre y suegros. Los padres no tienen límite de edad; los suegros deben ser menores de 75 años."
+      },
+      {
+        "tono": "info",
+        "titulo": "Si no reporta padres ni suegros",
+        "texto": "Puede incluir 2 familiares hasta 4º grado de consanguinidad (tío/a, primo/a, sobrino/a, abuelo/a, nieto/a, bisabuelo/a, bisnieto/a) menores de 50 años."
+      },
+      {
+        "tono": "info",
+        "titulo": "Si no reporta ningún beneficiario del grupo básico",
+        "texto": "Puede incluir 4 familiares hasta 4º grado de consanguinidad menores de 50 años."
+      },
+      {
+        "tono": "advertencia",
+        "titulo": "Grupo familiar del plan",
+        "texto": "Este convenio cubre únicamente el grupo básico. No aplican beneficiarios adicionales."
+      }
+    ]
+  },
+
+  "branding": {
+    "bannerUrl": null,
+    "logoUrl": null,
+    "colorPrimario": "#0f766e",
+    "titulo": "Registro de Afiliado / Grupo Familiar",
+    "subtitulo": "Complete los datos del afiliado y agregue los beneficiarios",
+    "textoIntro": null
+  },
+
+  "formulario": {
+    "mostrarAsistenciaFueraDeCasa": false,
+    "mostrarConsultaAfiliado": true,
+    "mostrarModalCondiciones": true,
+    "mostrarCedulaUpload": false,
+    "mostrarValorPorPersona": false,
+    "requiereCaptcha": true,
+    "requiereAceptacionDatos": true,
+    "tiposDocumentoTitular": ["CC", "TI", "CE", "PA", "PPT"]
+  },
+
+  "contacto": {
+    "whatsapp": {
+      "habilitado": true,
+      "telefono": "573176652197",
+      "brandName": "Los Olivos - CONYCA",
+      "ctaText": "Escríbenos, te ayudamos",
+      "messageText": "Hola, soy colaborador de CONYCA, necesito asesoría",
+      "welcomeText": "¿Necesitas ayuda? Estamos para servirte",
+      "colorBoton": "#34ba73",
+      "brandImg": "https://storage.googleapis.com/formailfiles/logo-1msg.svg"
+    },
+    "googleChat": { "notificar": true, "etiqueta": "CONYCA" },
+    "notificarA": null
+  },
+
+  "_pendientes": [
+    "branding.bannerUrl: falta la imagen del convenio (hasta entonces se muestra encabezado de texto).",
+    "contacto.whatsapp.telefono: es provisional, hoy apunta al número de Veolia.",
+    "contacto.notificarA: falta el correo de talento humano de CONYCA para las notificaciones.",
+    "activo: queda en 0 a propósito. Se activa con UPDATE cuando el cliente valide el formulario."
+  ]
+}

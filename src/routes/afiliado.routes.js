@@ -48,6 +48,18 @@ router.post(
   controller.createPublico
 );
 
+// ── POST /afiliados/convenio/:slug — registro público de un convenio ───────
+// Sin autenticación, igual que Veolia. El convenio se identifica por la URL y
+// nunca por el cuerpo, así el cliente no puede cambiarse de convenio con un
+// payload manipulado. Debe ir ANTES de la ruta /:id.
+router.post(
+  '/convenio/:slug',
+  uploadFields,
+  parseMultipartJson,
+  validate(createAfiliadoSchema),
+  controller.createPublicoConvenio
+);
+
 // ── POST /afiliados — solo ASESOR_AFILIACIONES y ADMIN pueden crear ────────
 router.post(
   '/',

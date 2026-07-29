@@ -2,7 +2,10 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP, sendImagenRecibo, sendTemplateImagenTexto } = require('../services/whatsappService');
 const axios = require('axios');
-const { notificarNuevoVeolia, notificarCorreccionVeolia } = require('../services/googleChatService');
+const { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico } = require('../services/googleChatService');
+const convenioService = require('../services/convenio.service');
+const emailService = require('../services/emailService');
+const { esOrigenPublico } = require('../utils/origen');
 const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
@@ -215,6 +218,96 @@ async function createPublico(req, res, next) {
   }
 }
 
+/**
+ * POST /afiliados/convenio/:slug
+ *
+ * Registro público de un convenio empresarial. Mismo canal que Veolia (sin
+ * sesión), pero con dos diferencias que importan:
+ *
+ *  1. Los datos de la empresa y los defaults comerciales se FUERZAN desde la
+ *     fila del convenio, pisando lo que venga del cliente. En /veolia el NIT
+ *     viaja en el cuerpo y afiliado.service lo usa para crear la empresa si no
+ *     existe, lo que permite a un anónimo insertar empresas arbitrarias. Aquí
+ *     eso no puede pasar: el cliente no elige ni el NIT ni el plan.
+ *
+ *  2. El grupo familiar se valida contra las reglas del convenio dentro de
+ *     afiliado.service (ver assertReglasConvenio), así que un POST con curl
+ *     saltándose el formulario recibe 400 con el detalle de lo que incumple.
+ */
+async function createPublicoConvenio(req, res, next) {
+  try {
+    const convenio = await convenioService.obtenerPorSlug(req.params.slug);
+    if (!convenio) throw new AppError('Convenio no encontrado o no disponible', 404);
+
+    const body = { ...req.body };
+    extractFiles(req, body);
+
+    body.asesorId = null;
+    body.origen = 'CONVENIO';
+    body.notificacionRecibo = 0;
+
+    // Datos que define el convenio, no el cliente.
+    body.convenioId    = convenio.id;
+    body.nit           = convenio.nit || null;
+    body.nombreEmpresa = convenio.nombre;
+    body.canal         = convenio.canal;
+    body.producto      = convenio.producto;
+    body.grupo         = convenio.grupo;
+
+    // Campos propios de Veolia: no aplican a un convenio.
+    body.unidadNegocio = null;
+    body.planVeolia    = null;
+
+    const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
+
+    Afiliado.count({ where: { celular: body.celular } })
+      .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
+      .catch(() => {});
+
+    // Notificaciones fire-and-forget: si fallan no rompen la respuesta.
+    const contacto = convenio.json('contacto') || {};
+    const formulario = convenio.json('formulario') || {};
+    if (contacto.googleChat?.notificar !== false) {
+      notificarNuevoPublico(
+        { ...body, beneficiarios: body.beneficiarios || [] },
+        {
+          etiqueta: contacto.googleChat?.etiqueta || convenio.nombre,
+          mostrarAsistencia: formulario.mostrarAsistenciaFueraDeCasa !== false
+        }
+      );
+    }
+    if (contacto.notificarA) {
+      notificarRegistroConvenio(contacto.notificarA, convenio, result).catch(() => {});
+    }
+
+    res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Aviso a talento humano de la empresa por cada registro nuevo del convenio.
+ * El destinatario se configura en `convenios.contacto.notificarA`.
+ */
+async function notificarRegistroConvenio(destinatario, convenio, afiliado) {
+  const nombre = [afiliado.primerNombre, afiliado.segundoNombre, afiliado.primerApellido, afiliado.segundoApellido]
+    .filter(Boolean).join(' ');
+  const beneficiarios = afiliado.beneficiarios?.length ?? 0;
+
+  return emailService.enviarNotificacion(
+    destinatario,
+    `Nueva afiliación registrada — ${convenio.nombre}`,
+    `Se registró una nueva afiliación por el convenio <strong>${convenio.nombre}</strong>.
+     <ul>
+       <li><strong>Colaborador:</strong> ${nombre}</li>
+       <li><strong>Documento:</strong> ${afiliado.tipoDocumento} ${afiliado.numeroDocumento}</li>
+       <li><strong>Grupo familiar:</strong> ${beneficiarios} beneficiario(s)</li>
+     </ul>
+     La afiliación quedó pendiente de aprobación por parte de Los Olivos.`
+  );
+}
+
 // ── Consultas ─────────────────────────────────────────────────────────────────
 
 async function getAll(req, res, next) {
@@ -349,11 +442,17 @@ async function reenviar(req, res, next) {
       attributes: ['id', 'origen']
     });
     if (!afiliadoActual) throw new AppError('Afiliado no encontrado', 404);
-    const esVeolia = afiliadoActual.origen === 'VEOLIA';
 
-    // OTP solo es obligatorio para VEOLIA (cliente externo sin JWT).
-    // El canal ASESOR se controla por sesión autenticada (req.usuario).
-    if (esVeolia) {
+    // OTP obligatorio para TODO origen público (Veolia y convenios): son
+    // clientes externos sin JWT, y el hash de la URL por sí solo no alcanza
+    // como control de acceso. El canal ASESOR se controla por sesión (req.usuario).
+    //
+    // Antes esto comparaba `origen === 'VEOLIA'`. Con los datos previos el
+    // resultado es idéntico fila por fila, pero de haberlo dejado así los
+    // convenios habrían podido reenviar correcciones sin OTP.
+    const esPublico = esOrigenPublico(afiliadoActual);
+
+    if (esPublico) {
       const { otp } = body;
       if (!otp) throw new AppError('Se requiere el código OTP para reenviar', 400);
       if (!otpStore.verify(`reenvio:${req.params.id}`, otp)) {
@@ -641,6 +740,7 @@ async function liquidacionPdf(req, res, next) {
 module.exports = {
   create,
   createPublico,
+  createPublicoConvenio,
   getAll,
   getById,
   getByHash,
