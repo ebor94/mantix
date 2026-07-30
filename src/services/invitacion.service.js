@@ -258,13 +258,17 @@ async function enviarInvitacion(invitacionId, canal, usuario) {
   }
 
   const invitacion = await ConvenioInvitacion.findByPk(invitacionId, {
-    include: [{ model: ConvenioEmpleado, as: 'empleado' }]
+    include: [
+      { model: ConvenioEmpleado, as: 'empleado' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
+    ]
   });
   if (!invitacion) {
     throw new AppError('Invitación no encontrada', 404);
   }
 
   const empleado = invitacion.empleado;
+  const nombreConvenio = invitacion.convenio?.nombre || 'tu empresa';
   const baseUrl = process.env.FRONT_BASE_URL || 'https://losolivoscucuta.com';
   const link = `${baseUrl}/afiliados/invitacion/${invitacion.token}`;
 
@@ -272,6 +276,9 @@ async function enviarInvitacion(invitacionId, canal, usuario) {
     if (!empleado?.celular) {
       throw new AppError('El empleado no tiene celular registrado para enviar por WhatsApp', 400);
     }
+    // El texto que rodea el enlace lo define la plantilla aprobada en
+    // WhatsApp Business (no se puede mandar texto libre en un mensaje
+    // iniciado por la empresa) — no hay mensaje personalizado que pasar acá.
     await whatsappService.sendInvitacion(empleado.celular, link);
   } else if (canal === 'EMAIL') {
     if (!empleado?.email) {
@@ -280,7 +287,9 @@ async function enviarInvitacion(invitacionId, canal, usuario) {
     await emailService.enviarNotificacion(
       empleado.email,
       'Invitación para afiliarte a tu plan exequial',
-      `Hola ${empleado.primerNombre}, tu empresa te invitó a afiliarte a tu plan exequial. ` +
+      `Hola ${empleado.primerNombre}, Los Olivos, a través del convenio con la empresa ` +
+      `<strong>${nombreConvenio}</strong>, tiene el gusto de invitarte a hacer el registro de ` +
+      `afiliación al plan exequial para ti y tu grupo familiar. ` +
       `Ingresa al siguiente enlace para completar tu registro: <a href="${link}">${link}</a>`
     );
   }
