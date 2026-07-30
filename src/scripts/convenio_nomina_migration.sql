@@ -96,14 +96,15 @@ ALTER TABLE usuarios ADD INDEX idx_usuarios_empresa (empresa_id);
 -- descripcion y activo explícitos, igual que los demás roles sembrados en
 -- rbac_afiliaciones_migration.sql y cym_migration.sql.
 
-INSERT INTO roles (nombre, descripcion, permisos, activo)
+INSERT INTO roles (nombre, descripcion, permisos, activo, created_at, updated_at)
 SELECT
   'EMPRESA_RRHH',
   'RRHH de empresa convenio — gestiona la nómina de empleados y envía invitaciones de autoafiliación',
   JSON_OBJECT('empresa', JSON_OBJECT(
     'ver', TRUE, 'gestionar_empleados', TRUE, 'invitar', TRUE, 'ver_afiliaciones', TRUE
   )),
-  1
+  1,
+  NOW(), NOW()
 WHERE NOT EXISTS (SELECT 1 FROM roles WHERE nombre = 'EMPRESA_RRHH');
 
 -- ── 5. Verificación ──────────────────────────────────────────
