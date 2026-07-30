@@ -157,10 +157,21 @@ async function sendAceptacion(celular) {
  * @param {string} celular - Número del empleado (se formatea automáticamente)
  * @param {string} link    - URL completa de la invitación (FRONT_BASE_URL + token)
  */
-async function sendInvitacion(celular, link) {
+async function sendInvitacion(celular, link, nombreConvenio) {
   const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
   const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
   const numero   = formatearTelefono(celular);
+
+  // 'start_template_1_durf6800z' es una plantilla genérica de un solo
+  // parámetro (sin texto propio alrededor, confirmado por prueba real) — el
+  // saludo institucional se arma acá y se manda TODO dentro de esa única
+  // variable, en vez de solo el link. Si el día de mañana existe una
+  // plantilla propia con este texto ya aprobado por Meta, esto se simplifica
+  // a pasar solo `link` de nuevo.
+  const mensaje =
+    `Los Olivos, a través del convenio con la empresa ${nombreConvenio || 'tu empresa'}, ` +
+    `tiene el gusto de invitarte a hacer el registro de afiliación al plan exequial para ti y ` +
+    `tu grupo familiar. Ingresa aquí para completar tu registro: ${link}`;
 
   const payload = {
     token,
@@ -174,7 +185,7 @@ async function sendInvitacion(celular, link) {
       {
         type: 'body',
         parameters: [
-          { type: 'text', text: link },
+          { type: 'text', text: mensaje },
         ],
       },
     ],

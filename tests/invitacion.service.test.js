@@ -317,11 +317,25 @@ describe('enviarInvitacion', () => {
 
     expect(whatsappService.sendInvitacion).toHaveBeenCalledWith(
       '3001234567',
-      expect.stringContaining('/afiliados/invitacion/tok-123')
+      expect.stringContaining('/afiliados/invitacion/tok-123'),
+      'tu empresa' // invitacionFalsa() no incluye `convenio` -> cae al fallback
     );
     expect(resultado.canalEnvio).toBe('WHATSAPP');
     expect(resultado.enviadoEn).toBeInstanceOf(Date);
     expect(invitacion.save).toHaveBeenCalled();
+  });
+
+  test('WHATSAPP: pasa el nombre real del convenio cuando la invitación lo incluye', async () => {
+    const invitacion = invitacionFalsa({ convenio: { id: 5, slug: 'conyca', nombre: 'CONYCA SOLUCIONES SAS' } });
+    mockConvenioInvitacion.findByPk.mockResolvedValue(invitacion);
+
+    await invitacionService.enviarInvitacion(1, 'WHATSAPP', { id: 2 });
+
+    expect(whatsappService.sendInvitacion).toHaveBeenCalledWith(
+      '3001234567',
+      expect.stringContaining('/afiliados/invitacion/tok-123'),
+      'CONYCA SOLUCIONES SAS'
+    );
   });
 
   test('EMAIL: llama a emailService.enviarNotificacion', async () => {

@@ -276,10 +276,7 @@ async function enviarInvitacion(invitacionId, canal, usuario) {
     if (!empleado?.celular) {
       throw new AppError('El empleado no tiene celular registrado para enviar por WhatsApp', 400);
     }
-    // El texto que rodea el enlace lo define la plantilla aprobada en
-    // WhatsApp Business (no se puede mandar texto libre en un mensaje
-    // iniciado por la empresa) — no hay mensaje personalizado que pasar acá.
-    await whatsappService.sendInvitacion(empleado.celular, link);
+    await whatsappService.sendInvitacion(empleado.celular, link, nombreConvenio);
   } else if (canal === 'EMAIL') {
     if (!empleado?.email) {
       throw new AppError('El empleado no tiene correo registrado para enviar por email', 400);
