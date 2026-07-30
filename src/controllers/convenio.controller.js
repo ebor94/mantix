@@ -103,6 +103,33 @@ function getPermisosEmpresa(usuario) {
  *   - usuario sin empresa_id → sin restricción por este chequeo (p.ej. un
  *     admin interno que gestiona convenios desde el panel general).
  *   - usuario con empresa_id → solo el convenio cuyo empresaId coincida.
+ *
+ * ⚠️ Nota deliberada (ronda de revisión, ver Fix 2 vs Fix 3): esta función
+ * tiene la MISMA forma "fail-open sin empresa_id" que tenía
+ * whereConFiltroAsesorYEmpresa en afiliado.service.js antes de su fix — y
+ * ahí SÍ era un bug (podía exponer afiliados de TODAS las empresas ante un
+ * futuro `ver_afiliaciones: true` con `empresa_id` nulo). Acá NO se
+ * endurece de la misma forma, y es intencional, no una inconsistencia
+ * olvidada:
+ *   - El scope de whereConFiltroAsesorYEmpresa protege LECTURA de PII de
+ *     afiliados (documento, celular, etc.) para CUALQUIER usuario
+ *     autenticado a quien, por error, se le otorgue el permiso — el fail-open
+ *     ahí era alcanzable por una sola casilla de configuración mal puesta.
+ *   - `puedeOperarConvenio` en cambio solo se evalúa para usuarios que YA
+ *     pasaron `requirePermiso('empresa', 'ver'|'gestionar_empleados'|
+ *     'invitar')` a nivel de ruta (ver convenio.routes.js) — es decir, ya
+ *     son personal interno con un permiso `empresa.*` explícitamente
+ *     otorgado. Sin `empresa_id`, el diseño asume a propósito "admin interno
+ *     de Los Olivos sin empresa propia, gestionando convenios de terceros
+ *     desde el panel general" (mismo caso que un asesor sin empresa_id
+ *     hoy) — no un accidente de seeding. tests/convenioNomina.routes.test.js
+ *     ("200 con permiso empresa.ver y sin empresa_id") fija este
+ *     comportamiento como esperado.
+ *   - Si en el futuro se decide que este fail-open también debe cerrarse
+ *     (p.ej. porque aparece un perfil interno sin empresa_id que NO debería
+ *     operar convenios ajenos), hacerlo aquí Y revisar/actualizar ese test —
+ *     nunca "corregir" esto copiando el guard de whereConFiltroAsesorYEmpresa
+ *     sin releer este comentario, para no volver a divergir por accidente.
  */
 function puedeOperarConvenio(usuario, convenio) {
   if (usuario.es_super_admin) return true;
