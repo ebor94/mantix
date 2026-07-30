@@ -15,6 +15,9 @@ const N8N_CERTIFICADO_URL =
 const N8N_FIRMA_URL =
   process.env.N8N_FIRMA_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/afiliado-registro-firma';
+const N8N_INVITACION_EMAIL_URL =
+  process.env.N8N_INVITACION_EMAIL_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/invitacion-afiliacion-email';
 const N8N_DRIVE_URL =
   process.env.N8N_DRIVE_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/archivar-r44-drive';
@@ -130,6 +133,26 @@ async function notificarFirma(afiliadoId) {
 }
 
 /**
+ * Notifica a n8n para que envíe por correo la invitación de autoafiliación
+ * (convenio/nómina) con la plantilla HTML de Los Olivos. n8n resuelve los
+ * datos del empleado/convenio y el link a partir del invitacionId.
+ *
+ * A diferencia de firma, este SÍ se espera (await) desde enviarInvitacion,
+ * para que un fallo del webhook se propague y RRHH vea el error en vez de
+ * marcar la invitación como enviada cuando el correo no salió.
+ *
+ * @param {number} invitacionId
+ */
+async function notificarInvitacionEmail(invitacionId) {
+  const res = await axios.post(
+    N8N_INVITACION_EMAIL_URL,
+    { invitacionId },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+  );
+  return res.data;
+}
+
+/**
  * Archiva los documentos del proveedor en Google Drive (organizados por año)
  * vía un workflow n8n dedicado. Fire-and-forget.
  *
@@ -173,5 +196,6 @@ module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
   notificarFirma,
+  notificarInvitacionEmail,
   archivarDocumentosEnDrive,
 };

@@ -18,7 +18,7 @@ const { Op } = require('sequelize');
 const { ConvenioEmpleado, ConvenioInvitacion, Convenio } = require('../models');
 const { ENGINE_VERSION } = require('../rules/convenioRules');
 const whatsappService = require('./whatsappService');
-const emailService = require('./emailService');
+const n8nService = require('./n8nService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
@@ -243,8 +243,8 @@ async function generarInvitaciones(convenioId, empleadoIds, { diasVigencia = 15 
  *
  * - WHATSAPP: whatsappService.sendInvitacion (misma convención de llamada que
  *   sendOTP/sendAceptacion: número + payload, no lanza si falla el envío).
- * - EMAIL: emailService.enviarNotificacion, igual que
- *   notificarRegistroConvenio en afiliado.controller.js.
+ * - EMAIL: n8nService.notificarInvitacionEmail, que dispara el workflow n8n
+ *   "Envio Invitacion Afiliacion - Por Correo" (plantilla HTML Los Olivos).
  * - MANUAL: no envía nada — cubre el caso en que RRHH exporta los links y los
  *   reparte por su cuenta.
  *
@@ -277,12 +277,9 @@ async function enviarInvitacion(invitacionId, canal, usuario) {
     if (!empleado?.email) {
       throw new AppError('El empleado no tiene correo registrado para enviar por email', 400);
     }
-    await emailService.enviarNotificacion(
-      empleado.email,
-      'Invitación para afiliarte a tu plan exequial',
-      `Hola ${empleado.primerNombre}, tu empresa te invitó a afiliarte a tu plan exequial. ` +
-      `Ingresa al siguiente enlace para completar tu registro: <a href="${link}">${link}</a>`
-    );
+    // El correo se envía vía workflow n8n (plantilla HTML de Los Olivos, mismo
+    // patrón que el de firma). n8n resuelve empleado/convenio/link desde el id.
+    await n8nService.notificarInvitacionEmail(invitacion.id);
   }
   // MANUAL: no se envía nada, solo se deja constancia abajo.
 
