@@ -165,8 +165,11 @@ async function sendInvitacion(celular, link) {
   const payload = {
     token,
     namespace: NAMESPACE,
-    template: 'invitacion_convenio',
-    language: { policy: 'deterministic', code: 'es' },
+    // 'invitacion_convenio' no existe en la cuenta real de 1msg (nunca se
+    // creó/aprobó). Se usa 'start_template_1_durf6800z', plantilla ya
+    // aprobada y en uso, confirmada por el cliente con este mismo payload.
+    template: 'start_template_1_durf6800z',
+    language: { policy: 'deterministic', code: 'en_US' },
     params: [
       {
         type: 'body',

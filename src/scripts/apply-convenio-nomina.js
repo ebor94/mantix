@@ -89,15 +89,18 @@ const STATEMENTS = [
 
   `ALTER TABLE usuarios ADD INDEX idx_usuarios_empresa (empresa_id)`,
 
-  // 4. Rol EMPRESA_RRHH — columna verificada contra src/models/Rol.js (nombre = `nombre`)
-  `INSERT INTO roles (nombre, descripcion, permisos, activo)
+  // 4. Rol EMPRESA_RRHH — columna verificada contra src/models/Rol.js (nombre = `nombre`).
+  //    created_at/updated_at son NOT NULL sin default en la tabla real: sin
+  //    incluirlos, este INSERT falla con ER_NO_DEFAULT_FOR_FIELD.
+  `INSERT INTO roles (nombre, descripcion, permisos, activo, created_at, updated_at)
    SELECT
      'EMPRESA_RRHH',
      'RRHH de empresa convenio — gestiona la nómina de empleados y envía invitaciones de autoafiliación',
      JSON_OBJECT('empresa', JSON_OBJECT(
        'ver', TRUE, 'gestionar_empleados', TRUE, 'invitar', TRUE, 'ver_afiliaciones', TRUE
      )),
-     1
+     1,
+     NOW(), NOW()
    WHERE NOT EXISTS (SELECT 1 FROM roles WHERE nombre = 'EMPRESA_RRHH')`
 ];
 
