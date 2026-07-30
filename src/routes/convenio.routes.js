@@ -1,7 +1,8 @@
 const { Router } = require('express');
 const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/convenio.controller');
-const { auth } = require('../middleware/auth');
+const { auth, requirePermiso } = require('../middleware/auth');
+const strictRateLimit = require('../middleware/strictRateLimit');
 
 const router = Router();
 
@@ -31,8 +32,58 @@ router.get('/publico/:slug', limitePublico, controller.getPublico);
 // Dry-run del motor de reglas: valida un grupo familiar sin persistir nada.
 router.post('/publico/:slug/validar', limitePublico, controller.validarPublico);
 
+// ── GET /convenios/invitacion/:token — resuelve una invitación de nómina ───
+// Público (Task 4): el link de autoafiliación llega por WhatsApp/email sin
+// sesión. Rate limiter ESTRICTO (10 req/15min, src/middleware/strictRateLimit.js,
+// reusado de Task 1) en vez del limitePublico de arriba: a diferencia de
+// /publico/:slug (un slug adivinable, pensado para difundirse), acá el token
+// es una capacidad de un solo uso — más valioso para un atacante de fuerza
+// bruta, así que el límite es más severo.
+//
+// ⚠️ Nombre de segmento en singular ("invitacion") a propósito, distinto del
+// plural ("invitaciones") de las rutas internas de abajo — evita cualquier
+// ambigüedad de matching entre esta ruta pública y /:slug/invitaciones.
+router.get('/invitacion/:token', strictRateLimit, controller.resolverInvitacion);
+
 // ── Internas ────────────────────────────────────────────────────────────────
 // Listado para el selector de convenio y el filtro de aprobaciones.
 router.get('/', auth, controller.listar);
+
+// ── Nómina / invitaciones de un convenio (Task 4) ──────────────────────────
+// RBAC vía requirePermiso('empresa', ...) — permisos sembrados para el rol
+// EMPRESA_RRHH en convenio_nomina_migration.sql. El scope por convenio (un
+// usuario con empresa_id solo puede operar el convenio de su propia empresa)
+// se valida dentro del controlador, no acá: responde 404, no 403, en caso de
+// no coincidir (ver convenio.controller.resolverConvenioOperable).
+router.get(
+  '/:slug/empleados',
+  auth,
+  requirePermiso('empresa', 'ver'),
+  controller.getEmpleados
+);
+router.post(
+  '/:slug/empleados/importar',
+  auth,
+  requirePermiso('empresa', 'gestionar_empleados'),
+  controller.importarEmpleados
+);
+router.post(
+  '/:slug/invitaciones',
+  auth,
+  requirePermiso('empresa', 'invitar'),
+  controller.crearInvitaciones
+);
+router.post(
+  '/:slug/invitaciones/enviar',
+  auth,
+  requirePermiso('empresa', 'invitar'),
+  controller.enviarInvitaciones
+);
+router.get(
+  '/:slug/invitaciones',
+  auth,
+  requirePermiso('empresa', 'ver'),
+  controller.getInvitaciones
+);
 
 module.exports = router;

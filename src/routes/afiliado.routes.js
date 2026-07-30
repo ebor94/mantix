@@ -61,6 +61,28 @@ router.post(
   controller.createPublicoConvenio
 );
 
+// ── POST /afiliados/convenio/invitacion/:token — autoafiliación por invitación ─
+// Sin autenticación, igual que /convenio/:slug. El convenio y la identidad del
+// titular se resuelven desde el token (invitacionService.resolverToken), no
+// desde el body ni la URL — así el cliente no puede autoafiliar a otra
+// persona ni cambiarse de convenio con un payload manipulado. Debe ir ANTES
+// de la ruta /:id (Task 4).
+//
+// Rate limiter ESTRICTO (strictRateLimit, mismo de Task 1 / GET
+// /convenios/invitacion/:token): el token es una capacidad de un solo uso,
+// y este endpoint es AÚN más sensible que su hermano GET — una adivinanza
+// exitosa no solo lee datos, crea un afiliado y consume la invitación de
+// otra persona bajo su identidad. Se coloca ANTES del resto de la cadena de
+// middlewares, igual que en las demás rutas rate-limited de este archivo.
+router.post(
+  '/convenio/invitacion/:token',
+  strictRateLimit,
+  uploadFields,
+  parseMultipartJson,
+  validate(createAfiliadoSchema),
+  controller.createPublicoConvenioInvitacion
+);
+
 // ── POST /afiliados — solo ASESOR_AFILIACIONES y ADMIN pueden crear ────────
 router.post(
   '/',
