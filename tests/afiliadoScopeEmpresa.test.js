@@ -132,6 +132,46 @@ describe('whereConFiltroEmpresa — composición vía getAllAfiliados', () => {
     const { where } = mockAfiliado.findAll.mock.calls[0][0];
     expect(where).toEqual({});
   });
+
+  // Fix 2 (IMPORTANT, ronda de revisión) — el atajo de whereConFiltroAsesorYEmpresa
+  // para `empresa.ver_afiliaciones` comprobaba SOLO el permiso, no si
+  // `usuario.empresa_id` era realmente verdadero. Si alguna cuenta llegara a
+  // tener `ver_afiliaciones: true` con `empresa_id` null/undefined (un error
+  // de configuración, no alcanzable hoy por el seed), el atajo devolvía
+  // DIRECTAMENTE whereConFiltroEmpresa(baseWhere, usuario) — que sin
+  // empresa_id es un no-op — es decir, acceso SIN RESTRICCIÓN a los
+  // afiliados de TODAS las empresas. Tras el fix, sin empresa_id verdadero
+  // el atajo no se toma: cae al camino normal
+  // (whereConFiltroEmpresa(whereConFiltroAsesor(...))), que para este
+  // usuario (no super_admin, sin `afiliaciones.ver_todas`) agrega
+  // `asesorId = usuario.id` — "no ve nada relevante" es la dirección segura
+  // de fallo, nunca "ve todo".
+  test('REGRESIÓN (Fix 2) — usuario con empresa.ver_afiliaciones=true pero empresa_id null/undefined: NO obtiene acceso sin restricción, cae al scope por asesorId (fail-closed)', async () => {
+    const usuarioSinEmpresaId = {
+      id: 40,
+      es_super_admin: false,
+      empresa_id: null,
+      rol: { permisos: { empresa: { ver_afiliaciones: true } } }
+    };
+    await afiliadoService.getAllAfiliados(usuarioSinEmpresaId);
+    const { where } = mockAfiliado.findAll.mock.calls[0][0];
+    // NUNCA `{}` (acceso sin restricción) — cae al scope normal por asesorId,
+    // que para un RRHH sin fila propia como asesor correctamente no devuelve
+    // resultados de ninguna otra empresa.
+    expect(where).toEqual({ asesorId: 40 });
+    expect(where).not.toEqual({});
+
+    mockAfiliado.findAll.mockClear();
+
+    const usuarioEmpresaIdUndefined = {
+      id: 41,
+      es_super_admin: false,
+      rol: { permisos: { empresa: { ver_afiliaciones: true } } }
+    };
+    await afiliadoService.getAllAfiliados(usuarioEmpresaIdUndefined);
+    const { where: whereUndefined } = mockAfiliado.findAll.mock.calls[0][0];
+    expect(whereUndefined).toEqual({ asesorId: 41 });
+  });
 });
 
 describe('getAfiliadoById — scope compuesto (Task 4)', () => {

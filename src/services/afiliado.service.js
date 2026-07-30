@@ -79,10 +79,25 @@ function whereConFiltroEmpresa(baseWhere, usuario) {
  * se aplica SOLO whereConFiltroEmpresa. whereConFiltroAsesor en sí NO se
  * modifica (sigue intacta para todo el canal ASESOR/APROBADOR existente);
  * esto solo cambia si la composición LA LLAMA o no para este perfil.
+ *
+ * Fix de seguridad (ronda de revisión): el atajo de arriba SOLO se toma si,
+ * ADEMÁS de `empresa.ver_afiliaciones`, el usuario tiene `empresa_id`
+ * verdadero. Antes de este fix se comprobaba únicamente el permiso — si
+ * alguna cuenta llegara a tener `ver_afiliaciones: true` con `empresa_id`
+ * `null`/`undefined` (hoy no lo permite el seed, pero basta un error de
+ * configuración futuro), el bloque `if` de todas formas se tomaba y
+ * devolvía DIRECTAMENTE `whereConFiltroEmpresa(baseWhere, usuario)`, que a
+ * su vez, sin `empresa_id`, es un no-op (`return baseWhere`) — es decir,
+ * acceso sin ninguna restricción a los afiliados de TODAS las empresas. Con
+ * `usuario.empresa_id` exigido en la propia condición, ese caso ya no
+ * cumple el atajo y cae al camino normal (`whereConFiltroEmpresa(
+ * whereConFiltroAsesor(...))`): un RRHH sin `asesorId` propio termina con
+ * `asesorId = usuario.id`, que no matchea ninguna fila — "no ve nada" es la
+ * dirección segura de fallo, no "ve todo".
  */
 function whereConFiltroAsesorYEmpresa(baseWhere, usuario) {
   const pEmpresa = getPermisos(usuario).empresa || {};
-  if (!usuario.es_super_admin && pEmpresa.ver_afiliaciones) {
+  if (!usuario.es_super_admin && pEmpresa.ver_afiliaciones && usuario.empresa_id) {
     return whereConFiltroEmpresa(baseWhere, usuario);
   }
   return whereConFiltroEmpresa(whereConFiltroAsesor(baseWhere, usuario), usuario);
