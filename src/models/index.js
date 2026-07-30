@@ -61,6 +61,10 @@ const db = {
   // ⚠️ IMPORTANTE: Empresa, Convenio y Tarifa DEBEN ir ANTES de Afiliado
   Empresa: require('./Empresa')(sequelize, Sequelize.DataTypes),
   Convenio: require('./Convenio')(sequelize, Sequelize.DataTypes),
+  // ConvenioEmpleado (nómina) y ConvenioInvitacion dependen de Convenio;
+  // ConvenioInvitacion además de ConvenioEmpleado — por eso van en este orden.
+  ConvenioEmpleado: require('./ConvenioEmpleado')(sequelize, Sequelize.DataTypes),
+  ConvenioInvitacion: require('./ConvenioInvitacion')(sequelize, Sequelize.DataTypes),
   VeoliaUnidadNegocio: require('./VeoliaUnidadNegocio')(sequelize, Sequelize.DataTypes),
   Tarifa: require('./Tarifa')(sequelize, Sequelize.DataTypes),
   PrimaSeguro: require('./PrimaSeguro')(sequelize, Sequelize.DataTypes),

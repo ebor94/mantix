@@ -33,17 +33,31 @@ if (!fs.existsSync(pdfsPath)) {
 // ============================================
 // CORS
 // ============================================
+// Allowlist de orígenes: se lee de CORS_ORIGIN (separado por comas). Si no
+// está seteada, se usa como default el dominio de producción más localhost
+// para desarrollo.
+const DEFAULT_CORS_ORIGINS = ['https://losolivoscucuta.com', 'http://localhost:5173'];
+const corsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origen) => origen.trim())
+  .filter(Boolean);
+const allowedOrigins = corsOrigins.length > 0 ? corsOrigins : DEFAULT_CORS_ORIGINS;
 
-
-app.use(cors({
-  origin: '*' , 
-  credentials: false,  
+const corsOptions = {
+  origin(origin, callback) {
+    // Sin header Origin (curl, Postman, health checks server-a-server): permitir.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origen no permitido por CORS'));
+  },
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Type', 'Content-Disposition']
-}));
+};
 
-app.options('*', cors());
+app.use(cors(corsOptions));
+
+app.options('*', cors(corsOptions));
 
 // ============================================
 // HELMET

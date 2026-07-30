@@ -14,6 +14,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    empresa_id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      comment: 'Empresa del convenio a la que pertenece un usuario EMPRESA_RRHH. NULL para el resto de roles. Usado por whereConFiltroEmpresa (src/services/afiliado.service.js) y por el chequeo de propiedad de convenio en convenio.controller.js.'
+    },
     sede_id: {
       type: DataTypes.INTEGER,
       allowNull: true,

@@ -4,6 +4,7 @@ const { sendAceptacion, sendOTP, sendImagenRecibo, sendTemplateImagenTexto } = r
 const axios = require('axios');
 const { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico } = require('../services/googleChatService');
 const convenioService = require('../services/convenio.service');
+const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
 const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
@@ -308,11 +309,101 @@ async function notificarRegistroConvenio(destinatario, convenio, afiliado) {
   );
 }
 
+/**
+ * POST /afiliados/convenio/invitacion/:token
+ *
+ * Registro público de autoafiliación por invitación de nómina (Task 4).
+ * Mismo canal público que createPublicoConvenio (sin sesión), con dos
+ * diferencias respecto a ese:
+ *
+ *  1. El convenio NO se identifica por slug en la URL sino por el token de
+ *     invitación: invitacionService.resolverToken hace las cinco
+ *     comprobaciones (token existe, no usado, no vencido, convenio activo,
+ *     empleado activo en la nómina) antes de dejar seguir.
+ *
+ *  2. La identidad del titular (documento y nombres) se fuerza desde el
+ *     empleado de nómina, igual que el convenio fuerza nit/canal/producto/
+ *     grupo en createPublicoConvenio: el cliente no puede autoafiliar a otra
+ *     persona con un link ajeno cambiando el documento en el payload.
+ *
+ * La invitación se marca usada DENTRO de la misma transacción que crea el
+ * afiliado (afiliadoService.createAfiliadoConInvitacion), así que un doble
+ * submit concurrente con el mismo token no puede generar dos afiliados — ver
+ * el docstring de esa función y de invitacionService.marcarUsada.
+ */
+async function createPublicoConvenioInvitacion(req, res, next) {
+  try {
+    const token = req.params.token;
+    const { convenio: convenioPublico, empleado } = await invitacionService.resolverToken(token);
+
+    // resolverToken devuelve la proyección pública del convenio (toPublicJSON),
+    // que deliberadamente no incluye el id ni datos internos de contacto. Se
+    // vuelve a cargar por slug — mismo helper que usa createPublicoConvenio —
+    // para tener el registro completo (id, nit, contacto, etc.) sin tocar
+    // invitacion.service.js.
+    const convenio = await convenioService.obtenerPorSlug(convenioPublico.slug);
+    if (!convenio) throw new AppError('Convenio no encontrado o no disponible', 404);
+
+    const body = { ...req.body };
+    extractFiles(req, body);
+
+    body.asesorId = null;
+    body.origen = 'CONVENIO';
+    body.notificacionRecibo = 0;
+
+    // Datos que define el convenio, no el cliente (igual que createPublicoConvenio).
+    body.convenioId    = convenio.id;
+    body.nit           = convenio.nit || null;
+    body.nombreEmpresa = convenio.nombre;
+    body.canal         = convenio.canal;
+    body.producto      = convenio.producto;
+    body.grupo         = convenio.grupo;
+
+    // Identidad del titular: se fuerza desde el empleado de nómina, nunca
+    // desde el body — el cliente no puede autoafiliar a otra persona con un
+    // link de invitación ajeno.
+    body.tipoDocumento   = empleado.tipoDocumento;
+    body.numeroDocumento = empleado.numeroDocumento;
+    body.primerNombre    = empleado.primerNombre;
+    body.primerApellido  = empleado.primerApellido;
+
+    // Campos propios de Veolia: no aplican a un convenio.
+    body.unidadNegocio = null;
+    body.planVeolia    = null;
+
+    const result = await afiliadoService.createAfiliadoConInvitacion(body, token);
+
+    Afiliado.count({ where: { celular: body.celular } })
+      .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
+      .catch(() => {});
+
+    // Notificaciones fire-and-forget: si fallan no rompen la respuesta.
+    const contacto = convenio.json('contacto') || {};
+    const formulario = convenio.json('formulario') || {};
+    if (contacto.googleChat?.notificar !== false) {
+      notificarNuevoPublico(
+        { ...body, beneficiarios: body.beneficiarios || [] },
+        {
+          etiqueta: contacto.googleChat?.etiqueta || convenio.nombre,
+          mostrarAsistencia: formulario.mostrarAsistenciaFueraDeCasa !== false
+        }
+      );
+    }
+    if (contacto.notificarA) {
+      notificarRegistroConvenio(contacto.notificarA, convenio, result).catch(() => {});
+    }
+
+    res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ── Consultas ─────────────────────────────────────────────────────────────────
 
 async function getAll(req, res, next) {
   try {
-    const afiliados = await afiliadoService.getAllAfiliados();
+    const afiliados = await afiliadoService.getAllAfiliados(req.usuario);
     res.json({ success: true, data: afiliados });
   } catch (error) {
     next(error);
@@ -341,7 +432,11 @@ async function getByHash(req, res, next) {
 
 async function getById(req, res, next) {
   try {
-    const afiliado = await afiliadoService.getAfiliadoById(req.params.id);
+    // Se pasa req.usuario para aplicar whereConFiltroAsesor + whereConFiltroEmpresa
+    // (Task 4): un usuario con empresa_id no puede ver afiliados de otra
+    // empresa. El chequeo manual de abajo (ownership por asesorId) se
+    // conserva sin tocar para el canal ASESOR existente.
+    const afiliado = await afiliadoService.getAfiliadoById(req.params.id, req.usuario);
     if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
     const usuario = req.usuario;
     if (!usuario.es_super_admin) {
@@ -349,7 +444,15 @@ async function getById(req, res, next) {
         ? JSON.parse(usuario.rol.permisos)
         : (usuario.rol?.permisos || {});
       const pAfil = permisos.afiliaciones || {};
-      if (!pAfil.ver_todas && afiliado.asesorId !== usuario.id) {
+      const pEmpresa = permisos.empresa || {};
+      // El chequeo de ownership por asesorId es la dimensión ASESOR
+      // (ver_todas la exime); un usuario EMPRESA_RRHH nunca es dueño por
+      // asesorId (no es asesor), así que se lo exime de ESTA verificación
+      // vía `empresa.ver_afiliaciones` — su alcance real ya quedó acotado a
+      // su propia empresa por whereConFiltroEmpresa en la consulta de arriba
+      // (Fix 4.4: si el afiliado fuera de otra empresa, la consulta ya
+      // habría devuelto null y ni siquiera llegaríamos aquí).
+      if (!pAfil.ver_todas && !pEmpresa.ver_afiliaciones && afiliado.asesorId !== usuario.id) {
         throw new AppError('No tienes permiso para ver esta afiliación', 403);
       }
     }
@@ -604,7 +707,11 @@ async function consultarPorDocumento(req, res, next) {
 async function buscarPorDocumento(req, res, next) {
   try {
     const { numeroDocumento } = req.params;
-    const afiliado = await afiliadoService.getAfiliadoByDocumento(numeroDocumento);
+    // Se pasa req.usuario para aplicar whereConFiltroAsesor: un asesor sin
+    // permiso ver_todas no debe ver afiliados de otro asesor. Si el afiliado
+    // existe pero es de otro asesor, se responde igual que "sin coincidencias"
+    // (mismo contrato de la UI) en vez de revelar que el registro existe.
+    const afiliado = await afiliadoService.getAfiliadoByDocumento(numeroDocumento, req.usuario);
     if (!afiliado) {
       return res.json({ success: true, data: null, message: 'Sin coincidencias' });
     }
@@ -646,7 +753,10 @@ async function getVeoliaUnidades(req, res, next) {
 
 async function getTrazabilidad(req, res, next) {
   try {
-    const registros = await afiliadoService.getTrazabilidad(req.params.id);
+    const registros = await afiliadoService.getTrazabilidad(req.params.id, req.usuario);
+    // null = el afiliado no existe o no pasa whereConFiltroAsesor. Se responde
+    // 404 (no 403) para no revelar a un asesor que el registro existe.
+    if (registros === null) throw new AppError('Afiliado no encontrado', 404);
     res.json({ success: true, data: registros });
   } catch (err) {
     next(err);
@@ -741,6 +851,7 @@ module.exports = {
   create,
   createPublico,
   createPublicoConvenio,
+  createPublicoConvenioInvitacion,
   getAll,
   getById,
   getByHash,

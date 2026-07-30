@@ -147,6 +147,53 @@ async function sendAceptacion(celular) {
 }
 
 /**
+ * Envía el link de una invitación de autoafiliación (convenios/nómina, Task 3)
+ * usando la plantilla "invitacion_convenio" de 1msg.
+ *
+ * No lanza excepción — mismo criterio que sendAceptacion: la invitación ya
+ * quedó creada en BD, un fallo de WhatsApp no debe impedir que el llamador
+ * registre el intento de envío (canalEnvio/enviadoEn).
+ *
+ * @param {string} celular - Número del empleado (se formatea automáticamente)
+ * @param {string} link    - URL completa de la invitación (FRONT_BASE_URL + token)
+ */
+async function sendInvitacion(celular, link) {
+  const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
+  const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
+  const numero   = formatearTelefono(celular);
+
+  const payload = {
+    token,
+    namespace: NAMESPACE,
+    template: 'invitacion_convenio',
+    language: { policy: 'deterministic', code: 'es' },
+    params: [
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: link },
+        ],
+      },
+    ],
+    phone: numero,
+  };
+
+  try {
+    const response = await axios.post(
+      `https://api.1msg.io/${instance}/sendTemplate`,
+      payload,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+    );
+    logger.info(`[WhatsApp] Invitación enviada a ${numero} | ID: ${response.data?.id || 'ok'}`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const msg = error.response?.data?.message || error.response?.data || error.message;
+    logger.warn(`[WhatsApp] Error enviando invitación a ${numero}: ${JSON.stringify(msg)}`);
+    return { success: false, error: msg }; // No lanza — no debe bloquear el registro del envío
+  }
+}
+
+/**
  * Envía un archivo (PDF/imagen) al cliente por WhatsApp vía 1msg.
  * Usa el endpoint /sendFile de 1msg.io con la URL pública del archivo.
  *
@@ -307,6 +354,7 @@ async function sendImagenRecibo(celular, urlPublicaImagen, numeroRecibo, valor) 
 module.exports = {
   sendOTP,
   sendAceptacion,
+  sendInvitacion,
   sendDocumento,
   sendDocumentoRecibo,
   sendTemplateImagenTexto,

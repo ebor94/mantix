@@ -4,6 +4,7 @@ const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const reciboCajaService = require('./reciboCaja.service');
 const convenioService = require('./convenio.service');
+const invitacionService = require('./invitacion.service');
 const AppError = require('../utils/AppError');
 
 /**
@@ -28,6 +29,78 @@ function whereConFiltroAsesor(baseWhere, usuario) {
   if (p.ver_todas) return baseWhere;
   // Solo ve las propias
   return { ...baseWhere, asesorId: usuario.id };
+}
+
+/**
+ * Construye la cláusula WHERE que restringe por empresa de convenio (Task 4).
+ *
+ * Pensado para componerse SIEMPRE después de whereConFiltroAsesor (nunca en
+ * su lugar): whereConFiltroAsesor ya decide si el usuario ve todo o solo lo
+ * suyo por asesorId; esta función solo puede ANGOSTAR ese resultado más — un
+ * usuario con `empresa_id` (típicamente EMPRESA_RRHH) nunca ve afiliados de
+ * otra empresa.
+ *
+ * IMPORTANTE: el único bypass de esta función es `es_super_admin`. NO se
+ * bypassea con `afiliaciones.ver_todas` — ese flag es la dimensión de
+ * "ver todos los asesores", no la de "ver todas las empresas", y son
+ * ortogonales. Si ambos bypasses compartieran el mismo flag, un usuario con
+ * `empresa_id` seteado al que se le otorgara `ver_todas` (p.ej. por un futuro
+ * cambio de rol) vería instantáneamente los afiliados de TODAS las empresas,
+ * no solo la suya — justo lo que este filtro existe para impedir. Por eso
+ * cada filtro tiene su propio criterio de bypass, independiente del otro:
+ *
+ *   - super_admin             → sin filtro adicional.
+ *   - usuario con empresa_id  → agrega empresaId = usuario.empresa_id,
+ *     SIN excepción por `ver_todas`.
+ *   - usuario sin empresa_id  → no restringe nada por acá (ya lo hizo, si
+ *     correspondía, whereConFiltroAsesor).
+ */
+function whereConFiltroEmpresa(baseWhere, usuario) {
+  if (usuario.es_super_admin) return baseWhere;
+  if (usuario.empresa_id) return { ...baseWhere, empresaId: usuario.empresa_id };
+  return baseWhere; // usuario sin empresa_id: no se restringe por este filtro (lo hace whereConFiltroAsesor)
+}
+
+/**
+ * Compone whereConFiltroAsesor y whereConFiltroEmpresa en el orden que exige
+ * Task 4: primero asesor, luego empresa sobre el resultado — así ninguno se
+ * pisa y ambos se respetan. Pequeño helper interno para no repetir la misma
+ * llamada anidada en cada función que lista/busca afiliados.
+ *
+ * EXCEPCIÓN (fix de regresión, ronda de revisión): un usuario con el permiso
+ * `empresa.ver_afiliaciones` (EMPRESA_RRHH puro, sin ningún permiso bajo
+ * `afiliaciones`) NO participa de la dimensión "asesor-ownership" — no crea
+ * afiliaciones como asesor, así que nunca hay una fila cuyo `asesorId`
+ * coincida con su `usuario.id`. Si se le aplicara whereConFiltroAsesor tal
+ * cual (que SIEMPRE agrega `asesorId = usuario.id` salvo super_admin/
+ * ver_todas), sus listados quedarían SIEMPRE vacíos — un 404/[] silencioso
+ * que hace inútil el permiso `empresa.ver_afiliaciones` en la práctica,
+ * aunque la ruta lo deje pasar (Fix 2). Por eso, para ese permiso puntual,
+ * se aplica SOLO whereConFiltroEmpresa. whereConFiltroAsesor en sí NO se
+ * modifica (sigue intacta para todo el canal ASESOR/APROBADOR existente);
+ * esto solo cambia si la composición LA LLAMA o no para este perfil.
+ *
+ * Fix de seguridad (ronda de revisión): el atajo de arriba SOLO se toma si,
+ * ADEMÁS de `empresa.ver_afiliaciones`, el usuario tiene `empresa_id`
+ * verdadero. Antes de este fix se comprobaba únicamente el permiso — si
+ * alguna cuenta llegara a tener `ver_afiliaciones: true` con `empresa_id`
+ * `null`/`undefined` (hoy no lo permite el seed, pero basta un error de
+ * configuración futuro), el bloque `if` de todas formas se tomaba y
+ * devolvía DIRECTAMENTE `whereConFiltroEmpresa(baseWhere, usuario)`, que a
+ * su vez, sin `empresa_id`, es un no-op (`return baseWhere`) — es decir,
+ * acceso sin ninguna restricción a los afiliados de TODAS las empresas. Con
+ * `usuario.empresa_id` exigido en la propia condición, ese caso ya no
+ * cumple el atajo y cae al camino normal (`whereConFiltroEmpresa(
+ * whereConFiltroAsesor(...))`): un RRHH sin `asesorId` propio termina con
+ * `asesorId = usuario.id`, que no matchea ninguna fila — "no ve nada" es la
+ * dirección segura de fallo, no "ve todo".
+ */
+function whereConFiltroAsesorYEmpresa(baseWhere, usuario) {
+  const pEmpresa = getPermisos(usuario).empresa || {};
+  if (!usuario.es_super_admin && pEmpresa.ver_afiliaciones && usuario.empresa_id) {
+    return whereConFiltroEmpresa(baseWhere, usuario);
+  }
+  return whereConFiltroEmpresa(whereConFiltroAsesor(baseWhere, usuario), usuario);
 }
 
 // Convierte strings vacíos a null para evitar truncamiento en columnas ENUM/DATE
@@ -135,8 +208,117 @@ async function createAfiliadoWithBeneficiarios(data) {
   }
 }
 
-async function getAllAfiliados() {
+/**
+ * Variante de createAfiliadoWithBeneficiarios para el registro público por
+ * invitación de convenio (Task 4, ver afiliado.controller.createPublicoConvenioInvitacion).
+ *
+ * DUPLICA el bloque transaccional de esa función hermana en vez de
+ * extenderla: createAfiliadoWithBeneficiarios la consumen también Veolia
+ * (createPublico) y el canal ASESOR (create) — Global Constraint #1 del plan
+ * prohíbe cambiar su comportamiento, y agregarle un parámetro/hook
+ * transaccional que solo usa este camino nuevo habría significado tocar una
+ * función que ellos también invocan. Se prefirió repetir el mismo bloque acá
+ * con una única diferencia real: `invitacionService.marcarUsada(token, ...)`
+ * se ejecuta DENTRO de la misma transacción que crea el afiliado, justo antes
+ * del commit. Si otro submit concurrente con el mismo token ya la consumió,
+ * marcarUsada lanza AppError(410) y el catch de abajo hace rollback de TODO
+ * (afiliado, beneficiarios, seguros, contrato y recibo de caja incluidos) —
+ * así un doble submit no puede generar dos afiliaciones para una invitación
+ * de un solo uso.
+ *
+ * @param {object} data  Mismo payload que createAfiliadoWithBeneficiarios.
+ * @param {string} token Token de la invitación, ya resuelto por el controller.
+ */
+async function createAfiliadoConInvitacion(data, token) {
+  const { beneficiarios = [], seguros = [], contrato = {}, ...raw } = data;
+  const afiliadoData = nullifyEmpty(raw);
+
+  await convenioService.assertReglasConvenio(
+    afiliadoData.convenioId, afiliadoData, beneficiarios
+  );
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    // ── 1. Resolver empresa por NIT (igual que createAfiliadoWithBeneficiarios) ─
+    if (afiliadoData.nit) {
+      let empresa = await buscarPorNit(afiliadoData.nit);
+      if (!empresa) {
+        empresa = await Empresa.create(
+          { nit: afiliadoData.nit, nombre: afiliadoData.nombreEmpresa || afiliadoData.nit },
+          { transaction }
+        );
+      }
+      afiliadoData.empresaId = empresa.id;
+      afiliadoData.nombreEmpresa = empresa.nombre;
+    }
+
+    // ── 2. Crear afiliado ────────────────────────────────────
+    if (afiliadoData.notificacionRecibo === undefined) afiliadoData.notificacionRecibo = 1;
+    afiliadoData.fechaNotificacionRecibo = new Date();
+    afiliadoData.estadoRegistro = 0;
+    const afiliado = await Afiliado.create(afiliadoData, { transaction });
+
+    // ── 3. Crear beneficiarios ───────────────────────────────
+    if (beneficiarios.length > 0) {
+      const beneficiariosConId = beneficiarios.map(b => ({ ...b, afiliadoId: afiliado.id }));
+      await Beneficiario.bulkCreate(beneficiariosConId, { transaction });
+    }
+
+    // ── 4. Crear seguros y calcular primas ───────────────────
+    if (seguros.length > 0) {
+      const segurosConId = seguros.map(s => ({ ...s, afiliadoId: afiliado.id }));
+      await Seguro.bulkCreate(segurosConId, { transaction });
+    }
+
+    // ── 5. Guardar contrato/valor ────────────────────────────
+    if (contrato && Object.keys(contrato).length > 0) {
+      await ContratoValor.create(
+        { ...contrato, afiliadoId: afiliado.id },
+        { transaction }
+      );
+    }
+
+    // ── 6. Emitir recibo de caja si aplica ──────────────────
+    try {
+      await reciboCajaService.crearReciboParaAfiliacion(afiliado, transaction);
+    } catch (errRecibo) {
+      throw errRecibo;
+    }
+
+    // ── 7. Consumir la invitación — la única diferencia real con la función
+    //      hermana. Dentro de la misma transacción; ver docstring arriba.
+    await invitacionService.marcarUsada(token, afiliado.id, transaction);
+
+    await transaction.commit();
+
+    const result = await Afiliado.findByPk(afiliado.id, {
+      include: [
+        { model: Beneficiario, as: 'beneficiarios' },
+        { model: Seguro, as: 'seguros' },
+        { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+        { model: Empresa, as: 'empresa' },
+        { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
+      ]
+    });
+
+    return result;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
+/**
+ * Lista afiliados. Si se pasa `usuario`, se aplica el mismo filtro de asesor
+ * que getPendientes/getRechazados (whereConFiltroAsesor), compuesto con
+ * whereConFiltroEmpresa (Task 4): un asesor sin permiso ver_todas solo ve las
+ * suyas; un usuario con empresa_id nunca ve afiliados de otra empresa.
+ */
+async function getAllAfiliados(usuario) {
+  const where = usuario ? whereConFiltroAsesorYEmpresa({}, usuario) : {};
   return Afiliado.findAll({
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -148,16 +330,29 @@ async function getAllAfiliados() {
   });
 }
 
-async function getAfiliadoById(id) {
-  return Afiliado.findByPk(id, {
-    include: [
-      { model: Beneficiario, as: 'beneficiarios' },
-      { model: Seguro, as: 'seguros' },
-      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
-      { model: Empresa, as: 'empresa' },
-      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
-    ]
-  });
+/**
+ * Obtiene un afiliado por id. Sin `usuario` (getByHash, OTP de reenvío)
+ * conserva el comportamiento previo: findByPk sin ningún filtro — rutas
+ * públicas donde el control de acceso es el hash cifrado o el OTP, no el
+ * usuario de sesión.
+ *
+ * Con `usuario` (Task 4, GET /afiliados/:id autenticado) aplica la misma
+ * composición asesor+empresa que el resto de consultas: si el afiliado no
+ * pasa el filtro, retorna null (el controlador lo traduce en 404).
+ */
+async function getAfiliadoById(id, usuario) {
+  const include = [
+    { model: Beneficiario, as: 'beneficiarios' },
+    { model: Seguro, as: 'seguros' },
+    { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+    { model: Empresa, as: 'empresa' },
+    { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
+  ];
+  if (!usuario) {
+    return Afiliado.findByPk(id, { include });
+  }
+  const where = whereConFiltroAsesorYEmpresa({ id }, usuario);
+  return Afiliado.findOne({ where, include });
 }
 
 /**
@@ -167,7 +362,7 @@ async function getAfiliadoById(id) {
  */
 async function getPendientes(usuario) {
   const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 }, rechazadoParcial: 0 };
-  const where = whereConFiltroAsesor(baseWhere, usuario);
+  const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
 
   return Afiliado.findAll({
     where,
@@ -268,11 +463,20 @@ async function rechazarBeneficiarios(afiliadoId, ids, motivo, usuarioId) {
 }
 
 /**
- * Busca el afiliado más reciente por número de documento (consulta pública).
+ * Busca el afiliado más reciente por número de documento.
+ *
+ * Se usa tanto desde la consulta pública (OTP, sin `usuario`, sin filtro —
+ * comportamiento sin cambios) como desde la búsqueda interna del asesor
+ * (`buscarPorDocumento`, con `usuario`): en ese segundo caso se aplica
+ * whereConFiltroAsesor (compuesto con whereConFiltroEmpresa, Task 4) para
+ * que un asesor sin permiso ver_todas no vea afiliados de otro asesor, y un
+ * usuario con empresa_id no vea afiliados de otra empresa.
  */
-async function getAfiliadoByDocumento(numeroDocumento) {
+async function getAfiliadoByDocumento(numeroDocumento, usuario) {
+  const baseWhere = { numeroDocumento };
+  const where = usuario ? whereConFiltroAsesorYEmpresa(baseWhere, usuario) : baseWhere;
   return Afiliado.findOne({
-    where: { numeroDocumento },
+    where,
     include: [
       { model: Beneficiario, as: 'beneficiarios' },
       { model: Seguro, as: 'seguros' },
@@ -367,7 +571,7 @@ async function getRechazados(usuario) {
       { rechazadoParcial: 1 }
     ]
   };
-  const where = whereConFiltroAsesor(baseWhere, usuario);
+  const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
 
   return Afiliado.findAll({
     where,
@@ -649,9 +853,20 @@ async function legalizarAfiliaciones(afiliadoIds, usuario, numeroPlanilla) {
 
 /**
  * Retorna el historial de trazabilidad de un afiliado, ordenado de más reciente a más antiguo.
+ *
+ * Si se pasa `usuario`, primero se valida que el afiliado exista y pase
+ * whereConFiltroAsesor compuesto con whereConFiltroEmpresa (mismo criterio
+ * que getPendientes/getRechazados, Task 4). Si no pasa el filtro se retorna
+ * `null` — el controlador lo traduce en 404, no 403, para no revelar que el
+ * registro existe.
  */
-async function getTrazabilidad(afiliadoId) {
+async function getTrazabilidad(afiliadoId, usuario) {
   const { Usuario } = require('../models');
+  if (usuario) {
+    const where = whereConFiltroAsesorYEmpresa({ id: afiliadoId }, usuario);
+    const visible = await Afiliado.findOne({ where, attributes: ['id'] });
+    if (!visible) return null;
+  }
   return Trazabilidad.findAll({
     where: { afiliadoId },
     include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'email'] }],
@@ -789,6 +1004,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
 
 module.exports = {
   createAfiliadoWithBeneficiarios,
+  createAfiliadoConInvitacion,
   getAllAfiliados,
   getAfiliadoById,
   getPendientes,
