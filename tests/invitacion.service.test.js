@@ -258,6 +258,41 @@ describe('generarInvitaciones', () => {
     expect(mockConvenioInvitacion.create).toHaveBeenCalledTimes(2);
     expect(mockConvenioInvitacion.create.mock.calls.map(([d]) => d.empleadoId)).toEqual([1, 3]);
   });
+
+  // Fix 1 (CRITICAL, ronda de revisión) — regresión de cross-tenant: antes
+  // de este fix, el bucle iteraba sobre `empleadoIds` crudo en vez de sobre
+  // las filas ya consultadas y acotadas por `convenioId`. Un id de OTRO
+  // convenio (o inexistente) no aparece en el `findAll` (mockeado acá para
+  // simular exactamente eso: el WHERE real de Sequelize ya excluye esas
+  // filas), así que antes del fix `activoPorEmpleadoId.get(empleadoId)`
+  // devolvía `undefined` — ni inactivo ni activo reconocido — y el código
+  // seguía de largo, creando una invitación que enlazaba el convenio con el
+  // empleado de OTRA empresa (PII cruzada + roster corrompido). Ahora
+  // cualquier id que no resuelve a una fila propia del convenio se reporta
+  // en `omitidos[]`, igual que un inactivo, y nunca se procesa.
+  test('id de un empleado de OTRO convenio (o inexistente) va a omitidos, no crea invitación, y los ids propios sí se procesan', async () => {
+    // Solo las filas 1 y 3 pertenecen al convenio 10 — el 99 es de otro
+    // convenio (o no existe): el WHERE { id: In([1,99,3]), convenioId: 10 }
+    // de Sequelize simplemente no lo trae de vuelta.
+    mockConvenioEmpleado.findAll.mockResolvedValue([
+      { id: 1, activo: 1 },
+      { id: 3, activo: 1 }
+    ]);
+    mockConvenioInvitacion.findOne.mockResolvedValue(null);
+    mockConvenioInvitacion.create.mockImplementation(async (datos) => ({ id: Math.random(), ...datos }));
+
+    const resultado = await invitacionService.generarInvitaciones(10, [1, 99, 3]);
+
+    expect(resultado).toHaveLength(2);
+    expect(resultado.map(r => r.empleadoId)).toEqual([1, 3]);
+    expect(resultado.omitidos).toEqual([
+      { empleadoId: 99, motivo: 'Empleado no pertenece a este convenio' }
+    ]);
+    expect(mockConvenioInvitacion.create).toHaveBeenCalledTimes(2);
+    expect(mockConvenioInvitacion.create.mock.calls.map(([d]) => d.empleadoId)).toEqual([1, 3]);
+    // Nunca se llama a create con el id ajeno.
+    expect(mockConvenioInvitacion.create.mock.calls.some(([d]) => d.empleadoId === 99)).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────

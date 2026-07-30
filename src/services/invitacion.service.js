@@ -158,6 +158,24 @@ async function importarEmpleados(convenioId, filas, usuario) {
  * fallar silenciosamente o abortar el lote completo, se reportan en
  * `omitidos[]` para que RRHH sepa cuáles quedaron fuera y por qué.
  *
+ * Fix de seguridad (ronda de revisión): el bucle SIEMPRE itera sobre las
+ * filas de `ConvenioEmpleado` ya consultadas y acotadas por `convenioId`
+ * (`empleadoPorId`, construido desde el `findAll` de arriba), nunca
+ * directamente sobre el `empleadoIds` recibido del caller. Antes de este fix
+ * se iteraba sobre `empleadoIds` crudo: un id de un empleado que pertenece a
+ * OTRO convenio (o que no existe) no aparecía en el Map, así que
+ * `activoPorEmpleadoId.get(empleadoId)` devolvía `undefined` — ni `0`/`false`
+ * (inactivo) ni un valor "activo" reconocible — y el código igual seguía de
+ * largo y creaba la invitación. Eso permitía enlazar el convenio A con el
+ * empleado de la empresa B: la invitación resultante expone el
+ * documento/celular/email/cargo de un empleado ajeno vía
+ * `GET /:slug/invitaciones` (que incluye `ConvenioEmpleado`), y al
+ * consumirse (`marcarUsada`) sobrescribiría `ConvenioEmpleado.afiliadoId` de
+ * ese registro de nómina ajeno. Un id que no resuelve a una fila propia del
+ * convenio (ajeno o inexistente) ahora se reporta en `omitidos[]`, igual que
+ * un empleado inactivo — nunca se procesa en silencio ni se descarta sin
+ * dejar rastro.
+ *
  * @param {number} convenioId
  * @param {Array<number>} empleadoIds
  * @param {{diasVigencia?: number}} [opciones]
@@ -180,10 +198,15 @@ async function generarInvitaciones(convenioId, empleadoIds, { diasVigencia = 15 
         attributes: ['id', 'activo']
       })
     : [];
-  const activoPorEmpleadoId = new Map(empleados.map(e => [e.id, e.activo]));
+  const empleadoPorId = new Map(empleados.map(e => [e.id, e]));
 
   for (const empleadoId of ids) {
-    const activo = activoPorEmpleadoId.get(empleadoId);
+    const empleado = empleadoPorId.get(empleadoId);
+    if (!empleado) {
+      omitidos.push({ empleadoId, motivo: 'Empleado no pertenece a este convenio' });
+      continue;
+    }
+    const activo = empleado.activo;
     if (activo === 0 || activo === false) {
       omitidos.push({ empleadoId, motivo: 'Empleado inactivo en la nómina' });
       continue;
