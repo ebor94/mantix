@@ -10,8 +10,10 @@
  *   - El scope por convenio: un usuario con empresa_id que no coincide con
  *     convenio.empresaId recibe 404 (no 403); uno que sí coincide, o que no
  *     tiene empresa_id, o que es super_admin, pasa.
- *   - GET /invitacion/:token es público (sin auth) y tiene el rate limiter
- *     estricto de Task 1 montado (no el limitePublico).
+ *   - GET /invitacion/:token es público (sin auth) y tiene el limiter propio
+ *     del flujo de invitaciones montado (invitacionRateLimit, Fix 4 de la
+ *     ronda de revisión — no el limitePublico, y ya NO el strictRateLimit
+ *     de login/OTP que compartía originalmente).
  *
  * Se mockea la capa de modelos (Usuario para auth.js real con JWT firmado, y
  * ConvenioEmpleado/ConvenioInvitacion que el controller requiere ad-hoc) y
@@ -220,7 +222,7 @@ describe('convenio.routes.js — endpoints de gestión (POST) exigen su propio p
   });
 });
 
-describe('convenio.routes.js — GET /invitacion/:token (público, rate limiter estricto)', () => {
+describe('convenio.routes.js — GET /invitacion/:token (público, rate limiter propio del flujo de invitaciones)', () => {
   test('responde sin Authorization (pública)', async () => {
     jest.resetModules();
     jest.doMock('../src/models', () => ({
@@ -244,9 +246,15 @@ describe('convenio.routes.js — GET /invitacion/:token (público, rate limiter 
     });
   });
 
-  test('tiene el rate limiter ESTRICTO montado (no el limitePublico de 120/5min) — bloquea con 429 al exceder el máximo bajo', async () => {
+  test('tiene el rate limiter propio del flujo de invitaciones montado (no limitePublico, no strictRateLimit de login/OTP) — bloquea con 429 al exceder SU PROPIO máximo bajo', async () => {
     jest.resetModules();
+    // Fix 4: si esta ruta todavía compartiera `strictRateLimit` con login/OTP,
+    // bajar STRICT_RATE_LIMIT_MAX_REQUESTS a 3 la habría bloqueado también.
+    // Se baja a propósito el límite ESTRICTO (no el de invitaciones) para
+    // demostrar que ya NO le afecta — y se usa el propio
+    // INVITACION_RATE_LIMIT_MAX_REQUESTS para forzar el 429 real de esta ruta.
     process.env.STRICT_RATE_LIMIT_MAX_REQUESTS = '3';
+    process.env.INVITACION_RATE_LIMIT_MAX_REQUESTS = '4';
     jest.doMock('../src/models', () => ({
       Usuario: { findByPk: jest.fn() }, Rol: {}, UsuarioCategoria: {},
       ConvenioEmpleado: { findAll: jest.fn() }, ConvenioInvitacion: { findAll: jest.fn(), findOne: jest.fn() }
@@ -262,15 +270,16 @@ describe('convenio.routes.js — GET /invitacion/:token (público, rate limiter 
     app.use((err, req, res, next) => res.status(err.statusCode || 500).json({ success: false, message: err.message }));
 
     let last;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       last = await request(app).get('/api/convenios/invitacion/tok-x');
     }
     expect(last.status).toBe(429);
     expect(last.body).toEqual({
       success: false,
-      message: 'Demasiados intentos desde esta IP. Intenta de nuevo más tarde.'
+      message: 'Demasiadas solicitudes de invitación desde esta IP. Intenta de nuevo más tarde.'
     });
 
     delete process.env.STRICT_RATE_LIMIT_MAX_REQUESTS;
+    delete process.env.INVITACION_RATE_LIMIT_MAX_REQUESTS;
   });
 });

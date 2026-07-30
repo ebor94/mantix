@@ -2,7 +2,7 @@ const { Router } = require('express');
 const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/convenio.controller');
 const { auth, requirePermiso } = require('../middleware/auth');
-const strictRateLimit = require('../middleware/strictRateLimit');
+const { invitacionRateLimit } = require('../middleware/strictRateLimit');
 
 const router = Router();
 
@@ -34,16 +34,25 @@ router.post('/publico/:slug/validar', limitePublico, controller.validarPublico);
 
 // ── GET /convenios/invitacion/:token — resuelve una invitación de nómina ───
 // Público (Task 4): el link de autoafiliación llega por WhatsApp/email sin
-// sesión. Rate limiter ESTRICTO (10 req/15min, src/middleware/strictRateLimit.js,
-// reusado de Task 1) en vez del limitePublico de arriba: a diferencia de
-// /publico/:slug (un slug adivinable, pensado para difundirse), acá el token
-// es una capacidad de un solo uso — más valioso para un atacante de fuerza
-// bruta, así que el límite es más severo.
+// sesión. Rate limiter propio del flujo de invitaciones
+// (invitacionRateLimit, src/middleware/strictRateLimit.js) en vez del
+// limitePublico de arriba: a diferencia de /publico/:slug (un slug
+// adivinable, pensado para difundirse), acá el token es una capacidad de un
+// solo uso — más valioso para un atacante de fuerza bruta, así que el
+// límite es más severo que limitePublico.
+//
+// Fix 4 (ronda de revisión): NO se reusa `strictRateLimit` (10 req/15min,
+// el mismo budget de login/OTP) — este flujo está pensado para uso masivo
+// desde una sola IP corporativa (muchos empleados de la misma oficina
+// resolviendo su invitación en la misma ventana de tiempo), y compartir el
+// budget estricto bloquearía login/OTP de esa misma IP tras solo unos pocos
+// empleados. `invitacionRateLimit` es una instancia separada, calibrada
+// para ese volumen, pero igual de real (ver el comentario del middleware).
 //
 // ⚠️ Nombre de segmento en singular ("invitacion") a propósito, distinto del
 // plural ("invitaciones") de las rutas internas de abajo — evita cualquier
 // ambigüedad de matching entre esta ruta pública y /:slug/invitaciones.
-router.get('/invitacion/:token', strictRateLimit, controller.resolverInvitacion);
+router.get('/invitacion/:token', invitacionRateLimit, controller.resolverInvitacion);
 
 // ── Internas ────────────────────────────────────────────────────────────────
 // Listado para el selector de convenio y el filtro de aprobaciones.

@@ -2,7 +2,7 @@ const { Router } = require('express');
 const controller = require('../controllers/empresa.controller');
 const validate = require('../middleware/validate');
 const { auth } = require('../middleware/auth');
-const strictRateLimit = require('../middleware/strictRateLimit');
+const { strictRateLimit } = require('../middleware/strictRateLimit');
 const { createEmpresaSchema } = require('../validations/afiliado.validation');
 
 const router = Router();

@@ -5,7 +5,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { auth } = require('../middleware/auth');
-const strictRateLimit = require('../middleware/strictRateLimit');
+const { strictRateLimit } = require('../middleware/strictRateLimit');
 
 /**
  * @swagger

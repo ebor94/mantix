@@ -3,7 +3,7 @@ const controller = require('../controllers/afiliado.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { auth, requirePermiso, softAuth } = require('../middleware/auth');
-const strictRateLimit = require('../middleware/strictRateLimit');
+const { strictRateLimit, invitacionRateLimit } = require('../middleware/strictRateLimit');
 const { createAfiliadoSchema } = require('../validations/afiliado.validation');
 
 const router = Router();
@@ -68,15 +68,21 @@ router.post(
 // persona ni cambiarse de convenio con un payload manipulado. Debe ir ANTES
 // de la ruta /:id (Task 4).
 //
-// Rate limiter ESTRICTO (strictRateLimit, mismo de Task 1 / GET
-// /convenios/invitacion/:token): el token es una capacidad de un solo uso,
-// y este endpoint es AÚN más sensible que su hermano GET — una adivinanza
-// exitosa no solo lee datos, crea un afiliado y consume la invitación de
-// otra persona bajo su identidad. Se coloca ANTES del resto de la cadena de
-// middlewares, igual que en las demás rutas rate-limited de este archivo.
+// Rate limiter de invitaciones (invitacionRateLimit, mismo de GET
+// /convenios/invitacion/:token — Fix 4 de la ronda de revisión): este
+// endpoint NO puede compartir el budget estricto de login/OTP
+// (strictRateLimit, 10 req/15min) porque el flujo de autoafiliación por
+// convenio está diseñado para uso masivo desde una sola IP corporativa
+// (muchos empleados detrás del mismo NAT de oficina, en la misma ventana de
+// tiempo) — compartir el budget bloquearía tanto nuevos registros como
+// logins/OTP no relacionados desde esa misma IP tras solo un puñado de
+// autoafiliaciones. Sigue siendo un límite real (ver
+// src/middleware/strictRateLimit.js), solo que calibrado para ese volumen.
+// Se coloca ANTES del resto de la cadena de middlewares, igual que en las
+// demás rutas rate-limited de este archivo.
 router.post(
   '/convenio/invitacion/:token',
-  strictRateLimit,
+  invitacionRateLimit,
   uploadFields,
   parseMultipartJson,
   validate(createAfiliadoSchema),
