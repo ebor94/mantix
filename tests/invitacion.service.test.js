@@ -13,7 +13,8 @@
 
 const mockConvenioEmpleado = {
   findAll: jest.fn(),
-  bulkCreate: jest.fn()
+  bulkCreate: jest.fn(),
+  update: jest.fn()
 };
 const mockConvenioInvitacion = {
   findOne: jest.fn(),
@@ -44,6 +45,7 @@ const { ENGINE_VERSION } = require('../src/rules/convenioRules');
 beforeEach(() => {
   mockConvenioEmpleado.findAll.mockReset();
   mockConvenioEmpleado.bulkCreate.mockReset().mockResolvedValue([]);
+  mockConvenioEmpleado.update.mockReset();
   mockConvenioInvitacion.findOne.mockReset();
   mockConvenioInvitacion.findByPk.mockReset();
   mockConvenioInvitacion.create.mockReset();
@@ -472,7 +474,7 @@ describe('resolverToken', () => {
 describe('marcarUsada', () => {
   const transaccionFalsa = { id: 'tx-1' };
 
-  test('token ya usado por otro submit concurrente (0 filas afectadas) → AppError 410', async () => {
+  test('token ya usado por otro submit concurrente (0 filas afectadas) → AppError 410, y NO toca ConvenioEmpleado', async () => {
     mockConvenioInvitacion.update.mockResolvedValue([0]);
 
     await expect(
@@ -483,13 +485,38 @@ describe('marcarUsada', () => {
       { usadoEn: expect.any(Date), afiliadoId: 55 },
       { where: { token: 'tok', usadoEn: null }, transaction: transaccionFalsa }
     );
+    // Las dos actualizaciones deben ir acopladas: si la invitación no se pudo
+    // marcar (carrera concurrente), la nómina tampoco debe tocarse.
+    expect(mockConvenioInvitacion.findOne).not.toHaveBeenCalled();
+    expect(mockConvenioEmpleado.update).not.toHaveBeenCalled();
   });
 
-  test('caso exitoso: 1 fila afectada no lanza error', async () => {
+  // Regresión: marcarUsada marcaba ConvenioInvitacion.usadoEn/afiliadoId pero
+  // nunca reflejaba el registro en ConvenioEmpleado.afiliadoId — la pantalla
+  // de RRHH que lista el estado de la nómina (GET /convenios/:slug/empleados)
+  // seguía viendo al empleado como "sin invitar" para siempre, aunque ya
+  // se hubiera autoafiliado con éxito.
+  test('caso exitoso: además de marcar la invitación, actualiza ConvenioEmpleado.afiliadoId en la misma transacción', async () => {
     mockConvenioInvitacion.update.mockResolvedValue([1]);
+    mockConvenioInvitacion.findOne.mockResolvedValue({ empleadoId: 77 });
+    mockConvenioEmpleado.update.mockResolvedValue([1]);
 
     await expect(
       invitacionService.marcarUsada('tok', 55, transaccionFalsa)
     ).resolves.toBeUndefined();
+
+    // Se busca el empleadoId de la invitación ya marcada, en la misma transacción.
+    expect(mockConvenioInvitacion.findOne).toHaveBeenCalledWith({
+      where: { token: 'tok' },
+      attributes: ['empleadoId'],
+      transaction: transaccionFalsa
+    });
+
+    // ConvenioEmpleado se actualiza con el mismo afiliadoId, el empleadoId
+    // correcto y la MISMA transacción que el UPDATE de ConvenioInvitacion.
+    expect(mockConvenioEmpleado.update).toHaveBeenCalledWith(
+      { afiliadoId: 55 },
+      { where: { id: 77 }, transaction: transaccionFalsa }
+    );
   });
 });

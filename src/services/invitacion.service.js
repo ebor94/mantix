@@ -345,6 +345,15 @@ async function resolverToken(token) {
  * lanza AppError para que la transacción completa haga rollback: así un doble
  * submit simultáneo con el mismo token no genera dos afiliaciones.
  *
+ * Además, una vez confirmado que la invitación quedó marcada, refleja el
+ * mismo `afiliadoId` en `ConvenioEmpleado` (el registro de nómina): es lo que
+ * lee la pantalla de RRHH (`GET /convenios/:slug/empleados`) para saber que
+ * ese empleado ya completó su autoafiliación. Sin este segundo UPDATE,
+ * `ConvenioInvitacion` queda correcta pero la nómina nunca se entera —el
+ * empleado se ve para siempre como "sin invitar" aunque ya se afilió—, así
+ * que va dentro de la MISMA transacción: si este UPDATE fallara, debe
+ * revertir también el de la invitación, no dejar un estado a medias.
+ *
  * @param {string} token
  * @param {number} afiliadoId
  * @param {import('sequelize').Transaction} transaction
@@ -358,6 +367,20 @@ async function marcarUsada(token, afiliadoId, transaction) {
   if (afectadas === 0) {
     throw new AppError('Esta invitación ya fue utilizada', 410);
   }
+
+  // La invitación ya se marcó como usada arriba; se busca su empleadoId
+  // (no se recibe como parámetro, solo el token) para propagar el mismo
+  // afiliadoId al registro de nómina correspondiente.
+  const invitacion = await ConvenioInvitacion.findOne({
+    where: { token },
+    attributes: ['empleadoId'],
+    transaction
+  });
+
+  await ConvenioEmpleado.update(
+    { afiliadoId },
+    { where: { id: invitacion.empleadoId }, transaction }
+  );
 }
 
 module.exports = {
