@@ -263,6 +263,7 @@ SELECT * FROM (
                 THEN (SELECT s.monto FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre='SOLICANASTA' ORDER BY s.id DESC LIMIT 1)
             WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%') THEN '610000'
             WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%') THEN '1830000'
+            WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 3%') THEN '3050000'
             ELSE '' END                                           AS \`VALOR 1 2\`,
         ''                                                        AS \`FORMA LIQ 2 2\`,
         ''                                                        AS \`VALOR 2 2\`,
@@ -276,6 +277,7 @@ SELECT * FROM (
         CASE
             WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%') THEN '1000000'
             WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%') THEN '3000000'
+            WHEN EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 3%') THEN '5000000'
             ELSE '' END                                           AS \`VALOR 1 3\`,
         ''                                                        AS \`FORMA LIQ 2 3\`,
         ''                                                        AS \`VALOR 2 3\`
