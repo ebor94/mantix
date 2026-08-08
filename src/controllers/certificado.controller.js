@@ -356,7 +356,21 @@ async function generar(req, res, next) {
     }
 
     // ── DETALLE COSTO ANUAL ────────────────────────────────────────────────
-    if (y > 680) { doc.addPage(); y = 120; }
+    const tarifa = contrato && contrato.tarifa ? contrato.tarifa : null;
+    const valorPlan = Number((contrato && contrato.valorPlanExequial) || (tarifa && tarifa.valorBase) || 0);
+    const valorAdicionales = Number((contrato && contrato.valorAdicionales) || 0);
+    const valorAsistencia = afiliado.asistenciaFueraDeCasa === 'SI' && tarifa ? Number(tarifa.valorAsistencia || 0) : 0;
+    // La prima viene ANUAL; se distribuye en `nCuotas` para el cobro por cuota.
+    const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0), 0);
+
+    // Salto de página para TODO el bloque (encabezado + filas + divisor + totales
+    // + texto legal), de modo que no se solape con la imagen del pie (y=740).
+    let filasDetalle = 1;
+    if (valorAdicionales > 0)  filasDetalle++;
+    if (valorAsistencia > 0)   filasDetalle++;
+    if (totalSegurosAnual > 0) filasDetalle++;
+    const altoDetalle = 20 + filasDetalle * 15 + 13 + 25 + 75; // + texto legal (~4 líneas)
+    if (y + altoDetalle > 720) { doc.addPage(); y = 120; }
 
     doc.rect(40, y, 515, 16).fill('#cbcfd2');
     doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
@@ -364,13 +378,6 @@ async function generar(req, res, next) {
     y += 20;
 
     doc.fontSize(9).fillColor('black');
-
-    const tarifa = contrato && contrato.tarifa ? contrato.tarifa : null;
-    const valorPlan = Number((contrato && contrato.valorPlanExequial) || (tarifa && tarifa.valorBase) || 0);
-    const valorAdicionales = Number((contrato && contrato.valorAdicionales) || 0);
-    const valorAsistencia = afiliado.asistenciaFueraDeCasa === 'SI' && tarifa ? Number(tarifa.valorAsistencia || 0) : 0;
-    // La prima viene ANUAL; se distribuye en `nCuotas` para el cobro por cuota.
-    const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0), 0);
 
     doc.font('Helvetica-Bold').text(`PLAN ${productoComercial(afiliado.producto)} - TITULAR`, 40, y);
     doc.font('Helvetica').text(formatMoneda(valorPlan), 450, y);
@@ -437,7 +444,7 @@ async function generar(req, res, next) {
 
     // ── OBSERVACIONES ──────────────────────────────────────────────────────
     if (afiliado.observaciones) {
-      if (y > 700) { doc.addPage(); y = 120; }
+      if (y > 660) { doc.addPage(); y = 120; }
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black').text('Observaciones:', 40, y);
       y = doc.y + 3;
       doc.font('Helvetica').text(afiliado.observaciones, 40, y, { width: 515, align: 'justify' });
@@ -445,7 +452,7 @@ async function generar(req, res, next) {
     }
 
     // ── ASESOR ─────────────────────────────────────────────────────────────
-    if (y > 720) { doc.addPage(); y = 120; }
+    if (y > 700) { doc.addPage(); y = 120; }
 
     doc.fontSize(9).font('Helvetica-Bold').fillColor('black').text('Asesor:', 40, y);
     doc.font('Helvetica').text(nombreAsesor || 'Asesor Serfunorte', 90, y, { width: 400 });
