@@ -28,6 +28,12 @@ function buildPublicPdfUrl(pdfUrlRelativa) {
 }
 
 // ── Carné digital de afiliación ──────────────────────────────────────────────
+const fs   = require('fs');
+const path = require('path');
+
+// Imagen base empaquetada localmente (evita depender de la red/TLS del host
+// remoto — la descarga remota fallaba de forma intermitente con EPROTO).
+const CARNET_BASE_LOCAL = path.join(__dirname, '../../assets/carnet-base.png');
 const CARNET_BASE_URL =
   process.env.CARNET_BASE_URL ||
   'https://losolivoscucuta.com/difusiones/img/carnet.png';
@@ -37,6 +43,14 @@ let _carnetBaseCache = { buf: null, ts: 0 };
 const CARNET_BASE_TTL_MS = 5 * 60 * 1000;
 
 async function obtenerCarnetBase() {
+  // 1) Preferir el archivo local (robusto, sin red).
+  try {
+    if (fs.existsSync(CARNET_BASE_LOCAL)) {
+      return fs.readFileSync(CARNET_BASE_LOCAL);
+    }
+  } catch (_) { /* si falla la lectura local, se intenta el remoto */ }
+
+  // 2) Fallback: descargar de CARNET_BASE_URL (cacheada).
   if (_carnetBaseCache.buf && (Date.now() - _carnetBaseCache.ts) < CARNET_BASE_TTL_MS) {
     return _carnetBaseCache.buf;
   }
