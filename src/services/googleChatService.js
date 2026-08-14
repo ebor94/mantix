@@ -88,4 +88,38 @@ function notificarCorreccionVeolia(afiliado) {
   sendMessage(text).catch(() => {});
 }
 
-module.exports = { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico };
+/**
+ * Notificación: nueva afiliación registrada por un asesor (canal estándar).
+ * @param {object} afiliado  Resultado de createAfiliadoWithBeneficiarios (con beneficiarios)
+ * @param {string} asesorNombre  Nombre del asesor que registró
+ */
+function notificarNuevoAsesor(afiliado, asesorNombre) {
+  const nombre = [afiliado.primerNombre, afiliado.segundoNombre, afiliado.primerApellido, afiliado.segundoApellido]
+    .filter(Boolean).join(' ');
+  const doc   = `${afiliado.tipoDocumento} ${afiliado.numeroDocumento}`;
+  const cel   = afiliado.celular || '—';
+  const benef = afiliado.beneficiarios?.length ?? 0;
+  const asist = afiliado.asistenciaFueraDeCasa === 'SI' ? '✅ Sí'
+              : afiliado.asistenciaFueraDeCasa === 'NO' ? '❌ No' : '—';
+  const NOVEDAD = {
+    NUEVO: 'Nuevo', CAMBIO: 'Cambio', TRASLADO: 'Traslado', ACTUALIZACION: 'Actualización',
+    TRASLADO_COMPETENCIA: 'Traslado Competencia', TRASLADO_CANAL: 'Traslado Canal'
+  };
+  const novedad = NOVEDAD[afiliado.novedad] || afiliado.novedad || '—';
+
+  const text = [
+    `🟢 *Nueva afiliación registrada*`,
+    `👤 *Afiliado:* ${nombre}`,
+    `🪪 *Documento:* ${doc}`,
+    `📱 *Celular:* ${cel}`,
+    `🏷️ *Canal:* ${afiliado.canal || '—'}  ·  *Producto:* ${afiliado.producto || '—'}  ·  *Grupo:* ${afiliado.grupo || '—'}`,
+    `📋 *Novedad:* ${novedad}`,
+    `👨‍👩‍👧 *Beneficiarios:* ${benef}`,
+    `🏠 *Asistencia fuera de casa:* ${asist}`,
+    `🧑‍💼 *Asesor:* ${asesorNombre || '—'}`
+  ].join('\n');
+
+  sendMessage(text).catch(() => {});
+}
+
+module.exports = { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico, notificarNuevoAsesor };

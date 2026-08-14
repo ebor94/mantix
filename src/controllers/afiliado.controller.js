@@ -2,7 +2,7 @@ const afiliadoService = require('../services/afiliado.service');
 const AppError = require('../utils/AppError');
 const { sendAceptacion, sendOTP, sendImagenRecibo, sendTemplateImagenTexto } = require('../services/whatsappService');
 const axios = require('axios');
-const { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico } = require('../services/googleChatService');
+const { notificarNuevoVeolia, notificarCorreccionVeolia, notificarNuevoPublico, notificarNuevoAsesor } = require('../services/googleChatService');
 const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
@@ -206,6 +206,11 @@ async function create(req, res, next) {
     // Fire-and-forget: sincronizar con sv_crm_personas + prospecto (estado AFILIADO,
     // asignado al equivalente del asesor en el CRM vía el puente de identidad SSO).
     sincronizarAfiliado(result, req.usuario).catch(() => {});
+
+    // Fire-and-forget: notificar la nueva afiliación al chat de Google.
+    const asesorNombre = [req.usuario?.nombre, req.usuario?.apellido].filter(Boolean).join(' ').trim()
+      || `user:${req.usuario?.id || 'desconocido'}`;
+    notificarNuevoAsesor(result, asesorNombre);
 
     res.status(201).json({ success: true, message: 'Afiliado registrado exitosamente', data: result });
   } catch (error) {
