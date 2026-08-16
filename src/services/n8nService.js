@@ -21,6 +21,11 @@ const N8N_INVITACION_EMAIL_URL =
 const N8N_DRIVE_URL =
   process.env.N8N_DRIVE_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/archivar-r44-drive';
+const N8N_BIENVENIDA_URL =
+  process.env.N8N_BIENVENIDA_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/bienvenida-proveedor-r44';
+const PORTAL_URL =
+  process.env.R44_PORTAL_URL || 'https://losolivoscucuta.com/portalproveedores/login';
 const DRIVE_ROOT_FOLDER_ID =
   process.env.R44_DRIVE_ROOT_FOLDER_ID || '1PN4TRzIfT45vQiD2Q23cD_D66OujQSDn';
 const API_BASE =
@@ -192,10 +197,29 @@ async function archivarDocumentosEnDrive({ proveedorId, anio, carpeta, documento
   }
 }
 
+/**
+ * Envía el correo de bienvenida con las credenciales de acceso a un proveedor
+ * recién creado por el revisor de compras (vía workflow n8n con Gmail).
+ * Se espera (await): si falla, el controlador lo marca como no enviado pero la
+ * cuenta ya quedó creada y el revisor entrega las credenciales manualmente.
+ *
+ * @param {object} opts
+ * @param {string} opts.nombre
+ * @param {string} opts.email     correo del proveedor (también es el usuario)
+ * @param {string} opts.password  contraseña temporal en texto plano
+ * @param {string} [opts.tipo]    'vinculacion' | 'actualizacion'
+ */
+async function notificarBienvenidaProveedor({ nombre, email, password, tipo }) {
+  const payload = { nombre, email, password, tipo: tipo || null, url: PORTAL_URL };
+  const res = await axios.post(N8N_BIENVENIDA_URL, payload, { timeout: 15000 });
+  return res.data;
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
   notificarFirma,
   notificarInvitacionEmail,
   archivarDocumentosEnDrive,
+  notificarBienvenidaProveedor,
 };

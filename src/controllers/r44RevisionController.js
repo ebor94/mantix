@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { R44Proveedor, R44Revision, R44Documento, R44Usuario } = require('../models');
 const { generarR44Pdf, cargarProveedorCompleto } = require('../services/r44Pdf');
-const { archivarDocumentosEnDrive } = require('../services/n8nService');
+const { archivarDocumentosEnDrive, notificarBienvenidaProveedor } = require('../services/n8nService');
 const { carpetaProveedor } = require('../services/r44Carpeta');
 
 // Contraseña temporal legible (sin caracteres ambiguos) para cuentas creadas
@@ -384,6 +384,21 @@ const r44RevisionController = {
         preexistente: tipoNorm === 'actualizacion',
       });
 
+      // Enviar el correo de bienvenida con los accesos (vía n8n). Si falla, la
+      // cuenta ya quedó creada y el revisor entrega las credenciales manualmente.
+      let correoEnviado = false;
+      try {
+        await notificarBienvenidaProveedor({
+          nombre: usuario.nombre,
+          email: usuario.email,
+          password: passwordTemporal,
+          tipo: tipoNorm,
+        });
+        correoEnviado = true;
+      } catch (e) {
+        console.error('[bienvenida] no se pudo enviar el correo:', e.message);
+      }
+
       return res.status(201).json({
         ok: true,
         message: 'Cuenta de proveedor creada',
@@ -393,6 +408,7 @@ const r44RevisionController = {
           email: usuario.email,
           tipo: tipoNorm,
           password_temporal: passwordTemporal,
+          correo_enviado: correoEnviado,
         },
       });
     } catch (err) {
