@@ -68,4 +68,10 @@ router.get('/revisores/estadisticas',
 router.get('/revisores/indicadores',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.indicadores);
 
+// Plantilla SARLAFT (revisor de excelencia / admin)
+router.get('/revisores/sarlaft/exportar',
+  r44Auth, r44Authorize('revisor_excelencia', 'admin'), r44RevCtrl.exportarSarlaft);
+router.get('/revisores/sarlaft',
+  r44Auth, r44Authorize('revisor_excelencia', 'admin'), r44RevCtrl.plantillaSarlaft);
+
 module.exports = router;

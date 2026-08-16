@@ -79,6 +79,10 @@ module.exports = (sequelize, DataTypes) => {
     tiene_sistema_gestion:    DataTypes.BOOLEAN,
     cual_certificacion:       DataTypes.STRING(200),
     total_empleados:          DataTypes.INTEGER,
+
+    // Campos para plantilla SARLAFT
+    genero:                   DataTypes.STRING(20),   // extraído de la cédula (sexo)
+    municipio_codigo:         DataTypes.STRING(10),   // código DANE del municipio (del RUT)
   }, {
     tableName: 'r44_proveedores',
     timestamps: true,

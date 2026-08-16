@@ -188,6 +188,8 @@ const r44DocumentosController = {
             pj_celular:              d.telefono_2               ?? proveedor.pj_celular,
             pj_dv:                   d.dv                       ?? proveedor.pj_dv,
             pj_sigla:                d.sigla                    ?? proveedor.pj_sigla,
+            municipio_codigo:        d.municipio_codigo         ?? proveedor.municipio_codigo,
+            genero:                  d.genero                   ?? proveedor.genero,
             estado: 'extraccion_completada',
           });
         } else {
@@ -209,6 +211,8 @@ const r44DocumentosController = {
             pn_lugar_expedicion:    d.rl_lugar_expedicion      ?? proveedor.pn_lugar_expedicion,
             pn_fecha_nacimiento:    toISODate(d.rl_fecha_nacimiento) ?? proveedor.pn_fecha_nacimiento,
             pn_lugar_nacimiento:    d.rl_lugar_nacimiento      ?? proveedor.pn_lugar_nacimiento,
+            municipio_codigo:       d.municipio_codigo         ?? proveedor.municipio_codigo,
+            genero:                 d.genero                   ?? proveedor.genero,
             estado: 'extraccion_completada',
           });
         }
