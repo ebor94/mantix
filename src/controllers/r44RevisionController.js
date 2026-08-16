@@ -7,7 +7,53 @@
 // ============================================
 const { Op } = require('sequelize');
 const fs = require('fs');
+const path = require('path');
 const { R44Proveedor, R44Revision, R44Documento } = require('../models');
+const { generarR44Pdf, cargarProveedorCompleto } = require('../services/r44Pdf');
+const { archivarDocumentosEnDrive } = require('../services/n8nService');
+
+// ── Formato R-44 en PDF ────────────────────────────────────
+// Ruta en disco del PDF del formato R-44 de un proveedor.
+function rutaR44Pdf(proveedor) {
+  const dir = path.join(process.cwd(), 'uploads', 'r44', String(proveedor.id));
+  return path.join(dir, `R-44_${proveedor.radicado || proveedor.id}.pdf`);
+}
+
+// Nombre de la carpeta del proveedor en Drive (misma convención que los
+// documentos: "Nombre (NIT)"), para que el PDF quede junto a los soportes.
+function carpetaDrive(p) {
+  const esJuridica = p.tipo_persona === 'juridica';
+  const nombre = esJuridica ? (p.pj_razon_social || p.pj_nombre_comercial) : p.pn_nombre_completo;
+  const ident  = esJuridica ? p.pj_nit : p.pn_numero_documento;
+  return `${nombre || ('Proveedor ' + p.id)}${ident ? ' (' + ident + ')' : ''}`
+    .replace(/[\\/]/g, '-').trim();
+}
+
+/**
+ * Genera el PDF del formato R-44, lo guarda en disco y (opcionalmente) lo
+ * sube a la carpeta del proveedor en Google Drive vía n8n.
+ * Devuelve { ok, ruta, nombreArchivo } o { ok:false, error }.
+ */
+async function generarYArchivarR44(proveedorId, { archivar = true } = {}) {
+  const proveedor = await cargarProveedorCompleto(proveedorId);
+  if (!proveedor) return { ok: false, error: 'Proveedor no encontrado' };
+
+  const buffer = await generarR44Pdf(proveedor);
+  const ruta = rutaR44Pdf(proveedor);
+  fs.mkdirSync(path.dirname(ruta), { recursive: true });
+  fs.writeFileSync(ruta, buffer);
+
+  if (archivar) {
+    archivarDocumentosEnDrive({
+      proveedorId: proveedor.id,
+      anio: proveedor.anio_vinculacion || new Date().getFullYear(),
+      carpeta: carpetaDrive(proveedor),
+      documentos: [{ tipo: 'formato_r44', ruta }],
+    }).catch((e) => console.error('[r44-pdf] archivado en Drive falló:', e.message));
+  }
+
+  return { ok: true, ruta, nombreArchivo: path.basename(ruta) };
+}
 
 // ── Helpers plantilla SARLAFT ──────────────────────────────
 // Deriva el sector económico (sección DANE CIIU Rev.4) a partir del código CIIU.
@@ -214,6 +260,14 @@ const r44RevisionController = {
         observaciones:            observaciones || null,
       });
 
+      // Al aprobar: generar el formato R-44 en PDF y archivarlo en el Drive
+      // del proveedor. Fire-and-forget: no bloquea la respuesta al revisor.
+      if (estado === 'aprobado') {
+        generarYArchivarR44(proveedor.id)
+          .then((r) => { if (!r.ok) console.error('[r44-pdf] no generado:', r.error); })
+          .catch((e) => console.error('[r44-pdf] error generando/archivando:', e.message));
+      }
+
       return res.json({
         ok: true,
         data: {
@@ -221,6 +275,7 @@ const r44RevisionController = {
           radicado: proveedor.radicado,
           estado_anterior: estadoAnterior,
           estado_nuevo: estado,
+          r44_pdf: estado === 'aprobado' ? 'generando' : null,
         },
       });
     } catch (err) {
@@ -246,6 +301,45 @@ const r44RevisionController = {
       res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
       res.setHeader('Content-Disposition',
         `inline; filename="${doc.nombre_archivo_original || ('documento_' + doc.id)}"`);
+      fs.createReadStream(ruta).pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * POST /api/r44/revisores/proveedores/:id/r44-pdf
+   * (Re)genera el formato R-44 en PDF y lo sube al Drive del proveedor.
+   * Botón manual del revisor. Espera a que el PDF quede en disco.
+   */
+  async generarR44(req, res, next) {
+    try {
+      const r = await generarYArchivarR44(req.params.id, { archivar: true });
+      if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
+      return res.json({ ok: true, message: 'Formato R-44 generado y enviado a Drive', archivo: r.nombreArchivo });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * GET /api/r44/revisores/proveedores/:id/r44-pdf
+   * Sirve el PDF del formato R-44 inline. Si aún no existe en disco lo
+   * genera al vuelo (sin re-archivar en Drive).
+   */
+  async descargarR44(req, res, next) {
+    try {
+      const proveedor = await R44Proveedor.findByPk(req.params.id,
+        { attributes: ['id', 'radicado'] });
+      if (!proveedor) return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
+
+      const ruta = rutaR44Pdf(proveedor);
+      if (!fs.existsSync(ruta)) {
+        const r = await generarYArchivarR44(req.params.id, { archivar: false });
+        if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
+      }
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="R-44_${proveedor.radicado || proveedor.id}.pdf"`);
       fs.createReadStream(ruta).pipe(res);
     } catch (err) {
       next(err);

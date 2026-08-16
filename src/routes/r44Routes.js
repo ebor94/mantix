@@ -59,6 +59,12 @@ router.get('/revisores/proveedores/:id',
 router.patch('/revisores/proveedores/:id/estado',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.actualizarEstado);
 
+// Formato R-44 en PDF: (re)generar+archivar en Drive / descargar inline
+router.post('/revisores/proveedores/:id/r44-pdf',
+  r44Auth, r44Authorize(...REVISORES), r44RevCtrl.generarR44);
+router.get('/revisores/proveedores/:id/r44-pdf',
+  r44Auth, r44Authorize(...REVISORES), r44RevCtrl.descargarR44);
+
 router.get('/revisores/documentos/:id/descargar',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.descargarDocumento);
 
