@@ -6,6 +6,9 @@ module.exports = (sequelize, DataTypes) => {
     password_hash: { type: DataTypes.STRING(255), allowNull: false },
     rol:           { type: DataTypes.ENUM('proveedor','revisor_compras','revisor_excelencia','admin'), defaultValue: 'proveedor' },
     activo:        { type: DataTypes.BOOLEAN, defaultValue: true },
+    // Proveedor preexistente (ya trabajaba con la empresa antes del portal):
+    // su vinculación anual cuenta siempre como "actualización".
+    preexistente:  { type: DataTypes.BOOLEAN, defaultValue: false },
   }, {
     tableName: 'r44_usuarios',
     timestamps: true,

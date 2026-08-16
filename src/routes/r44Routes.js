@@ -53,6 +53,10 @@ const REVISORES = ['revisor_compras', 'revisor_excelencia', 'admin'];
 router.get('/revisores/proveedores',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.listar);
 
+// El revisor de compras da de alta la cuenta de un proveedor y marca el tipo
+router.post('/revisores/proveedores/nuevo',
+  r44Auth, r44Authorize('revisor_compras', 'admin'), r44RevCtrl.crearProveedorCuenta);
+
 router.get('/revisores/proveedores/:id',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.detalle);
 

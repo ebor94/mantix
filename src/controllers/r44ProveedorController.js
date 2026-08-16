@@ -5,6 +5,7 @@
 // PATCH  /api/r44/proveedores/:id      — actualizar borrador / enviar con firma
 // GET    /api/r44/proveedores/:id      — detalle (revisores/admin)
 // ============================================
+const { Op } = require('sequelize');
 const {
   R44Proveedor, R44RepresentanteLegal, R44Accionista,
   R44InfoFinanciera, R44RefBancaria, R44RefComercial,
@@ -201,11 +202,21 @@ const r44ProveedorController = {
       const anioActual = new Date().getFullYear();
       const esFirmaCompleta = firma?.base64 && firma?.aceptacion_terminos;
 
+      // Tipo de vinculación: "vinculación" sólo la primera vez. Es
+      // "actualización" si el proveedor es preexistente (migrado) o ya tiene
+      // un registro de un año anterior en el sistema.
+      const tienePrevio = await R44Proveedor.count({
+        where: { usuario_id: usuario.id, anio_vinculacion: { [Op.lt]: anioActual } },
+        transaction: t,
+      });
+      const tipoVinc = (usuario.preexistente || tienePrevio > 0) ? 'actualizacion' : 'vinculacion';
+
       const camposProveedor = {
         usuario_id:  usuario.id,
         tipo_persona: tp,
         anio_vinculacion: anioActual,
         ...mapearCampos(tp, db),
+        tipo_vinculacion: tipoVinc,
       };
 
       // Una vinculación por (usuario, año): cada año es un registro nuevo;

@@ -25,7 +25,7 @@ async function r44Auth(req, res, next) {
 
     const usuario = await R44Usuario.findOne({
       where: { id: payload.id, activo: true },
-      attributes: ['id', 'nombre', 'email', 'rol'],
+      attributes: ['id', 'nombre', 'email', 'rol', 'preexistente'],
     });
 
     if (!usuario) {

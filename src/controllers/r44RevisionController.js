@@ -8,25 +8,28 @@
 const { Op } = require('sequelize');
 const fs = require('fs');
 const path = require('path');
-const { R44Proveedor, R44Revision, R44Documento } = require('../models');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const { R44Proveedor, R44Revision, R44Documento, R44Usuario } = require('../models');
 const { generarR44Pdf, cargarProveedorCompleto } = require('../services/r44Pdf');
 const { archivarDocumentosEnDrive } = require('../services/n8nService');
+const { carpetaProveedor } = require('../services/r44Carpeta');
+
+// Contraseña temporal legible (sin caracteres ambiguos) para cuentas creadas
+// por el revisor. El proveedor la cambia al primer ingreso.
+function generarPasswordTemporal() {
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(10);
+  let s = '';
+  for (let i = 0; i < 10; i++) s += abc[bytes[i] % abc.length];
+  return s;
+}
 
 // ── Formato R-44 en PDF ────────────────────────────────────
 // Ruta en disco del PDF del formato R-44 de un proveedor.
 function rutaR44Pdf(proveedor) {
   const dir = path.join(process.cwd(), 'uploads', 'r44', String(proveedor.id));
   return path.join(dir, `R-44_${proveedor.radicado || proveedor.id}.pdf`);
-}
-
-// Nombre de la carpeta del proveedor en Drive (misma convención que los
-// documentos: "Nombre (NIT)"), para que el PDF quede junto a los soportes.
-function carpetaDrive(p) {
-  const esJuridica = p.tipo_persona === 'juridica';
-  const nombre = esJuridica ? (p.pj_razon_social || p.pj_nombre_comercial) : p.pn_nombre_completo;
-  const ident  = esJuridica ? p.pj_nit : p.pn_numero_documento;
-  return `${nombre || ('Proveedor ' + p.id)}${ident ? ' (' + ident + ')' : ''}`
-    .replace(/[\\/]/g, '-').trim();
 }
 
 /**
@@ -47,7 +50,7 @@ async function generarYArchivarR44(proveedorId, { archivar = true } = {}) {
     archivarDocumentosEnDrive({
       proveedorId: proveedor.id,
       anio: proveedor.anio_vinculacion || new Date().getFullYear(),
-      carpeta: carpetaDrive(proveedor),
+      carpeta: carpetaProveedor(proveedor),
       documentos: [{ tipo: 'formato_r44', ruta }],
     }).catch((e) => console.error('[r44-pdf] archivado en Drive falló:', e.message));
   }
@@ -171,7 +174,7 @@ const r44RevisionController = {
       const { count, rows } = await R44Proveedor.findAndCountAll({
         where,
         attributes: [
-          'id','radicado','anio_vinculacion','tipo_persona','estado',
+          'id','radicado','anio_vinculacion','tipo_persona','tipo_vinculacion','estado',
           'pj_razon_social','pj_nit','pj_municipio',
           'pn_nombre_completo','pn_numero_documento','pn_municipio_domicilio',
           'created_at',
@@ -341,6 +344,57 @@ const r44RevisionController = {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="R-44_${proveedor.radicado || proveedor.id}.pdf"`);
       fs.createReadStream(ruta).pipe(res);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
+   * POST /api/r44/revisores/proveedores/nuevo
+   * El revisor de compras da de alta la cuenta de un proveedor y define si es
+   * vinculación (nuevo) o actualización (preexistente). Genera una contraseña
+   * temporal que el revisor entrega al proveedor. Rol: revisor_compras / admin.
+   * Body: { nombre, email, tipo }  (tipo: 'vinculacion' | 'actualizacion')
+   */
+  async crearProveedorCuenta(req, res, next) {
+    try {
+      const { nombre, email, tipo } = req.body;
+      if (!nombre || !email) {
+        return res.status(400).json({ ok: false, error: 'Nombre y correo son obligatorios' });
+      }
+      const correo = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+        return res.status(400).json({ ok: false, error: 'Correo inválido' });
+      }
+      // Por defecto actualización (la mayoría son proveedores preexistentes)
+      const tipoNorm = tipo === 'vinculacion' ? 'vinculacion' : 'actualizacion';
+
+      const existe = await R44Usuario.findOne({ where: { email: correo } });
+      if (existe) {
+        return res.status(409).json({ ok: false, error: 'El correo ya está registrado' });
+      }
+
+      const passwordTemporal = generarPasswordTemporal();
+      const password_hash = await bcrypt.hash(passwordTemporal, 10);
+      const usuario = await R44Usuario.create({
+        nombre: String(nombre).trim(),
+        email: correo,
+        password_hash,
+        rol: 'proveedor',
+        preexistente: tipoNorm === 'actualizacion',
+      });
+
+      return res.status(201).json({
+        ok: true,
+        message: 'Cuenta de proveedor creada',
+        data: {
+          id: usuario.id,
+          nombre: usuario.nombre,
+          email: usuario.email,
+          tipo: tipoNorm,
+          password_temporal: passwordTemporal,
+        },
+      });
     } catch (err) {
       next(err);
     }

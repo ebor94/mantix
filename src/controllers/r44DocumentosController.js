@@ -7,6 +7,7 @@
 const path = require('path');
 const { R44Proveedor, R44Documento, R44ExtraccionLlm } = require('../models');
 const { notificarN8n, archivarDocumentosEnDrive } = require('../services/n8nService');
+const { carpetaProveedor } = require('../services/r44Carpeta');
 
 // tipo_documento (BD) -> clave corta usada en el archivado / nombres en Drive
 const TIPO_CORTO = { rut: 'rut', camara_comercio: 'camara', declaracion_renta: 'renta', cedula_rl: 'cedula' };
@@ -223,13 +224,7 @@ const r44DocumentosController = {
       // Archivar los documentos en Google Drive por año (fire-and-forget).
       // Se usa el nombre/NIT ya extraídos para nombrar la carpeta del proveedor.
       try {
-        const esJuridica = proveedor.tipo_persona === 'juridica';
-        const nombre = esJuridica
-          ? (proveedor.pj_razon_social || proveedor.pj_nombre_comercial)
-          : proveedor.pn_nombre_completo;
-        const ident = esJuridica ? proveedor.pj_nit : proveedor.pn_numero_documento;
-        const carpeta = `${nombre || ('Proveedor ' + proveedor.id)}${ident ? ' (' + ident + ')' : ''}`
-          .replace(/[\\/]/g, '-').trim();
+        const carpeta = carpetaProveedor(proveedor);
 
         const docs = await R44Documento.findAll({
           where: { proveedor_id: parseInt(proveedor_id) },
