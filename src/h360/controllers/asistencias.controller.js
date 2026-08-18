@@ -90,7 +90,16 @@ async function listar(req, res, next) {
       if (!estado) { conditions.push("estado = 'ENCOFRADO'") }
     }
 
-    if (estado)        { conditions.push('estado = ?');            params.push(estado) }
+    if (estado) {
+      // Soporta un solo estado ('PRESERVACION') o varios separados por coma ('PRESERVACION,ENCOFRADO')
+      const estados = String(estado).split(',').map(s => s.trim()).filter(Boolean)
+      if (estados.length === 1) {
+        conditions.push('estado = ?'); params.push(estados[0])
+      } else if (estados.length > 1) {
+        conditions.push(`estado IN (${estados.map(() => '?').join(',')})`)
+        params.push(...estados)
+      }
+    }
     if (identificacion){ conditions.push('identificacion LIKE ?'); params.push(`%${identificacion}%`) }
     if (fecha_desde)   { conditions.push('DATE(created_at) >= ?'); params.push(fecha_desde) }
     if (fecha_hasta)   { conditions.push('DATE(created_at) <= ?'); params.push(fecha_hasta) }
