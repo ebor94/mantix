@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { sequelize, Afiliado, Beneficiario, Empresa, Convenio, Seguro, ContratoValor, Tarifa, Trazabilidad } = require('../models');
+const { sequelize, Afiliado, Beneficiario, Empresa, Convenio, Seguro, ContratoValor, Tarifa, Trazabilidad, Usuario } = require('../models');
 const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const reciboCajaService = require('./reciboCaja.service');
@@ -371,7 +371,8 @@ async function getPendientes(usuario) {
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' },
-      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
+      { model: Usuario, as: 'asesor', attributes: ['id', 'nombre', 'apellido'] }
     ],
     order: [['createdAt', 'DESC']]
   });
