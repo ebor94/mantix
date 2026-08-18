@@ -122,6 +122,10 @@ router.get('/pendientes', auth, controller.getPendientes);
 // ── GET /afiliados/rechazados — ídem ──────────────────────────────────────
 router.get('/rechazados', auth, controller.getRechazados);
 
+// ── GET /afiliados/aprobados — reporte de aprobadas (solo aprobador/admin) ─
+//    Filtrable por rango de fecha de registro: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+router.get('/aprobados', auth, requirePermiso('afiliaciones', 'aprobar'), controller.getAprobados);
+
 // ── GET /afiliados/mis-del-dia — afiliaciones del asesor del día (todos los estados) ─
 router.get('/mis-del-dia',
   auth,

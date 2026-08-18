@@ -378,6 +378,41 @@ async function getPendientes(usuario) {
   });
 }
 
+/**
+ * Reporte de afiliaciones aprobadas (estadoRegistro=1), filtrable por rango de
+ * fecha de registro (createdAt). Para el aprobador y el administrador — el
+ * filtro asesor+empresa se conserva por consistencia, pero como estos roles
+ * tienen ver_todas devuelven todas las aprobadas. Solo lectura (sin export).
+ *
+ * @param {object} usuario  Usuario de sesión (req.usuario)
+ * @param {object} [params] { desde: 'YYYY-MM-DD', hasta: 'YYYY-MM-DD' }
+ */
+async function getAprobados(usuario, params = {}) {
+  const baseWhere = { estadoRegistro: 1 };
+
+  // Filtro por rango de fecha de registro (createdAt)
+  if (params.desde || params.hasta) {
+    const rango = {};
+    if (params.desde) rango[Op.gte] = new Date(`${params.desde}T00:00:00`);
+    if (params.hasta) rango[Op.lte] = new Date(`${params.hasta}T23:59:59.999`);
+    baseWhere.createdAt = rango;
+  }
+
+  const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
+
+  return Afiliado.findAll({
+    where,
+    include: [
+      { model: Beneficiario, as: 'beneficiarios', attributes: ['id'] },
+      { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
+      { model: Empresa, as: 'empresa' },
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
+      { model: Usuario, as: 'asesor', attributes: ['id', 'nombre', 'apellido'] }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+}
+
 async function aprobarAfiliado(id, usuarioId) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
@@ -1009,6 +1044,7 @@ module.exports = {
   getAllAfiliados,
   getAfiliadoById,
   getPendientes,
+  getAprobados,
   aprobarAfiliado,
   rechazarAfiliado,
   rechazarBeneficiarios,

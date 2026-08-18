@@ -490,6 +490,16 @@ async function getPendientes(req, res, next) {
   }
 }
 
+async function getAprobados(req, res, next) {
+  try {
+    const { desde, hasta } = req.query;
+    const afiliados = await afiliadoService.getAprobados(req.usuario, { desde, hasta });
+    res.json({ success: true, data: afiliados });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getRechazados(req, res, next) {
   try {
     const afiliados = await afiliadoService.getRechazados(req.usuario);
@@ -875,6 +885,7 @@ module.exports = {
   getById,
   getByHash,
   getPendientes,
+  getAprobados,
   aprobar,
   rechazar,
   rechazarParcial,
