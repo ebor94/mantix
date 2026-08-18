@@ -1,8 +1,36 @@
 /**
  * homenajes_sala.controller.js
  * Gestión de homenajes en sala (ingreso, visitas, salida) — formato R-22.
+ *
+ * Regla de inmutabilidad: cualquier bloque con `firma_familiar` no vacía
+ * queda BLOQUEADO. Solo admin puede modificar con `motivo` obligatorio;
+ * la lógica hace UPSERT del snapshot en `homenaje_sala_auditoria` antes.
  */
 const db = require('../config/db')
+
+// ── Helpers de bloqueo por firma ────────────────────────────────────────────
+function parseJson(v) {
+  if (!v) return null
+  if (typeof v === 'string') { try { return JSON.parse(v) } catch { return null } }
+  return v
+}
+
+function estaFirmado(dataJson) {
+  const d = parseJson(dataJson)
+  return !!(d && typeof d.firma_familiar === 'string' && d.firma_familiar.trim().length > 20)
+}
+
+async function insertarAuditoria(homenaje_sala_id, seccion, accion, snapshot, motivo, req, visita_id = null) {
+  const { usuario, nombre } = req.user || {}
+  await db.query(
+    `INSERT INTO homenaje_sala_auditoria
+     (homenaje_sala_id, visita_id, seccion, accion, snapshot_anterior, motivo, usuario_id, nombre_usuario)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [homenaje_sala_id, visita_id, seccion, accion,
+     snapshot ? JSON.stringify(snapshot) : null,
+     motivo || null, usuario, nombre || null]
+  )
+}
 
 // GET /api/h360/homenajes-sala?asistencia_id=&sala_id=&estado=&page=&limit=
 async function listar(req, res, next) {
@@ -92,16 +120,36 @@ async function crear(req, res, next) {
 async function guardarIngreso(req, res, next) {
   try {
     const { id } = req.params
-    const { ingreso_data, observaciones_generales } = req.body
+    const { rol } = req.user
+    const { ingreso_data, observaciones_generales, motivo } = req.body
     if (!ingreso_data) return res.status(400).json({ mensaje: 'ingreso_data requerido' })
+
+    // Chequeo de lock: si el ingreso ya está firmado, solo admin con motivo puede modificar
+    const [prev] = await db.query('SELECT ingreso_data FROM homenajes_sala WHERE id = ?', [id])
+    if (!prev.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
+    const yaFirmado = estaFirmado(prev[0].ingreso_data)
+
+    if (yaFirmado) {
+      if (rol !== 'admin') {
+        return res.status(423).json({
+          mensaje: 'El ingreso está firmado y bloqueado. Solo admin puede modificarlo.',
+        })
+      }
+      if (!motivo?.trim()) {
+        return res.status(400).json({
+          mensaje: 'Debes indicar el motivo para modificar un ingreso firmado.',
+        })
+      }
+      // Snapshot del estado anterior
+      await insertarAuditoria(id, 'INGRESO', 'UPDATE', parseJson(prev[0].ingreso_data), motivo.trim(), req)
+    }
 
     const campos = { ingreso_data: JSON.stringify(ingreso_data) }
     if (observaciones_generales !== undefined) campos.observaciones_generales = observaciones_generales
 
     await db.query('UPDATE homenajes_sala SET ? WHERE id = ?', [campos, id])
     const [rows] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [id])
-    if (!rows.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
-    res.json({ ok: true, homenaje: rows[0] })
+    res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado })
   } catch (err) { next(err) }
 }
 
@@ -109,8 +157,27 @@ async function guardarIngreso(req, res, next) {
 async function guardarSalida(req, res, next) {
   try {
     const { id } = req.params
-    const { salida_data, finalizar } = req.body
+    const { rol } = req.user
+    const { salida_data, finalizar, motivo } = req.body
     if (!salida_data) return res.status(400).json({ mensaje: 'salida_data requerido' })
+
+    const [prev] = await db.query('SELECT salida_data FROM homenajes_sala WHERE id = ?', [id])
+    if (!prev.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
+    const yaFirmado = estaFirmado(prev[0].salida_data)
+
+    if (yaFirmado) {
+      if (rol !== 'admin') {
+        return res.status(423).json({
+          mensaje: 'La salida está firmada y bloqueada. Solo admin puede modificarla.',
+        })
+      }
+      if (!motivo?.trim()) {
+        return res.status(400).json({
+          mensaje: 'Debes indicar el motivo para modificar una salida firmada.',
+        })
+      }
+      await insertarAuditoria(id, 'SALIDA', 'UPDATE', parseJson(prev[0].salida_data), motivo.trim(), req)
+    }
 
     const nuevoEstado = finalizar ? 'FINALIZADO' : 'SALIDA_REGISTRADA'
     await db.query(
@@ -118,8 +185,7 @@ async function guardarSalida(req, res, next) {
       [JSON.stringify(salida_data), nuevoEstado, id]
     )
     const [rows] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [id])
-    if (!rows.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
-    res.json({ ok: true, homenaje: rows[0] })
+    res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado })
   } catch (err) { next(err) }
 }
 
@@ -194,4 +260,60 @@ async function listarVisitas(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, crear, guardarIngreso, guardarSalida, agregarVisita, listarVisitas }
+// PATCH /api/h360/homenajes-sala/:id/visitas/:visitaId
+async function actualizarVisita(req, res, next) {
+  try {
+    const { id, visitaId } = req.params
+    const { rol } = req.user
+    const { fecha_visita, hora_visita, vo_bo, validacion_data, servicios_data, observaciones, firma_familiar, motivo } = req.body
+
+    const [prev] = await db.query(
+      'SELECT * FROM homenaje_sala_visitas WHERE id = ? AND homenaje_sala_id = ?',
+      [visitaId, id]
+    )
+    if (!prev.length) return res.status(404).json({ mensaje: 'Visita no encontrada' })
+
+    const yaFirmado = !!(prev[0].firma_familiar && String(prev[0].firma_familiar).trim().length > 20)
+    if (yaFirmado) {
+      if (rol !== 'admin') {
+        return res.status(423).json({ mensaje: 'La visita está firmada y bloqueada. Solo admin puede modificarla.' })
+      }
+      if (!motivo?.trim()) {
+        return res.status(400).json({ mensaje: 'Debes indicar el motivo para modificar una visita firmada.' })
+      }
+      await insertarAuditoria(id, 'VISITA', 'UPDATE', prev[0], motivo.trim(), req, visitaId)
+    }
+
+    const campos = {}
+    if (fecha_visita     !== undefined) campos.fecha_visita     = fecha_visita
+    if (hora_visita      !== undefined) campos.hora_visita      = hora_visita
+    if (vo_bo            !== undefined) campos.vo_bo            = vo_bo
+    if (validacion_data  !== undefined) campos.validacion_data  = JSON.stringify(validacion_data)
+    if (servicios_data   !== undefined) campos.servicios_data   = JSON.stringify(servicios_data)
+    if (observaciones    !== undefined) campos.observaciones    = observaciones
+    if (firma_familiar   !== undefined) campos.firma_familiar   = firma_familiar
+    if (!Object.keys(campos).length) return res.status(400).json({ mensaje: 'Nada que actualizar' })
+
+    await db.query('UPDATE homenaje_sala_visitas SET ? WHERE id = ?', [campos, visitaId])
+    const [rows] = await db.query('SELECT * FROM homenaje_sala_visitas WHERE id = ?', [visitaId])
+    res.json({ ok: true, visita: rows[0], desbloqueado: yaFirmado })
+  } catch (err) { next(err) }
+}
+
+// GET /api/h360/homenajes-sala/:id/auditoria
+async function obtenerAuditoria(req, res, next) {
+  try {
+    const { id } = req.params
+    const [rows] = await db.query(
+      `SELECT id, seccion, accion, snapshot_anterior, motivo, usuario_id, nombre_usuario,
+              visita_id, created_at
+       FROM homenaje_sala_auditoria
+       WHERE homenaje_sala_id = ?
+       ORDER BY created_at DESC`,
+      [id]
+    )
+    res.json(rows)
+  } catch (err) { next(err) }
+}
+
+module.exports = { listar, obtener, crear, guardarIngreso, guardarSalida, agregarVisita, listarVisitas, actualizarVisita, obtenerAuditoria }
