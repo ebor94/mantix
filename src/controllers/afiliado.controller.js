@@ -500,6 +500,39 @@ async function getAprobados(req, res, next) {
   }
 }
 
+/**
+ * Reenviar el correo de solicitud de firma (clausulado) al afiliado.
+ * Dispara el mismo webhook n8n que el registro (notificarFirma), pero a demanda
+ * desde /mis-afiliaciones. Solo el asesor dueño de la afiliación o un
+ * super_admin pueden reenviarla, y solo aplica al canal ASESOR (Veolia/convenio
+ * no usan este flujo de firma).
+ */
+async function reenviarFirma(req, res, next) {
+  try {
+    const { id } = req.params;
+    const afiliado = await Afiliado.findByPk(id);
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+    const esDueno = Number(afiliado.asesorId) === Number(req.usuario.id);
+    if (!esDueno && !req.usuario.es_super_admin) {
+      throw new AppError('No tienes permiso para reenviar la firma de esta afiliación', 403);
+    }
+    if (afiliado.origen !== 'ASESOR') {
+      throw new AppError('El reenvío de firma solo aplica a afiliaciones del canal asesor', 400);
+    }
+
+    // Se espera (await) para reportar el resultado real al usuario, a diferencia
+    // del registro que la dispara fire-and-forget.
+    const result = await notificarFirma(afiliado.id);
+    if (!result) {
+      throw new AppError('No se pudo enviar el correo de firma. Intenta de nuevo en unos minutos.', 502);
+    }
+    res.json({ success: true, message: 'Correo de firma enviado al afiliado' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getRechazados(req, res, next) {
   try {
     const afiliados = await afiliadoService.getRechazados(req.usuario);
@@ -886,6 +919,7 @@ module.exports = {
   getByHash,
   getPendientes,
   getAprobados,
+  reenviarFirma,
   aprobar,
   rechazar,
   rechazarParcial,

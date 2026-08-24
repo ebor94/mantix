@@ -126,6 +126,10 @@ router.get('/rechazados', auth, controller.getRechazados);
 //    Filtrable por rango de fecha de registro: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 router.get('/aprobados', auth, requirePermiso('afiliaciones', 'aprobar'), controller.getAprobados);
 
+// ── POST /afiliados/:id/reenviar-firma — reenviar correo de firma a demanda ─
+//    El controlador valida que sea el asesor dueño o super_admin.
+router.post('/:id/reenviar-firma', auth, controller.reenviarFirma);
+
 // ── GET /afiliados/mis-del-dia — afiliaciones del asesor del día (todos los estados) ─
 router.get('/mis-del-dia',
   auth,
