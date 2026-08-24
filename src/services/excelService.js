@@ -478,7 +478,7 @@ SELECT * FROM (
             THEN DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')
             ELSE '' END                                           AS \`FECHA DE NACIMIENTO PAGADOR\`,
         CASE WHEN a.diferenteAlContratante = 1 THEN a.sexo             ELSE '' END AS \`SEXO PAGADOR\`,
-        a.asesorId                                                AS \`CODIGO ASESOR\`,
+        IFNULL((SELECT u.codigo FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
         99999                                                     AS \`COD ZONA ASESOR\`,
         8                                                         AS \`CODIGO TELEFONO\`,
         a.celular                                                 AS \`TELEFONO\`,
