@@ -196,7 +196,7 @@ SELECT * FROM (
         CASE WHEN a.diferenteAlContratante = 1 THEN a.segundoNombre    ELSE '' END AS \`NOMBRE 2 PAGADOR\`,
         CASE WHEN a.diferenteAlContratante = 1 THEN DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y') ELSE '' END AS \`FECHA DE NACIMIENTO PAGADOR\`,
         CASE WHEN a.diferenteAlContratante = 1 THEN a.sexo             ELSE '' END AS \`SEXO PAGADOR\`,
-        IFNULL((SELECT u.codigo FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
+        IFNULL((SELECT u.cod_vendedor FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
         99999                                                     AS \`COD ZONA ASESOR\`,
         8                                                         AS \`CODIGO TELEFONO\`,
         a.celular                                                 AS \`TELEFONO\`,
@@ -478,7 +478,7 @@ SELECT * FROM (
             THEN DATE_FORMAT(a.fechaNacimiento, '%e/%c/%Y')
             ELSE '' END                                           AS \`FECHA DE NACIMIENTO PAGADOR\`,
         CASE WHEN a.diferenteAlContratante = 1 THEN a.sexo             ELSE '' END AS \`SEXO PAGADOR\`,
-        IFNULL((SELECT u.codigo FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
+        IFNULL((SELECT u.cod_vendedor FROM usuarios u WHERE u.id = a.asesorId LIMIT 1), a.asesorId) AS \`CODIGO ASESOR\`,
         99999                                                     AS \`COD ZONA ASESOR\`,
         8                                                         AS \`CODIGO TELEFONO\`,
         a.celular                                                 AS \`TELEFONO\`,

@@ -69,7 +69,12 @@ module.exports = (sequelize, DataTypes) => {
     codigo: {
       type: DataTypes.STRING(45),
       allowNull: true,
-      comment: 'Código del asesor usado en el plano Excel (columna CODIGO ASESOR)'
+      comment: 'Código interno del asesor (histórico). El consecutivo del recibo usa prefijo_recibo.'
+    },
+    cod_vendedor: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+      comment: 'Código de vendedor usado en el plano Excel (columna CODIGO ASESOR)'
     },
     activo: {
       type: DataTypes.BOOLEAN,
