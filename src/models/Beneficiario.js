@@ -96,7 +96,12 @@ module.exports = (sequelize, DataTypes) => {
     documentoUrl: {
       type: DataTypes.STRING(500),
       allowNull: true,
-      comment: 'Nombre del archivo de documento adjunto del beneficiario'
+      comment: 'Nombre del archivo de documento adjunto del beneficiario (frente)'
+    },
+    documentoReversoUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'Nombre del archivo de documento adjunto del beneficiario (reverso)'
     }
   }, {
     tableName: 'beneficiarios',

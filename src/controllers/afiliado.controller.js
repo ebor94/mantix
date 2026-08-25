@@ -156,9 +156,12 @@ function extractFiles(req, body) {
 
   if (Array.isArray(body.beneficiarios)) {
     body.beneficiarios = body.beneficiarios.map((b, i) => {
-      const campo = `beneficiario_doc_${i}`;
-      const file  = req.files?.[campo]?.[0];
-      return file ? { ...b, documentoUrl: file.filename } : b;
+      const file        = req.files?.[`beneficiario_doc_${i}`]?.[0];
+      const fileReverso = req.files?.[`beneficiario_doc_reverso_${i}`]?.[0];
+      const out = { ...b };
+      if (file)        out.documentoUrl        = file.filename;
+      if (fileReverso) out.documentoReversoUrl = fileReverso.filename;
+      return out;
     });
   }
 }

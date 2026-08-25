@@ -556,6 +556,7 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
     // corrección no trae uno nuevo (evita borrar archivos ya subidos).
     const prev = await Beneficiario.findAll({ where: { afiliadoId }, transaction });
     const prevDocByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoUrl]));
+    const prevRevByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoReversoUrl]));
 
     await Beneficiario.destroy({ where: { afiliadoId }, transaction });
     if (beneficiarios.length > 0) {
@@ -573,7 +574,8 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
           afiliadoId,
           activo: 1,
           motivoRechazo: null,
-          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
+          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null,
+          documentoReversoUrl: rest.documentoReversoUrl || prevRevByNumero.get(rest.numeroDocumento) || null
         };
       });
       await Beneficiario.bulkCreate(conId, { transaction });
@@ -670,6 +672,7 @@ async function reenviarAfiliacion(id, data, usuario) {
     if (beneficiarios.length > 0) {
       const prev = await Beneficiario.findAll({ where: { afiliadoId: id }, transaction });
       const prevDocByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoUrl]));
+    const prevRevByNumero = new Map(prev.map(p => [p.numeroDocumento, p.documentoReversoUrl]));
 
       await Beneficiario.destroy({ where: { afiliadoId: id }, transaction });
       const bConId = beneficiarios.map(b => {
@@ -688,7 +691,8 @@ async function reenviarAfiliacion(id, data, usuario) {
           afiliadoId: id,
           activo: 1,
           motivoRechazo: null,
-          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null
+          documentoUrl: rest.documentoUrl || prevDocByNumero.get(rest.numeroDocumento) || null,
+          documentoReversoUrl: rest.documentoReversoUrl || prevRevByNumero.get(rest.numeroDocumento) || null
         };
       });
       await Beneficiario.bulkCreate(bConId, { transaction });

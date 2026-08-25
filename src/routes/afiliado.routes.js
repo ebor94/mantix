@@ -32,12 +32,19 @@ const beneficiariosDocFields = Array.from({ length: 10 }, (_, i) => ({
   maxCount: 1
 }))
 
+// Segundo archivo por beneficiario (reverso de la cédula)
+const beneficiariosDocReversoFields = Array.from({ length: 10 }, (_, i) => ({
+  name: `beneficiario_doc_reverso_${i}`,
+  maxCount: 1
+}))
+
 const uploadFields = upload.fields([
   { name: 'soporte',              maxCount: 1 },
   { name: 'cedulaFrontal',        maxCount: 1 },
   { name: 'cedulaReverso',        maxCount: 1 },
   { name: 'contratoCompetencia',  maxCount: 1 },
-  ...beneficiariosDocFields
+  ...beneficiariosDocFields,
+  ...beneficiariosDocReversoFields
 ]);
 
 // ── POST /afiliados/veolia — registro público sin autenticación (Veolia) ───
