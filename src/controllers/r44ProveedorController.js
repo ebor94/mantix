@@ -352,7 +352,9 @@ const r44ProveedorController = {
       if (proveedor.usuario_id !== usuario.id) {
         return res.status(403).json({ ok: false, error: 'Sin permisos para modificar este formulario' });
       }
-      const ESTADOS_EDITABLES = ['borrador', 'documentos_cargados', 'extraccion_completada'];
+      // 'requiere_correccion' reabre el formulario: el revisor lo devolvió para
+      // que el proveedor complete/corrija y lo reenvíe (vuelve a pendiente_revision).
+      const ESTADOS_EDITABLES = ['borrador', 'documentos_cargados', 'extraccion_completada', 'requiere_correccion'];
       if (!ESTADOS_EDITABLES.includes(proveedor.estado)) {
         return res.status(409).json({ ok: false, error: 'El formulario ya fue enviado y no puede modificarse' });
       }
