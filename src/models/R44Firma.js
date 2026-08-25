@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
     acepta_tratamiento: { type: DataTypes.BOOLEAN, defaultValue: false },
     acepta_declaracion: { type: DataTypes.BOOLEAN, defaultValue: false },
     token_firma:        DataTypes.STRING(100),
-    firma_electronica:  DataTypes.TEXT,
+    firma_electronica:  DataTypes.TEXT('medium'),  // MEDIUMTEXT: soporta firmas por imagen subida (base64 > 64KB)
   }, {
     tableName: 'r44_firma_declaracion',
     timestamps: true,
