@@ -384,6 +384,7 @@ SELECT * FROM (
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 2%')
                 THEN '21'
             WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
+                 AND IFNULL(a.asistenciaFueraDeCasa, '') <> 'SI'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SOLICANASTA%')
                 THEN '19'
             WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
