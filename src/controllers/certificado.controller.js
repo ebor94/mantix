@@ -102,6 +102,17 @@ async function generar(req, res, next) {
       order: [['parentesco', 'ASC']]
     });
 
+    // Cuando el asegurado principal se registró como beneficiario (caso
+    // "diferente al contratante"), sus datos personales son los del TITULAR
+    // del certificado. Se extrae para pintarlo arriba y se excluye de la lista
+    // de beneficiarios. Producto/Grupo/Canal siguen viniendo del afiliado
+    // (son datos del plan, no de la persona).
+    const aseguradoPrincipal = beneficiarios.find(b => b.parentesco === 'ASEGURADO PRINCIPAL');
+    const titular = aseguradoPrincipal || afiliado;
+    const beneficiariosLista = aseguradoPrincipal
+      ? beneficiarios.filter(b => b !== aseguradoPrincipal)
+      : beneficiarios;
+
     const contrato = await ContratoValor.findOne({
       where: { afiliadoId },
       include: [{ model: Tarifa, as: 'tarifa' }]
@@ -231,17 +242,17 @@ async function generar(req, res, next) {
 
     doc.fontSize(9).fillColor('black');
     doc.font('Helvetica-Bold').text('Documento:', 40, y);
-    doc.font('Helvetica').text(`${afiliado.tipoDocumento} ${afiliado.numeroDocumento}`, 110, y);
+    doc.font('Helvetica').text(`${titular.tipoDocumento} ${titular.numeroDocumento}`, 110, y);
     doc.font('Helvetica-Bold').text('Nombre Completo:', 240, y);
-    doc.font('Helvetica').text(nombreCompleto(afiliado), 340, y, { width: 215 });
+    doc.font('Helvetica').text(nombreCompleto(titular), 340, y, { width: 215 });
 
     y += 18;
     doc.font('Helvetica-Bold').text('Fecha Nacimiento:', 40, y);
-    doc.font('Helvetica').text(formatFecha(afiliado.fechaNacimiento), 135, y);
+    doc.font('Helvetica').text(formatFecha(titular.fechaNacimiento), 135, y);
     doc.font('Helvetica-Bold').text('Edad:', 220, y);
-    doc.font('Helvetica').text(String(afiliado.edad || calcularEdad(afiliado.fechaNacimiento)), 255, y);
+    doc.font('Helvetica').text(String(titular.edad || calcularEdad(titular.fechaNacimiento)), 255, y);
     doc.font('Helvetica-Bold').text('Género:', 300, y);
-    doc.font('Helvetica').text(afiliado.sexo || '', 345, y);
+    doc.font('Helvetica').text(titular.sexo || '', 345, y);
     doc.font('Helvetica-Bold').text('Producto:', 380, y);
     doc.font('Helvetica').text(productoComercial(afiliado.producto), 430, y);
 
@@ -259,7 +270,7 @@ async function generar(req, res, next) {
       .text('INFORMACIÓN DE AFILIADOS', 0, y + 3, { align: 'center' });
     y += 20;
 
-    if (beneficiarios.length > 0) {
+    if (beneficiariosLista.length > 0) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
       doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
@@ -274,7 +285,7 @@ async function generar(req, res, next) {
       y += 15;
 
       doc.font('Helvetica').fontSize(7.5);
-      for (const ben of beneficiarios) {
+      for (const ben of beneficiariosLista) {
         const nombre     = nombreCompleto(ben);
         const parentesco = ben.parentesco || '';
         // Altura de la fila según la celda más alta (nombre/parentesco pueden envolver)
