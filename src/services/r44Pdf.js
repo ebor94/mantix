@@ -254,12 +254,11 @@ function generarR44Pdf(p) {
       doc.fillColor('#000'); doc.x = M; doc.y += 38;
 
       // ── I. DILIGENCIAMIENTO ──
+      const tipoVincTxt = p.tipo_vinculacion === 'vinculacion' ? 'Vinculación'
+        : p.tipo_vinculacion === 'actualizacion' ? 'Actualización' : fmt(p.tipo_vinculacion);
       sectionBar(doc, 'I. Datos de diligenciamiento');
       fields(doc, [
-        { l: 'Ciudad de diligenciamiento', v: p.ciudad_diligenciamiento },
-        { l: 'Tipo de vinculación', v: p.tipo_vinculacion },
-        { l: 'Funcionario que diligencia', v: p.funcionario_diligencia },
-        { l: 'Teléfono funcionario', v: p.telefono_funcionario },
+        { l: 'Tipo de vinculación', v: tipoVincTxt, full: true },
       ]);
 
       // ── II. IDENTIFICACIÓN ──
