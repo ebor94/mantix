@@ -391,7 +391,7 @@ SELECT * FROM (
                  AND a.asistenciaFueraDeCasa = 'SI'
                 THEN '5'
             WHEN a.grupo = 'UNIFAMILIAR' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
-                THEN '23'
+                THEN '19'
             -- ======== UNIPERSONAL / INDIVIDUAL ========
             WHEN a.grupo = 'UNIPERSONAL' THEN '10'
             WHEN a.grupo = 'INDIVIDUAL'  THEN '27'
