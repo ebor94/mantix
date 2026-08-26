@@ -31,12 +31,20 @@ const beneficiariosDocFields = Array.from({ length: 10 }, (_, i) => ({
   maxCount: 1
 }));
 
+// Segundo archivo por beneficiario (reverso de la cédula). Debe declararse aquí
+// o multer.fields rechaza el campo y falla el guardado del borrador.
+const beneficiariosDocReversoFields = Array.from({ length: 10 }, (_, i) => ({
+  name: `beneficiario_doc_reverso_${i}`,
+  maxCount: 1
+}));
+
 const uploadFields = upload.fields([
   { name: 'soporte',              maxCount: 1 },
   { name: 'cedulaFrontal',        maxCount: 1 },
   { name: 'cedulaReverso',        maxCount: 1 },
   { name: 'contratoCompetencia',  maxCount: 1 },
-  ...beneficiariosDocFields
+  ...beneficiariosDocFields,
+  ...beneficiariosDocReversoFields
 ]);
 
 // GET    /afiliados/borradores        — listar borradores del asesor

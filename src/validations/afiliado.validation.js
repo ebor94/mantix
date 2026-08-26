@@ -45,6 +45,7 @@ const beneficiarioSchema = Joi.object({
   // Sin esto, stripUnknown:true del middleware Joi los elimina del payload
   // antes de llegar al controller (y se pierde el documentoUrl al corregir).
   documentoUrl:  Joi.string().max(500).allow('', null).optional(),
+  documentoReversoUrl: Joi.string().max(500).allow('', null).optional(),
   activo:        Joi.alternatives()
                    .try(Joi.boolean(), Joi.number().valid(0, 1))
                    .optional(),
@@ -206,7 +207,15 @@ const createAfiliadoSchema = Joi.object({
   referenciaPago2: Joi.string().max(200).allow('', null).trim(),
   referenciaPago3: Joi.string().max(200).allow('', null).trim(),
   fechaPagoTentativa: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
-  // soportePago, cedulaFrontal, cedulaReverso se inyectan en el controller desde req.files — no vienen en el body
+  // soportePago, cedulaFrontal, cedulaReverso se inyectan en el controller desde
+  // req.files cuando se sube un archivo nuevo. Pero también pueden venir en el
+  // body como nombre ya subido (borrador recuperado / corrección sin re-subir);
+  // se declaran para que stripUnknown no los elimine. extractFiles() los
+  // sobrescribe después de Joi si llega un archivo nuevo.
+  soportePago:         Joi.string().max(500).allow('', null).optional(),
+  cedulaFrontal:       Joi.string().max(500).allow('', null).optional(),
+  cedulaReverso:       Joi.string().max(500).allow('', null).optional(),
+  contratoCompetencia: Joi.string().max(500).allow('', null).optional(),
 
   // ── Afiliado diferente al contratante ───────────────────────
   diferenteAlContratante: Joi.number().integer().valid(0, 1).allow(null).default(0),

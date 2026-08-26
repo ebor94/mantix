@@ -56,18 +56,28 @@ async function actualizar(id, asesorId, payload) {
     }
   }
 
-  // Para beneficiarios: emparejar por numeroDocumento y conservar documentoUrl previo
+  // Para beneficiarios: emparejar por numeroDocumento y conservar documentoUrl
+  // y documentoReversoUrl previos (frente y reverso de la cédula).
   if (Array.isArray(payload.beneficiarios)) {
     const prevDocByNumero = new Map(
       prevBeneficiarios
         .filter(b => b.numeroDocumento)
         .map(b => [b.numeroDocumento, b.documentoUrl])
     );
+    const prevRevByNumero = new Map(
+      prevBeneficiarios
+        .filter(b => b.numeroDocumento)
+        .map(b => [b.numeroDocumento, b.documentoReversoUrl])
+    );
     payload.beneficiarios = payload.beneficiarios.map(b => {
-      if (!b.documentoUrl && b.numeroDocumento && prevDocByNumero.get(b.numeroDocumento)) {
-        return { ...b, documentoUrl: prevDocByNumero.get(b.numeroDocumento) };
+      const out = { ...b };
+      if (!out.documentoUrl && out.numeroDocumento && prevDocByNumero.get(out.numeroDocumento)) {
+        out.documentoUrl = prevDocByNumero.get(out.numeroDocumento);
       }
-      return b;
+      if (!out.documentoReversoUrl && out.numeroDocumento && prevRevByNumero.get(out.numeroDocumento)) {
+        out.documentoReversoUrl = prevRevByNumero.get(out.numeroDocumento);
+      }
+      return out;
     });
   }
 
