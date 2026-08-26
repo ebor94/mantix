@@ -340,7 +340,7 @@ async function generar(req, res, next) {
       if (y > 680) { doc.addPage(); y = 120; }
       doc.rect(40, y, 515, 16).fill('#cbcfd2');
       doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
-        .text('SEGUROS', 0, y + 3, { align: 'center' });
+        .text('SEGUROS DEL TITULAR', 0, y + 3, { align: 'center' });
       y += 20;
 
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
