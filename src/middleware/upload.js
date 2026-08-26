@@ -29,11 +29,20 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Límite de tamaño por archivo. Se acepta MAX_FILE_SIZE (en bytes) por
+// compatibilidad; si no, MAX_FILE_SIZE_MB (en MB, lo que hay en el .env);
+// por defecto 10 MB. Antes se leía solo MAX_FILE_SIZE y, como el .env define
+// MAX_FILE_SIZE_MB, el límite efectivo caía al default viejo de 5 MB y las
+// fotos/PDF de celular (> 5 MB) fallaban con "file too large".
+const maxFileSizeBytes = process.env.MAX_FILE_SIZE
+  ? parseInt(process.env.MAX_FILE_SIZE, 10)
+  : (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 10) * 1024 * 1024;
+
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB
+    fileSize: maxFileSizeBytes
   }
 });
 

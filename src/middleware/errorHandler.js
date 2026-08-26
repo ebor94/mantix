@@ -44,6 +44,21 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Error de multer (subida de archivos): traducir a mensaje claro en español.
+  if (err.name === 'MulterError') {
+    const maxMb = process.env.MAX_FILE_SIZE
+      ? Math.round(parseInt(process.env.MAX_FILE_SIZE, 10) / (1024 * 1024))
+      : (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 10);
+    const mensajes = {
+      LIMIT_FILE_SIZE: `El archivo supera el tamaño máximo permitido (${maxMb} MB). Reduce o comprime la imagen/PDF e inténtalo de nuevo.`,
+      LIMIT_UNEXPECTED_FILE: 'Se envió un archivo en un campo no permitido.'
+    };
+    return res.status(400).json({
+      success: false,
+      message: mensajes[err.code] || `Error al subir el archivo: ${err.message}`
+    });
+  }
+
   // Error genérico
   const cuerpo = {
     success: false,
