@@ -107,6 +107,17 @@ async function crear(req, res, next) {
     const [[sala]] = await db.query('SELECT id FROM salas_velacion WHERE id = ?', [sala_id])
     if (!sala) return res.status(404).json({ mensaje: 'Sala no encontrada' })
 
+    // Exclusividad con homenaje en residencia
+    const [enRes] = await db.query(
+      'SELECT id FROM homenajes_residencia WHERE asistencia_id = ? LIMIT 1',
+      [asistencia_id]
+    )
+    if (enRes.length) {
+      return res.status(409).json({
+        mensaje: 'Esta asistencia ya tiene un homenaje en residencia registrado. No puede tener también en sala.',
+      })
+    }
+
     const [r] = await db.query(
       'INSERT INTO homenajes_sala (asistencia_id, sala_id, observaciones_generales, created_by) VALUES (?,?,?,?)',
       [asistencia_id, sala_id, observaciones_generales || null, usuario]
