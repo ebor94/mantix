@@ -12,4 +12,9 @@ router.patch('/:id/equipo-velacion',         requireRol('supervisora','admin'), 
 router.post('/:id/novedades',                requireRol('supervisora','admin'),                              ctrl.agregarNovedad)
 router.patch('/:id/novedades/:novedadId',    requireRol('supervisora','admin'),                              ctrl.actualizarNovedad)
 
+// Tokens de confirmación por WhatsApp
+router.post('/:id/tokens',                   requireRol('supervisora','admin'),                              ctrl.solicitarToken)
+router.post('/:id/tokens/:tokenId/verificar',requireRol('supervisora','admin'),                              ctrl.verificarToken)
+router.post('/:id/tokens/:tokenId/omitir',   requireRol('admin'),                                            ctrl.omitirToken)
+
 module.exports = router

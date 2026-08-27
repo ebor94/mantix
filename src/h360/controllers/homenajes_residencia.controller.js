@@ -8,6 +8,14 @@
  *  - Auditoría en homenaje_residencia_auditoria (snapshot + motivo).
  */
 const db = require('../config/db')
+const { sendOTP } = require('../../services/whatsappService')
+
+// TTL del token en minutos
+const TOKEN_TTL_MIN = 10
+
+function generarCodigo() {
+  return String(Math.floor(100000 + Math.random() * 900000))  // 6 dígitos
+}
 
 function parseJson(v) {
   if (!v) return null
@@ -124,14 +132,150 @@ async function crear(req, res, next) {
 async function guardarPrimeraLlamada(req, res, next) {
   try {
     const { id } = req.params
-    const { primera_llamada_data } = req.body
+    const { rol } = req.user
+    const { primera_llamada_data, token_id } = req.body
     if (!primera_llamada_data) return res.status(400).json({ mensaje: 'primera_llamada_data requerido' })
     const [ok] = await db.query('SELECT id FROM homenajes_residencia WHERE id = ?', [id])
     if (!ok.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
+
+    // Requiere token VERIFICADO u OMITIDO_ADMIN salvo que sea admin sin token
+    if (rol !== 'admin') {
+      if (!token_id) {
+        return res.status(400).json({
+          mensaje: 'Debes enviar y verificar el token de confirmación al familiar antes de guardar.',
+        })
+      }
+      const [tks] = await db.query(
+        `SELECT estado FROM homenaje_residencia_tokens
+         WHERE id = ? AND homenaje_residencia_id = ? AND seccion = 'PRIMERA_LLAMADA'`,
+        [token_id, id]
+      )
+      if (!tks.length) {
+        return res.status(400).json({ mensaje: 'Token no encontrado para esta llamada.' })
+      }
+      if (tks[0].estado !== 'VERIFICADO' && tks[0].estado !== 'OMITIDO_ADMIN') {
+        return res.status(400).json({
+          mensaje: `El token está en estado ${tks[0].estado}. Debe estar VERIFICADO u OMITIDO_ADMIN.`,
+        })
+      }
+    }
+
+    // Enriquecer JSON con token_id (evidencia dentro del mismo registro)
+    const dataConToken = { ...primera_llamada_data, token_id: token_id || null }
     await db.query('UPDATE homenajes_residencia SET primera_llamada_data = ? WHERE id = ?',
-      [JSON.stringify(primera_llamada_data), id])
+      [JSON.stringify(dataConToken), id])
     const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [id])
     res.json({ ok: true, homenaje: rows[0] })
+  } catch (err) { next(err) }
+}
+
+// POST /api/h360/homenajes-residencia/:id/tokens
+async function solicitarToken(req, res, next) {
+  try {
+    const { id } = req.params
+    const { usuario } = req.user
+    const { seccion = 'PRIMERA_LLAMADA', telefono } = req.body
+    if (!telefono) return res.status(400).json({ mensaje: 'telefono requerido' })
+    if (!['PRIMERA_LLAMADA','SEGUNDA_LLAMADA','EQUIPO_VELACION'].includes(seccion)) {
+      return res.status(400).json({ mensaje: 'seccion inválida' })
+    }
+
+    const [ok] = await db.query('SELECT id FROM homenajes_residencia WHERE id = ?', [id])
+    if (!ok.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
+
+    const codigo = generarCodigo()
+    const expira = new Date(Date.now() + TOKEN_TTL_MIN * 60 * 1000)
+
+    // Insertar primero para tener el ID; el envío WhatsApp es fire-and-continue
+    const [r] = await db.query(
+      `INSERT INTO homenaje_residencia_tokens
+       (homenaje_residencia_id, seccion, telefono, token, expira_at, usuario_solicita)
+       VALUES (?,?,?,?,?,?)`,
+      [id, seccion, telefono, codigo, expira, usuario]
+    )
+    const tokenId = r.insertId
+
+    // Enviar por WhatsApp con la plantilla toke_acceso
+    try {
+      const resp = await sendOTP(telefono, codigo, `Homenaje ${id}`)
+      await db.query('UPDATE homenaje_residencia_tokens SET respuesta_whatsapp = ? WHERE id = ?',
+        [JSON.stringify({ ok: true, provider: resp?.data || resp }), tokenId])
+    } catch (waErr) {
+      await db.query('UPDATE homenaje_residencia_tokens SET respuesta_whatsapp = ? WHERE id = ?',
+        [JSON.stringify({ ok: false, error: waErr.message }), tokenId])
+      return res.status(502).json({
+        mensaje: 'No se pudo enviar el token por WhatsApp: ' + waErr.message,
+        token_id: tokenId,
+      })
+    }
+
+    res.status(201).json({
+      ok: true,
+      token_id: tokenId,
+      telefono,
+      expira_at: expira.toISOString(),
+      ttl_minutos: TOKEN_TTL_MIN,
+    })
+  } catch (err) { next(err) }
+}
+
+// POST /api/h360/homenajes-residencia/:id/tokens/:tokenId/verificar
+async function verificarToken(req, res, next) {
+  try {
+    const { id, tokenId } = req.params
+    const { usuario } = req.user
+    const { codigo } = req.body
+    if (!codigo) return res.status(400).json({ mensaje: 'codigo requerido' })
+
+    const [rows] = await db.query(
+      `SELECT * FROM homenaje_residencia_tokens
+       WHERE id = ? AND homenaje_residencia_id = ?`,
+      [tokenId, id]
+    )
+    if (!rows.length) return res.status(404).json({ mensaje: 'Token no encontrado' })
+    const t = rows[0]
+
+    if (t.estado === 'VERIFICADO')     return res.status(400).json({ mensaje: 'Este token ya fue verificado.' })
+    if (t.estado === 'OMITIDO_ADMIN')  return res.status(400).json({ mensaje: 'Este token fue omitido por admin.' })
+
+    if (t.expira_at && new Date(t.expira_at) < new Date()) {
+      await db.query("UPDATE homenaje_residencia_tokens SET estado='EXPIRADO' WHERE id = ?", [tokenId])
+      return res.status(410).json({ mensaje: 'El token ha expirado. Solicita uno nuevo.' })
+    }
+
+    if (String(codigo).trim() !== String(t.token).trim()) {
+      return res.status(400).json({ mensaje: 'Código incorrecto.' })
+    }
+
+    await db.query(
+      "UPDATE homenaje_residencia_tokens SET estado='VERIFICADO', verificado_at=NOW(), usuario_verifica=? WHERE id = ?",
+      [usuario, tokenId]
+    )
+    res.json({ ok: true, verificado_at: new Date().toISOString() })
+  } catch (err) { next(err) }
+}
+
+// POST /api/h360/homenajes-residencia/:id/tokens/:tokenId/omitir
+async function omitirToken(req, res, next) {
+  try {
+    const { id, tokenId } = req.params
+    const { rol, usuario } = req.user
+    const { motivo } = req.body
+    if (rol !== 'admin') return res.status(403).json({ mensaje: 'Solo admin puede omitir un token.' })
+    if (!motivo?.trim()) return res.status(400).json({ mensaje: 'motivo obligatorio para omitir el token.' })
+
+    const [rows] = await db.query(
+      'SELECT estado FROM homenaje_residencia_tokens WHERE id = ? AND homenaje_residencia_id = ?',
+      [tokenId, id]
+    )
+    if (!rows.length) return res.status(404).json({ mensaje: 'Token no encontrado' })
+    if (rows[0].estado === 'VERIFICADO') return res.status(400).json({ mensaje: 'Este token ya fue verificado; no requiere omisión.' })
+
+    await db.query(
+      "UPDATE homenaje_residencia_tokens SET estado='OMITIDO_ADMIN', omitido_motivo=?, usuario_verifica=? WHERE id = ?",
+      [motivo.trim(), usuario, tokenId]
+    )
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
@@ -252,4 +396,5 @@ module.exports = {
   listar, obtener, crear,
   guardarPrimeraLlamada, guardarSegundaLlamada, guardarEquipoVelacion,
   agregarNovedad, actualizarNovedad, obtenerAuditoria,
+  solicitarToken, verificarToken, omitirToken,
 }
