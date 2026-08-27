@@ -24,6 +24,7 @@ const db = {
   Rol: require('./Rol')(sequelize, Sequelize.DataTypes),
   Usuario: require('./Usuario')(sequelize, Sequelize.DataTypes),
   Sede: require('./Sede')(sequelize, Sequelize.DataTypes),
+  ObservacionFrecuente: require('./ObservacionFrecuente')(sequelize, Sequelize.DataTypes),
   CategoriaMantenimiento: require('./CategoriaMantenimiento')(sequelize, Sequelize.DataTypes),
   UsuarioCategoria: require('./UsuarioCategoria')(sequelize, Sequelize.DataTypes), 
   TipoMantenimiento: require('./TipoMantenimiento')(sequelize, Sequelize.DataTypes),

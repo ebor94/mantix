@@ -35,6 +35,7 @@ const empresaRoutes = require('./empresa.routes');
 const convenioRoutes = require('./convenio.routes');
 const tarifaRoutes = require('./tarifa.routes');
 const certificadoRoutes = require('./certificado.routes');
+const observacionFrecuenteRoutes = require('./observacionFrecuente.routes');
 const h360Routes   = require('../h360/routes/index');   // ← Módulo Homenajes360
 const r44Routes    = require('./r44Routes');              // ← Módulo R-44 Proveedores Serfunorte
 const reciboCajaRoutes = require('./reciboCaja.routes');  // ← Módulo de recibos de caja y cuadre
@@ -74,6 +75,7 @@ router.use('/empresas', empresaRoutes);
 router.use('/convenios', convenioRoutes); // ← Convenios empresariales parametrizables
 router.use('/tarifas', tarifaRoutes);
 router.use('/certificados', certificadoRoutes);
+router.use('/observaciones-frecuentes', observacionFrecuenteRoutes);
 router.use('/h360',   h360Routes);   // ← Módulo Homenajes360
 router.use('/cym',    require('./cym.routes')); // ← Módulo CYM Mantenimiento Predios
 router.use('/r44',    r44Routes);    // ← Módulo R-44 Portal Proveedores Serfunorte
