@@ -424,24 +424,27 @@ async function guardarEquipoVelacion(req, res, next) {
 }
 
 // POST /api/h360/homenajes-residencia/:id/novedades
+// Supervisora registra la novedad y la asigna a un asistente_tanatologo.
+// La resolución (actividad + firmas) la hace el asistente vía /novedades-externas.
 async function agregarNovedad(req, res, next) {
   try {
     const { id } = req.params
     const { usuario } = req.user
-    const { fecha_reporte, hora_reporte, asistente_homenajes, hora_llegada, hora_retiro,
-            actividad_realizada, firma_cliente, firma_asistente } = req.body
+    const { fecha_reporte, hora_reporte, descripcion_novedad, asignado_a, asignado_a_nombre } = req.body
     if (!fecha_reporte) return res.status(400).json({ mensaje: 'fecha_reporte requerido' })
+    if (!descripcion_novedad?.trim()) return res.status(400).json({ mensaje: 'descripcion_novedad requerida' })
+    if (!asignado_a?.trim()) return res.status(400).json({ mensaje: 'Debes asignar la novedad a un asistente.' })
+
     const [ok] = await db.query('SELECT id FROM homenajes_residencia WHERE id = ?', [id])
     if (!ok.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
 
     const [r] = await db.query(
       `INSERT INTO homenaje_residencia_novedades
-       (homenaje_residencia_id, fecha_reporte, hora_reporte, asistente_homenajes,
-        hora_llegada, hora_retiro, actividad_realizada, firma_cliente, firma_asistente, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, fecha_reporte, hora_reporte || null, asistente_homenajes || null,
-       hora_llegada || null, hora_retiro || null, actividad_realizada || null,
-       firma_cliente || null, firma_asistente || null, usuario]
+       (homenaje_residencia_id, fecha_reporte, hora_reporte,
+        descripcion_novedad, asignado_a, asignado_a_nombre, estado, created_by)
+       VALUES (?,?,?,?,?,?, 'PENDIENTE', ?)`,
+      [id, fecha_reporte, hora_reporte || null,
+       descripcion_novedad.trim(), asignado_a.trim(), asignado_a_nombre || null, usuario]
     )
     const [rows] = await db.query('SELECT * FROM homenaje_residencia_novedades WHERE id = ?', [r.insertId])
     res.status(201).json(rows[0])

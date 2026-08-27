@@ -13,6 +13,7 @@ const sedesRoutes               = require('./sedes.routes')
 const salasRoutes               = require('./salas.routes')
 const homenajesSalaRoutes       = require('./homenajes_sala.routes')
 const homenajesResidenciaRoutes = require('./homenajes_residencia.routes')
+const novedadesExternasRoutes   = require('./novedades_externas.routes')
 
 // Auth H360 (login con LDAP — público)
 router.use('/auth', authRoutes)
@@ -25,6 +26,7 @@ router.use('/sedes',                 verifyToken, sedesRoutes)
 router.use('/salas',                 verifyToken, salasRoutes)
 router.use('/homenajes-sala',        verifyToken, homenajesSalaRoutes)
 router.use('/homenajes-residencia',  verifyToken, homenajesResidenciaRoutes)
+router.use('/novedades-externas',    verifyToken, novedadesExternasRoutes)
 
 // Health H360
 router.get('/health', (_, res) => res.json({ ok: true, modulo: 'Homenajes360', version: '1.0.0' }))
