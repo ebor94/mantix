@@ -333,11 +333,20 @@ const r44RevisionController = {
   async descargarR44(req, res, next) {
     try {
       const proveedor = await R44Proveedor.findByPk(req.params.id,
-        { attributes: ['id', 'radicado'] });
+        { attributes: ['id', 'radicado', 'updated_at'] });
       if (!proveedor) return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
 
       const ruta = rutaR44Pdf(proveedor);
-      if (!fs.existsSync(ruta)) {
+      // Regenerar si no existe o si el proveedor se modificó después del último
+      // PDF (así "Ver R-44" nunca muestra una versión desactualizada tras editar).
+      let regenerar = !fs.existsSync(ruta);
+      if (!regenerar) {
+        try {
+          const mtime = fs.statSync(ruta).mtime;
+          if (proveedor.updated_at && new Date(proveedor.updated_at) > mtime) regenerar = true;
+        } catch { regenerar = true; }
+      }
+      if (regenerar) {
         const r = await generarYArchivarR44(req.params.id, { archivar: false });
         if (!r.ok) return res.status(404).json({ ok: false, error: r.error });
       }
