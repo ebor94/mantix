@@ -19,7 +19,7 @@ const {
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
-const FORMAS_PAGO_QUE_GENERAN_RECIBO = ['EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'PAGO_EN_CAJA'];
+const FORMAS_PAGO_QUE_GENERAN_RECIBO = ['EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'];
 const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 
 // Mapping de forma de pago → tipo de aprobación
@@ -27,7 +27,9 @@ const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 //   TRANSFERENCIA         → aprueba CARTERA   (permiso caja.aprobar_bancarios)
 //   CORRESPONSAL          → aprueba CARTERA   (permiso caja.aprobar_bancarios)
 //   POSFECHADO_COBRADO    → aprueba CARTERA   (típicamente entra como consignación/transferencia)
-const FORMAS_EFECTIVO  = ['EFECTIVO', 'PAGO_EN_CAJA'];
+// Efecty y Super Giros funcionan igual que efectivo: generan recibo y los
+// aprueba el cajero (caja.aprobar_efectivo), no cartera.
+const FORMAS_EFECTIVO  = ['EFECTIVO', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'];
 const FORMAS_BANCARIAS = ['TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO'];
 
 /**

@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Formato: prefijo-NNNNNN (padStart 6)'
     },
     formaPago: {
-      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO', 'PAGO_EN_CAJA'),
+      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'),
       allowNull: false,
       field: 'forma_pago'
     },

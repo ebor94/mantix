@@ -911,6 +911,8 @@ doc.fontSize(20)
         const formaPagoLabel = {
           EFECTIVO:           'Efectivo',
           PAGO_EN_CAJA:       'Pago en caja',
+          EFECTY:             'Efecty',
+          SUPER_GIROS:        'Super Giros',
           TRANSFERENCIA:      'Transferencia bancaria',
           CORRESPONSAL:       'Corresponsal bancario',
           POSFECHADO_COBRADO: 'Posfechado (cobrado)'

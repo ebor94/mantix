@@ -224,7 +224,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // ── Primera cuota / soporte de pago ───────────────────────
     formaPago: {
-      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO', 'PAGO_EN_CAJA'),
+      type: DataTypes.ENUM('EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'),
       allowNull: true,
       comment: 'Forma de pago de la primera cuota'
     },
