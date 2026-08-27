@@ -483,8 +483,14 @@ function generarR44Pdf(p) {
         doc.font('Helvetica').fontSize(8.5).fillColor('#111').text(fmt(v), xR, y + 8, { width: wR, lineBreak: false });
         doc.fillColor('#000');
       };
-      linea('Nombre del firmante', firma.nombre_firmante, yF);
-      linea('Documento', firma.documento_firmante, yF + 20);
+      // Si no hay firmante explícito, se toma el representante legal
+      // (o la persona natural / razón social como último recurso).
+      const firmanteNombre = firma.nombre_firmante || rl.nombres_apellidos
+        || (esPN ? p.pn_nombre_completo : p.pj_razon_social);
+      const firmanteDoc = firma.documento_firmante || rl.numero_documento
+        || (esPN ? p.pn_numero_documento : p.pj_nit);
+      linea('Nombre del firmante', firmanteNombre, yF);
+      linea('Documento', firmanteDoc, yF + 20);
       linea('Ciudad y fecha de firma', `${fmt(firma.ciudad_firma)} · ${fdate(firma.fecha_firma)}`, yF + 40);
       doc.x = M; doc.y = yF + 78;
       fields(doc, [
