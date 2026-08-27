@@ -33,7 +33,7 @@ const r44AuthController = {
       const token = jwt.sign(
         { id: usuario.id, rol: usuario.rol, r44: true },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+        { expiresIn: process.env.R44_JWT_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '24h' }
       );
 
       return res.json({
@@ -126,7 +126,7 @@ const r44AuthController = {
       const token = jwt.sign(
         { id: usuario.id, rol: usuario.rol, r44: true },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+        { expiresIn: process.env.R44_JWT_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '24h' }
       );
 
       return res.status(201).json({
