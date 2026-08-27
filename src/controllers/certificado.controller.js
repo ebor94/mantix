@@ -262,6 +262,10 @@ async function generar(req, res, next) {
     doc.font('Helvetica-Bold').text('Canal:', 280, y);
     doc.font('Helvetica').text(afiliado.canal || '', 320, y);
 
+    y += 15;
+    doc.font('Helvetica-Bold').text('Fecha de vinculación:', 40, y);
+    doc.font('Helvetica').text(formatFecha(afiliado.vigenciaDesde), 155, y);
+
     y += 20;
 
     // ── INFORMACION DE AFILIADOS (BENEFICIARIOS) ───────────────────────────
