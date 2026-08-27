@@ -87,7 +87,16 @@ async function obtener(req, res, next) {
       'SELECT * FROM homenaje_residencia_novedades WHERE homenaje_residencia_id = ? ORDER BY fecha_reporte DESC, hora_reporte DESC',
       [id]
     )
-    res.json({ ...rows[0], novedades })
+    // Tokens de las 3 secciones (sin exponer el código, solo estado y metadatos)
+    const [tokens] = await db.query(
+      `SELECT id, seccion, telefono, estado, verificado_at, expira_at, omitido_motivo,
+              usuario_solicita, usuario_verifica, created_at
+       FROM homenaje_residencia_tokens
+       WHERE homenaje_residencia_id = ?
+       ORDER BY created_at DESC`,
+      [id]
+    )
+    res.json({ ...rows[0], novedades, tokens })
   } catch (err) { next(err) }
 }
 
@@ -128,17 +137,51 @@ async function crear(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ── Helper: ¿está la 1a llamada confirmada (token verificado/omitido)? ──
+async function primeraLlamadaConfirmada(id) {
+  const [prev] = await db.query('SELECT primera_llamada_data FROM homenajes_residencia WHERE id = ?', [id])
+  if (!prev.length) return { confirmada: false, prev: null }
+  const d = parseJson(prev[0].primera_llamada_data)
+  if (!d?.token_id) return { confirmada: false, prev: prev[0], data: d }
+  const [tks] = await db.query('SELECT estado FROM homenaje_residencia_tokens WHERE id = ?', [d.token_id])
+  const confirmada = tks.length && (tks[0].estado === 'VERIFICADO' || tks[0].estado === 'OMITIDO_ADMIN')
+  return { confirmada, prev: prev[0], data: d }
+}
+
 // PATCH /api/h360/homenajes-residencia/:id/primera-llamada
 async function guardarPrimeraLlamada(req, res, next) {
   try {
     const { id } = req.params
     const { rol } = req.user
-    const { primera_llamada_data, token_id } = req.body
+    const { primera_llamada_data, token_id, motivo } = req.body
     if (!primera_llamada_data) return res.status(400).json({ mensaje: 'primera_llamada_data requerido' })
-    const [ok] = await db.query('SELECT id FROM homenajes_residencia WHERE id = ?', [id])
-    if (!ok.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
+    const { confirmada, prev, data: dataPrev } = await primeraLlamadaConfirmada(id)
+    if (!prev) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
 
-    // Requiere token VERIFICADO u OMITIDO_ADMIN salvo que sea admin sin token
+    // ── Caso 1: ya está confirmada → bloqueada, solo admin con motivo puede reeditar
+    if (confirmada) {
+      if (rol !== 'admin') {
+        return res.status(423).json({
+          mensaje: 'La primera llamada ya fue confirmada y está bloqueada. Solo admin puede modificarla.',
+        })
+      }
+      if (!motivo?.trim()) {
+        return res.status(400).json({
+          mensaje: 'Debes indicar el motivo para modificar una primera llamada confirmada.',
+        })
+      }
+      // Snapshot del estado anterior en auditoría
+      await insertarAuditoria(id, 'PRIMERA_LLAMADA', 'UPDATE', dataPrev, motivo.trim(), req)
+
+      // Conservar token_id original (no se pierde la evidencia)
+      const dataAdmin = { ...primera_llamada_data, token_id: dataPrev?.token_id || null }
+      await db.query('UPDATE homenajes_residencia SET primera_llamada_data = ? WHERE id = ?',
+        [JSON.stringify(dataAdmin), id])
+      const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [id])
+      return res.json({ ok: true, homenaje: rows[0], desbloqueado: true })
+    }
+
+    // ── Caso 2: primer guardado (o borrador) → requiere token verificado
     if (rol !== 'admin') {
       if (!token_id) {
         return res.status(400).json({
@@ -160,10 +203,14 @@ async function guardarPrimeraLlamada(req, res, next) {
       }
     }
 
-    // Enriquecer JSON con token_id (evidencia dentro del mismo registro)
     const dataConToken = { ...primera_llamada_data, token_id: token_id || null }
     await db.query('UPDATE homenajes_residencia SET primera_llamada_data = ? WHERE id = ?',
       [JSON.stringify(dataConToken), id])
+
+    // Registrar CREATE en auditoría (evento de creación/confirmación)
+    await insertarAuditoria(id, 'PRIMERA_LLAMADA', 'CREATE', null,
+      token_id ? `Confirmada con token #${token_id}` : 'Guardada por admin sin token', req)
+
     const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [id])
     res.json({ ok: true, homenaje: rows[0] })
   } catch (err) { next(err) }
