@@ -7,7 +7,7 @@ const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
-const { notificarCertificadoAfiliacion, notificarFirma } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma, notificarAprobacionPublica } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
@@ -566,6 +566,12 @@ async function aprobar(req, res, next) {
     emitirCarnetYCertificado(afiliado.id, aprobadoPor).catch((err) => {
       logger.warn(`[Afiliado.aprobar] Carné/certificado falló: ${err?.message || err}`);
     });
+
+    // Afiliaciones públicas (Veolia/Convenio): disparar de inmediato el workflow
+    // n8n de correo de aprobación en vez de esperar su polling de 5 min.
+    if (afiliado.origen === 'VEOLIA' || afiliado.origen === 'CONVENIO') {
+      notificarAprobacionPublica(afiliado.id).catch(() => {});
+    }
 
     res.json({ success: true, message: 'Registro aprobado exitosamente', data: afiliado });
   } catch (error) {

@@ -24,6 +24,9 @@ const N8N_DRIVE_URL =
 const N8N_BIENVENIDA_URL =
   process.env.N8N_BIENVENIDA_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/bienvenida-proveedor-r44';
+const N8N_APROBACION_PUBLICA_URL =
+  process.env.N8N_APROBACION_PUBLICA_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/aprobacion-afiliacion-publica';
 const PORTAL_URL =
   process.env.R44_PORTAL_URL || 'https://losolivoscucuta.com/portalproveedores/login';
 const DRIVE_ROOT_FOLDER_ID =
@@ -215,10 +218,37 @@ async function notificarBienvenidaProveedor({ nombre, email, password, tipo }) {
   return res.data;
 }
 
+/**
+ * Dispara (fire-and-forget) el workflow n8n "Aprobacion Afiliacion" que envía el
+ * correo de aprobación a afiliaciones públicas (Veolia/Convenio). El workflow
+ * también corre por schedule cada 5 min como respaldo; este webhook lo adelanta
+ * para que la notificación salga al momento de aprobar en vez de esperar.
+ *
+ * @param {number} afiliadoId  Solo informativo/para logs; el workflow procesa el
+ *                             siguiente aprobado sin notificar (query propia).
+ */
+async function notificarAprobacionPublica(afiliadoId) {
+  try {
+    const res = await axios.post(
+      N8N_APROBACION_PUBLICA_URL,
+      { afiliadoId },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 8000 }
+    );
+    return res.data;
+  } catch (err) {
+    console.error(
+      `[n8nService] Error disparando aprobación pública (afiliado ${afiliadoId}):`,
+      err.message
+    );
+    return null;
+  }
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
   notificarFirma,
+  notificarAprobacionPublica,
   notificarInvitacionEmail,
   archivarDocumentosEnDrive,
   notificarBienvenidaProveedor,
