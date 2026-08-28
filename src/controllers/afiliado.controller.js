@@ -554,7 +554,11 @@ async function getRechazados(req, res, next) {
 
 async function aprobar(req, res, next) {
   try {
-    const afiliado = await afiliadoService.aprobarAfiliado(req.params.id, req.usuario.id);
+    const numeroContrato = req.body?.numeroContrato;
+    if (!numeroContrato || String(numeroContrato).trim() === '') {
+      throw new AppError('El número de contrato es obligatorio para aprobar', 400);
+    }
+    const afiliado = await afiliadoService.aprobarAfiliado(req.params.id, req.usuario.id, numeroContrato);
 
     // Fire-and-forget: disparar webhook de n8n para generar/enviar el
     // certificado de afiliación. No bloquea la respuesta al frontend

@@ -413,16 +413,21 @@ async function getAprobados(usuario, params = {}) {
   });
 }
 
-async function aprobarAfiliado(id, usuarioId) {
+async function aprobarAfiliado(id, usuarioId, numeroContrato) {
   const afiliado = await Afiliado.findByPk(id);
   if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
-  await afiliado.update({
+  const cambios = {
     estadoRegistro: 1,
     rechazado: 0,
     motivoRechazo: null
     //notificacionAprobacion: 1,
     //fechaNotificacionAprobacion: new Date()
-  });
+  };
+  // Número de contrato asignado en la aprobación (si se envió).
+  if (numeroContrato != null && String(numeroContrato).trim() !== '') {
+    cambios.numeroContrato = String(numeroContrato).trim();
+  }
+  await afiliado.update(cambios);
   // Trazabilidad
   Trazabilidad.create({ afiliadoId: id, tipo: 'APROBACION', usuarioId: usuarioId || null }).catch(() => {});
   return afiliado;

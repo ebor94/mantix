@@ -322,6 +322,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 0
     },
+    numeroContrato: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Número de contrato asignado al aprobar la afiliación'
+    },
     notificacionAprobacion: {
       type: DataTypes.INTEGER(1).UNSIGNED,
       allowNull: true,
