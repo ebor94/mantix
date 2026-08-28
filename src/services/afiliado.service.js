@@ -796,7 +796,8 @@ async function getMisDelDia(usuario, params = {}) {
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' },
       { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
-      { model: Usuario, as: 'legalizador', attributes: ['id', 'nombre', 'apellido'] }
+      { model: Usuario, as: 'legalizador', attributes: ['id', 'nombre', 'apellido'] },
+      { model: Usuario, as: 'asesor', attributes: ['id', 'nombre', 'apellido'] }
     ],
     order: [['createdAt', 'DESC']]
   });
