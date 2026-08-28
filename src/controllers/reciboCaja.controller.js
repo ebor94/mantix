@@ -64,6 +64,27 @@ async function getCuadre(req, res, next) {
 }
 
 /**
+ * GET /recibos/cuadre/export — descarga el cuadre en Excel (mismos filtros).
+ */
+async function exportarCuadre(req, res, next) {
+  try {
+    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = req.query;
+    const buffer = await reciboService.exportarCuadreExcel(req.usuario, {
+      fecha,
+      fechaDesde,
+      fechaHasta,
+      asesorId: asesorId ? parseInt(asesorId, 10) : undefined,
+      estado,
+      tipo
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="cuadre-caja-${stamp}.xlsx"`);
+    res.send(Buffer.from(buffer));
+  } catch (err) { next(err); }
+}
+
+/**
  * POST /api/recibos/aprobar
  * Aprueba uno o varios recibos pendientes.
  * Valida en el servicio el permiso por forma de pago:
@@ -258,6 +279,7 @@ async function reenviarWhatsapp(req, res, next) {
 module.exports = {
   getMisRecibos,
   getCuadre,
+  exportarCuadre,
   aprobarRecibos,
   cobrarPosfechado,
   getPosfechadosPendientes,

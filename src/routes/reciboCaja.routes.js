@@ -36,6 +36,13 @@ router.get('/cuadre',
   controller.getCuadre
 );
 
+// ── Exportar el cuadre a Excel (mismos filtros/permisos) ─────────
+router.get('/cuadre/export',
+  auth,
+  requirePermiso('caja', 'ver_cuadre'),
+  controller.exportarCuadre
+);
+
 // Lista de asesores con prefijo (para el dropdown del filtro)
 router.get('/asesores',
   auth,

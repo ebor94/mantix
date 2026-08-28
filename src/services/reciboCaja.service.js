@@ -18,6 +18,18 @@ const {
 } = require('../models');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const ExcelJS = require('exceljs');
+
+// Etiquetas legibles de forma de pago para el reporte.
+const FORMA_PAGO_LABEL = {
+  EFECTIVO: 'Efectivo',
+  PAGO_EN_CAJA: 'Pago en caja',
+  EFECTY: 'Efecty',
+  SUPER_GIROS: 'Super Giros',
+  TRANSFERENCIA: 'Transferencia',
+  CORRESPONSAL: 'Corresponsal',
+  POSFECHADO_COBRADO: 'Posfechado cobrado'
+};
 
 const FORMAS_PAGO_QUE_GENERAN_RECIBO = ['EFECTIVO', 'TRANSFERENCIA', 'CORRESPONSAL', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'];
 const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
@@ -266,7 +278,7 @@ const INCLUDE_RECIBO_COMPLETO = [
   {
     model: Afiliado,
     as: 'afiliado',
-    attributes: ['id', 'numeroDocumento', 'primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido', 'celular', 'estadoRegistro', 'rechazado', 'rechazadoParcial']
+    attributes: ['id', 'numeroDocumento', 'primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido', 'celular', 'email', 'direccion', 'barrio', 'ciudad', 'departamento', 'estadoRegistro', 'rechazado', 'rechazadoParcial']
   },
   { model: Usuario, as: 'asesor',     attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo', 'sede_id'] },
   { model: Usuario, as: 'aprobador',  attributes: ['id', 'nombre', 'apellido'] }
@@ -532,6 +544,74 @@ async function getReciboById(id, usuario) {
   return recibo;
 }
 
+/**
+ * Genera el Excel del cuadre de caja con la estructura solicitada. Usa los
+ * mismos filtros/permisos que listarRecibosParaCuadre (el usuario exporta lo que
+ * ve). Devuelve un Buffer .xlsx.
+ */
+async function exportarCuadreExcel(usuario, params = {}) {
+  const recibos = await listarRecibosParaCuadre(usuario, params);
+
+  const nombreCompleto = (p) => p
+    ? [p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido].filter(Boolean).join(' ')
+    : '';
+  const nombreAsesor = (u) => u ? [u.nombre, u.apellido].filter(Boolean).join(' ') : '';
+  const fmtFecha = (d) => {
+    if (!d) return '';
+    const x = new Date(d);
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${p2(x.getDate())}/${p2(x.getMonth() + 1)}/${x.getFullYear()} ${p2(x.getHours())}:${p2(x.getMinutes())}`;
+  };
+
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet('Recibos');
+
+  ws.columns = [
+    { header: 'CC PAGADOR',          key: 'cc',          width: 16 },
+    { header: 'NOMBRE PAGADOR',      key: 'nombre',      width: 30 },
+    { header: 'DIRECCION',           key: 'direccion',   width: 28 },
+    { header: 'BARRIO',              key: 'barrio',      width: 18 },
+    { header: 'MUNICIPIO',           key: 'municipio',   width: 16 },
+    { header: 'DEPARTAMENTO',        key: 'departamento',width: 18 },
+    { header: 'CELULAR',             key: 'celular',     width: 14 },
+    { header: 'CORREO ELECTRONICO',  key: 'correo',      width: 28 },
+    { header: 'RECIBO',              key: 'recibo',      width: 16 },
+    { header: 'FECHA',               key: 'fecha',       width: 18 },
+    { header: 'FORMA DE PAGO',       key: 'forma',       width: 16 },
+    { header: 'VALOR',               key: 'valor',       width: 14 },
+    { header: 'REFERENCIAS',         key: 'referencias', width: 20 },
+    { header: 'REFERENCIA OPCIONAL', key: 'refOpcional', width: 20 },
+    { header: 'ASESOR',              key: 'asesor',      width: 24 }
+  ];
+  ws.getRow(1).font = { bold: true };
+
+  for (const r of recibos) {
+    const a = r.afiliado || {};
+    ws.addRow({
+      cc:           a.numeroDocumento || '',
+      nombre:       nombreCompleto(a),
+      direccion:    a.direccion || '',
+      barrio:       a.barrio || '',
+      municipio:    a.ciudad || '',
+      departamento: a.departamento || '',
+      celular:      a.celular || '',
+      correo:       a.email || '',
+      recibo:       r.numeroRecibo || '',
+      fecha:        fmtFecha(r.fechaEmision),
+      forma:        FORMA_PAGO_LABEL[r.formaPago] || r.formaPago || '',
+      valor:        Number(r.valor || 0),
+      referencias:  r.banco || '',          // REFERENCIAS = banco
+      refOpcional:  r.referencia || '',     // REFERENCIA OPCIONAL = referencia
+      asesor:       nombreAsesor(r.asesor)
+    });
+  }
+
+  // Formato de moneda para la columna VALOR
+  ws.getColumn('valor').numFmt = '#,##0';
+
+  return workbook.xlsx.writeBuffer();
+}
+
 module.exports = {
   formatearConsecutivo,
   generarConsecutivo,
@@ -539,6 +619,7 @@ module.exports = {
   cobrarPosfechado,
   listarRecibosAsesor,
   listarRecibosParaCuadre,
+  exportarCuadreExcel,
   aprobarRecibos,
   listarPosfechadosPendientes,
   getReciboById,
