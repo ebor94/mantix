@@ -43,6 +43,13 @@ router.get('/cuadre/export',
   controller.exportarCuadre
 );
 
+// ── Plano ERP de los recibos seleccionados ───────────────────────
+router.post('/plano-erp',
+  auth,
+  requirePermiso('caja', 'ver_cuadre'),
+  controller.generarPlanoErp
+);
+
 // Lista de asesores con prefijo (para el dropdown del filtro)
 router.get('/asesores',
   auth,

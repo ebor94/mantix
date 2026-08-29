@@ -8,6 +8,7 @@ const { Op } = require('sequelize');
 const { Usuario, Afiliado, ReciboCaja } = require('../models');
 const reciboService = require('../services/reciboCaja.service');
 const pdfService = require('../services/pdfService');
+const AppError = require('../utils/AppError');
 const { sendImagenRecibo } = require('../services/whatsappService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
@@ -80,6 +81,27 @@ async function exportarCuadre(req, res, next) {
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="cuadre-caja-${stamp}.xlsx"`);
+    res.send(Buffer.from(buffer));
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /recibos/plano-erp — genera el plano ERP (.xlsx) de los recibos
+ * seleccionados. Body: { reciboIds: number[] }.
+ */
+async function generarPlanoErp(req, res, next) {
+  try {
+    const reciboIds = req.body?.reciboIds;
+    if (!Array.isArray(reciboIds) || reciboIds.length === 0) {
+      return next(new AppError('Selecciona al menos un recibo para generar el plano', 400));
+    }
+    const buffer = await reciboService.generarPlanoErpExcel(req.usuario, reciboIds);
+    if (!buffer) {
+      return next(new AppError('No hay recibos válidos para exportar', 400));
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="plano-erp-${stamp}.xlsx"`);
     res.send(Buffer.from(buffer));
   } catch (err) { next(err); }
 }
@@ -280,6 +302,7 @@ module.exports = {
   getMisRecibos,
   getCuadre,
   exportarCuadre,
+  generarPlanoErp,
   aprobarRecibos,
   cobrarPosfechado,
   getPosfechadosPendientes,

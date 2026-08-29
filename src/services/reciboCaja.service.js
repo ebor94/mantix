@@ -612,6 +612,76 @@ async function exportarCuadreExcel(usuario, params = {}) {
   return workbook.xlsx.writeBuffer();
 }
 
+/**
+ * Genera el plano ERP (.xlsx) con los recibos seleccionados. Estructura fija
+ * para cargue al ERP. Respeta permisos: solo incluye recibos que el usuario
+ * puede ver (forma de pago según rol + sede para el cajero de efectivo).
+ */
+async function generarPlanoErpExcel(usuario, reciboIds) {
+  const ids = (Array.isArray(reciboIds) ? reciboIds : []).map(Number).filter(Boolean);
+  if (ids.length === 0) return null;
+
+  const p = permisosCaja(usuario);
+  let formasVisibles = [];
+  if (p.superAdmin || p.all) formasVisibles = [...FORMAS_EFECTIVO, ...FORMAS_BANCARIAS];
+  else if (p.efectivo)       formasVisibles = [...FORMAS_EFECTIVO];
+  else if (p.bancarios)      formasVisibles = [...FORMAS_BANCARIAS];
+  else return null;
+
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+
+  const recibos = await ReciboCaja.findAll({
+    where: { id: { [Op.in]: ids }, formaPago: { [Op.in]: formasVisibles } },
+    include: INCLUDE_RECIBO_COMPLETO,
+    order: [['numeroRecibo', 'ASC']]
+  });
+  const visibles = esCajeroScoped
+    ? recibos.filter(r => r.asesor && r.asesor.sede_id === usuario.sede_id)
+    : recibos;
+
+  const fmtYmd = (d) => {
+    if (!d) return '';
+    const x = new Date(d);
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${x.getFullYear()}${p2(x.getMonth() + 1)}${p2(x.getDate())}`;
+  };
+  // EFECTIVO y PAGO_EN_CAJA = 1 (efectivo); todo lo demás = 6.
+  const codFormaPago = (fp) => (fp === 'EFECTIVO' || fp === 'PAGO_EN_CAJA') ? 1 : 6;
+
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet('Plano');
+  ws.columns = [
+    { header: 'codtiporef',         key: 'codtiporef',         width: 12 },
+    { header: 'codformapago',       key: 'codformapago',       width: 14 },
+    { header: 'referencia2',        key: 'referencia2',        width: 16 },
+    { header: 'referencia1',        key: 'referencia1',        width: 16 },
+    { header: 'numeroReciboManual', key: 'numeroReciboManual', width: 20 },
+    { header: 'ValorRecaudo',       key: 'ValorRecaudo',       width: 14 },
+    { header: 'fechaRecaudo',       key: 'fechaRecaudo',       width: 14 },
+    { header: 'Nro_cheque',         key: 'Nro_cheque',         width: 12 },
+    { header: 'cod_banco',          key: 'cod_banco',          width: 12 },
+    { header: 'girador',            key: 'girador',            width: 16 }
+  ];
+
+  for (const r of visibles) {
+    const a = r.afiliado || {};
+    ws.addRow({
+      codtiporef:         2,
+      codformapago:       codFormaPago(r.formaPago),
+      referencia2:        a.numeroContrato || '',
+      referencia1:        a.numeroDocumento || '',
+      numeroReciboManual: r.numeroRecibo || '',
+      ValorRecaudo:       Math.round(Number(r.valor || 0)),
+      fechaRecaudo:       fmtYmd(r.fechaEmision),
+      Nro_cheque:         '',
+      cod_banco:          '',
+      girador:            ''
+    });
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
 module.exports = {
   formatearConsecutivo,
   generarConsecutivo,
@@ -620,6 +690,7 @@ module.exports = {
   listarRecibosAsesor,
   listarRecibosParaCuadre,
   exportarCuadreExcel,
+  generarPlanoErpExcel,
   aprobarRecibos,
   listarPosfechadosPendientes,
   getReciboById,
