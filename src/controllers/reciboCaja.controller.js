@@ -8,7 +8,6 @@ const { Op } = require('sequelize');
 const { Usuario, Afiliado, ReciboCaja } = require('../models');
 const reciboService = require('../services/reciboCaja.service');
 const pdfService = require('../services/pdfService');
-const AppError = require('../utils/AppError');
 const { sendImagenRecibo } = require('../services/whatsappService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
