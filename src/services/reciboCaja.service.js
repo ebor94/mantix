@@ -39,10 +39,10 @@ const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 //   TRANSFERENCIA         → aprueba CARTERA   (permiso caja.aprobar_bancarios)
 //   CORRESPONSAL          → aprueba CARTERA   (permiso caja.aprobar_bancarios)
 //   POSFECHADO_COBRADO    → aprueba CARTERA   (típicamente entra como consignación/transferencia)
-// Efecty y Super Giros funcionan igual que efectivo: generan recibo y los
-// aprueba el cajero (caja.aprobar_efectivo), no cartera.
-const FORMAS_EFECTIVO  = ['EFECTIVO', 'PAGO_EN_CAJA', 'EFECTY', 'SUPER_GIROS'];
-const FORMAS_BANCARIAS = ['TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO'];
+// Efecty y Super Giros son pagos BANCARIOS: generan recibo y los aprueba
+// cartera (caja.aprobar_bancarios), no el cajero de efectivo.
+const FORMAS_EFECTIVO  = ['EFECTIVO', 'PAGO_EN_CAJA'];
+const FORMAS_BANCARIAS = ['TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO', 'EFECTY', 'SUPER_GIROS'];
 
 /**
  * Lee los permisos del módulo caja desde el usuario.
