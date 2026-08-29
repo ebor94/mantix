@@ -348,6 +348,14 @@ async function guardarEtapa(req, res, next) {
       [id, etapa, JSON.stringify(datos), usuario, completar ? 1 : 0]
     )
 
+    // Auto-asignación de responsable según la etapa (último que guarda queda registrado).
+    // F02/F03 → asistente_id (inventario); F04 → tanatologo_id (tanatopraxia).
+    if (etapa === 'F02_INVENTARIO_CUERPO' || etapa === 'F03_INVENTARIO_RETOQUE') {
+      await db.query('UPDATE asistencias SET asistente_id=? WHERE id=?', [usuario, id])
+    } else if (etapa === 'F04_TANATOPRAXIA') {
+      await db.query('UPDATE asistencias SET tanatologo_id=? WHERE id=?', [usuario, id])
+    }
+
     // Registro de uso de cofre al completar F-06 (fire-and-forget)
     if (etapa === 'F06_ENCOFRADO' && completar) {
       registrarUsoCofre(datos, id, usuario).catch(e => console.warn('[cofres]', e.message))
