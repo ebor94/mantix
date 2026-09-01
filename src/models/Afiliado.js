@@ -327,6 +327,25 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Número de contrato asignado al aprobar la afiliación'
     },
+    anulado: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Afiliación anulada después de aprobada (1 = anulada)'
+    },
+    fechaAnulacion: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    motivoAnulacion: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    anuladoPor: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Usuario que anuló la afiliación'
+    },
     notificacionAprobacion: {
       type: DataTypes.INTEGER(1).UNSIGNED,
       allowNull: true,

@@ -206,6 +206,13 @@ router.post('/:id/rechazar-parcial',
   controller.rechazarParcial
 );
 
+// ── POST /:id/anular — anula una afiliación ya aprobada (cualquier aprobador) ─
+router.post('/:id/anular',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.anular
+);
+
 // ── PUT /:id/actualizar-beneficiarios — actualización pública de beneficiarios ─
 router.put('/:id/actualizar-beneficiarios',
   softAuth,

@@ -452,6 +452,44 @@ async function rechazarAfiliado(id, motivo, usuarioId) {
 }
 
 /**
+ * Anula una afiliación YA APROBADA. Marca los campos de anulación y deja
+ * trazabilidad. El recibo de caja NO se toca: su tratamiento (reversa,
+ * cuadre, contabilidad) lo maneja caja por su cuenta. La afiliación anulada
+ * queda igualmente fuera de selección en el cuadre porque su estado deja de
+ * ser "Aprobada".
+ *
+ * @returns {{ afiliado }}
+ */
+async function anularAfiliado(id, motivo, usuarioId) {
+  return sequelize.transaction(async (transaction) => {
+    const afiliado = await Afiliado.findByPk(id, { transaction });
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+    if (Number(afiliado.estadoRegistro) !== 1) {
+      throw new AppError('Solo se pueden anular afiliaciones aprobadas', 400);
+    }
+    if (afiliado.anulado) {
+      throw new AppError('La afiliación ya está anulada', 400);
+    }
+
+    await afiliado.update({
+      anulado: true,
+      fechaAnulacion: new Date(),
+      motivoAnulacion: motivo || null,
+      anuladoPor: usuarioId || null
+    }, { transaction });
+
+    Trazabilidad.create({
+      afiliadoId: id,
+      tipo: 'ANULACION',
+      descripcion: motivo || null,
+      usuarioId: usuarioId || null
+    }, { transaction }).catch(() => {});
+
+    return { afiliado };
+  });
+}
+
+/**
  * Rechazo parcial: inactiva beneficiarios específicos.
  * El afiliado permanece en estado pendiente.
  */
@@ -1057,6 +1095,7 @@ module.exports = {
   getAprobados,
   aprobarAfiliado,
   rechazarAfiliado,
+  anularAfiliado,
   rechazarBeneficiarios,
   getRechazados,
   reenviarAfiliacion,

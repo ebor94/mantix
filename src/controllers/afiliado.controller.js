@@ -7,7 +7,7 @@ const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
-const { notificarCertificadoAfiliacion, notificarFirma, notificarAprobacionPublica } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
@@ -89,6 +89,29 @@ async function emitirCarnetYCertificado(afiliadoId, aprobadoPor) {
   }
   // Siempre disparar el certificado (con carnetUrl si se generó → correo + Drive en n8n)
   await notificarCertificadoAfiliacion(afiliadoId, aprobadoPor, carnetUrl);
+}
+
+// Imagen genérica de Los Olivos para el WhatsApp de anulación (la plantilla
+// texto_imagen_generico exige un header de imagen).
+const BANNER_ANULACION_URL = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
+
+/**
+ * Fire-and-forget tras anular: avisa al cliente por WhatsApp (si tiene) y por
+ * correo (vía n8n) que su afiliación fue anulada, con el motivo.
+ */
+async function emitirNotificacionAnulacion(afiliado, motivo, anuladoPor) {
+  try {
+    if (Number(afiliado.celularTieneWhatsapp) === 1 && afiliado.celular) {
+      const nombre = [afiliado.primerNombre, afiliado.primerApellido].filter(Boolean).join(' ');
+      const texto = `Hola${nombre ? ' ' + nombre : ''}, te informamos que tu afiliación a Los Olivos ha sido ANULADA.` +
+        `${motivo ? ' Motivo: ' + motivo + '.' : ''} Para más información comunícate con nosotros.`;
+      await sendTemplateImagenTexto(afiliado.celular, BANNER_ANULACION_URL, texto);
+    }
+  } catch (e) {
+    logger.warn(`[Anulacion] WhatsApp falló para afiliado ${afiliado.id}: ${e.message || e}`);
+  }
+  // Correo vía n8n (siempre; n8n decide si hay email).
+  await notificarAnulacionAfiliacion(afiliado.id, motivo, anuladoPor);
 }
 
 /**
@@ -593,6 +616,33 @@ async function rechazar(req, res, next) {
   }
 }
 
+/**
+ * POST /:id/anular — anula una afiliación ya aprobada. Requiere motivo.
+ * Notifica al cliente (WhatsApp + correo n8n) y define el destino del recibo.
+ */
+async function anular(req, res, next) {
+  try {
+    const { motivo } = req.body || {};
+    if (!motivo || String(motivo).trim() === '') {
+      throw new AppError('El motivo de anulación es obligatorio', 400);
+    }
+    const { afiliado } = await afiliadoService.anularAfiliado(
+      req.params.id, String(motivo).trim(), req.usuario.id
+    );
+
+    const anuladoPor = [req.usuario?.nombre, req.usuario?.apellido]
+      .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
+    // Fire-and-forget: avisar al cliente (WhatsApp + correo n8n).
+    emitirNotificacionAnulacion(afiliado, String(motivo).trim(), anuladoPor).catch((err) => {
+      logger.warn(`[Afiliado.anular] Notificación falló: ${err?.message || err}`);
+    });
+
+    res.json({ success: true, message: 'Afiliación anulada exitosamente', data: afiliado });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function rechazarParcial(req, res, next) {
   try {
     const { motivo, beneficiarioIds } = req.body;
@@ -936,6 +986,7 @@ module.exports = {
   aprobar,
   rechazar,
   rechazarParcial,
+  anular,
   getRechazados,
   reenviar,
   solicitarOtp,

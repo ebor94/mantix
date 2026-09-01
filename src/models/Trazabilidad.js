@@ -23,7 +23,8 @@ module.exports = (sequelize, DataTypes) => {
         'RECHAZO_TOTAL',
         'APROBACION_RECIBO',
         'COBRO_POSFECHADO',
-        'LEGALIZACION'
+        'LEGALIZACION',
+        'ANULACION'
       ),
       allowNull: false
     },

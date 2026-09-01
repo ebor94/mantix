@@ -27,6 +27,9 @@ const N8N_BIENVENIDA_URL =
 const N8N_APROBACION_PUBLICA_URL =
   process.env.N8N_APROBACION_PUBLICA_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/aprobacion-afiliacion-publica';
+const N8N_ANULACION_URL =
+  process.env.N8N_ANULACION_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/anulacion-afiliacion';
 const PORTAL_URL =
   process.env.R44_PORTAL_URL || 'https://losolivoscucuta.com/portalproveedores/login';
 const DRIVE_ROOT_FOLDER_ID =
@@ -244,11 +247,38 @@ async function notificarAprobacionPublica(afiliadoId) {
   }
 }
 
+/**
+ * Dispara (fire-and-forget) el workflow n8n que envía por correo el aviso de
+ * ANULACIÓN de una afiliación al cliente. n8n resuelve los datos del afiliado a
+ * partir del afiliadoId y envía el correo (Gmail).
+ *
+ * @param {number} afiliadoId
+ * @param {string} motivo      Motivo de la anulación (se muestra en el correo)
+ * @param {string} anuladoPor  Nombre/identificador de quien anuló
+ */
+async function notificarAnulacionAfiliacion(afiliadoId, motivo, anuladoPor) {
+  try {
+    const res = await axios.post(
+      N8N_ANULACION_URL,
+      { afiliadoId, motivo, anuladoPor },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 8000 }
+    );
+    return res.data;
+  } catch (err) {
+    console.error(
+      `[n8nService] Error notificando anulación (afiliado ${afiliadoId}):`,
+      err.message
+    );
+    return null;
+  }
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
   notificarFirma,
   notificarAprobacionPublica,
+  notificarAnulacionAfiliacion,
   notificarInvitacionEmail,
   archivarDocumentosEnDrive,
   notificarBienvenidaProveedor,

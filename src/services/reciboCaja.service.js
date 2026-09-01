@@ -278,7 +278,7 @@ const INCLUDE_RECIBO_COMPLETO = [
   {
     model: Afiliado,
     as: 'afiliado',
-    attributes: ['id', 'numeroDocumento', 'numeroContrato', 'primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido', 'celular', 'email', 'direccion', 'barrio', 'ciudad', 'departamento', 'estadoRegistro', 'rechazado', 'rechazadoParcial']
+    attributes: ['id', 'numeroDocumento', 'numeroContrato', 'primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido', 'celular', 'email', 'direccion', 'barrio', 'ciudad', 'departamento', 'estadoRegistro', 'rechazado', 'rechazadoParcial', 'anulado']
   },
   { model: Usuario, as: 'asesor',     attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo', 'sede_id'] },
   { model: Usuario, as: 'aprobador',  attributes: ['id', 'nombre', 'apellido'] }
