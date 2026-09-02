@@ -78,6 +78,7 @@ const db = {
   Trazabilidad: require('./Trazabilidad')(sequelize, Sequelize.DataTypes),
   Borrador: require('./Borrador')(sequelize, Sequelize.DataTypes),
   ReciboCaja: require('./ReciboCaja')(sequelize, Sequelize.DataTypes),
+  EntregaEfectivo: require('./EntregaEfectivo')(sequelize, Sequelize.DataTypes),
   ConsecutivoRecibo: require('./ConsecutivoRecibo')(sequelize, Sequelize.DataTypes),
 
   // ============================================
