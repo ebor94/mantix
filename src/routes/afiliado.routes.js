@@ -137,6 +137,10 @@ router.get('/aprobados', auth, requirePermiso('afiliaciones', 'aprobar'), contro
 //    El controlador valida que sea el asesor dueño o super_admin.
 router.post('/:id/reenviar-firma', auth, controller.reenviarFirma);
 
+// ── POST /afiliados/:id/validar-firma — dispara validación de firma Adobe a demanda ─
+//    El controlador valida que sea el asesor dueño o super_admin.
+router.post('/:id/validar-firma', auth, controller.validarFirma);
+
 // ── GET /afiliados/mis-del-dia — afiliaciones del asesor del día (todos los estados) ─
 router.get('/mis-del-dia',
   auth,

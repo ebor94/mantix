@@ -15,6 +15,9 @@ const N8N_CERTIFICADO_URL =
 const N8N_FIRMA_URL =
   process.env.N8N_FIRMA_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/afiliado-registro-firma';
+const N8N_VALIDAR_FIRMA_URL =
+  process.env.N8N_VALIDAR_FIRMA_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/validar-firma-afiliado';
 const N8N_INVITACION_EMAIL_URL =
   process.env.N8N_INVITACION_EMAIL_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/invitacion-afiliacion-email';
@@ -137,6 +140,32 @@ async function notificarFirma(afiliadoId) {
     const msg = err.response?.data || err.message;
     console.error(
       `[n8nService] Error notificando firma para afiliado ${afiliadoId}:`,
+      msg
+    );
+    return null;
+  }
+}
+
+/**
+ * Dispara el workflow n8n de validación de firma Adobe para un afiliado a
+ * demanda (desde /mis-afiliaciones-dia). El webhook responde onReceived; el
+ * flujo (búsqueda Gmail por el correo → Drive → marcar firmado) corre async.
+ * @param {number} afiliadoId
+ * @param {string} email  Correo del afiliado (para la búsqueda en Gmail)
+ * @returns {Promise<true|null>} true si el webhook aceptó (2xx), null si falló
+ */
+async function notificarValidacionFirma(afiliadoId, email) {
+  try {
+    await axios.post(
+      N8N_VALIDAR_FIRMA_URL,
+      { afiliadoId, email },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    return true;
+  } catch (err) {
+    const msg = err.response?.data || err.message;
+    console.error(
+      `[n8nService] Error validando firma para afiliado ${afiliadoId}:`,
       msg
     );
     return null;
@@ -277,6 +306,7 @@ module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
   notificarFirma,
+  notificarValidacionFirma,
   notificarAprobacionPublica,
   notificarAnulacionAfiliacion,
   notificarInvitacionEmail,

@@ -7,7 +7,7 @@ const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
-const { notificarCertificadoAfiliacion, notificarFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
@@ -559,6 +559,42 @@ async function reenviarFirma(req, res, next) {
   }
 }
 
+/**
+ * Valida la firma electrónica (Adobe) de una afiliación a demanda: dispara el
+ * workflow n8n de validación (búsqueda Gmail por el correo del afiliado). Solo
+ * el asesor dueño o super_admin, solo canal ASESOR, y solo si aún no está
+ * firmada. Async: el workflow marca `fechaFirmaAdobe` al terminar.
+ */
+async function validarFirma(req, res, next) {
+  try {
+    const { id } = req.params;
+    const afiliado = await Afiliado.findByPk(id);
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+    const esDueno = Number(afiliado.asesorId) === Number(req.usuario.id);
+    if (!esDueno && !req.usuario.es_super_admin) {
+      throw new AppError('No tienes permiso para validar la firma de esta afiliación', 403);
+    }
+    if (afiliado.origen !== 'ASESOR') {
+      throw new AppError('La validación de firma solo aplica a afiliaciones del canal asesor', 400);
+    }
+    if (afiliado.fechaFirmaAdobe) {
+      throw new AppError('La afiliación ya tiene la firma validada', 400);
+    }
+    if (!afiliado.email) {
+      throw new AppError('El afiliado no tiene correo registrado', 400);
+    }
+
+    const result = await notificarValidacionFirma(afiliado.id, afiliado.email);
+    if (!result) {
+      throw new AppError('No se pudo iniciar la validación de firma. Intenta de nuevo en unos minutos.', 502);
+    }
+    res.json({ success: true, message: 'Validación de firma iniciada' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getRechazados(req, res, next) {
   try {
     const afiliados = await afiliadoService.getRechazados(req.usuario);
@@ -983,6 +1019,7 @@ module.exports = {
   getPendientes,
   getAprobados,
   reenviarFirma,
+  validarFirma,
   aprobar,
   rechazar,
   rechazarParcial,
