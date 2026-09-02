@@ -14,6 +14,20 @@ function puedeVerTodas(usuario) {
   return permisos?.caja?.ver_cuadre === true;
 }
 
+// Gate mínimo para los endpoints de lectura (GET / y GET /:id/comprobante-pdf):
+// solo super_admin, caja.ver_cuadre o caja.ver_propios pueden entrar. El filtro
+// de ownership en listar()/comprobantePdf() sigue siendo la segunda capa.
+function requireVerEntregas(req, res, next) {
+  const usuario = req.usuario;
+  if (!usuario) return next(new AppError('No autorizado', 403));
+  if (usuario.es_super_admin) return next();
+  const raw = usuario.rol?.permisos;
+  const permisos = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  const puede = permisos?.caja?.ver_cuadre === true || permisos?.caja?.ver_propios === true;
+  if (!puede) return next(new AppError('No autorizado', 403));
+  return next();
+}
+
 async function asesores(req, res, next) {
   try {
     const data = await service.listarAsesoresDisponibles();
@@ -82,4 +96,4 @@ async function comprobantePdf(req, res, next) {
   } catch (error) { next(error); }
 }
 
-module.exports = { asesores, crear, confirmar, reenviar, listar, comprobantePdf };
+module.exports = { asesores, crear, confirmar, reenviar, listar, comprobantePdf, requireVerEntregas };

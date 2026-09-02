@@ -19,6 +19,30 @@ function generarOtp() {
   return String(Math.floor(10000 + Math.random() * 90000)); // 5 dígitos
 }
 
+// Lockout de intentos fallidos por entrega, para evitar fuerza bruta sobre el
+// OTP (otpStore.verify no consume el código en un intento fallido). Se
+// mantiene en memoria, contenido a este módulo, sin dependencias nuevas.
+const MAX_INTENTOS_OTP = 5;
+const intentosFallidos = new Map();
+
+function _resetIntentos(id) {
+  intentosFallidos.delete(String(id));
+}
+
+function _registrarIntentoFallido(id) {
+  const key = String(id);
+  const actuales = (intentosFallidos.get(key) || 0) + 1;
+  if (actuales >= MAX_INTENTOS_OTP) {
+    // otpStore no expone un "delete" explícito; sobreescribir con un valor
+    // que el usuario nunca podrá enviar invalida el código actual de forma
+    // efectiva (debe usar "Reenviar código" para obtener uno nuevo).
+    otpStore.set(otpKey(id), `LOCKED-${Date.now()}-${Math.random()}`);
+    _resetIntentos(id);
+    throw new AppError('Demasiados intentos. Solicita reenviar el código.', 429);
+  }
+  intentosFallidos.set(key, actuales);
+}
+
 // Lista de asesores (rol cuyo nombre contiene "ASESOR") para el dropdown.
 async function listarAsesoresDisponibles() {
   const asesores = await Usuario.findAll({
@@ -33,7 +57,6 @@ async function listarAsesoresDisponibles() {
       id: u.id,
       nombre: u.nombre,
       apellido: u.apellido,
-      telefono: u.telefono || null,
       celularMasked: maskCelular(u.telefono),
       tieneTelefono: !!(u.telefono && String(u.telefono).replace(/\D/g, '').length >= 10)
     }));
@@ -86,8 +109,10 @@ async function confirmarEntrega({ id, codigo }) {
     throw new AppError('La entrega ya está confirmada', 400);
   }
   if (!codigo || !otpStore.verify(otpKey(id), String(codigo).trim())) {
+    _registrarIntentoFallido(id); // puede lanzar AppError 429 si se agotaron los intentos
     throw new AppError('Código incorrecto o expirado', 401);
   }
+  _resetIntentos(id);
   await entrega.update({ estado: 'CONFIRMADA', fechaConfirmacion: new Date() });
   return entrega;
 }
@@ -98,6 +123,7 @@ async function reenviarOtp(id) {
   if (entrega.estado === 'CONFIRMADA') {
     throw new AppError('La entrega ya está confirmada', 400);
   }
+  _resetIntentos(id); // código nuevo → intentos frescos
   await _generarYEnviarOtp(entrega.id, entrega.celular);
   return { celularMasked: maskCelular(entrega.celular) };
 }
