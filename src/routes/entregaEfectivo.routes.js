@@ -18,6 +18,9 @@ router.get('/:id/comprobante-pdf', auth, controller.requireVerEntregas, controll
 // Registrar entrega (cajero/admin).
 router.post('/', auth, requirePermiso('caja', 'ver_cuadre'), controller.crear);
 
+// Registrar entrega a partir de recibos EFECTIVO seleccionados en el cuadre.
+router.post('/desde-recibos', auth, requirePermiso('caja', 'ver_cuadre'), controller.crearDesdeRecibos);
+
 // Confirmar con OTP (cajero/admin, rate-limited para evitar fuerza bruta del código).
 router.post('/:id/confirmar', strictRateLimit, auth, requirePermiso('caja', 'ver_cuadre'), controller.confirmar);
 

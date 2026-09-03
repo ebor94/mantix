@@ -53,6 +53,24 @@ async function crear(req, res, next) {
   } catch (error) { next(error); }
 }
 
+async function crearDesdeRecibos(req, res, next) {
+  try {
+    const { recibosIds } = req.body || {};
+    if (!Array.isArray(recibosIds) || recibosIds.length === 0) {
+      throw new AppError('Debe seleccionar al menos un recibo', 400);
+    }
+    const { entrega, celularMasked, asesorNombre } = await service.registrarEntregaDesdeRecibos({
+      recibosIds,
+      cajeroId: req.usuario.id
+    });
+    res.status(201).json({
+      success: true,
+      message: `Código enviado al WhatsApp del asesor (${celularMasked})`,
+      data: { id: entrega.id, estado: entrega.estado, monto: entrega.monto, celularMasked, asesorNombre }
+    });
+  } catch (error) { next(error); }
+}
+
 async function confirmar(req, res, next) {
   try {
     const { codigo } = req.body || {};
@@ -96,4 +114,4 @@ async function comprobantePdf(req, res, next) {
   } catch (error) { next(error); }
 }
 
-module.exports = { asesores, crear, confirmar, reenviar, listar, comprobantePdf, requireVerEntregas };
+module.exports = { asesores, crear, crearDesdeRecibos, confirmar, reenviar, listar, comprobantePdf, requireVerEntregas };
