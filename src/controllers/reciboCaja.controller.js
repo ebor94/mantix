@@ -297,6 +297,41 @@ async function reenviarWhatsapp(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * Regenera el PDF (y la imagen) del recibo desde los valores ACTUALES de la BD
+ * y actualiza pdf_url. Útil cuando el recibo se corrige después de emitido (el
+ * archivo guardado no se regenera solo). Solo caja/cartera/super_admin.
+ */
+async function regenerarPDF(req, res, next) {
+  try {
+    const reciboId = parseInt(req.params.id, 10);
+    const recibo = await ReciboCaja.findByPk(reciboId, {
+      include: [{ model: Usuario, as: 'asesor' }]
+    });
+    if (!recibo) throw new AppError('Recibo no encontrado', 404);
+
+    // Solo caja/cartera/super_admin (dato ya emitido; el asesor dueño NO regenera)
+    const permisos = reciboService.permisosCaja(req.usuario);
+    const puedeCaja = permisos.efectivo || permisos.bancarios || permisos.all || permisos.superAdmin;
+    if (!puedeCaja) throw new AppError('Sin permisos para regenerar este recibo', 403);
+
+    const afiliado = await Afiliado.findByPk(recibo.afiliadoId);
+    if (!afiliado) throw new AppError('Afiliado del recibo no encontrado', 404);
+
+    const reciboJson   = recibo.toJSON();
+    const afiliadoJson = afiliado.toJSON();
+    const asesorJson   = recibo.asesor ? recibo.asesor.toJSON() : null;
+
+    // Forzar regeneración: sobrescribe el archivo con el valor actual y actualiza pdf_url
+    const pdfInfo = await pdfService.generarReciboCajaPDF(reciboJson, afiliadoJson, asesorJson);
+    await recibo.update({ pdfUrl: pdfInfo.url });
+    await pdfService.generarReciboCajaImagen(reciboJson, afiliadoJson, asesorJson);
+
+    logger.info(`[ReciboCaja] PDF regenerado recibo ${recibo.numeroRecibo}`);
+    res.json({ success: true, message: 'PDF regenerado', data: { pdfUrl: pdfInfo.url } });
+  } catch (error) { next(error); }
+}
+
 module.exports = {
   getMisRecibos,
   getCuadre,
@@ -308,5 +343,6 @@ module.exports = {
   getReciboById,
   descargarPDF,
   getAsesoresConPrefijo,
-  reenviarWhatsapp
+  reenviarWhatsapp,
+  regenerarPDF
 };

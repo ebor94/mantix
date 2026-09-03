@@ -78,4 +78,7 @@ router.get('/:id/pdf', auth, controller.descargarPDF);
 // Útil cuando el envío automático falló (p.ej. PUBLIC_API_URL no configurado)
 router.post('/:id/reenviar-whatsapp', auth, controller.reenviarWhatsapp);
 
+// ── Regenerar el PDF del recibo desde los valores actuales (caja/admin) ──
+router.post('/:id/regenerar-pdf', auth, controller.regenerarPDF);
+
 module.exports = router;
