@@ -105,7 +105,13 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       field: 'fecha_emision',
       comment: 'Fecha contable del recibo'
-    }
+    },
+    reciboEntregaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'recibo_entrega_id',
+      comment: 'Entrega de efectivo que recibió este recibo (NULL = no recibido)'
+    },
   }, {
     tableName: 'recibos_caja',
     timestamps: true,

@@ -43,7 +43,12 @@ module.exports = (sequelize, DataTypes) => {
     observacion: {
       type: DataTypes.TEXT,
       allowNull: true
-    }
+    },
+    recibosIds: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: 'Ids de recibos_caja (EFECTIVO) que cubre esta entrega'
+    },
   }, {
     tableName: 'entregas_efectivo',
     timestamps: true
