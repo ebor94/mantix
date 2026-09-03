@@ -307,10 +307,12 @@ function generarR44Pdf(p) {
           { l: 'Fecha de matrícula', v: fdate(p.pj_fecha_matricula) },
           { l: 'Último año renovado', v: p.pj_ultimo_anio_renovado },
           { l: 'Grupo NIIF', v: p.pj_grupo_niif },
-          { l: 'Actividad económica', v: p.pj_actividad_economica, full: true },
+          { l: 'Actividad económica', v: p.pj_actividad_economica || p.pj_descripcion_actividad, full: true },
           { l: 'CIIU principal', v: p.pj_ciiu_principal },
           { l: 'CIIU secundario', v: p.pj_ciiu_secundario },
-          { l: 'Descripción de la actividad', v: p.pj_descripcion_actividad, full: true },
+          // La descripción larga solo se muestra aparte si existe además de la actividad corta
+          ...(p.pj_actividad_economica && p.pj_descripcion_actividad
+            ? [{ l: 'Descripción de la actividad', v: p.pj_descripcion_actividad, full: true }] : []),
           { l: 'Dirección', v: p.pj_direccion, full: true },
           { l: 'Municipio', v: p.pj_municipio },
           { l: 'Departamento', v: p.pj_departamento },
