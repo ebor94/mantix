@@ -238,6 +238,11 @@ async function createAfiliadoConInvitacion(data, token) {
   await convenioService.assertReglasConvenio(
     afiliadoData.convenioId, afiliadoData, beneficiarios
   );
+  // Este camino crea el afiliado directo desde una invitación, sin pasar por
+  // createAfiliadoWithBeneficiarios, así que necesita su propia verificación
+  // de la regla INDIV II (grupo INDIV II no puede persistir padre/madre de-ley
+  // fuera de 75-80).
+  validarGrupoIndivII(afiliadoData.grupo, beneficiarios);
 
   const transaction = await sequelize.transaction();
 
@@ -594,6 +599,10 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
   await convenioService.assertReglasConvenio(
     afiliado.convenioId, afiliado.get({ plain: true }), beneficiarios
   );
+  // Mismo motivo que assertReglasConvenio arriba: este camino reemplaza el
+  // grupo familiar completo, así que necesita su propia verificación de la
+  // regla INDIV II. El grupo no cambia en este flujo, se usa el ya guardado.
+  validarGrupoIndivII(afiliado.grupo, beneficiarios);
 
   const transaction = await sequelize.transaction();
   try {
@@ -695,6 +704,14 @@ async function reenviarAfiliacion(id, data, usuario) {
   await convenioService.assertReglasConvenio(
     afiliado.convenioId,
     { ...afiliado.get({ plain: true }), ...afiliadoData },
+    beneficiarios
+  );
+  // Este camino reemplaza el grupo familiar completo vía corrección, sin
+  // pasar por createAfiliadoWithBeneficiarios, así que necesita su propia
+  // verificación de la regla INDIV II. Se usa el grupo resultante (payload
+  // si lo trae, si no el ya guardado), igual que assertReglasConvenio arriba.
+  validarGrupoIndivII(
+    { ...afiliado.get({ plain: true }), ...afiliadoData }.grupo,
     beneficiarios
   );
 
