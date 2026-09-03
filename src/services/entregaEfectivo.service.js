@@ -10,7 +10,7 @@ const maskCelular = require('../utils/maskCelular');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
-const { EntregaEfectivo, Usuario, Rol } = db;
+const { EntregaEfectivo, Usuario, Rol, ReciboCaja } = db;
 
 const ASESOR_ATTRS = ['id', 'nombre', 'apellido'];
 const otpKey = (id) => `entrega:${id}`;
@@ -102,6 +102,55 @@ async function registrarEntrega({ asesorId, monto, observacion, cajeroId }) {
   return { entrega, celularMasked: maskCelular(celular) };
 }
 
+// Registra una entrega de efectivo a partir de recibos EFECTIVO seleccionados
+// en el cuadre. Valida forma de pago, asesor único y no-ya-recibidos; calcula
+// el monto; crea la entrega PENDIENTE con recibosIds y dispara el OTP.
+async function registrarEntregaDesdeRecibos({ recibosIds, cajeroId }) {
+  if (!Array.isArray(recibosIds) || recibosIds.length === 0) {
+    throw new AppError('Debe seleccionar al menos un recibo', 400);
+  }
+  const recibos = await ReciboCaja.findAll({ where: { id: { [Op.in]: recibosIds } } });
+  if (recibos.length !== recibosIds.length) {
+    throw new AppError('Algunos recibos seleccionados no existen', 400);
+  }
+  if (recibos.some((r) => r.formaPago !== 'EFECTIVO')) {
+    throw new AppError('Solo se puede recibir efectivo de recibos con forma de pago EFECTIVO', 400);
+  }
+  const yaRecibidos = recibos.filter((r) => r.reciboEntregaId != null);
+  if (yaRecibidos.length) {
+    throw new AppError(`${yaRecibidos.length} recibo(s) ya fueron recibidos en otra entrega`, 400);
+  }
+  const asesorIds = [...new Set(recibos.map((r) => Number(r.asesorId)))];
+  if (asesorIds.length !== 1) {
+    throw new AppError('Los recibos deben ser de un solo asesor', 400);
+  }
+  const asesor = await Usuario.findByPk(asesorIds[0]);
+  if (!asesor) throw new AppError('Asesor no encontrado', 404);
+  const celular = asesor.telefono;
+  if (!celular || String(celular).replace(/\D/g, '').length < 10) {
+    throw new AppError('El asesor no tiene un celular válido registrado; actualízalo antes de recibir el efectivo', 400);
+  }
+  const monto = recibos.reduce((s, r) => s + Number(r.valor || 0), 0);
+  if (monto <= 0) throw new AppError('El total de efectivo debe ser mayor a cero', 400);
+
+  const entrega = await EntregaEfectivo.create({
+    asesorId: asesor.id,
+    cajeroId,
+    monto: Math.round(monto),
+    celular,
+    estado: 'PENDIENTE',
+    recibosIds,
+    observacion: `Recibos: ${recibos.map((r) => r.numeroRecibo || r.id).join(', ')}`
+  });
+
+  await _generarYEnviarOtp(entrega.id, celular);
+  return {
+    entrega,
+    celularMasked: maskCelular(celular),
+    asesorNombre: [asesor.nombre, asesor.apellido].filter(Boolean).join(' ')
+  };
+}
+
 async function confirmarEntrega({ id, codigo }) {
   const entrega = await EntregaEfectivo.findByPk(id);
   if (!entrega) throw new AppError('Entrega no encontrada', 404);
@@ -113,7 +162,25 @@ async function confirmarEntrega({ id, codigo }) {
     throw new AppError('Código incorrecto o expirado', 401);
   }
   _resetIntentos(id);
-  await entrega.update({ estado: 'CONFIRMADA', fechaConfirmacion: new Date() });
+
+  await db.sequelize.transaction(async (t) => {
+    await entrega.update({ estado: 'CONFIRMADA', fechaConfirmacion: new Date() }, { transaction: t });
+    const ids = Array.isArray(entrega.recibosIds) ? entrega.recibosIds : [];
+    if (ids.length) {
+      const yaTomados = await ReciboCaja.count({
+        where: { id: { [Op.in]: ids }, reciboEntregaId: { [Op.ne]: null } },
+        transaction: t
+      });
+      if (yaTomados > 0) {
+        throw new AppError('Algunos recibos ya fueron recibidos por otra entrega. Recarga el cuadre.', 409);
+      }
+      await ReciboCaja.update(
+        { reciboEntregaId: entrega.id },
+        { where: { id: { [Op.in]: ids }, reciboEntregaId: null }, transaction: t }
+      );
+    }
+  });
+
   return entrega;
 }
 
@@ -166,6 +233,7 @@ async function obtenerEntrega(id) {
 module.exports = {
   listarAsesoresDisponibles,
   registrarEntrega,
+  registrarEntregaDesdeRecibos,
   confirmarEntrega,
   reenviarOtp,
   listarEntregas,
