@@ -61,7 +61,8 @@ async function crearDesdeRecibos(req, res, next) {
     }
     const { entrega, celularMasked, asesorNombre } = await service.registrarEntregaDesdeRecibos({
       recibosIds,
-      cajeroId: req.usuario.id
+      cajeroId: req.usuario.id,
+      usuario: req.usuario
     });
     res.status(201).json({
       success: true,

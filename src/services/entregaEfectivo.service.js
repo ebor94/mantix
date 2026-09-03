@@ -10,6 +10,8 @@ const maskCelular = require('../utils/maskCelular');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
+const { permisosCaja } = require('./reciboCaja.service');
+
 const { EntregaEfectivo, Usuario, Rol, ReciboCaja } = db;
 
 const ASESOR_ATTRS = ['id', 'nombre', 'apellido'];
@@ -105,7 +107,7 @@ async function registrarEntrega({ asesorId, monto, observacion, cajeroId }) {
 // Registra una entrega de efectivo a partir de recibos EFECTIVO seleccionados
 // en el cuadre. Valida forma de pago, asesor único y no-ya-recibidos; calcula
 // el monto; crea la entrega PENDIENTE con recibosIds y dispara el OTP.
-async function registrarEntregaDesdeRecibos({ recibosIds, cajeroId }) {
+async function registrarEntregaDesdeRecibos({ recibosIds, cajeroId, usuario }) {
   if (!Array.isArray(recibosIds) || recibosIds.length === 0) {
     throw new AppError('Debe seleccionar al menos un recibo', 400);
   }
@@ -126,6 +128,22 @@ async function registrarEntregaDesdeRecibos({ recibosIds, cajeroId }) {
   }
   const asesor = await Usuario.findByPk(asesorIds[0]);
   if (!asesor) throw new AppError('Asesor no encontrado', 404);
+
+  // Cajero de efectivo acotado por sede: mismo criterio que aprobarRecibos en
+  // reciboCaja.service.js (esCajeroScoped = efectivo && !bancarios && !superAdmin).
+  // Sin sede asignada → no puede recibir nada; recibos de asesor de otra sede
+  // quedan rechazados con 403.
+  const p = permisosCaja(usuario);
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+  if (esCajeroScoped) {
+    if (!usuario.sede_id) {
+      throw new AppError('No tienes una sede asignada para recibir efectivo', 403);
+    }
+    if (asesor.sede_id !== usuario.sede_id) {
+      throw new AppError('No puedes recibir efectivo de recibos de otra sede', 403);
+    }
+  }
+
   const celular = asesor.telefono;
   if (!celular || String(celular).replace(/\D/g, '').length < 10) {
     throw new AppError('El asesor no tiene un celular válido registrado; actualízalo antes de recibir el efectivo', 400);
@@ -174,10 +192,13 @@ async function confirmarEntrega({ id, codigo }) {
       if (yaTomados > 0) {
         throw new AppError('Algunos recibos ya fueron recibidos por otra entrega. Recarga el cuadre.', 409);
       }
-      await ReciboCaja.update(
+      const [n] = await ReciboCaja.update(
         { reciboEntregaId: entrega.id },
         { where: { id: { [Op.in]: ids }, reciboEntregaId: null }, transaction: t }
       );
+      if (n !== ids.length) {
+        throw new AppError('Algunos recibos ya fueron recibidos por otra entrega. Recarga el cuadre.', 409);
+      }
     }
   });
 
