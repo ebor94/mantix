@@ -6,6 +6,7 @@ const reciboCajaService = require('./reciboCaja.service');
 const convenioService = require('./convenio.service');
 const invitacionService = require('./invitacion.service');
 const AppError = require('../utils/AppError');
+const { validarGrupoIndivII } = require('../validations/grupoIndivII');
 
 /**
  * Extrae el objeto de permisos del rol del usuario
@@ -129,6 +130,7 @@ async function createAfiliadoWithBeneficiarios(data) {
   // Antes de abrir la transacción: si el grupo familiar no cumple, no tiene
   // sentido empezar a escribir. No hace nada cuando convenioId es null, que es
   // el caso de todas las afiliaciones de asesor y de Veolia.
+  validarGrupoIndivII(afiliadoData.grupo, beneficiarios);
   await convenioService.assertReglasConvenio(
     afiliadoData.convenioId, afiliadoData, beneficiarios
   );

@@ -163,7 +163,7 @@ const createAfiliadoSchema = Joi.object({
   producto: Joi.string().valid('VERDE', 'INTEGRAL', 'CENS').allow('', null)
     .messages({ 'any.only': 'Producto debe ser VERDE, INTEGRAL o CENS' }),
   grupo: Joi.string()
-    .valid('UNIPERSONAL', 'UNIFAMILIAR', 'BASICO', 'CENS_II', 'INDIVIDUAL', 'TRADICIONAL')
+    .valid('UNIPERSONAL', 'UNIFAMILIAR', 'BASICO', 'CENS_II', 'INDIVIDUAL', 'TRADICIONAL', 'UNIFAMILIAR_INDIV_II', 'BASICO_INDIV_II')
     .allow('', null)
     .messages({ 'any.only': 'Grupo no válido' }),
   asistenciaFueraDeCasa: Joi.string().valid('SI', 'NO').allow('', null),

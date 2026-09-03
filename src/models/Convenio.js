@@ -55,7 +55,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     grupo: {
-      type: DataTypes.ENUM('UNIPERSONAL', 'UNIFAMILIAR', 'BASICO', 'CENS_II', 'INDIVIDUAL', 'TRADICIONAL'),
+      type: DataTypes.ENUM('UNIPERSONAL', 'UNIFAMILIAR', 'BASICO', 'CENS_II', 'INDIVIDUAL', 'TRADICIONAL', 'UNIFAMILIAR_INDIV_II', 'BASICO_INDIV_II'),
       allowNull: true
     },
     planNombre: {
