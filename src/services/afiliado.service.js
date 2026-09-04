@@ -241,7 +241,7 @@ async function createAfiliadoConInvitacion(data, token) {
   // Este camino crea el afiliado directo desde una invitación, sin pasar por
   // createAfiliadoWithBeneficiarios, así que necesita su propia verificación
   // de la regla INDIV II (grupo INDIV II no puede persistir padre/madre de-ley
-  // fuera de 75-80).
+  // mayores de 80).
   validarGrupoIndivII(afiliadoData.grupo, beneficiarios);
 
   const transaction = await sequelize.transaction();
