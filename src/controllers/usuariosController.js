@@ -123,15 +123,17 @@ const usuariosController = {
   async create(req, res, next) {
     try {
       const usuarioActual = req.usuario;
-      const { 
-        rol_id, 
-        nombre, 
-        apellido, 
-        email, 
-        password, 
-        telefono, 
-        avatar, 
+      const {
+        rol_id,
+        nombre,
+        apellido,
+        email,
+        password,
+        telefono,
+        avatar,
         es_super_admin,
+        sede_id,
+        prefijo_recibo,
         categorias // Array de IDs de categorías
       } = req.body;
 
@@ -159,6 +161,8 @@ const usuariosController = {
         password,
         telefono,
         avatar,
+        sede_id: sede_id ?? null,
+        prefijo_recibo: prefijo_recibo || null,
         es_super_admin: es_super_admin || false
       });
 
@@ -204,9 +208,11 @@ const usuariosController = {
       res.status(201).json(usuarioCreado);
     } catch (error) {
       if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({ 
-          error: 'El correo electrónico ya está registrado.' 
-        });
+        const campo = error.errors?.[0]?.path || '';
+        if (campo.includes('prefijo')) {
+          return res.status(409).json({ error: 'El prefijo de recibo ya está en uso.' });
+        }
+        return res.status(409).json({ error: 'El correo electrónico ya está registrado.' });
       }
       if (error.name === 'SequelizeValidationError') {
         const errores = error.errors.map(err => ({ 
@@ -227,16 +233,18 @@ const usuariosController = {
     try {
       const { id } = req.params;
       const usuarioActual = req.usuario;
-      const { 
-        rol_id, 
-        nombre, 
-        apellido, 
-        email, 
-        password, 
-        telefono, 
-        avatar, 
+      const {
+        rol_id,
+        nombre,
+        apellido,
+        email,
+        password,
+        telefono,
+        avatar,
         activo,
         es_super_admin,
+        sede_id,
+        prefijo_recibo,
         categorias // Array de IDs de categorías
       } = req.body;
 
@@ -304,6 +312,8 @@ const usuariosController = {
       if (password !== undefined) datosActualizacion.password = password;
       if (telefono !== undefined) datosActualizacion.telefono = telefono;
       if (avatar !== undefined) datosActualizacion.avatar = avatar;
+      if (sede_id !== undefined) datosActualizacion.sede_id = sede_id;
+      if (prefijo_recibo !== undefined) datosActualizacion.prefijo_recibo = prefijo_recibo || null;
       if (activo !== undefined) datosActualizacion.activo = activo;
       if (es_super_admin !== undefined) datosActualizacion.es_super_admin = es_super_admin;
 
@@ -361,6 +371,13 @@ const usuariosController = {
 
       res.status(200).json(usuarioActualizado);
     } catch (error) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const campo = error.errors?.[0]?.path || '';
+        if (campo.includes('prefijo')) {
+          return res.status(409).json({ error: 'El prefijo de recibo ya está en uso.' });
+        }
+        return res.status(409).json({ error: 'El correo electrónico ya está registrado por otro usuario.' });
+      }
       next(error);
     }
   },
