@@ -150,6 +150,14 @@ async function crearReciboParaAfiliacion(afiliado, transaction) {
   if (!afiliado.formaPago) return null;
   if (!FORMAS_PAGO_QUE_GENERAN_RECIBO.includes(afiliado.formaPago)) return null;
 
+  // Estas formas cobran al registrar: el recibo NO puede emitirse en cero.
+  // Defensa de servidor (el front también lo exige) para no generar soporte
+  // por recibos en $0. POSFECHADO no llega aquí (no está en la lista de arriba).
+  const valorRecibido = Number(afiliado.valorRecibido);
+  if (!Number.isFinite(valorRecibido) || valorRecibido < 10000) {
+    throw new AppError('El valor recibido debe ser mayor o igual a $10.000 para emitir el recibo de caja.', 400);
+  }
+
   const asesor = await Usuario.findByPk(afiliado.asesorId, { transaction });
   if (!asesor) {
     logger.warn(`[ReciboCaja] Asesor ${afiliado.asesorId} no existe — no se genera recibo`);
