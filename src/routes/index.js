@@ -7,6 +7,7 @@ const router = express.Router();
 // Importar rutas
 const authRoutes = require('./authRoutes');
 const usuariosRoutes = require('./usuariosRoutes');
+const rolesRoutes = require('./rolesRoutes');
 const sedesRoutes = require('./sedesRoutes');
 const equiposRoutes = require('./equiposRoutes');
 const mantenimientosRoutes = require('./mantenimientosRoutes');
@@ -46,6 +47,7 @@ const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (id
 // Montar rutas
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuariosRoutes);
+router.use('/roles', rolesRoutes);
 router.use('/sedes', sedesRoutes);
 router.use('/equipos', equiposRoutes);
 router.use('/mantenimientos', mantenimientosRoutes);
