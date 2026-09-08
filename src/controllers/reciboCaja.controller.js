@@ -209,11 +209,20 @@ async function descargarPDF(req, res, next) {
  */
 async function getAsesoresConPrefijo(req, res, next) {
   try {
+    const where = {
+      prefijo_recibo: { [Op.ne]: null },
+      activo: 1
+    };
+    // Cajero de efectivo acotado por sede: el selector solo lista asesores de su
+    // sede (mismo criterio que el cuadre). Sin sede asignada → lista vacía.
+    const p = reciboService.permisosCaja(req.usuario);
+    const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+    if (esCajeroScoped) {
+      if (!req.usuario.sede_id) return res.json({ success: true, data: [] });
+      where.sede_id = req.usuario.sede_id;
+    }
     const asesores = await Usuario.findAll({
-      where: {
-        prefijo_recibo: { [Op.ne]: null },
-        activo: 1
-      },
+      where,
       attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo'],
       order: [['prefijo_recibo', 'ASC']]
     });
