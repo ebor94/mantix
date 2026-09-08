@@ -14,6 +14,20 @@ function puedeVerTodas(usuario) {
   return permisos?.caja?.ver_cuadre === true;
 }
 
+// Cajero de efectivo acotado por sede (aprobar_efectivo sin aprobar_bancarios y
+// no super_admin): solo ve entregas de asesores de SU sede. Mismo criterio que
+// `esCajeroScoped` en el cuadre de caja (reciboCaja.service).
+function sedeScope(usuario) {
+  if (!usuario || usuario.es_super_admin) return { scoped: false, sedeId: null };
+  const raw = usuario.rol?.permisos;
+  const permisos = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  const c = permisos?.caja || {};
+  const efectivo = c.aprobar_efectivo === true;
+  const bancarios = c.aprobar_bancarios === true;
+  const scoped = efectivo && !bancarios;
+  return { scoped, sedeId: scoped ? (usuario.sede_id ?? null) : null };
+}
+
 // Gate mínimo para los endpoints de lectura (GET / y GET /:id/comprobante-pdf):
 // solo super_admin, caja.ver_cuadre o caja.ver_propios pueden entrar. El filtro
 // de ownership en listar()/comprobantePdf() sigue siendo la segunda capa.
@@ -93,7 +107,10 @@ async function listar(req, res, next) {
     const { desde, hasta, asesorId } = req.query;
     // Si el usuario NO tiene ver_cuadre pero sí ver_propios, solo ve las suyas.
     const soloAsesorId = puedeVerTodas(req.usuario) ? null : req.usuario.id;
-    const data = await service.listarEntregas({ desde, hasta, asesorId, soloAsesorId });
+    // Cajero acotado por sede: además, limitar a asesores de su sede.
+    const { scoped, sedeId } = sedeScope(req.usuario);
+    if (scoped && !sedeId) return res.json({ success: true, data: [] });
+    const data = await service.listarEntregas({ desde, hasta, asesorId, soloAsesorId, sedeId });
     res.json({ success: true, data });
   } catch (error) { next(error); }
 }
@@ -102,6 +119,11 @@ async function comprobantePdf(req, res, next) {
   try {
     const entrega = await service.obtenerEntrega(req.params.id);
     if (!puedeVerTodas(req.usuario) && entrega.asesorId !== req.usuario.id) {
+      throw new AppError('No tienes permiso para ver este comprobante', 403);
+    }
+    // Cajero acotado por sede: no puede ver comprobantes de otra sede.
+    const { scoped, sedeId } = sedeScope(req.usuario);
+    if (scoped && entrega.asesor?.sede_id !== sedeId) {
       throw new AppError('No tienes permiso para ver este comprobante', 403);
     }
     if (entrega.estado !== 'CONFIRMADA') {

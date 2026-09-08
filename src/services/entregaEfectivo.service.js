@@ -14,7 +14,7 @@ const { permisosCaja } = require('./reciboCaja.service');
 
 const { EntregaEfectivo, Usuario, Rol, ReciboCaja } = db;
 
-const ASESOR_ATTRS = ['id', 'nombre', 'apellido'];
+const ASESOR_ATTRS = ['id', 'nombre', 'apellido', 'sede_id'];
 const otpKey = (id) => `entrega:${id}`;
 
 function generarOtp() {
@@ -223,17 +223,25 @@ function _rangoFechas(desde, hasta) {
   return Object.keys(rango).length ? rango : undefined;
 }
 
-async function listarEntregas({ desde, hasta, asesorId, soloAsesorId } = {}) {
+async function listarEntregas({ desde, hasta, asesorId, soloAsesorId, sedeId } = {}) {
   const where = {};
   const createdAt = _rangoFechas(desde, hasta);
   if (createdAt) where.createdAt = createdAt;
   if (soloAsesorId) where.asesorId = soloAsesorId;
   else if (asesorId) where.asesorId = asesorId;
 
+  // Cajero acotado por sede: solo entregas cuyo ASESOR pertenece a esa sede
+  // (INNER JOIN sobre asesor.sede_id), igual criterio que el cuadre de caja.
+  const asesorInclude = { model: Usuario, as: 'asesor', attributes: ASESOR_ATTRS };
+  if (sedeId != null) {
+    asesorInclude.where = { sede_id: sedeId };
+    asesorInclude.required = true;
+  }
+
   return EntregaEfectivo.findAll({
     where,
     include: [
-      { model: Usuario, as: 'asesor', attributes: ASESOR_ATTRS },
+      asesorInclude,
       { model: Usuario, as: 'cajero', attributes: ASESOR_ATTRS }
     ],
     order: [['createdAt', 'DESC']]
