@@ -658,17 +658,18 @@ async function generarPlanoErpExcel(usuario, reciboIds) {
 
   const workbook = new ExcelJS.Workbook();
   const ws = workbook.addWorksheet('Plano');
+  // Orden de columnas requerido por el ERP (no cambiar sin confirmar con el ERP).
   ws.columns = [
-    { header: 'codtiporef',         key: 'codtiporef',         width: 12 },
-    { header: 'codformapago',       key: 'codformapago',       width: 14 },
-    { header: 'referencia2',        key: 'referencia2',        width: 16 },
-    { header: 'referencia1',        key: 'referencia1',        width: 16 },
-    { header: 'numeroReciboManual', key: 'numeroReciboManual', width: 20 },
-    { header: 'ValorRecaudo',       key: 'ValorRecaudo',       width: 14 },
-    { header: 'fechaRecaudo',       key: 'fechaRecaudo',       width: 14 },
-    { header: 'Nro_cheque',         key: 'Nro_cheque',         width: 12 },
-    { header: 'cod_banco',          key: 'cod_banco',          width: 12 },
-    { header: 'girador',            key: 'girador',            width: 16 }
+    { header: 'CodTipoRef',      key: 'codtiporef',         width: 12 },
+    { header: 'Referencia1',     key: 'referencia1',        width: 16 },
+    { header: 'Referencia2',     key: 'referencia2',        width: 16 },
+    { header: 'FechaRecaudo',    key: 'fechaRecaudo',       width: 14 },
+    { header: 'NroReciboManual', key: 'numeroReciboManual', width: 20 },
+    { header: 'ValorRecaudo',    key: 'ValorRecaudo',       width: 14 },
+    { header: 'Codformapago',    key: 'codformapago',       width: 14 },
+    { header: 'Nro_cheque',      key: 'Nro_cheque',         width: 12 },
+    { header: 'cod_banco',       key: 'cod_banco',          width: 12 },
+    { header: 'girador',         key: 'girador',            width: 16 }
   ];
 
   for (const r of visibles) {
