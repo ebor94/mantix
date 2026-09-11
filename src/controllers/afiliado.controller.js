@@ -11,7 +11,7 @@ const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
-const { Afiliado, ReciboCaja, Usuario } = require('../models');
+const { Afiliado, ReciboCaja, Usuario, Trazabilidad } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
 const { encodeId, decodeId } = require('../utils/hashId');
@@ -1008,6 +1008,48 @@ async function liquidacionPdf(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * POST /api/afiliados/:id/regenerar-certificado
+ * Re-emite el certificado (carné WhatsApp + correo + Drive) de una afiliación
+ * aprobada, dejando el motivo en trazabilidad. Reutiliza emitirCarnetYCertificado.
+ * Permiso: afiliaciones.aprobar (super_admin incluido).
+ */
+async function regenerarCertificado(req, res, next) {
+  try {
+    const motivo = String(req.body?.motivo || '').trim();
+    if (!motivo) {
+      return next(new AppError('El motivo es requerido', 400));
+    }
+
+    const afiliado = await Afiliado.findByPk(req.params.id);
+    if (!afiliado) {
+      return next(new AppError('Afiliado no encontrado', 404));
+    }
+    if (Number(afiliado.estadoRegistro) !== 1) {
+      return next(new AppError('Solo se puede regenerar el certificado de afiliaciones aprobadas', 400));
+    }
+    if (afiliado.anulado) {
+      return next(new AppError('La afiliación está anulada', 400));
+    }
+
+    await Trazabilidad.create({
+      afiliadoId: afiliado.id,
+      tipo: 'REGENERACION_CERTIFICADO',
+      descripcion: motivo,
+      usuarioId: req.usuario.id
+    });
+
+    // Re-emisión completa (carné WhatsApp + certificado por correo + Drive), fire-and-forget.
+    emitirCarnetYCertificado(afiliado.id, req.usuario.id).catch((err) => {
+      logger.warn(`[RegenerarCertificado] Falló la re-emisión del afiliado ${afiliado.id}: ${err.message || err}`);
+    });
+
+    res.json({ success: true, message: 'Regeneración de certificado iniciada' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   create,
   createPublico,
@@ -1024,6 +1066,7 @@ module.exports = {
   rechazar,
   rechazarParcial,
   anular,
+  regenerarCertificado,
   getRechazados,
   reenviar,
   solicitarOtp,

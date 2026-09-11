@@ -217,6 +217,13 @@ router.post('/:id/anular',
   controller.anular
 );
 
+// ── POST /:id/regenerar-certificado — re-emite el certificado (aprobador/admin) ─
+router.post('/:id/regenerar-certificado',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.regenerarCertificado
+);
+
 // ── PUT /:id/actualizar-beneficiarios — actualización pública de beneficiarios ─
 router.put('/:id/actualizar-beneficiarios',
   softAuth,

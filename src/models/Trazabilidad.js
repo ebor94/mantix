@@ -24,7 +24,8 @@ module.exports = (sequelize, DataTypes) => {
         'APROBACION_RECIBO',
         'COBRO_POSFECHADO',
         'LEGALIZACION',
-        'ANULACION'
+        'ANULACION',
+        'REGENERACION_CERTIFICADO'
       ),
       allowNull: false
     },
