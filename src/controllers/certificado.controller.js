@@ -191,6 +191,8 @@ async function generar(req, res, next) {
     doc.font('Helvetica').text(afiliado.sucursal || 'CUCUTA', 130, y);
     doc.font('Helvetica-Bold').text('Tipo de Negocio:', 280, y);
     doc.font('Helvetica').text(afiliado.novedad || 'NUEVO', 360, y);
+    doc.font('Helvetica-Bold').text('N° Contrato:', 430, y);
+    doc.font('Helvetica').text(afiliado.numeroContrato || '', 490, y, { width: 65 });
 
     y += 15;
     doc.font('Helvetica-Bold').text('Fecha Expedición:', 40, y);
