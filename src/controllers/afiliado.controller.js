@@ -1040,7 +1040,11 @@ async function regenerarCertificado(req, res, next) {
     });
 
     // Re-emisión completa (carné WhatsApp + certificado por correo + Drive), fire-and-forget.
-    emitirCarnetYCertificado(afiliado.id, req.usuario.id).catch((err) => {
+    // Se pasa el NOMBRE del usuario como `aprobadoPor` (igual que el flujo de
+    // aprobación) para que el certificado no muestre un id numérico.
+    const aprobadoPor = [req.usuario?.nombre, req.usuario?.apellido]
+      .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
+    emitirCarnetYCertificado(afiliado.id, aprobadoPor).catch((err) => {
       logger.warn(`[RegenerarCertificado] Falló la re-emisión del afiliado ${afiliado.id}: ${err.message || err}`);
     });
 
