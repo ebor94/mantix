@@ -50,4 +50,44 @@ function grupoIdsAccesibles(user) {
   return [...set];
 }
 
-module.exports = { areasAccesibles, tieneAccesoArea, areaIdsAccesibles, grupoIdsAccesibles };
+/**
+ * Devuelve la lista de usr_id que el actor puede ver o gestionar.
+ * Retorna null para SUPER_ADMIN (acceso total, no aplicar filtro).
+ * Consulta la DB para expandir grupos/areas a usuarios concretos.
+ */
+async function usuariosAccesibles(actor) {
+  const { Op } = require('sequelize');
+  const { SvUsuario } = require('../models');
+  const codigo = actor?.rol?.rol_codigo;
+
+  if (codigo === 'SUPER_ADMIN') return null;
+  if (codigo === 'ASESOR' || codigo === 'AGENTE_SVC') return [actor.usr_id];
+
+  const rolesArea  = ['GERENTE_GENERAL', 'DIRECTOR_COMERCIAL', 'ADMIN_AREA'];
+  const rolesGrupo = ['COORDINADOR_PREVISION', 'JEFE_PAP', 'SUPERVISOR'];
+
+  if (rolesArea.includes(codigo)) {
+    const areas = areaIdsAccesibles(actor); // ya devuelve number[] con principal + extras
+    if (!areas?.length) return [actor.usr_id];
+    const rows = await SvUsuario.findAll({
+      where: { usr_area_id: { [Op.in]: areas }, usr_activo: 1 },
+      attributes: ['usr_id']
+    });
+    return rows.map(r => r.usr_id);
+  }
+
+  if (rolesGrupo.includes(codigo)) {
+    const grupos = grupoIdsAccesibles(actor);
+    if (!grupos?.length) return [actor.usr_id];
+    const rows = await SvUsuario.findAll({
+      where: { usr_grupo_id: { [Op.in]: grupos }, usr_activo: 1 },
+      attributes: ['usr_id']
+    });
+    return rows.map(r => r.usr_id);
+  }
+
+  // Rol desconocido: safe default
+  return [actor.usr_id];
+}
+
+module.exports = { areasAccesibles, tieneAccesoArea, areaIdsAccesibles, grupoIdsAccesibles, usuariosAccesibles };
