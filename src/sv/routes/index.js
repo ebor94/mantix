@@ -13,6 +13,9 @@ router.get('/health', (_req, res) => res.json({
   ts: new Date().toISOString()
 }));
 
+// SP-1a · Endpoints públicos (sin svAuth) — landing + registro al pool
+router.use('/public', require('./publicEventos.routes'));
+
 router.use('/auth',     require('./auth.routes'));
 router.use('/config',   svAuth, svAreaGuard, require('./config.routes'));
 router.use('/usuarios', svAuth, svAreaGuard, require('./usuarios.routes'));
