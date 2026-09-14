@@ -29,6 +29,17 @@ function hoyISO() {
   return aISO(new Date());
 }
 
+/**
+ * Fecha de hoy en zona 'America/Bogota', formato ISO YYYY-MM-DD.
+ * Prefiérela sobre hoyISO() cuando el consumidor represente "hoy"
+ * desde la perspectiva del usuario en Colombia (jornada, ausencia,
+ * horario laboral). hoyISO() sigue existiendo para parseo de inputs
+ * Joi.date() con formato YYYY-MM-DD.
+ */
+function hoyBogotaISO() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+}
+
 function rangoDia(d) {
   const iso = aISO(d) || hoyISO();
   return { start: `${iso} 00:00:00`, end: `${iso} 23:59:59`, fecha: iso };
@@ -40,4 +51,4 @@ function rango(desde, hasta) {
   return { start: `${dStart} 00:00:00`, end: `${dEnd} 23:59:59`, desde: dStart, hasta: dEnd };
 }
 
-module.exports = { aISO, hoyISO, rangoDia, rango };
+module.exports = { aISO, hoyISO, hoyBogotaISO, rangoDia, rango };

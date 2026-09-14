@@ -7,10 +7,28 @@ jest.mock('../src/sv/models', () => ({
 }));
 
 jest.mock('../src/sv/utils/fechas', () => ({
-  hoyISO: () => '2026-09-14'
+  hoyBogotaISO: () => '2026-09-14'
 }));
 
 const svc = require('../src/sv/services/jornadaObligatoria.service');
+
+const realFechas = jest.requireActual('../src/sv/utils/fechas');
+describe('utils/fechas.hoyBogotaISO', () => {
+  test('devuelve fecha en zona America/Bogota (no UTC)', () => {
+    // fake una fecha en el borde: 03:00 UTC = 22:00 Bogota del día anterior
+    const orig = Date;
+    global.Date = class extends Date {
+      constructor() { super('2026-09-15T03:00:00Z'); }
+    };
+    Object.setPrototypeOf(global.Date, orig);
+    try {
+      const r = realFechas.hoyBogotaISO();
+      expect(r).toBe('2026-09-14'); // 22:00 Bogota, ayer
+    } finally {
+      global.Date = orig;
+    }
+  });
+});
 
 const asesor    = { usr_id: 10, rol: { rol_codigo: 'ASESOR' } };
 const coord     = { usr_id: 11, rol: { rol_codigo: 'COORDINADOR_PREVISION' } };

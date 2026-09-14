@@ -9,7 +9,7 @@
  *  - Un usuario sólo puede tener 1 ausencia por día (unique key).
  */
 const { SvJornada, SvJornadaAusencia } = require('../models');
-const { hoyISO } = require('../utils/fechas');
+const { hoyBogotaISO } = require('../utils/fechas');
 
 const ROLES_NO_OPERATIVOS = new Set([
   'SUPER_ADMIN',
@@ -23,7 +23,7 @@ function esOperativo(usuario) {
 }
 
 async function estadoHoy(usuario) {
-  const fecha = hoyISO();
+  const fecha = hoyBogotaISO();
   const [jornada, ausencia] = await Promise.all([
     SvJornada.findOne({ where: { jor_usr_id: usuario.usr_id, jor_fecha: fecha } }),
     SvJornadaAusencia.findOne({ where: { aus_usr_id: usuario.usr_id, aus_fecha: fecha } })
@@ -42,7 +42,7 @@ async function registrarAusencia(usuarioId, { tipo, motivo }) {
   try {
     return await SvJornadaAusencia.create({
       aus_usr_id: usuarioId,
-      aus_fecha:  hoyISO(),
+      aus_fecha:  hoyBogotaISO(),
       aus_tipo:   tipo,
       aus_motivo: motivo
     });
@@ -58,7 +58,7 @@ async function registrarAusencia(usuarioId, { tipo, motivo }) {
 
 async function eliminarAusenciaHoy(usuarioId) {
   return SvJornadaAusencia.destroy({
-    where: { aus_usr_id: usuarioId, aus_fecha: hoyISO() }
+    where: { aus_usr_id: usuarioId, aus_fecha: hoyBogotaISO() }
   });
 }
 
