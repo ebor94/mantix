@@ -2,6 +2,7 @@
  * sv/services/eventoPool.service.js
  * Pool de registros públicos de eventos → convertidos a prospectos al asignar.
  */
+const { Transaction } = require('sequelize');
 const {
   SvEventoPoolRegistro, SvEventoAgenda, SvEventoAsistente,
   SvPersona, SvProspecto, SvFuente, SvEstado, SvUsuario, sequelize
@@ -55,10 +56,7 @@ async function asignar(eventoId, poolId, payload, actor) {
   if (!evento) throw err('Evento no encontrado', 'NOT_FOUND');
   await validarAccesoEvento(evento, actor);
 
-  const pool = await SvEventoPoolRegistro.findByPk(poolId);
-  if (!pool || pool.pool_evento_id !== evento.evento_id) throw err('Registro no encontrado', 'NOT_FOUND');
-  if (pool.pool_prosp_id) throw err('Registro ya asignado', 'YA_ASIGNADO');
-
+  // Validaciones no dependientes de la fila del pool: fail-fast fuera de la transacción.
   const asesorId = parseInt(payload.asesor_id);
   if (!asesorId) throw err('asesor_id requerido', 'VALIDATION_ERROR');
 
@@ -89,6 +87,18 @@ async function asignar(eventoId, poolId, payload, actor) {
   const { normalizar } = require('../utils/telefono');
 
   return sequelize.transaction(async (t) => {
+    // Adquiere row-lock EXCLUSIVO sobre la fila del pool (SELECT ... FOR UPDATE).
+    // Esto serializa dos "asignar" concurrentes sobre el mismo registro: el segundo
+    // espera a que el primero libere la fila y la vuelve a leer ya con pool_prosp_id seteado.
+    const pool = await SvEventoPoolRegistro.findByPk(poolId, {
+      transaction: t,
+      lock: Transaction.LOCK.UPDATE
+    });
+    if (!pool || pool.pool_evento_id !== evento.evento_id) throw err('Registro no encontrado', 'NOT_FOUND');
+    // Re-check dentro del lock: cualquier request concurrente que haya asignado antes
+    // de que adquiriéramos el lock aparece aquí con pool_prosp_id ya seteado.
+    if (pool.pool_prosp_id) throw err('Registro ya asignado', 'YA_ASIGNADO');
+
     let persona = await personasSvc.buscarPorTelefono(pool.pool_telefono);
     if (!persona) {
       const nombreParts = pool.pool_nombre.trim().split(/\s+/);

@@ -100,6 +100,25 @@ describe('crear (multi-asesor)', () => {
   });
 });
 
+describe('validarAccesoEvento (scope por área para DIRECTOR_COMERCIAL/GERENTE_GENERAL/ADMIN_AREA)', () => {
+  test('DIRECTOR_COMERCIAL con el dueño del evento dentro de su scope puede actualizar (no lanza FORBIDDEN)', async () => {
+    const director = {
+      usr_id: 30, rol: { rol_codigo: 'DIRECTOR_COMERCIAL' },
+      usr_area_id: 2, areasExtra: [{ area_id: 3 }]
+    };
+    mockEvento.findByPk.mockResolvedValue({
+      evento_id: 500, evento_asesor_id: 10,
+      update: jest.fn().mockResolvedValue(true)
+    });
+    acceso.usuariosAccesibles.mockResolvedValue([10, 11, 12]); // director ve al dueño del evento
+
+    const ev = await svc.actualizar(500, { titulo: 'X' }, director);
+
+    expect(mockEvento.findByPk).toHaveBeenCalledWith(500);
+    expect(ev.update).toHaveBeenCalledWith(expect.objectContaining({ evento_titulo: 'X' }));
+  });
+});
+
 describe('actualizarMetricasAsistente', () => {
   test('jefe actualiza métricas de un asistente en su scope', async () => {
     mockAsis.findByPk.mockResolvedValue({

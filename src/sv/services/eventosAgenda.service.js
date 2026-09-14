@@ -9,7 +9,7 @@ const {
   SvEventoAgenda, SvEventoAsistente, SvEventoSlot, SvEventoPoolRegistro,
   SvUsuario, SvProspecto, SvEmpresa, SvGrupo, SvArea
 } = require('../models');
-const { usuariosAccesibles, grupoIdsAccesibles } = require('../utils/acceso');
+const { usuariosAccesibles } = require('../utils/acceso');
 const { ROLES } = require('../config/constants');
 
 const TIPOS_VALIDOS = new Set(['REUNION','VISITA','CAPACITACION','LLAMADA','FERIA','PERSONAL','OTRO','SEGUIMIENTO']);
@@ -42,12 +42,9 @@ async function validarAccesoEvento(eventoId, actor) {
     if (!asis) throw err('Evento fuera de tu alcance', 'FORBIDDEN');
     return ev;
   }
-  const grupos = grupoIdsAccesibles(actor);
-  if (grupos !== null) {
-    const target = await SvUsuario.findByPk(ev.evento_asesor_id, { attributes: ['usr_grupo_id'] });
-    if (!target || !grupos.includes(target.usr_grupo_id)) {
-      throw err('Evento fuera de tu grupo', 'FORBIDDEN');
-    }
+  const scope = await usuariosAccesibles(actor);
+  if (scope !== null && !scope.includes(ev.evento_asesor_id)) {
+    throw err('Evento fuera de tu alcance', 'FORBIDDEN');
   }
   return ev;
 }
