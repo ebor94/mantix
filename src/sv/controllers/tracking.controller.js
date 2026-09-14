@@ -144,8 +144,38 @@ async function exportarMisDatos(req, res) {
   return res.send(head + filas);
 }
 
+// ─────────────────────────────────────────────────────────
+// SP-4 · Popup obligatorio de inicio de jornada
+// ─────────────────────────────────────────────────────────
+const jornadaObligatoria = require('../services/jornadaObligatoria.service');
+
+async function estadoJornadaHoy(req, res) {
+  const r = await jornadaObligatoria.estadoHoy(req.user);
+  return ok(res, r);
+}
+
+async function registrarAusenciaHoy(req, res) {
+  try {
+    const a = await jornadaObligatoria.registrarAusencia(req.user.usr_id, req.body);
+    return created(res, a);
+  } catch (e) {
+    if (e.code === 'AUSENCIA_DUPLICADA') {
+      return fail(res, 409, ERROR_CODES.CONFLICT, e.message);
+    }
+    throw e;
+  }
+}
+
+async function eliminarAusenciaHoy(req, res) {
+  await jornadaObligatoria.eliminarAusenciaHoy(req.user.usr_id);
+  return noContent(res);
+}
+
 module.exports = {
   iniciarJornada, finalizarJornada, batchPuntos,
   recorrido, liveEquipo, listarJornadas,
-  aceptarConsentimiento, exportarMisDatos
+  aceptarConsentimiento, exportarMisDatos,
+  estadoJornadaHoy,
+  registrarAusenciaHoy,
+  eliminarAusenciaHoy
 };

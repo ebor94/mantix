@@ -18,6 +18,12 @@ router.patch ('/jornadas/:id/finalizar',      validate(v.finalizarJornada),     
 router.post  ('/jornadas/:id/puntos',         validate(v.batchPuntos),                     ctrl.batchPuntos);
 router.get   ('/jornadas',                    validate(v.listarJornadas, 'query'),         ctrl.listarJornadas);
 
+// SP-4 · Popup obligatorio de inicio de jornada
+const vJornObl = require('../validations/jornadaObligatoria.validation');
+router.get   ('/jornadas/hoy',                                                             ctrl.estadoJornadaHoy);
+router.post  ('/jornadas/ausencia',           validate(vJornObl.registrarAusencia),        ctrl.registrarAusenciaHoy);
+router.delete('/jornadas/ausencia/hoy',                                                    ctrl.eliminarAusenciaHoy);
+
 // Recorrido de un usuario en una fecha (propio o subordinado)
 router.get   ('/recorrido/:usrId',            validate(v.recorrido, 'query'),              ctrl.recorrido);
 
