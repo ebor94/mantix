@@ -109,7 +109,7 @@ async function listar(req, res, next) {
     const [rows] = await db.query(
       `SELECT id, codigo, estado, nombre_ser_querido, identificacion,
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
-              asesor_id, asistente_id, tanatologo_id, created_at, updated_at
+              conductor, asesor_id, asistente_id, tanatologo_id, created_at, updated_at
        FROM asistencias ${where}
        ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
