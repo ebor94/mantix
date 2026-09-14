@@ -14,6 +14,6 @@ router.post('/:id/actores',      requireRol('asesor', 'admin'),          ctrl.as
 router.patch('/:id/estado',      requireRol(...ROLES_AVANCE),            ctrl.cambiarEstado)
 router.post('/:id/etapa',        requireRol(...ROLES_CAMPO),             ctrl.guardarEtapa)
 router.post('/:id/aprobar',      requireRol('coordinador', 'contabilidad', 'admin'), ctrl.aprobar)
-router.post('/:id/nota',         requireRol('contabilidad', 'coordinador', 'admin'), ctrl.agregarNota)
+router.post('/:id/nota',         requireRol('contabilidad', 'coordinador', 'supervisora', 'admin'), ctrl.agregarNota)
 
 module.exports = router
