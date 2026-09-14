@@ -41,6 +41,16 @@ describe('PUT /eventos-agenda/:id', () => {
     expect(svEv.actualizar).toHaveBeenCalledWith(500,
       expect.objectContaining({ titulo: 'Nuevo título' }), jefe);
   });
+
+  test('PUT NO inyecta registros_publicos_habilitado si no se envía', async () => {
+    svEv.actualizar.mockResolvedValue({ evento_id: 500 });
+    await request(buildApp(jefe))
+      .put('/api/sv/eventos-agenda/500')
+      .send({ titulo: 'Solo titulo' });
+    const [, payload] = svEv.actualizar.mock.calls[svEv.actualizar.mock.calls.length - 1];
+    expect(payload).not.toHaveProperty('registros_publicos_habilitado');
+    expect(payload).toEqual({ titulo: 'Solo titulo' });
+  });
 });
 
 describe('GET /eventos-agenda/:id/pool', () => {

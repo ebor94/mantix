@@ -40,10 +40,23 @@ const crearEvento = Joi.object({
   meta_leads:     Joi.number().integer().min(0).allow(null)
 }).prefs({ abortEarly: false });
 
-const actualizarEvento = crearEvento.fork(
-  ['titulo', 'tipo', 'modo_fechas', 'fecha_inicio', 'asistentes_ids'],
-  (s) => s.optional()
-);
+// Update schema: NO defaults, NO cross-field constraints — updates son parciales.
+// Cualquier campo omitido queda sin tocar (el service usa `if (payload.X !== undefined)`).
+const actualizarEvento = Joi.object({
+  titulo:      Joi.string().trim().min(2).max(180),
+  descripcion: Joi.string().allow('', null).max(2000),
+  tipo:        Joi.string().valid(...TIPOS_EVENTO),
+  modo_fechas: Joi.string().valid(...MODOS_FECHA),
+  fecha_inicio: Joi.date().iso(),
+  fecha_fin:   Joi.date().iso().allow(null),
+  slots:       Joi.array().items(slot).min(1),
+  asistentes_ids: Joi.array().items(Joi.number().integer().positive()).min(1),
+  apoyo_usr_id:   Joi.number().integer().positive().allow(null),
+  empresa_id:     Joi.number().integer().positive().allow(null),
+  prosp_id:       Joi.number().integer().positive().allow(null),
+  registros_publicos_habilitado: Joi.boolean(),
+  meta_leads:     Joi.number().integer().min(0).allow(null)
+}).min(1).prefs({ abortEarly: false });
 
 const registroPublico = Joi.object({
   nombre:   Joi.string().trim().min(2).max(180).required(),

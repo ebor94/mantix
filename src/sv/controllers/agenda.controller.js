@@ -59,13 +59,6 @@ async function obtenerEvento(req, res) {
   } catch (e) { return manejarError(res, e); }
 }
 
-async function actualizarEvento(req, res) {
-  try {
-    const r = await eventos.actualizar(parseInt(req.params.id), req.body, req.user);
-    return ok(res, r);
-  } catch (e) { return manejarError(res, e); }
-}
-
 async function marcarCompletadoEvento(req, res) {
   try {
     const r = await eventos.marcarCompletado(parseInt(req.params.id), !!req.body.completado, req.user);
@@ -90,10 +83,7 @@ async function actualizarEventoV2(req, res) {
     const r = await eventos.actualizar(parseInt(req.params.id), req.body, req.user);
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'NOT_FOUND')         return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
-    if (e.code === 'FORBIDDEN')         return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
-    if (e.code === 'VALIDATION_ERROR')  return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    throw e;
+    return manejarError(res, e);
   }
 }
 
@@ -102,8 +92,7 @@ async function listarPool(req, res) {
     const r = await eventoPool.listar(parseInt(req.params.id), req.query, req.user);
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'NOT_FOUND') return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
-    throw e;
+    return manejarError(res, e);
   }
 }
 
@@ -115,11 +104,8 @@ async function asignarPool(req, res) {
     );
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
-    if (e.code === 'YA_ASIGNADO')      return fail(res, 409, ERROR_CODES.CONFLICT, e.message);
-    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    if (e.code === 'FORBIDDEN')        return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
-    throw e;
+    if (e.code === 'YA_ASIGNADO') return fail(res, 409, ERROR_CODES.CONFLICT, e.message);
+    return manejarError(res, e);
   }
 }
 
@@ -130,10 +116,7 @@ async function actualizarMetricas(req, res) {
     );
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
-    if (e.code === 'FORBIDDEN')        return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
-    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    throw e;
+    return manejarError(res, e);
   }
 }
 
@@ -142,14 +125,12 @@ async function resumenEvento(req, res) {
     const r = await eventos.resumen(parseInt(req.params.id), req.user);
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'NOT_FOUND') return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
-    if (e.code === 'FORBIDDEN') return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
-    throw e;
+    return manejarError(res, e);
   }
 }
 
 module.exports = {
   listarDia, listarMes,
-  crearEvento, obtenerEvento, actualizarEvento, marcarCompletadoEvento, eliminarEvento,
+  crearEvento, obtenerEvento, marcarCompletadoEvento, eliminarEvento,
   actualizarEventoV2, listarPool, asignarPool, actualizarMetricas, resumenEvento
 };
