@@ -7,6 +7,7 @@ const mockFuente   = { findOne: jest.fn() };
 const mockEstado   = { findOne: jest.fn() };
 const mockUsr      = { findByPk: jest.fn() };
 const mockPersonasSvc = { buscarPorTelefono: jest.fn() };
+const mockUsuariosAccesibles = jest.fn();
 
 jest.mock('../src/sv/models', () => ({
   SvEventoPoolRegistro: mockPool,
@@ -16,23 +17,27 @@ jest.mock('../src/sv/models', () => ({
   SvProspecto:          mockProsp,
   SvFuente:             mockFuente,
   SvEstado:             mockEstado,
-  SvUsuario:            mockUsr
+  SvUsuario:            mockUsr,
+  sequelize:            { transaction: (fn) => fn({}) }
 }));
 jest.mock('../src/sv/services/personas.service', () => mockPersonasSvc);
 jest.mock('../src/sv/utils/telefono', () => ({
   normalizar: (t) => String(t || '').replace(/\D/g, ''),
   esValido:   () => true
 }));
-
-jest.mock('../src/sv/services/eventosAgenda.service', () => ({
-  validarAccesoEvento: undefined // no exportada; se skippea en este test
+jest.mock('../src/sv/utils/acceso', () => ({
+  usuariosAccesibles: mockUsuariosAccesibles
 }));
 
 const svc = require('../src/sv/services/eventoPool.service');
 
 const jefe = { usr_id: 20, rol: { rol_codigo: 'COORDINADOR_PREVISION' } };
+const asesor = { usr_id: 15, rol: { rol_codigo: 'ASESOR' } };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockUsuariosAccesibles.mockResolvedValue(null); // sin filtro por defecto (simula scope amplio)
+});
 
 describe('listar', () => {
   test('sin filtro devuelve todos', async () => {
@@ -75,10 +80,10 @@ describe('asignar', () => {
     const r = await svc.asignar(500, 7, { asesor_id: 15 }, jefe);
 
     expect(mockPersona.create).toHaveBeenCalled();
-    expect(mockProsp.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockProsp.create.mock.calls[0][0]).toEqual(expect.objectContaining({
       prosp_asesor_id: 15, prosp_fuente_id: 99, prosp_area_id: 4, prosp_grupo_id: 3
     }));
-    expect(r.pool.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(r.pool.update.mock.calls[0][0]).toEqual(expect.objectContaining({
       pool_prosp_id: 900, pool_asignado_a: 15, pool_asignado_por: 20
     }));
     expect(r.prospecto.prosp_id).toBe(900);
@@ -86,9 +91,24 @@ describe('asignar', () => {
 
   test('rechaza si el pool ya fue asignado', async () => {
     mockEvento.findByPk.mockResolvedValue({ evento_id: 500 });
-    mockPool.findByPk.mockResolvedValue({ pool_id: 7, pool_prosp_id: 900 });
+    mockPool.findByPk.mockResolvedValue({ pool_id: 7, pool_evento_id: 500, pool_prosp_id: 900 });
     await expect(svc.asignar(500, 7, { asesor_id: 15 }, jefe))
       .rejects.toMatchObject({ code: 'YA_ASIGNADO' });
+  });
+
+  test('rechaza NOT_FOUND si el pool pertenece a otro evento (cross-event)', async () => {
+    mockEvento.findByPk.mockResolvedValue({ evento_id: 500 });
+    mockPool.findByPk.mockResolvedValue({ pool_id: 7, pool_evento_id: 999, pool_prosp_id: null });
+    await expect(svc.asignar(500, 7, { asesor_id: 15 }, jefe))
+      .rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  test('rechaza FORBIDDEN si el asesor no es dueño ni asistente del evento', async () => {
+    mockEvento.findByPk.mockResolvedValue({ evento_id: 500, evento_asesor_id: 999 });
+    mockAsis.findOne.mockResolvedValue(null); // no es asistente activo
+    await expect(svc.asignar(500, 7, { asesor_id: 15 }, asesor))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockPool.findByPk).not.toHaveBeenCalled();
   });
 
   test('rechaza si el asesor destino no es asistente activo', async () => {
