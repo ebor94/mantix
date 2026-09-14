@@ -35,6 +35,9 @@ const db = {
   SvGrupoEmpresarial:  require('./GrupoEmpresarial')(sequelize, Sequelize.DataTypes),
   // ─── Agenda transversal (Migración 018) ───
   SvEventoAgenda:      require('./EventoAgenda')(sequelize, Sequelize.DataTypes),
+  SvEventoAsistente:   require('./EventoAsistente')(sequelize, Sequelize.DataTypes),
+  SvEventoSlot:        require('./EventoSlot')(sequelize, Sequelize.DataTypes),
+  SvEventoPoolRegistro: require('./EventoPoolRegistro')(sequelize, Sequelize.DataTypes),
   // ─── Fidelización Empresas (Fase 6) ───
   SvContactoFideliz:   require('./ContactoFideliz')(sequelize, Sequelize.DataTypes),
   SvFechaEspecial:     require('./FechaEspecial')(sequelize, Sequelize.DataTypes),
