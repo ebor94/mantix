@@ -5,7 +5,7 @@ const glpi = require('../services/glpi.service')
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
   tanatologo:           ['PRESERVACION'],
-  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION'], // doble rol
+  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO'], // triple rol: incluye encofrado
   supervisora:          ['ENCOFRADO'],
 }
 
@@ -13,17 +13,21 @@ const ESTADOS_POR_ROL = {
 const ETAPAS_POR_ROL = {
   asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
-  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
+  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME'],
   supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
   admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
 }
 
-// Etapas requeridas para cerrar cada estado por rol
+// Etapas requeridas para cerrar cada estado por rol.
+// NOTA: al cerrar F06 el asistente_tanatologo NO hace transición porque
+// TRANSICIONES.ENCOFRADO solo permite avance a supervisora/admin — la
+// asistencia queda en ENCOFRADO esperando que la supervisora haga F-05.
 const ETAPAS_PARA_CERRAR = {
   asistente:            { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
   tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA'] },
   asistente_tanatologo: { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
-                          PRESERVACION: ['F04_TANATOPRAXIA'] },
+                          PRESERVACION: ['F04_TANATOPRAXIA'],
+                          ENCOFRADO:    ['F06_ENCOFRADO'] },
   supervisora:          { ENCOFRADO:     ['F06_ENCOFRADO', 'F05_ENTREGA'] },
   admin:                { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'],
@@ -85,7 +89,7 @@ async function listar(req, res, next) {
         ))`)
       }
     } else if (rol === 'asistente_tanatologo') {
-      if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION')") }
+      if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION','ENCOFRADO')") }
     } else if (rol === 'supervisora') {
       if (!estado) { conditions.push("estado = 'ENCOFRADO'") }
     }
