@@ -80,7 +80,76 @@ async function eliminarEvento(req, res) {
   } catch (e) { return manejarError(res, e); }
 }
 
+// ─────────────────────────────────────────────────────────
+// SP-1a · Multi-asesor + pool público
+// ─────────────────────────────────────────────────────────
+const eventoPool = require('../services/eventoPool.service');
+
+async function actualizarEventoV2(req, res) {
+  try {
+    const r = await eventos.actualizar(parseInt(req.params.id), req.body, req.user);
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'NOT_FOUND')         return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'FORBIDDEN')         return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
+    if (e.code === 'VALIDATION_ERROR')  return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
+    throw e;
+  }
+}
+
+async function listarPool(req, res) {
+  try {
+    const r = await eventoPool.listar(parseInt(req.params.id), req.query, req.user);
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    throw e;
+  }
+}
+
+async function asignarPool(req, res) {
+  try {
+    const r = await eventoPool.asignar(
+      parseInt(req.params.id), parseInt(req.params.pool_id),
+      req.body, req.user
+    );
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'YA_ASIGNADO')      return fail(res, 409, ERROR_CODES.CONFLICT, e.message);
+    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
+    if (e.code === 'FORBIDDEN')        return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
+    throw e;
+  }
+}
+
+async function actualizarMetricas(req, res) {
+  try {
+    const r = await eventos.actualizarMetricasAsistente(
+      parseInt(req.params.eva_id), req.body, req.user
+    );
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'FORBIDDEN')        return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
+    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
+    throw e;
+  }
+}
+
+async function resumenEvento(req, res) {
+  try {
+    const r = await eventos.resumen(parseInt(req.params.id), req.user);
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'NOT_FOUND') return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'FORBIDDEN') return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
+    throw e;
+  }
+}
+
 module.exports = {
   listarDia, listarMes,
-  crearEvento, obtenerEvento, actualizarEvento, marcarCompletadoEvento, eliminarEvento
+  crearEvento, obtenerEvento, actualizarEvento, marcarCompletadoEvento, eliminarEvento,
+  actualizarEventoV2, listarPool, asignarPool, actualizarMetricas, resumenEvento
 };
