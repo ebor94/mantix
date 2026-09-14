@@ -211,17 +211,20 @@ async function crear(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /asistencias/:id/actores  — llamado por n8n para asignar asistente y tanatólogo
+// POST /asistencias/:id/actores
+// - Llamado por n8n (o admin) con { asistente_id, tanatologo_id } para asignar actores.
+// - Llamado por el asesor sin body para avanzar de NUEVO → ASISTENCIA sin pre-asignar
+//   (el asistente/tanatólogo que finalmente diligencie F-02/F-04 se auto-asigna).
 async function asignarActores(req, res, next) {
   try {
     const { id } = req.params
-    const { asistente_id, tanatologo_id } = req.body
+    const { asistente_id, tanatologo_id } = req.body || {}
     const { usuario, nombre } = req.user
 
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
     if (rows[0].estado !== 'NUEVO')
-      return res.status(400).json({ mensaje: 'Solo se pueden asignar actores en estado NUEVO' })
+      return res.status(400).json({ mensaje: 'Solo se puede avanzar en estado NUEVO' })
 
     const updates = {}
     if (asistente_id)  updates.asistente_id  = asistente_id
@@ -229,10 +232,10 @@ async function asignarActores(req, res, next) {
     updates.estado = 'ASISTENCIA'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
-    await insertarHistorial(
-      id, 'NUEVO', 'ASISTENCIA', usuario, nombre,
-      `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`
-    )
+    const motivo = (asistente_id || tanatologo_id)
+      ? `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`
+      : `Avanzado a ASISTENCIA por ${nombre || usuario}`
+    await insertarHistorial(id, 'NUEVO', 'ASISTENCIA', usuario, nombre, motivo)
 
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
     res.json(actualizada[0])
