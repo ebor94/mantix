@@ -42,6 +42,7 @@ const db = {
   // ─── Tracking GPS de jornadas (Fase 7) ───
   SvJornada:           require('./Jornada')(sequelize, Sequelize.DataTypes),
   SvTrackingPunto:     require('./TrackingPunto')(sequelize, Sequelize.DataTypes),
+  SvJornadaAusencia:   require('./JornadaAusencia')(sequelize, Sequelize.DataTypes),
   // ─── Empresariales: categoría + documentos + propuestas archivo + presupuesto fideliz (migración 015) ───
   SvTipoDocumento:           require('./TipoDocumento')(sequelize, Sequelize.DataTypes),
   SvEmpresaDocumento:        require('./EmpresaDocumento')(sequelize, Sequelize.DataTypes),
