@@ -7,19 +7,24 @@ const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
 
 async function landing(req, res) {
-  const ev = await svc.obtenerPorHash(req.params.hash);
-  if (!ev) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Evento no encontrado o registro cerrado');
-  if (ev.fecha_fin && new Date(ev.fecha_fin) < new Date()) {
-    return fail(res, 410, ERROR_CODES.CONFLICT, 'Evento ya cerrado');
+  try {
+    const ev = await svc.obtenerPorHash(req.params.hash);
+    if (!ev) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Evento no encontrado o registro cerrado');
+    if (ev.evento_fecha_fin && new Date(ev.evento_fecha_fin) < new Date()) {
+      return fail(res, 410, ERROR_CODES.CONFLICT, 'Evento ya cerrado');
+    }
+    return ok(res, {
+      evento_id:      ev.evento_id,
+      titulo:         ev.evento_titulo,
+      descripcion:    ev.evento_descripcion,
+      fecha_inicio:   ev.evento_fecha_hora,
+      fecha_fin:      ev.evento_fecha_fin,
+      empresa_nombre: ev.empresa?.empresa_razon_social || null
+    });
+  } catch (e) {
+    console.error('[publicEventos.landing] error:', e?.message || e);
+    return fail(res, 500, ERROR_CODES.INTERNAL_ERROR, 'Error interno');
   }
-  return ok(res, {
-    evento_id:      ev.evento_id,
-    titulo:         ev.titulo,
-    descripcion:    ev.descripcion,
-    fecha_inicio:   ev.fecha_inicio,
-    fecha_fin:      ev.fecha_fin,
-    empresa_nombre: ev.empresa_nombre || null
-  });
 }
 
 async function registrar(req, res) {
@@ -33,7 +38,8 @@ async function registrar(req, res) {
   } catch (e) {
     if (e.code === 'NOT_FOUND')       return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
     if (e.code === 'EVENTO_CERRADO')  return fail(res, 410, ERROR_CODES.CONFLICT, e.message);
-    throw e;
+    console.error('[publicEventos.registrar] error:', e?.message || e);
+    return fail(res, 500, ERROR_CODES.INTERNAL_ERROR, 'Error interno');
   }
 }
 
