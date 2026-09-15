@@ -4,7 +4,7 @@
  * Migración 020 (SP-1a) — soporte multi-asesor + slots + apoyo + pool público.
  */
 const crypto = require('crypto');
-const { Op } = require('sequelize');
+const { Op, fn, col, literal } = require('sequelize');
 const {
   SvEventoAgenda, SvEventoAsistente, SvEventoSlot, SvEventoPoolRegistro,
   SvUsuario, SvProspecto, SvEmpresa, SvGrupo, SvArea
@@ -348,17 +348,35 @@ async function listado({ filtros = {}, actor }) {
     limit: 500
   });
 
-  const rows = [];
-  for (const ev of eventos) {
-    const evJson = ev.toJSON ? ev.toJSON() : ev;
-    let pool_total = 0, pool_pendientes = 0;
-    if (evJson.evento_registros_publicos_habilitado) {
-      const [t, p] = await Promise.all([
-        SvEventoPoolRegistro.count({ where: { pool_evento_id: evJson.evento_id } }),
-        SvEventoPoolRegistro.count({ where: { pool_evento_id: evJson.evento_id, pool_prosp_id: null } })
-      ]);
-      pool_total = t; pool_pendientes = p;
+  // Batch: 1 sola query para todos los pool counts (evita N+1)
+  const eventosJson = eventos.map(e => e.toJSON ? e.toJSON() : e);
+  const eventosConLink = eventosJson.filter(e => e.evento_registros_publicos_habilitado);
+
+  const poolCountsMap = new Map(); // evento_id → { total, pendientes }
+  if (eventosConLink.length) {
+    const poolStats = await SvEventoPoolRegistro.findAll({
+      attributes: [
+        'pool_evento_id',
+        [fn('COUNT', col('pool_id')), 'total'],
+        [fn('SUM', literal('CASE WHEN pool_prosp_id IS NULL THEN 1 ELSE 0 END')), 'pendientes']
+      ],
+      where: { pool_evento_id: { [Op.in]: eventosConLink.map(e => e.evento_id) } },
+      group: ['pool_evento_id'],
+      raw: true
+    });
+    for (const s of poolStats) {
+      poolCountsMap.set(s.pool_evento_id, {
+        total:      parseInt(s.total) || 0,
+        pendientes: parseInt(s.pendientes) || 0
+      });
     }
+  }
+
+  const rows = [];
+  for (const evJson of eventosJson) {
+    const counts = poolCountsMap.get(evJson.evento_id) || { total: 0, pendientes: 0 };
+    const pool_total = counts.total;
+    const pool_pendientes = counts.pendientes;
     rows.push({
       evento_id:                            evJson.evento_id,
       evento_titulo:                        evJson.evento_titulo,

@@ -1,4 +1,5 @@
 const { inspect } = require('util');
+const { Op } = require('sequelize');
 
 const mockEv    = { findAll: jest.fn() };
 const mockPool  = { count: jest.fn() };
@@ -64,11 +65,14 @@ describe('listado', () => {
     mockEv.findAll.mockResolvedValue([
       { toJSON: () => ({ evento_id: 500, evento_registros_publicos_habilitado: 1 }) }
     ]);
-    mockPool.count
-      .mockResolvedValueOnce(20)  // total
-      .mockResolvedValueOnce(5);  // pendientes
+    mockPool.findAll = jest.fn().mockResolvedValue([
+      { pool_evento_id: 500, total: '20', pendientes: '5' }  // Sequelize devuelve strings en aggregates raw
+    ]);
     const r = await svc.listado({ filtros: {}, actor: jefe });
     expect(r[0].pool_total).toBe(20);
     expect(r[0].pool_pendientes).toBe(5);
+    expect(mockPool.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { pool_evento_id: { [Op.in]: [500] } } })
+    );
   });
 });
