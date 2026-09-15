@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const {
   sequelize, SvJornada, SvTrackingPunto, SvUsuario, SvGestion, SvProspecto, SvPersona
 } = require('../models');
-const { aISO, hoyISO, rangoDia } = require('../utils/fechas');
+const { aISO, hoyISO, hoyBogotaISO, rangoDia } = require('../utils/fechas');
 const { sumaDistancias } = require('../utils/haversine');
 
 const RETENCION_DIAS = 90;
@@ -69,7 +69,9 @@ async function iniciarJornada(usrId, { lat = null, lng = null, dispositivo = nul
   const j = await SvJornada.create({
     jor_id:                uuid(),
     jor_usr_id:            usrId,
-    jor_fecha:             aISO(now),
+    // Bogotá timezone-aware para match con jornadaObligatoria.estadoHoy
+    // (jor_fecha con aISO UTC daba mañana post-19:00 Bogotá → popup reaparecía)
+    jor_fecha:             hoyBogotaISO(),
     jor_inicio_at:         now,
     jor_inicio_lat:        lat,
     jor_inicio_lng:        lng,
