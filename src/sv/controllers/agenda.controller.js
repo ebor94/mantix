@@ -129,8 +129,36 @@ async function resumenEvento(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// SP-2 · Agenda de seguimiento (supervisores)
+// ─────────────────────────────────────────────────────────
+
+async function semanaSeguimiento(req, res) {
+  try {
+    const asesoresIds = req.query.asesores_ids
+      ? String(req.query.asesores_ids).split(',').map(s => parseInt(s.trim())).filter(Boolean)
+      : [];
+    const r = await agenda.listarSemana({
+      anio:       parseInt(req.query.anio),
+      semanaISO:  parseInt(req.query.semana),
+      asesoresIds,
+      actor:      req.user
+    });
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'FORBIDDEN') return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
+    throw e;
+  }
+}
+
+async function listadoEventos(req, res) {
+  const r = await eventos.listado({ filtros: req.query, actor: req.user });
+  return ok(res, r);
+}
+
 module.exports = {
   listarDia, listarMes,
   crearEvento, obtenerEvento, marcarCompletadoEvento, eliminarEvento,
-  actualizarEventoV2, listarPool, asignarPool, actualizarMetricas, resumenEvento
+  actualizarEventoV2, listarPool, asignarPool, actualizarMetricas, resumenEvento,
+  semanaSeguimiento, listadoEventos
 };
