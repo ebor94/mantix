@@ -4,10 +4,10 @@
  */
 const db = require('../config/db')
 
-// GET /api/h360/gestion-servicios?estado=PENDIENTE|GESTIONADO|DESCARTADO|all&tipo=&fecha_desde=&fecha_hasta=
+// GET /api/h360/gestion-servicios?estado=PENDIENTE|GESTIONADO|DESCARTADO|all&tipo=&fecha_desde=&fecha_hasta=&asistencia_id=
 async function listar(req, res, next) {
   try {
-    const { estado = 'PENDIENTE', tipo, fecha_desde, fecha_hasta } = req.query
+    const { estado = 'PENDIENTE', tipo, fecha_desde, fecha_hasta, asistencia_id } = req.query
     const conds = []
     const params = []
 
@@ -15,6 +15,7 @@ async function listar(req, res, next) {
     if (tipo)                       { conds.push('g.tipo_servicio = ?'); params.push(tipo) }
     if (fecha_desde)                { conds.push('DATE(g.fecha_ofrecimiento) >= ?'); params.push(fecha_desde) }
     if (fecha_hasta)                { conds.push('DATE(g.fecha_ofrecimiento) <= ?'); params.push(fecha_hasta) }
+    if (asistencia_id)              { conds.push('g.asistencia_id = ?'); params.push(asistencia_id) }
 
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
     const [rows] = await db.query(
