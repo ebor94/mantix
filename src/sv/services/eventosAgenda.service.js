@@ -304,8 +304,82 @@ async function resumen(eventoId, actor) {
   };
 }
 
+async function listado({ filtros = {}, actor }) {
+  const scope = await usuariosAccesibles(actor);
+  const whereAnd = [];
+
+  // Scope: dueño OR asistente activo, dentro del scope del actor
+  if (scope !== null) {
+    const asisRows = await SvEventoAsistente.findAll({
+      where: { eva_usr_id: { [Op.in]: scope }, eva_activo: 1 },
+      attributes: ['eva_evento_id']
+    });
+    const evIdsAsis = [...new Set(asisRows.map(a => a.eva_evento_id))];
+    whereAnd.push({
+      [Op.or]: [
+        { evento_asesor_id: { [Op.in]: scope } },
+        ...(evIdsAsis.length ? [{ evento_id: { [Op.in]: evIdsAsis } }] : [])
+      ]
+    });
+  }
+
+  if (filtros.desde) whereAnd.push({ evento_fecha_hora: { [Op.gte]: `${filtros.desde} 00:00:00` } });
+  if (filtros.hasta) whereAnd.push({ evento_fecha_hora: { [Op.lte]: `${filtros.hasta} 23:59:59` } });
+  if (filtros.tipo)  whereAnd.push({ evento_tipo: String(filtros.tipo).toUpperCase() });
+  if (filtros.asesor_id) whereAnd.push({ evento_asesor_id: parseInt(filtros.asesor_id) });
+  if (filtros.link_publico === '1' || filtros.link_publico === 1 || filtros.link_publico === true) {
+    whereAnd.push({ evento_registros_publicos_habilitado: 1 });
+  }
+  if (filtros.q) {
+    whereAnd.push({ evento_titulo: { [Op.like]: `%${String(filtros.q).trim()}%` } });
+  }
+
+  const where = whereAnd.length ? { [Op.and]: whereAnd } : {};
+
+  const eventos = await SvEventoAgenda.findAll({
+    where,
+    include: [
+      { model: SvUsuario, as: 'asesor', attributes: ['usr_id','usr_nombre','usr_apellido'] },
+      { model: SvEventoAsistente, as: 'asistentes',
+        where: { eva_activo: 1 }, required: false,
+        attributes: ['eva_id'] }
+    ],
+    order: [['evento_fecha_hora', 'DESC']],
+    limit: 500
+  });
+
+  const rows = [];
+  for (const ev of eventos) {
+    const evJson = ev.toJSON ? ev.toJSON() : ev;
+    let pool_total = 0, pool_pendientes = 0;
+    if (evJson.evento_registros_publicos_habilitado) {
+      const [t, p] = await Promise.all([
+        SvEventoPoolRegistro.count({ where: { pool_evento_id: evJson.evento_id } }),
+        SvEventoPoolRegistro.count({ where: { pool_evento_id: evJson.evento_id, pool_prosp_id: null } })
+      ]);
+      pool_total = t; pool_pendientes = p;
+    }
+    rows.push({
+      evento_id:                            evJson.evento_id,
+      evento_titulo:                        evJson.evento_titulo,
+      evento_tipo:                          evJson.evento_tipo,
+      evento_fecha_hora:                    evJson.evento_fecha_hora,
+      evento_fecha_fin:                     evJson.evento_fecha_fin,
+      evento_modo_fechas:                   evJson.evento_modo_fechas,
+      evento_registros_publicos_habilitado: !!evJson.evento_registros_publicos_habilitado,
+      evento_link_hash:                     evJson.evento_link_hash,
+      evento_meta_leads:                    evJson.evento_meta_leads,
+      dueño:                                evJson.asesor,
+      count_asistentes:                     (evJson.asistentes || []).length,
+      pool_total,
+      pool_pendientes
+    });
+  }
+  return rows;
+}
+
 module.exports = {
   crear, actualizar, marcarCompletado, eliminar, getOne,
-  actualizarMetricasAsistente, resumen,
+  actualizarMetricasAsistente, resumen, listado,
   TIPOS_VALIDOS
 };
