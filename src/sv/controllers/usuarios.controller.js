@@ -7,6 +7,7 @@ const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto } = require('../models');
 const { hash } = require('../utils/password');
 const { ok, created, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
+const { usuariosAccesibles } = require('../utils/acceso');
 
 function adminAreaFilter(req) {
   const c = req.user.rol?.rol_codigo;
@@ -143,4 +144,26 @@ async function resetPassword(req, res) {
   return ok(res, { ok: true });
 }
 
-module.exports = { list, getOne, create, update, toggle, resetPassword };
+/**
+ * GET /usuarios/accesibles
+ * Devuelve EXACTAMENTE el scope de usuariosAccesibles(actor) — el mismo
+ * usado por agenda.listarSemana / eventosAgenda.listado — para que los
+ * selectores de asesores del frontend no muestren usuarios que luego el
+ * backend rechazará con 403 (mismatch área vs. grupo, SP-2 hotfix).
+ * Autenticado (svAuth), sin gate de rol: cada quien recibe SU propio scope.
+ */
+async function accesibles(req, res) {
+  const scope = await usuariosAccesibles(req.user);
+  // scope es null (super_admin) o array. Si null, devolver todos los activos.
+  const where = { usr_activo: 1 };
+  if (Array.isArray(scope)) where.usr_id = { [Op.in]: scope };
+  const rows = await SvUsuario.findAll({
+    where,
+    attributes: ['usr_id', 'usr_nombre', 'usr_apellido', 'usr_email'],
+    include: [{ model: SvRol, as: 'rol', attributes: ['rol_codigo', 'rol_nombre'] }],
+    order: [['usr_nombre', 'ASC'], ['usr_apellido', 'ASC']]
+  });
+  return ok(res, rows);
+}
+
+module.exports = { list, getOne, create, update, toggle, resetPassword, accesibles };

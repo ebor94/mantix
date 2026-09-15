@@ -18,6 +18,9 @@ const admin   = authorize('SUPER_ADMIN', 'GERENTE_GENERAL', 'ADMIN_AREA');
 const lectura = authorize(...ROLES_SUPERVISORES);
 
 router.get   ('/',     lectura, ctrl.list);
+// SP-2 hotfix: cualquier autenticado recibe SU propio scope (usuariosAccesibles),
+// sin gate de rol — debe ir antes de '/:id' para no ser capturada por el param.
+router.get   ('/accesibles', ctrl.accesibles);
 router.get   ('/:id',  lectura, ctrl.getOne);
 router.post  ('/',     admin, validate(v.create), ctrl.create);
 router.put   ('/:id',  admin, validate(v.update), ctrl.update);

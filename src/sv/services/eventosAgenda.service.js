@@ -323,8 +323,26 @@ async function listado({ filtros = {}, actor }) {
     });
   }
 
-  if (filtros.desde) whereAnd.push({ evento_fecha_hora: { [Op.gte]: `${filtros.desde} 00:00:00` } });
-  if (filtros.hasta) whereAnd.push({ evento_fecha_hora: { [Op.lte]: `${filtros.hasta} 23:59:59` } });
+  if (filtros.desde || filtros.hasta) {
+    const desdeTs = filtros.desde ? `${filtros.desde} 00:00:00` : '1900-01-01 00:00:00';
+    const hastaTs = filtros.hasta ? `${filtros.hasta} 23:59:59` : '2999-12-31 23:59:59';
+    // Ventana overlap: evento_fecha_hora <= hasta AND (fecha_fin cubre desde,
+    // o si es null, fecha_hora >= desde). Consistente con ventanaFecha() de
+    // agenda.service.js — un evento multi-día debe aparecer si su rango
+    // se solapa con [desde, hasta], no sólo si arranca dentro del rango.
+    whereAnd.push({
+      [Op.and]: [
+        { evento_fecha_hora: { [Op.lte]: hastaTs } },
+        { [Op.or]: [
+          { evento_fecha_fin: { [Op.gte]: desdeTs } },
+          { [Op.and]: [
+            { evento_fecha_fin: null },
+            { evento_fecha_hora: { [Op.gte]: desdeTs } }
+          ]}
+        ]}
+      ]
+    });
+  }
   if (filtros.tipo)  whereAnd.push({ evento_tipo: String(filtros.tipo).toUpperCase() });
   if (filtros.asesor_id) whereAnd.push({ evento_asesor_id: parseInt(filtros.asesor_id) });
   if (filtros.link_publico === '1' || filtros.link_publico === 1 || filtros.link_publico === true) {
