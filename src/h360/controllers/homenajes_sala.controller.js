@@ -7,6 +7,7 @@
  * la lógica hace UPSERT del snapshot en `homenaje_sala_auditoria` antes.
  */
 const db = require('../config/db')
+const { syncFromVisita, syncFromSalida } = require('../services/sync_gestion.service')
 
 // ── Helpers de bloqueo por firma ────────────────────────────────────────────
 function parseJson(v) {
@@ -196,6 +197,12 @@ async function guardarSalida(req, res, next) {
       [JSON.stringify(salida_data), nuevoEstado, id]
     )
     const [rows] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [id])
+
+    // Sync gestión de servicios (novenario / última noche en residencia)
+    try {
+      await syncFromSalida(rows[0].id, rows[0].asistencia_id, salida_data, req.user.usuario, req.user.nombre)
+    } catch (e) { console.warn('[sync gestion salida]', e.message) }
+
     res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado })
   } catch (err) { next(err) }
 }
@@ -235,6 +242,13 @@ async function agregarVisita(req, res, next) {
       ]
     )
     const [nueva] = await db.query('SELECT * FROM homenaje_sala_visitas WHERE id = ?', [r.insertId])
+
+    // Sync gestión de servicios adicionales marcados en esta visita
+    try {
+      const [[hs]] = await db.query('SELECT asistencia_id FROM homenajes_sala WHERE id = ?', [id])
+      await syncFromVisita(r.insertId, parseInt(id), hs?.asistencia_id || null, servicios_data, usuario, nombre)
+    } catch (e) { console.warn('[sync gestion visita]', e.message) }
+
     res.status(201).json(nueva[0])
   } catch (err) { next(err) }
 }
@@ -307,6 +321,16 @@ async function actualizarVisita(req, res, next) {
 
     await db.query('UPDATE homenaje_sala_visitas SET ? WHERE id = ?', [campos, visitaId])
     const [rows] = await db.query('SELECT * FROM homenaje_sala_visitas WHERE id = ?', [visitaId])
+
+    // Si cambió servicios_data, sincronizar la bandeja del coordinador
+    if (servicios_data !== undefined) {
+      try {
+        const [[hs]] = await db.query('SELECT asistencia_id FROM homenajes_sala WHERE id = ?', [id])
+        await syncFromVisita(parseInt(visitaId), parseInt(id), hs?.asistencia_id || null,
+          servicios_data, req.user.usuario, req.user.nombre)
+      } catch (e) { console.warn('[sync gestion visita update]', e.message) }
+    }
+
     res.json({ ok: true, visita: rows[0], desbloqueado: yaFirmado })
   } catch (err) { next(err) }
 }
