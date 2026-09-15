@@ -32,4 +32,10 @@ router.patch('/eventos-agenda/asistentes/:eva_id/metricas',
              validate(v.actualizarMetricas),                                  c.actualizarMetricas);
 router.get('/eventos-agenda/:id/resumen',                                     c.resumenEvento);
 
+const vOtp = require('../validations/eventoOtp.validation');
+
+// SP-3 · OTP para edición del dueño
+router.post('/eventos-agenda/:id/otp/solicitar', validate(vOtp.solicitarOtp), c.solicitarOtpEvento);
+router.post('/eventos-agenda/:id/otp/confirmar', validate(vOtp.confirmarOtp), c.confirmarOtpEvento);
+
 module.exports = router;

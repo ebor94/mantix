@@ -159,9 +159,47 @@ async function listadoEventos(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// SP-3 · OTP para edición del dueño
+// ─────────────────────────────────────────────────────────
+const eventoOtp = require('../services/eventoOtp.service');
+
+async function solicitarOtpEvento(req, res) {
+  try {
+    const r = await eventoOtp.solicitar({
+      eventoId: parseInt(req.params.id),
+      cambios:  req.body.cambios,
+      actor:    req.user
+    });
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'RATE_LIMIT')  return fail(res, 429, ERROR_CODES.RATE_LIMIT || 'RATE_LIMIT', e.message);
+    if (e.code === 'GCHAT_FAIL')  return fail(res, 503, 'GCHAT_FAIL',  e.message);
+    return manejarError(res, e);
+  }
+}
+
+async function confirmarOtpEvento(req, res) {
+  try {
+    const r = await eventoOtp.confirmar({
+      eventoId: parseInt(req.params.id),
+      otpId:    parseInt(req.body.otp_id),
+      otp:      String(req.body.otp),
+      actor:    req.user
+    });
+    return ok(res, r);
+  } catch (e) {
+    if (e.code === 'OTP_EXPIRED')  return fail(res, 410, 'OTP_EXPIRED',  e.message);
+    if (e.code === 'OTP_CONSUMED') return fail(res, 409, 'OTP_CONSUMED', e.message);
+    if (e.code === 'OTP_INVALID')  return fail(res, 401, 'OTP_INVALID',  e.message);
+    return manejarError(res, e);
+  }
+}
+
 module.exports = {
   listarDia, listarMes,
   crearEvento, obtenerEvento, marcarCompletadoEvento, eliminarEvento,
   actualizarEventoV2, listarPool, asignarPool, actualizarMetricas, resumenEvento,
-  semanaSeguimiento, listadoEventos
+  semanaSeguimiento, listadoEventos,
+  solicitarOtpEvento, confirmarOtpEvento
 };
