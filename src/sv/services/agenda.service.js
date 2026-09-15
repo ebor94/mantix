@@ -25,7 +25,7 @@ const {
   SvProspecto, SvEstado, SvEmpresa, SvPersona, SvEventoAgenda,
   SvEventoAsistente, SvUsuario
 } = require('../models');
-const { grupoIdsAccesibles } = require('../utils/acceso');
+const { grupoIdsAccesibles, usuariosAccesibles } = require('../utils/acceso');
 const { ROLES } = require('../config/constants');
 
 function esAsesor(actor) {
@@ -284,4 +284,133 @@ async function listarMes({ asesorId, anio, mes, actor }) {
   return mapa;
 }
 
-module.exports = { listarDia, listarMes };
+/**
+ * Rango lunes-domingo de una semana ISO 8601.
+ * ISO week: lunes es día 1; primera semana del año contiene el 4 de enero.
+ */
+function rangoSemanaISO(anio, semana) {
+  const jan4 = new Date(Date.UTC(anio, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7; // 1..7 (dom=7)
+  const lunesW1 = new Date(jan4);
+  lunesW1.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+  const lunes = new Date(lunesW1);
+  lunes.setUTCDate(lunesW1.getUTCDate() + (semana - 1) * 7);
+  const domingo = new Date(lunes);
+  domingo.setUTCDate(lunes.getUTCDate() + 6);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return { lunes: fmt(lunes), domingo: fmt(domingo) };
+}
+
+/**
+ * Agenda semanal agregada (SP-2): eventos + gestiones por día de una semana
+ * ISO 8601, con soporte multi-asesor y ventana de fecha para eventos
+ * multi-día (reusa ventanaFecha()).
+ *
+ * listarSemana({ anio, semanaISO, asesoresIds, actor }):
+ *   - Si asesoresIds trae ids, deben estar todos dentro de usuariosAccesibles(actor)
+ *     (si no, FORBIDDEN); si viene vacío/null, usa todo el scope del actor.
+ *   - Retorna { lunes, domingo, por_dia: {[fecha]: {eventos, gestiones}} }.
+ */
+async function listarSemana({ anio, semanaISO, asesoresIds, actor }) {
+  const scope = await usuariosAccesibles(actor); // null = super_admin, number[] = resto
+  const idsPedidos = Array.isArray(asesoresIds) ? asesoresIds.map(n => parseInt(n)).filter(Boolean) : [];
+
+  // Validar scope
+  let idsFinal;
+  if (idsPedidos.length === 0) {
+    idsFinal = scope; // null o [ids]
+  } else {
+    if (scope !== null) {
+      const fuera = idsPedidos.filter(id => !scope.includes(id));
+      if (fuera.length) { const e = new Error(`Asesor(es) fuera de tu alcance: ${fuera.join(',')}`); e.code = 'FORBIDDEN'; throw e; }
+    }
+    idsFinal = idsPedidos;
+  }
+
+  const { lunes, domingo } = rangoSemanaISO(parseInt(anio), parseInt(semanaISO));
+
+  const inicioTs = `${lunes} 00:00:00`;
+  const finTs    = `${domingo} 23:59:59`;
+
+  // Construir where (dueño OR asistente activo, dentro de idsFinal)
+  let scopeOr = null;
+  if (Array.isArray(idsFinal)) {
+    const asisRows = await SvEventoAsistente.findAll({
+      where: { eva_usr_id: { [Op.in]: idsFinal }, eva_activo: 1 },
+      attributes: ['eva_evento_id']
+    });
+    const evIdsAsis = [...new Set(asisRows.map(a => a.eva_evento_id))];
+    scopeOr = {
+      [Op.or]: [
+        { evento_asesor_id: { [Op.in]: idsFinal } },
+        ...(evIdsAsis.length ? [{ evento_id: { [Op.in]: evIdsAsis } }] : [])
+      ]
+    };
+  }
+
+  const whereEv = scopeOr
+    ? { [Op.and]: [ventanaFecha(inicioTs, finTs), scopeOr] }
+    : ventanaFecha(inicioTs, finTs);
+
+  const eventos = await SvEventoAgenda.findAll({
+    where: whereEv,
+    include: [
+      { model: SvUsuario, as: 'asesor', attributes: ['usr_id','usr_nombre','usr_apellido'] },
+      { model: SvUsuario, as: 'apoyo',  attributes: ['usr_id','usr_nombre','usr_apellido'], required: false },
+      { model: SvEmpresa, as: 'empresa', attributes: ['empresa_id','empresa_razon_social'], required: false },
+      { model: SvEventoAsistente, as: 'asistentes',
+        where: { eva_activo: 1 }, required: false,
+        include: [{ model: SvUsuario, as: 'usuario', attributes: ['usr_id','usr_nombre','usr_apellido'] }] }
+    ],
+    order: [['evento_fecha_hora', 'ASC']]
+  });
+
+  // Distribuir eventos por día que cubren
+  const por_dia = {};
+  const lunesDate = new Date(`${lunes}T00:00:00`);
+  const domingoFinDate = new Date(`${domingo}T23:59:59`);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lunesDate); d.setDate(lunesDate.getDate() + i);
+    const k = d.toISOString().slice(0, 10);
+    por_dia[k] = { eventos: [], gestiones: [] };
+  }
+  for (const ev of eventos) {
+    const ini = new Date(ev.evento_fecha_hora);
+    const fin = ev.evento_fecha_fin ? new Date(ev.evento_fecha_fin) : ini;
+    const desde = ini < lunesDate ? lunesDate : ini;
+    const hasta = fin > domingoFinDate ? domingoFinDate : fin;
+    const cursor = new Date(desde); cursor.setHours(0, 0, 0, 0);
+    const stop = new Date(hasta); stop.setHours(0, 0, 0, 0);
+    while (cursor <= stop) {
+      const k = cursor.toISOString().slice(0, 10);
+      if (por_dia[k]) por_dia[k].eventos.push(ev.toJSON ? ev.toJSON() : ev);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  // Gestiones próximas por día (mismo criterio que listarDia, en rango completo)
+  const whereProsp = {
+    prosp_prox_gestion_fecha: { [Op.between]: [lunes, domingo] },
+    prosp_activo: 1
+  };
+  if (Array.isArray(idsFinal)) whereProsp.prosp_asesor_id = { [Op.in]: idsFinal };
+  const gestiones = await SvProspecto.findAll({
+    where: whereProsp,
+    attributes: ['prosp_id','prosp_asesor_id','prosp_prox_gestion_fecha','prosp_prox_gestion_hora','prosp_prioridad'],
+    include: [
+      { model: SvEstado,  as: 'estado',  attributes: ['estado_id','estado_codigo','estado_nombre','estado_color_hex'] },
+      { model: SvPersona, as: 'persona', attributes: ['persona_id','persona_nombre','persona_apellido','persona_telefono_principal'] },
+      { model: SvUsuario, as: 'asesor',  attributes: ['usr_id','usr_nombre','usr_apellido'] }
+    ]
+  });
+  for (const g of gestiones) {
+    const k = g.prosp_prox_gestion_fecha instanceof Date
+      ? g.prosp_prox_gestion_fecha.toISOString().slice(0, 10)
+      : String(g.prosp_prox_gestion_fecha).slice(0, 10);
+    if (por_dia[k]) por_dia[k].gestiones.push(g.toJSON ? g.toJSON() : g);
+  }
+
+  return { lunes, domingo, por_dia };
+}
+
+module.exports = { listarDia, listarMes, listarSemana };
