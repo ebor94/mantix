@@ -29,7 +29,10 @@ sequelize.authenticate()
 
     // SerVentas: cron renovaciones B2B (Fase 8 - crear renovaciones próximas + marcar vencidos)
     require('./src/sv/jobs/renovaciones.job').start();
-    
+
+    // SP-3: cron cleanup OTPs (limpiar expirados > 24h cada hora)
+    require('./src/sv/jobs/otpCleanup.job').start();
+
     // Iniciar servidor
     app.listen(PORT, () => {
       logger.info(`🚀 Servidor Mantix corriendo en puerto ${PORT}`);
