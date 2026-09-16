@@ -15,6 +15,8 @@ const ETAPAS_POR_ROL = {
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME'],
   supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
+  asesor:               ['F03_INVENTARIO_RETOQUE'],
+  coordinador:          ['F03_INVENTARIO_RETOQUE'],
   admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
 }
 
@@ -355,12 +357,16 @@ async function guardarEtapa(req, res, next) {
       [id, etapa, JSON.stringify(datos), usuario, completar ? 1 : 0]
     )
 
-    // Auto-asignación de responsable según la etapa (último que guarda queda registrado).
+    // Auto-asignación de responsable según la etapa (solo roles operativos).
     // F02/F03 → asistente_id (inventario); F04 → tanatologo_id (tanatopraxia).
-    if (etapa === 'F02_INVENTARIO_CUERPO' || etapa === 'F03_INVENTARIO_RETOQUE') {
-      await db.query('UPDATE asistencias SET asistente_id=? WHERE id=?', [usuario, id])
-    } else if (etapa === 'F04_TANATOPRAXIA') {
-      await db.query('UPDATE asistencias SET tanatologo_id=? WHERE id=?', [usuario, id])
+    // Asesor/coordinador pueden llenar F-03 pero NO deben sobrescribir la asignación.
+    const rolesOperativos = ['asistente', 'tanatologo', 'asistente_tanatologo', 'admin']
+    if (rolesOperativos.includes(rol)) {
+      if (etapa === 'F02_INVENTARIO_CUERPO' || etapa === 'F03_INVENTARIO_RETOQUE') {
+        await db.query('UPDATE asistencias SET asistente_id=? WHERE id=?', [usuario, id])
+      } else if (etapa === 'F04_TANATOPRAXIA') {
+        await db.query('UPDATE asistencias SET tanatologo_id=? WHERE id=?', [usuario, id])
+      }
     }
 
     // Registro de uso de cofre al completar F-06 (fire-and-forget)
