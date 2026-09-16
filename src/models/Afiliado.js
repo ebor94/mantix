@@ -258,6 +258,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Fecha tentativa de pago para forma POSFECHADO'
     },
+    fechaPago: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: 'Fecha en que se realizó el primer pago (la ingresa el asesor, por defecto el día del registro)'
+    },
     contratoCompetencia: {
       type: DataTypes.STRING(500),
       allowNull: true,
