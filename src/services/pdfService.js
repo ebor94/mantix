@@ -1266,6 +1266,16 @@ doc.fontSize(20)
         const nombreCompleto = (a) =>
           [a.primerNombre, a.segundoNombre, a.primerApellido, a.segundoApellido]
             .filter(Boolean).join(' ');
+        // Etiqueta legible del tipo de novedad (ingreso, traslado, etc.)
+        const NOVEDAD_LABEL = {
+          NUEVO: 'Ingreso',
+          CAMBIO: 'Cambio',
+          TRASLADO: 'Traslado',
+          ACTUALIZACION: 'Actualización',
+          TRASLADO_COMPETENCIA: 'Tras. comp.',
+          TRASLADO_CANAL: 'Tras. canal'
+        };
+        const labelNovedad = (a) => NOVEDAD_LABEL[a.novedad] || a.novedad || '—';
 
         // ── ENCABEZADO ──────────────────────────────────────────────
         const logoPath = path.join(__dirname, '../../assets/logoConv.png');
@@ -1297,14 +1307,15 @@ doc.fontSize(20)
 
         // Encabezado tabla detalle
         const detalleCols = [
-          { label: 'ID',         x: 40,  w: 35,  align: 'left'  },
-          { label: 'Afiliado',   x: 75,  w: 140, align: 'left'  },
-          { label: 'Producto',   x: 215, w: 90,  align: 'left'  },
-          { label: 'V. Plan',    x: 305, w: 60,  align: 'right' },
-          { label: 'Asist.',     x: 365, w: 50,  align: 'right' },
-          { label: 'Seguros',    x: 415, w: 55,  align: 'right' },
-          { label: 'Adic.',      x: 470, w: 50,  align: 'right' },
-          { label: 'Total',      x: 520, w: 52,  align: 'right' }
+          { label: 'ID',         x: 40,  w: 28,  align: 'left'  },
+          { label: 'Afiliado',   x: 68,  w: 118, align: 'left'  },
+          { label: 'Novedad',    x: 186, w: 58,  align: 'left'  },
+          { label: 'Producto',   x: 244, w: 78,  align: 'left'  },
+          { label: 'V. Plan',    x: 322, w: 52,  align: 'right' },
+          { label: 'Asist.',     x: 374, w: 44,  align: 'right' },
+          { label: 'Seguros',    x: 418, w: 48,  align: 'right' },
+          { label: 'Adic.',      x: 466, w: 48,  align: 'right' },
+          { label: 'Total',      x: 514, w: 58,  align: 'right' }
         ];
 
         doc.rect(40, y, 532, 18).fill(BG_SOFT);
@@ -1327,6 +1338,7 @@ doc.fontSize(20)
           const filas = [
             `#${a.id}`,
             nombreCompleto(a),
+            labelNovedad(a),
             `${a.producto || ''} · ${a.grupo || ''}`,
             this.formatearNumero(contrato.valorPlanExequial),
             a.asistenciaFueraDeCasa === 'SI'
