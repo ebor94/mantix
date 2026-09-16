@@ -2,7 +2,7 @@ const router       = require('express').Router()
 const ctrl         = require('../controllers/asistencias.controller')
 const { requireRol } = require('../middleware/auth')
 
-const ROLES_CAMPO  = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'admin']
+const ROLES_CAMPO  = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'asesor', 'coordinador', 'admin']
 const ROLES_AVANCE = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'coordinador', 'contabilidad', 'admin']
 
 router.get ('/',                   ctrl.listar)
