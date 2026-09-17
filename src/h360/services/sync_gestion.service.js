@@ -20,25 +20,53 @@ const CATALOGO_SERVICIOS = {
 const NOVENARIO_LABEL   = 'Novenario en residencia'
 const ULTIMA_NOCHE_LABEL = 'Última noche en residencia'
 
+// Extrae los marcados de novenario/última noche desde un bloque de datos que
+// contenga { novenario, ultima_noche, direccion }. Retorna [] si no aplica.
+function extraerNovenario(bloque) {
+  const raw = typeof bloque === 'string' ? JSON.parse(bloque || '{}') : (bloque || {})
+  // Puede venir en la raíz (ingreso/salida) o dentro de _novenario (visita)
+  const b = raw._novenario || raw
+  const direccion = (b.direccion_novenario || b.direccion || '').trim() || null
+  const marcados = []
+  if ((b.novenario || '').toLowerCase() === 'residencia') {
+    marcados.push({ tipo: 'novenario_residencia', descripcion: NOVENARIO_LABEL, direccion })
+  }
+  if ((b.ultima_noche || '').toLowerCase() === 'residencia') {
+    marcados.push({ tipo: 'ultima_noche_residencia', descripcion: ULTIMA_NOCHE_LABEL, direccion })
+  }
+  return marcados
+}
+
 /**
- * Sync para una visita de sala.
- * @param {number} visitaId
- * @param {number} homenajeSalaId
- * @param {number|null} asistenciaId
- * @param {object|string|null} serviciosData  Puede venir como {key: {ofrecido:true, ...}} o {key: true}
- * @param {string} usuarioId
- * @param {string|null} nombre
+ * Sync para una visita de sala. Sincroniza servicios adicionales y también
+ * novenario/última noche si el bloque de confirmación aparece en la visita.
  */
-async function syncFromVisita(visitaId, homenajeSalaId, asistenciaId, serviciosData, usuarioId, nombre) {
+async function syncFromVisita(visitaId, homenajeSalaId, asistenciaId, serviciosData, usuarioId, nombre, extra) {
   const originRef = `VISITA_SALA:${visitaId}`
   const raw = typeof serviciosData === 'string' ? JSON.parse(serviciosData || '{}') : (serviciosData || {})
 
   const marcados = Object.entries(CATALOGO_SERVICIOS)
     .filter(([key]) => isMarcado(raw[key]))
-    .map(([key, label]) => ({ tipo: key, descripcion: label }))
+    .map(([key, label]) => ({ tipo: key, descripcion: label, direccion: null }))
+
+  // Bloque novenario/última noche embebido en la visita (opcional)
+  if (extra) marcados.push(...extraerNovenario(extra))
 
   await sincronizar({
     originRef, origen: 'VISITA_SALA',
+    homenajeSalaId, homenajeResidenciaId: null, asistenciaId,
+    marcados, usuarioId, nombre,
+  })
+}
+
+/**
+ * Sync para ingreso de sala (novenario / última noche capturados en el ingreso).
+ */
+async function syncFromIngreso(homenajeSalaId, asistenciaId, ingresoData, usuarioId, nombre) {
+  const originRef = `INGRESO_SALA:${homenajeSalaId}`
+  const marcados = extraerNovenario(ingresoData)
+  await sincronizar({
+    originRef, origen: 'INGRESO_SALA',
     homenajeSalaId, homenajeResidenciaId: null, asistenciaId,
     marcados, usuarioId, nombre,
   })
@@ -49,16 +77,7 @@ async function syncFromVisita(visitaId, homenajeSalaId, asistenciaId, serviciosD
  */
 async function syncFromSalida(homenajeSalaId, asistenciaId, salidaData, usuarioId, nombre) {
   const originRef = `SALIDA_SALA:${homenajeSalaId}`
-  const s = typeof salidaData === 'string' ? JSON.parse(salidaData || '{}') : (salidaData || {})
-
-  const marcados = []
-  if ((s.novenario || '').toLowerCase() === 'residencia') {
-    marcados.push({ tipo: 'novenario_residencia', descripcion: NOVENARIO_LABEL })
-  }
-  if ((s.ultima_noche || '').toLowerCase() === 'residencia') {
-    marcados.push({ tipo: 'ultima_noche_residencia', descripcion: ULTIMA_NOCHE_LABEL })
-  }
-
+  const marcados = extraerNovenario(salidaData)
   await sincronizar({
     originRef, origen: 'SALIDA_SALA',
     homenajeSalaId, homenajeResidenciaId: null, asistenciaId,
@@ -94,20 +113,22 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
     )
   }
 
-  // 2) Inserta las nuevas (ignora si ya existen — evita duplicar gestionadas)
-  for (const { tipo, descripcion } of marcados) {
+  // 2) Inserta las nuevas (ignora si ya existen — evita duplicar gestionadas).
+  //    Actualiza direccion en filas PENDIENTES si viene una nueva.
+  for (const { tipo, descripcion, direccion } of marcados) {
     await db.query(
       `INSERT INTO gestion_servicios
        (homenaje_sala_id, homenaje_residencia_id, asistencia_id, tipo_servicio,
-        descripcion, origen, origen_ref, ofrecido_por, ofrecido_por_nombre)
-       VALUES (?,?,?,?,?,?,?,?,?)
+        descripcion, direccion, origen, origen_ref, ofrecido_por, ofrecido_por_nombre)
+       VALUES (?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE
+         direccion = IF(estado = 'PENDIENTE', VALUES(direccion), direccion),
          ofrecido_por = COALESCE(ofrecido_por, VALUES(ofrecido_por)),
          ofrecido_por_nombre = COALESCE(ofrecido_por_nombre, VALUES(ofrecido_por_nombre))`,
       [homenajeSalaId, homenajeResidenciaId, asistenciaId, tipo, descripcion,
-       origen, originRef, usuarioId, nombre || null]
+       direccion || null, origen, originRef, usuarioId, nombre || null]
     )
   }
 }
 
-module.exports = { syncFromVisita, syncFromSalida, CATALOGO_SERVICIOS }
+module.exports = { syncFromIngreso, syncFromVisita, syncFromSalida, CATALOGO_SERVICIOS }

@@ -7,7 +7,7 @@
  * la lógica hace UPSERT del snapshot en `homenaje_sala_auditoria` antes.
  */
 const db = require('../config/db')
-const { syncFromVisita, syncFromSalida } = require('../services/sync_gestion.service')
+const { syncFromIngreso, syncFromVisita, syncFromSalida } = require('../services/sync_gestion.service')
 
 // ── Helpers de bloqueo por firma ────────────────────────────────────────────
 function parseJson(v) {
@@ -161,6 +161,12 @@ async function guardarIngreso(req, res, next) {
 
     await db.query('UPDATE homenajes_sala SET ? WHERE id = ?', [campos, id])
     const [rows] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [id])
+
+    // Sync gestión de servicios (novenario / última noche en residencia desde ingreso)
+    try {
+      await syncFromIngreso(rows[0].id, rows[0].asistencia_id, ingreso_data, req.user.usuario, req.user.nombre)
+    } catch (e) { console.warn('[sync gestion ingreso]', e.message) }
+
     res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado })
   } catch (err) { next(err) }
 }
@@ -243,10 +249,12 @@ async function agregarVisita(req, res, next) {
     )
     const [nueva] = await db.query('SELECT * FROM homenaje_sala_visitas WHERE id = ?', [r.insertId])
 
-    // Sync gestión de servicios adicionales marcados en esta visita
+    // Sync gestión de servicios adicionales marcados en esta visita +
+    // novenario/última noche si vienen embebidos en validacion_data.
     try {
       const [[hs]] = await db.query('SELECT asistencia_id FROM homenajes_sala WHERE id = ?', [id])
-      await syncFromVisita(r.insertId, parseInt(id), hs?.asistencia_id || null, servicios_data, usuario, nombre)
+      await syncFromVisita(r.insertId, parseInt(id), hs?.asistencia_id || null,
+        servicios_data, usuario, nombre, validacion_data)
     } catch (e) { console.warn('[sync gestion visita]', e.message) }
 
     res.status(201).json(nueva[0])
@@ -322,12 +330,15 @@ async function actualizarVisita(req, res, next) {
     await db.query('UPDATE homenaje_sala_visitas SET ? WHERE id = ?', [campos, visitaId])
     const [rows] = await db.query('SELECT * FROM homenaje_sala_visitas WHERE id = ?', [visitaId])
 
-    // Si cambió servicios_data, sincronizar la bandeja del coordinador
-    if (servicios_data !== undefined) {
+    // Si cambió servicios_data o validacion_data, sincronizar bandeja del coordinador
+    if (servicios_data !== undefined || validacion_data !== undefined) {
       try {
         const [[hs]] = await db.query('SELECT asistencia_id FROM homenajes_sala WHERE id = ?', [id])
+        // Si vino solo uno, leer el otro de la BD para no perder pendientes
+        const servFinal = servicios_data !== undefined ? servicios_data : parseJson(rows[0].servicios_data)
+        const validFinal = validacion_data !== undefined ? validacion_data : parseJson(rows[0].validacion_data)
         await syncFromVisita(parseInt(visitaId), parseInt(id), hs?.asistencia_id || null,
-          servicios_data, req.user.usuario, req.user.nombre)
+          servFinal, req.user.usuario, req.user.nombre, validFinal)
       } catch (e) { console.warn('[sync gestion visita update]', e.message) }
     }
 
