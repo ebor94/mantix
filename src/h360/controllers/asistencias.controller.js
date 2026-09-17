@@ -42,12 +42,12 @@ const ETAPAS_PARA_CERRAR = {
 
 // Transiciones del flujo
 const TRANSICIONES = {
-  NUEVO:        { siguiente: 'ASISTENCIA',   roles: ['admin'] },
+  NUEVO:        { siguiente: 'ASISTENCIA',   roles: ['asesor', 'coordinador', 'admin'] },
   ASISTENCIA:   { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
   PRESERVACION: { siguiente: 'ENCOFRADO',    roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
-  ENCOFRADO:    { siguiente: 'ENCUENTRO',    roles: ['supervisora', 'asistente_tanatologo', 'admin'] },
-  ENCUENTRO:    { siguiente: 'SALA',         roles: ['supervisora', 'admin'] },
-  SALA:         { siguiente: 'APROBACION',   roles: ['supervisora', 'admin'] },
+  ENCOFRADO:    { siguiente: 'ENCUENTRO',    roles: ['supervisora', 'coordinador', 'asistente_tanatologo', 'admin'] },
+  ENCUENTRO:    { siguiente: 'SALA',         roles: ['supervisora', 'coordinador', 'admin'] },
+  SALA:         { siguiente: 'APROBACION',   roles: ['supervisora', 'coordinador', 'admin'] },
   APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
