@@ -6,8 +6,8 @@ const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
   tanatologo:           ['PRESERVACION'],
-  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO'], // triple rol: incluye encofrado
-  supervisora:          ['ENCOFRADO'],
+  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO'],
+  supervisora:          ['ENCOFRADO', 'ENCUENTRO', 'SALA'],
 }
 
 // Rol → etapas que puede guardar
@@ -22,29 +22,33 @@ const ETAPAS_POR_ROL = {
 }
 
 // Etapas requeridas para cerrar cada estado por rol.
-// NOTA: al cerrar F06 el asistente_tanatologo NO hace transición porque
-// TRANSICIONES.ENCOFRADO solo permite avance a supervisora/admin — la
-// asistencia queda en ENCOFRADO esperando que la supervisora haga F-05.
+// Flujo: ENCOFRADO(F06) → ENCUENTRO(F05) → SALA (manual) → APROBACION.
 const ETAPAS_PARA_CERRAR = {
-  asistente:            { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
+  asistente:            { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'] },
   tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA'] },
-  asistente_tanatologo: { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+  asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'],
                           ENCOFRADO:    ['F06_ENCOFRADO'] },
-  supervisora:          { ENCOFRADO:     ['F06_ENCOFRADO', 'F05_ENTREGA'] },
-  admin:                { ASISTENCIA:    ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+  supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
+                          ENCUENTRO:    ['F05_ENTREGA'],
+                          SALA:         [] },
+  admin:                { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'],
-                          ENCOFRADO:     ['F06_ENCOFRADO', 'F05_ENTREGA'],
-                          APROBACION:  [] },
+                          ENCOFRADO:    ['F06_ENCOFRADO'],
+                          ENCUENTRO:    ['F05_ENTREGA'],
+                          SALA:         [],
+                          APROBACION:   [] },
 }
 
-// Transiciones del flujo — cada rol puede avanzar desde su estado
+// Transiciones del flujo
 const TRANSICIONES = {
-  NUEVO:       { siguiente: 'ASISTENCIA',    roles: ['admin'] },
-  ASISTENCIA:    { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
-  PRESERVACION: { siguiente: 'ENCOFRADO',     roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
-  ENCOFRADO:     { siguiente: 'APROBACION',  roles: ['supervisora', 'admin'] },
-  APROBACION:  { siguiente: 'CERRADO',     roles: ['coordinador', 'contabilidad', 'admin'] },
+  NUEVO:        { siguiente: 'ASISTENCIA',   roles: ['admin'] },
+  ASISTENCIA:   { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
+  PRESERVACION: { siguiente: 'ENCOFRADO',    roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
+  ENCOFRADO:    { siguiente: 'ENCUENTRO',    roles: ['supervisora', 'asistente_tanatologo', 'admin'] },
+  ENCUENTRO:    { siguiente: 'SALA',         roles: ['supervisora', 'admin'] },
+  SALA:         { siguiente: 'APROBACION',   roles: ['supervisora', 'admin'] },
+  APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
 // Helper: insertar registro en historial con nombre completo del usuario
@@ -101,7 +105,7 @@ async function listar(req, res, next) {
     } else if (rol === 'asistente_tanatologo') {
       if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION','ENCOFRADO')") }
     } else if (rol === 'supervisora') {
-      if (!estado) { conditions.push("estado = 'ENCOFRADO'") }
+      if (!estado) { conditions.push("estado IN ('ENCOFRADO','ENCUENTRO','SALA')") }
     }
 
     if (estado) {
