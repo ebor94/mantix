@@ -123,7 +123,9 @@ async function listar(req, res, next) {
     const [rows] = await db.query(
       `SELECT id, codigo, estado, nombre_ser_querido, identificacion,
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
-              conductor, asesor_id, asistente_id, tanatologo_id, created_at, updated_at
+              conductor, asesor_id, asistente_id, tanatologo_id,
+              motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
+              created_at, updated_at
        FROM asistencias ${where}
        ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
@@ -436,6 +438,45 @@ async function guardarEtapa(req, res, next) {
 }
 
 // POST /asistencias/:id/aprobar
+// POST /asistencias/:id/desistir
+// body: { motivo }
+// Marca la asistencia como DESISTIDO. Bloquea futura edición.
+async function desistir(req, res, next) {
+  try {
+    const { id } = req.params
+    const { usuario, nombre } = req.user
+    const { motivo } = req.body || {}
+
+    if (!motivo?.trim() || motivo.trim().length < 5)
+      return res.status(400).json({ mensaje: 'El motivo debe tener al menos 5 caracteres.' })
+
+    const [rows] = await db.query('SELECT id, estado FROM asistencias WHERE id = ?', [id])
+    if (!rows.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+    if (rows[0].estado === 'CERRADO')
+      return res.status(400).json({ mensaje: 'No se puede marcar como desistida una asistencia CERRADA.' })
+    if (rows[0].estado === 'DESISTIDO')
+      return res.status(400).json({ mensaje: 'La asistencia ya está marcada como desistida.' })
+
+    const estadoAnterior = rows[0].estado
+    await db.query(
+      `UPDATE asistencias SET
+        estado = 'DESISTIDO',
+        motivo_desistimiento = ?,
+        desistido_por = ?,
+        desistido_por_nombre = ?,
+        desistido_at = NOW()
+       WHERE id = ?`,
+      [motivo.trim(), usuario, nombre || null, id]
+    )
+
+    await insertarHistorial(id, estadoAnterior, 'DESISTIDO', usuario, nombre,
+      `Familia desistió: ${motivo.trim()}`)
+
+    const [updated] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
+    res.json({ ok: true, asistencia: updated[0] })
+  } catch (err) { next(err) }
+}
+
 async function aprobar(req, res, next) {
   try {
     const { id } = req.params
@@ -500,4 +541,4 @@ async function agregarNota(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota }
+module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir }

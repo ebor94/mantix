@@ -16,6 +16,7 @@ router.patch('/:id/estado',      requireRol(...ROLES_AVANCE),            ctrl.ca
 router.post('/:id/etapa',        requireRol(...ROLES_CAMPO),             ctrl.guardarEtapa)
 router.post('/:id/aprobar',      requireRol('coordinador', 'contabilidad', 'admin'), ctrl.aprobar)
 router.post('/:id/nota',         requireRol('contabilidad', 'coordinador', 'supervisora', 'admin'), ctrl.agregarNota)
+router.post('/:id/desistir',     requireRol('asesor', 'coordinador', 'admin'), ctrl.desistir)
 
 // Reapertura de sección con token vía Google Chat (F-01..F-07)
 router.post('/:id/reapertura/solicitar', requireRol(...ROLES_CAMPO), reaperturaCtrl.solicitar)
