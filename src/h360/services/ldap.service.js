@@ -3,6 +3,7 @@ const ldap = require('ldapjs')
 const LDAP_TIMEOUT = 8000 // ms máximo por operación
 
 const ROLE_MAP = () => ({
+  [process.env.LDAP_GROUP_ADMIN]:            'admin',                // full access
   [process.env.LDAP_GROUP_ASESOR]:           'asesor',
   [process.env.LDAP_GROUP_ASISTENTE]:        'asistente',
   [process.env.LDAP_GROUP_TANATOLOGO]:       'tanatologo',
