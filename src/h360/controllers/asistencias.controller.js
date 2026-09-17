@@ -1,5 +1,6 @@
 const db   = require('../config/db')
 const glpi = require('../services/glpi.service')
+const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
@@ -56,10 +57,17 @@ async function insertarHistorial(asistencia_id, estado_desde, estado_hasta, usua
   )
 }
 
+// Devuelve el próximo código H360-YYYY-####. Usa MAX del sufijo real, no COUNT,
+// para no colisionar con huecos (borrados) ni con secuencias mixtas.
 async function generarCodigo() {
   const year = new Date().getFullYear()
-  const [rows] = await db.query('SELECT COUNT(*) as total FROM asistencias WHERE YEAR(created_at) = ?', [year])
-  const n = (rows[0].total + 1).toString().padStart(4, '0')
+  const [rows] = await db.query(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(codigo, '-', -1) AS UNSIGNED)), 0) AS maxNum
+     FROM asistencias
+     WHERE codigo LIKE ?`,
+    [`H360-${year}-%`]
+  )
+  const n = (Number(rows[0].maxNum) + 1).toString().padStart(4, '0')
   return `H360-${year}-${n}`
 }
 
@@ -180,7 +188,6 @@ async function obtenerEtapa(req, res, next) {
 async function crear(req, res, next) {
   try {
     const { usuario, nombre } = req.user
-    const codigo = await generarCodigo()
     const {
       nombre_ser_querido, identificacion, contrato, certificado_defuncion,
       peso_aproximado, causa_fallecimiento, categoria_sanitaria,
@@ -188,21 +195,36 @@ async function crear(req, res, next) {
       lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto,
     } = req.body
 
-    const [result] = await db.query(
-      `INSERT INTO asistencias
-       (codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-        peso_aproximado, causa_fallecimiento, categoria_sanitaria,
-        nombre_contacto, telefono_contacto,
-        lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-        peso_aproximado, causa_fallecimiento, categoria_sanitaria || null,
-        nombre_contacto, telefono_contacto,
-        lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
-        conductor, fecha_contacto || null, usuario,
-      ]
-    )
+    // Reintenta hasta 3 veces si el codigo generado colisiona (race condition
+    // entre asesores creando simultaneamente).
+    let result, codigo
+    for (let intento = 0; intento < 3; intento++) {
+      codigo = await generarCodigo()
+      try {
+        ;[result] = await db.query(
+          `INSERT INTO asistencias
+           (codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
+            peso_aproximado, causa_fallecimiento, categoria_sanitaria,
+            nombre_contacto, telefono_contacto,
+            lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
+            peso_aproximado, causa_fallecimiento, categoria_sanitaria || null,
+            nombre_contacto, telefono_contacto,
+            lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
+            conductor, fecha_contacto || null, usuario,
+          ]
+        )
+        break
+      } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY' && intento < 2) {
+          console.warn(`[asistencias.crear] codigo duplicado ${codigo}, reintentando…`)
+          continue
+        }
+        throw err
+      }
+    }
 
     await insertarHistorial(result.insertId, null, 'NUEVO', usuario, nombre)
 
