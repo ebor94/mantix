@@ -155,7 +155,8 @@ async function validar(req, res, next) {
 // reciente por el mismo usuario para esta asistencia y etapa='F01'.
 const CAMPOS_F01 = [
   'nombre_ser_querido', 'identificacion', 'contrato', 'certificado_defuncion',
-  'peso_aproximado', 'causa_fallecimiento', 'categoria_sanitaria',
+  'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
+  'causa_fallecimiento', 'categoria_sanitaria',
   'lugar_asistencia', 'nombre_contacto', 'telefono_contacto',
   'conductor', 'fecha_contacto',
 ]

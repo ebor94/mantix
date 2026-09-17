@@ -196,7 +196,8 @@ async function crear(req, res, next) {
     const { usuario, nombre } = req.user
     const {
       nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-      peso_aproximado, causa_fallecimiento, categoria_sanitaria,
+      peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
+      causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto,
     } = req.body
@@ -210,13 +211,15 @@ async function crear(req, res, next) {
         ;[result] = await db.query(
           `INSERT INTO asistencias
            (codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-            peso_aproximado, causa_fallecimiento, categoria_sanitaria,
+            peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
+            causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
-            peso_aproximado, causa_fallecimiento, categoria_sanitaria || null,
+            peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
+            causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
             conductor, fecha_contacto || null, usuario,
