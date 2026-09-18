@@ -11,6 +11,7 @@ const ROLE_MAP = () => ({
   [process.env.LDAP_GROUP_SUPERVISORA]:      'supervisora',
   [process.env.LDAP_GROUP_COORDINADOR]:      'coordinador',
   [process.env.LDAP_GROUP_CONTABILIDAD]:     'contabilidad',
+  [process.env.LDAP_GROUP_RECEPCION]:        'recepcion',            // atiende exequias/ceremonias
 })
 
 // Filtro de conexión estándar AD: usuarios activos de tipo persona

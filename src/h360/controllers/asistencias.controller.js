@@ -78,7 +78,7 @@ async function generarCodigo() {
 // GET /asistencias
 async function listar(req, res, next) {
   try {
-    const { estado, identificacion, fecha_desde, fecha_hasta, page = 1, limit = 20 } = req.query
+    const { estado, identificacion, q, fecha_desde, fecha_hasta, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const { rol, usuario } = req.user
 
@@ -119,6 +119,11 @@ async function listar(req, res, next) {
       }
     }
     if (identificacion){ conditions.push('identificacion LIKE ?'); params.push(`%${identificacion}%`) }
+    if (q) {
+      const term = `%${q}%`
+      conditions.push('(codigo LIKE ? OR nombre_ser_querido LIKE ? OR identificacion LIKE ?)')
+      params.push(term, term, term)
+    }
     if (fecha_desde)   { conditions.push('DATE(created_at) >= ?'); params.push(fecha_desde) }
     if (fecha_hasta)   { conditions.push('DATE(created_at) <= ?'); params.push(fecha_hasta) }
 
