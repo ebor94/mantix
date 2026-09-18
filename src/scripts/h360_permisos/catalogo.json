@@ -1,0 +1,678 @@
+{
+  "catalogo": [
+    {
+      "clave": "accion.asistencias.actores",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.aprobar",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "contabilidad",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.crear",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.desistir",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.estado",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.etapa",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.f01",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.historial",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.nota",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "contabilidad",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.reapertura_solicitar",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.asistencias.reapertura_validar",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.cofres.usos",
+      "modulo": "cofres",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.asignar_vehiculo",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.cancelar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.confirmar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "recepcion"
+      ]
+    },
+    {
+      "clave": "accion.exequias.crear",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.editar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.marcar_realizada",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.gestion_servicios.editar",
+      "modulo": "gestion_servicios",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.novedades.resolver",
+      "modulo": "novedades",
+      "roles": [
+        "admin",
+        "asistente_tanatologo"
+      ]
+    },
+    {
+      "clave": "accion.residencia.auditoria",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "contabilidad",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.crear",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.equipo_velacion",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.novedades",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.primera_llamada",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.segunda_llamada",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.tokens",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.residencia.tokens_omitir",
+      "modulo": "residencia",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "clave": "accion.residencia.tokens_verificar",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_catalogo.crear",
+      "modulo": "salas_catalogo",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "clave": "accion.salas_catalogo.editar",
+      "modulo": "salas_catalogo",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.auditoria",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.crear",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.ingreso",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.salida",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.visitas",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.vehiculos.crear",
+      "modulo": "vehiculos",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.vehiculos.editar",
+      "modulo": "vehiculos",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.vehiculos.eliminar",
+      "modulo": "vehiculos",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "clave": "estado.APROBACION.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "contabilidad",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "estado.APROBACION.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "clave": "estado.ASISTENCIA.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente",
+        "asistente_tanatologo"
+      ]
+    },
+    {
+      "clave": "estado.ASISTENCIA.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente",
+        "asistente_tanatologo"
+      ]
+    },
+    {
+      "clave": "estado.ENCOFRADO.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "estado.ENCOFRADO.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "estado.ENCUENTRO.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "estado.ENCUENTRO.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "estado.NUEVO.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "estado.PRESERVACION.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "estado.PRESERVACION.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "estado.SALA.avanzar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "estado.SALA.cerrar",
+      "modulo": "estados",
+      "roles": [
+        "admin",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "etapa.F02_INVENTARIO_CUERPO.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "etapa.F03_INVENTARIO_RETOQUE.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "etapa.F04_TANATOPRAXIA.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "etapa.F05_ENTREGA.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "etapa.F06_ENCOFRADO.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "etapa.F07_SALIDA_NO_CONFORME.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "ruta.asistencias.ver",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "ruta.cofres.ver",
+      "modulo": "cofres",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "ruta.exequias.ver",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "ruta.gestion_servicios.ver",
+      "modulo": "gestion_servicios",
+      "roles": [
+        "admin",
+        "asesor",
+        "contabilidad",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.novedades.ver",
+      "modulo": "novedades",
+      "roles": [
+        "admin",
+        "asistente_tanatologo",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.residencia.ver",
+      "modulo": "residencia",
+      "roles": [
+        "admin",
+        "contabilidad",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.salas_catalogo.ver",
+      "modulo": "salas_catalogo",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "ruta.salas_velacion.ver",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.sedes.ver",
+      "modulo": "sedes",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
+      "clave": "ruta.vehiculos.ver",
+      "modulo": "vehiculos",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    }
+  ],
+  "requisitos_cierre": {
+    "ASISTENCIA": "F02_INVENTARIO_CUERPO+F03_INVENTARIO_RETOQUE",
+    "PRESERVACION": "F04_TANATOPRAXIA",
+    "ENCOFRADO": "F06_ENCOFRADO",
+    "ENCUENTRO": "F05_ENTREGA",
+    "SALA": "",
+    "APROBACION": ""
+  }
+}
