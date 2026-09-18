@@ -16,7 +16,7 @@ const ETAPAS_POR_ROL = {
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME'],
   supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
-  asesor:               ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+  asesor:               ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F05_ENTREGA'],
   coordinador:          ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
 }
@@ -32,6 +32,7 @@ const ETAPAS_PARA_CERRAR = {
   supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
                           SALA:         [] },
+  asesor:               { ENCUENTRO:    ['F05_ENTREGA'] },
   admin:                { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
                           PRESERVACION: ['F04_TANATOPRAXIA'],
                           ENCOFRADO:    ['F06_ENCOFRADO'],
@@ -46,7 +47,7 @@ const TRANSICIONES = {
   ASISTENCIA:   { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
   PRESERVACION: { siguiente: 'ENCOFRADO',    roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
   ENCOFRADO:    { siguiente: 'ENCUENTRO',    roles: ['supervisora', 'coordinador', 'asistente_tanatologo', 'admin'] },
-  ENCUENTRO:    { siguiente: 'SALA',         roles: ['supervisora', 'coordinador', 'admin'] },
+  ENCUENTRO:    { siguiente: 'SALA',         roles: ['asesor', 'supervisora', 'coordinador', 'admin'] },
   SALA:         { siguiente: 'APROBACION',   roles: ['supervisora', 'coordinador', 'admin'] },
   APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
