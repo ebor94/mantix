@@ -81,6 +81,8 @@ function extraerAtributos(entry) {
       sam:         get('sAMAccountName') || '',
       displayName: get('displayName')   || '',
       mail:        get('mail')          || '',
+      // mobile es el campo de celular; telephoneNumber queda como respaldo
+      telefono:    get('mobile') || get('telephoneNumber') || '',
       memberOf:    (() => {
         const m = get('memberOf')
         if (!m)              return []
@@ -96,6 +98,7 @@ function extraerAtributos(entry) {
     sam:         attrs.sAMAccountName || '',
     displayName: attrs.displayName   || '',
     mail:        attrs.mail          || '',
+    telefono:    attrs.mobile || attrs.telephoneNumber || '',
     memberOf:    Array.isArray(attrs.memberOf) ? attrs.memberOf : [attrs.memberOf || ''].filter(Boolean),
   }
 }
@@ -151,7 +154,7 @@ async function listarMiembrosGrupo(groupName) {
     const escapedDN = escapeFilter(groupDN)
     const filter = `(&${USER_FILTER}(memberOf=${escapedDN}))`
     entries = await searchAsync(svcClient, searchBase, filter,
-      ['sAMAccountName', 'displayName'])
+      ['sAMAccountName', 'displayName', 'mobile', 'telephoneNumber'])
   } catch (err) {
     throw new Error('Error al consultar miembros del grupo: ' + err.message)
   } finally {
@@ -160,7 +163,7 @@ async function listarMiembrosGrupo(groupName) {
 
   const miembros = entries.map(e => {
     const a = extraerAtributos(e)
-    return { usuario: a.sam, nombre: a.displayName || a.sam }
+    return { usuario: a.sam, nombre: a.displayName || a.sam, telefono: a.telefono || '' }
   }).filter(m => m.usuario)
 
   miembros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
@@ -262,4 +265,42 @@ function detectarRol(memberOf) {
   return null
 }
 
-module.exports = { autenticarLDAP, listarMiembrosGrupo }
+/**
+ * Busca un usuario por sAMAccountName y devuelve sus datos de contacto.
+ * Usado para resolver el celular del conductor al notificarlo por WhatsApp.
+ * Retorna null si no existe; nunca lanza por "no encontrado".
+ */
+async function buscarUsuarioPorSam(sam) {
+  if (!sam) return null
+
+  const domainBase = process.env.LDAP_BASE_DN
+    .split(',')
+    .filter(p => p.toUpperCase().startsWith('DC='))
+    .join(',')
+  const searchBase = domainBase || process.env.LDAP_BASE_DN
+
+  const svcClient = createClient()
+  try {
+    await bindAsync(svcClient, process.env.LDAP_BIND_USER, process.env.LDAP_BIND_PASS)
+    const entries = await searchAsync(
+      svcClient, searchBase,
+      `(&${USER_FILTER}(sAMAccountName=${escapeFilter(sam)}))`,
+      ['sAMAccountName', 'displayName', 'mail', 'mobile', 'telephoneNumber']
+    )
+    if (!entries.length) return null
+    const a = extraerAtributos(entries[0])
+    return {
+      usuario:  a.sam,
+      nombre:   a.displayName || a.sam,
+      mail:     a.mail || '',
+      telefono: a.telefono || '',
+    }
+  } catch (err) {
+    console.warn(`[LDAP] buscarUsuarioPorSam(${sam}):`, err.message)
+    return null
+  } finally {
+    svcClient.destroy()
+  }
+}
+
+module.exports = { autenticarLDAP, listarMiembrosGrupo, buscarUsuarioPorSam }

@@ -354,6 +354,55 @@ async function sendImagenRecibo(celular, urlPublicaImagen, numeroRecibo, valor) 
   return sendTemplateImagenTexto(celular, urlPublicaImagen, body);
 }
 
+/**
+ * Envía un aviso operativo de una sola línea usando la plantilla
+ * "start_template_1_durf6800z" (BODY: " ⇨ {{1}} ‹ ‹", sin header ni botones).
+ *
+ * Al ser API Cloud oficial, un mensaje iniciado por el negocio exige plantilla
+ * aprobada; esta es la única disponible que admite texto arbitrario sin imagen.
+ * Los parámetros de plantilla no admiten saltos de línea ni tabulaciones, así
+ * que el texto se normaliza a una sola línea.
+ *
+ * @param {string} celular - Destinatario (se formatea automáticamente)
+ * @param {string} texto   - Contenido del aviso, máx. 900 caracteres
+ */
+async function sendTextoSimple(celular, texto) {
+  const instance = process.env.MSG1_INSTANCE || DEFAULT_INSTANCE;
+  const token    = process.env.MSG1_TOKEN    || DEFAULT_TOKEN;
+  const numero   = formatearTelefono(celular);
+
+  const cuerpo = String(texto).replace(/\s*[\r\n\t]+\s*/g, ' ').trim().slice(0, 900);
+
+  if (!instance || !token) {
+    logger.warn('[WhatsApp] Credenciales 1msg no configuradas — modo DEV');
+    logger.info(`[WhatsApp DEV] "${cuerpo}" para ${numero}`);
+    return { success: true, dev: true };
+  }
+
+  const payload = {
+    token,
+    namespace: NAMESPACE,
+    template: 'start_template_1_durf6800z',
+    language: { policy: 'deterministic', code: 'en_US' },
+    params: [{ type: 'body', parameters: [{ type: 'text', text: cuerpo }] }],
+    phone: numero,
+  };
+
+  try {
+    const response = await axios.post(
+      `https://api.1msg.io/${instance}/sendTemplate`,
+      payload,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+    );
+    logger.info(`[WhatsApp] Aviso enviado a ${numero} | ID: ${response.data?.id || 'ok'}`);
+    return { success: true, data: response.data };
+  } catch (error) {
+    const msg = error.response?.data?.message || error.response?.data || error.message;
+    logger.error(`[WhatsApp] Error enviando aviso a ${numero}: ${JSON.stringify(msg)}`);
+    throw new Error(`Error al enviar WhatsApp: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+  }
+}
+
 module.exports = {
   sendOTP,
   sendAceptacion,
@@ -361,5 +410,6 @@ module.exports = {
   sendDocumento,
   sendDocumentoRecibo,
   sendTemplateImagenTexto,
-  sendImagenRecibo
+  sendImagenRecibo,
+  sendTextoSimple
 };

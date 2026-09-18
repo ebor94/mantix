@@ -1,4 +1,6 @@
 const db = require('../config/db')
+const { buscarUsuarioPorSam } = require('../services/ldap.service')
+const { sendTextoSimple }     = require('../../services/whatsappService')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -166,9 +168,56 @@ async function asignarVehiculo(req, res, next) {
       [vehiculo_id, conductor_id, usuario, id]
     )
     await insertarHistorial(id, rows[0].estado, 'PROGRAMADA', usuario, `Vehículo ${vehiculo_id} · Conductor ${conductor_id}`)
+
+    // Aviso al conductor por WhatsApp. La asignación ya quedó guardada, así que
+    // un fallo aquí se reporta pero no la revierte ni devuelve error.
+    const notificacion = await notificarConductor(id, conductor_id)
+
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
-    res.json(nueva[0])
+    res.json({ ...nueva[0], notificacion })
   } catch (err) { next(err) }
+}
+
+// Arma el aviso y lo envía al celular que el conductor tenga en el AD.
+// Nunca lanza: devuelve { ok, motivo } para que la UI informe qué pasó.
+async function notificarConductor(exequiaId, conductorId) {
+  const registrar = async (resultado, telefono = null) => {
+    await db.query(
+      `UPDATE exequias SET wa_enviado_at = ?, wa_telefono = ?, wa_respuesta = ? WHERE id = ?`,
+      [resultado.ok ? new Date() : null, telefono, JSON.stringify(resultado), exequiaId]
+    )
+    return resultado
+  }
+
+  try {
+    const [[ex]] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [exequiaId])
+    if (!ex) return { ok: false, motivo: 'Exequia no encontrada' }
+
+    const conductor = await buscarUsuarioPorSam(conductorId)
+    if (!conductor)
+      return registrar({ ok: false, motivo: `El conductor ${conductorId} no existe en el directorio` })
+    if (!conductor.telefono)
+      return registrar({
+        ok: false,
+        motivo: `${conductor.nombre} no tiene celular registrado en el directorio activo (campo "mobile")`,
+      })
+
+    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
+    const lugar = [ex.lugar, ex.barrio, ex.parroquia].filter(Boolean).join(', ')
+    const texto = [
+      `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} asignada`,
+      `${fecha} ${String(ex.hora).slice(0, 5)}`,
+      lugar,
+      `Carroza ${ex.vehiculo_placa || 's/n'}`,
+      `Ser querido: ${ex.ser_querido || 's/n'}`,
+    ].filter(Boolean).join(' · ')
+
+    const envio = await sendTextoSimple(conductor.telefono, texto)
+    return registrar({ ok: true, texto, provider: envio?.data || envio }, conductor.telefono)
+  } catch (err) {
+    console.warn('[exequias] notificarConductor:', err.message)
+    return registrar({ ok: false, motivo: err.message })
+  }
 }
 
 // POST /exequias/:id/marcar-realizada
