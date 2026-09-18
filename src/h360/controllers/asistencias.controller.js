@@ -361,8 +361,20 @@ async function guardarEtapa(req, res, next) {
     if (!permitidas.includes(etapa))
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
-    const [asist] = await db.query('SELECT estado FROM asistencias WHERE id = ?', [id])
+    const [asist] = await db.query(
+      'SELECT estado, certificado_defuncion FROM asistencias WHERE id = ?', [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
+    // El certificado de defunción es obligatorio para cerrar F-02: si no vino
+    // en F-01, hay que registrarlo aquí.
+    if (etapa === 'F02_INVENTARIO_CUERPO' && completar) {
+      const yaRegistrado = (asist[0].certificado_defuncion || '').trim()
+      const vieneEnF02   = String(datos?.certificado_defuncion || '').trim()
+      if (!yaRegistrado && !vieneEnF02)
+        return res.status(400).json({
+          mensaje: 'El número de certificado de defunción es obligatorio para cerrar F-02.'
+        })
+    }
 
     // Reproceso: si F-05 marca requiere_reproceso=true al cerrar, no completar y no avanzar
     if (etapa === 'F05_ENTREGA' && completar && datos?.requiere_reproceso === true) {
@@ -404,6 +416,17 @@ async function guardarEtapa(req, res, next) {
       } else if (etapa === 'F04_TANATOPRAXIA') {
         await db.query('UPDATE asistencias SET tanatologo_id=? WHERE id=?', [usuario, id])
       }
+    }
+
+    // Certificado de defunción: cuando F-01 quedó sin él, se puede completar
+    // desde F-02. El WHERE solo rellena vacíos — sobrescribir uno ya registrado
+    // sigue exigiendo reapertura de F-01 con token.
+    if (etapa === 'F02_INVENTARIO_CUERPO' && datos?.certificado_defuncion) {
+      await db.query(
+        `UPDATE asistencias SET certificado_defuncion = ?
+          WHERE id = ? AND (certificado_defuncion IS NULL OR certificado_defuncion = '')`,
+        [String(datos.certificado_defuncion).trim(), id]
+      )
     }
 
     // Registro de uso de cofre al completar F-06 (fire-and-forget)
