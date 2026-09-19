@@ -124,10 +124,14 @@ async function validar(req, res, next) {
         F06: 'F06_ENCOFRADO',
         F07: 'F07_SALIDA_NO_CONFORME',
       }[etapa]
+      // INSERT en vez de UPDATE: una etapa puede autorizarse aunque nunca se
+      // haya diligenciado (p. ej. F-03 saltada y necesaria más tarde). Con
+      // UPDATE el token se consumía sin efecto visible y parecía que fallaba.
       await db.query(
-        `UPDATE asistencia_etapas SET completado = 0
-         WHERE asistencia_id = ? AND etapa = ?`,
-        [id, etapaFull]
+        `INSERT INTO asistencia_etapas (asistencia_id, etapa, datos, usuario_id, completado)
+         VALUES (?, ?, '{}', ?, 0)
+         ON DUPLICATE KEY UPDATE completado = 0, updated_at = NOW()`,
+        [id, etapaFull, usuario]
       )
     }
 
