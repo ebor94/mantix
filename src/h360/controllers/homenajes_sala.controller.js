@@ -89,6 +89,30 @@ async function obtener(req, res, next) {
       [id]
     )
     homenaje.visitas = visitas
+
+    // Exequias programadas para la misma asistencia (hora, lugar, parroquia).
+    const [exequias] = await db.query(
+      `SELECT e.id, e.tipo, e.fecha, e.hora, e.lugar, e.barrio, e.parroquia,
+              e.direccion, e.estado, e.conductor_id, v.placa AS vehiculo_placa
+         FROM exequias e
+    LEFT JOIN vehiculos v ON v.id = e.vehiculo_id
+        WHERE e.asistencia_id = ?
+        ORDER BY e.fecha, e.hora`,
+      [homenaje.asistencia_id]
+    )
+    homenaje.exequias = exequias
+
+    // Familiar que recibió el encuentro (F-05). Puede no existir aún.
+    const [[f05]] = await db.query(
+      `SELECT JSON_UNQUOTE(JSON_EXTRACT(datos, '$.nombre_familiar')) AS nombre_familiar,
+              completado
+         FROM asistencia_etapas
+        WHERE asistencia_id = ? AND etapa = 'F05_ENTREGA'`,
+      [homenaje.asistencia_id]
+    )
+    homenaje.familiar_encuentro = (f05?.nombre_familiar || '').trim() || null
+    homenaje.encuentro_cerrado  = f05?.completado === 1
+
     res.json(homenaje)
   } catch (err) { next(err) }
 }
