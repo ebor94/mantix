@@ -397,34 +397,15 @@ async function guardarSegundaLlamada(req, res, next) {
       return res.json({ ok: true, homenaje: rows[0], desbloqueado: true })
     }
 
-    // ── Primer guardado → requiere token verificado (salvo admin)
-    if (rol !== 'admin') {
-      if (!token_id) {
-        return res.status(400).json({
-          mensaje: 'Debes enviar y verificar el token de confirmación al familiar antes de guardar.',
-        })
-      }
-      const [tks] = await db.query(
-        `SELECT estado FROM homenaje_residencia_tokens
-         WHERE id = ? AND homenaje_residencia_id = ? AND seccion = 'SEGUNDA_LLAMADA'`,
-        [token_id, id]
-      )
-      if (!tks.length) {
-        return res.status(400).json({ mensaje: 'Token no encontrado para esta llamada.' })
-      }
-      if (tks[0].estado !== 'VERIFICADO' && tks[0].estado !== 'OMITIDO_ADMIN') {
-        return res.status(400).json({
-          mensaje: `El token está en estado ${tks[0].estado}. Debe estar VERIFICADO u OMITIDO_ADMIN.`,
-        })
-      }
-    }
-
+    // La segunda llamada no exige token de confirmación del familiar: a
+    // diferencia de la primera, es seguimiento interno. Se sigue aceptando
+    // token_id por compatibilidad con los registros que ya lo tienen.
     const dataConToken = { ...segunda_llamada_data, token_id: token_id || null }
     await db.query('UPDATE homenajes_residencia SET segunda_llamada_data = ? WHERE id = ?',
       [JSON.stringify(dataConToken), id])
 
     await insertarAuditoria(id, 'SEGUNDA_LLAMADA', 'CREATE', null,
-      token_id ? `Confirmada con token #${token_id}` : 'Guardada por admin sin token', req)
+      token_id ? `Confirmada con token #${token_id}` : 'Guardada sin token', req)
 
     const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [id])
     res.json({ ok: true, homenaje: rows[0] })
