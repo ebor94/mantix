@@ -70,6 +70,62 @@ function construirWhere({ rango, scope, origen, convenioId }) {
   return where;
 }
 
+/** Redondea una tasa a 4 decimales. */
+function tasa(aprobadas, registradas) {
+  return registradas > 0 ? Number((aprobadas / registradas).toFixed(4)) : 0;
+}
+
+/** Convierte la fila agregada de KPIs (valores string de SQL) a números + tasa. */
+function ensamblarKpis(row) {
+  const r = row || {};
+  const registradas = Number(r.registradas || 0);
+  const aprobadas = Number(r.aprobadas || 0);
+  return {
+    registradas,
+    aprobadas,
+    pendientes: Number(r.pendientes || 0),
+    rechazadas: Number(r.rechazadas || 0),
+    anuladas: Number(r.anuladas || 0),
+    tasaAprobacion: tasa(aprobadas, registradas)
+  };
+}
+
+const ORIGEN_LABEL = { ASESOR: 'Asesor', VEOLIA: 'Veolia' };
+
+/** Etiqueta cada fila por origen (CONVENIO usa el nombre del convenio) y ordena desc. */
+function ensamblarPorOrigen(rows, convenioNombreById = {}) {
+  return (rows || [])
+    .map(r => ({
+      origen: r.origen,
+      convenioId: r.convenioId ?? null,
+      label: r.origen === 'CONVENIO'
+        ? (convenioNombreById[r.convenioId] || 'Convenio')
+        : (ORIGEN_LABEL[r.origen] || r.origen),
+      registradas: Number(r.registradas || 0),
+      aprobadas: Number(r.aprobadas || 0)
+    }))
+    .sort((a, b) => b.registradas - a.registradas);
+}
+
+/** Arma el ranking de asesores (nombre, tasa), ordena desc y corta a topN. */
+function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
+  return (rows || [])
+    .map(r => {
+      const registradas = Number(r.registradas || 0);
+      const aprobadas = Number(r.aprobadas || 0);
+      return {
+        asesorId: r.asesorId,
+        nombre: usuarioById[r.asesorId] || `Asesor ${r.asesorId}`,
+        registradas,
+        aprobadas,
+        tasaAprobacion: tasa(aprobadas, registradas)
+      };
+    })
+    .sort((a, b) => b.registradas - a.registradas)
+    .slice(0, topN);
+}
+
 module.exports = {
-  getPermisos, resolverScope, normalizarRango, elegirGranularidad, construirWhere
+  getPermisos, resolverScope, normalizarRango, elegirGranularidad, construirWhere,
+  ensamblarKpis, ensamblarPorOrigen, ensamblarRanking
 };
