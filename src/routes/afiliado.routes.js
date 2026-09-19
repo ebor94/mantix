@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const controller = require('../controllers/afiliado.controller');
+const dashboardAfiliacionesController = require('../controllers/dashboardAfiliaciones.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { auth, requirePermiso, softAuth } = require('../middleware/auth');
@@ -185,6 +186,9 @@ router.get('/:id/carnet',
 
 // ── GET /afiliados/:id/trazabilidad — historial de auditoría del afiliado ─────
 router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
+
+// ── GET /afiliados/dashboard — indicadores agregados (auth; scope en servicio) ─
+router.get('/dashboard', auth, dashboardAfiliacionesController.dashboard);
 
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
 router.get('/:id', auth, controller.getById);
