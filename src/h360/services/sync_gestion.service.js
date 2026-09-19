@@ -5,7 +5,8 @@
  * en residencia). Conserva las filas ya GESTIONADAS/DESCARTADAS y
  * refresca las PENDIENTES según lo que venga marcado ahora.
  */
-const db = require('../config/db')
+const db    = require('../config/db')
+const gchat = require('./googleChat.service')
 
 const CATALOGO_SERVICIOS = {
   foto_memorial:        'Foto memorial',
@@ -115,8 +116,9 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
 
   // 2) Inserta las nuevas (ignora si ya existen — evita duplicar gestionadas).
   //    Actualiza direccion en filas PENDIENTES si viene una nueva.
+  const nuevos = []
   for (const { tipo, descripcion, direccion } of marcados) {
-    await db.query(
+    const [r] = await db.query(
       `INSERT INTO gestion_servicios
        (homenaje_sala_id, homenaje_residencia_id, asistencia_id, tipo_servicio,
         descripcion, direccion, origen, origen_ref, ofrecido_por, ofrecido_por_nombre)
@@ -128,6 +130,45 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
       [homenajeSalaId, homenajeResidenciaId, asistenciaId, tipo, descripcion,
        direccion || null, origen, originRef, usuarioId, nombre || null]
     )
+    // affectedRows: 1 = insertado, 2 = actualizado, 0 = sin cambios. Solo se
+    // avisa de lo recién insertado; de lo contrario cada guardado de borrador
+    // repetiría el aviso de servicios ya marcados antes.
+    if (r.affectedRows === 1) nuevos.push({ tipo, descripcion, direccion })
+  }
+
+  if (nuevos.length) await notificarServicios({ asistenciaId, nuevos, usuarioId, nombre })
+}
+
+/**
+ * Avisa al espacio de operaciones de los servicios recién marcados.
+ * Nunca lanza: lo importante (el registro en gestion_servicios) ya quedó hecho.
+ */
+async function notificarServicios({ asistenciaId, nuevos, usuarioId, nombre }) {
+  try {
+    const [[a]] = await db.query(
+      'SELECT codigo, nombre_ser_querido FROM asistencias WHERE id = ?', [asistenciaId])
+
+    const esNovenario  = t => t === 'novenario_residencia' || t === 'ultima_noche_residencia'
+    const novenario    = nuevos.filter(n =>  esNovenario(n.tipo))
+    const adicionales  = nuevos.filter(n => !esNovenario(n.tipo))
+
+    const lineas = [
+      `🎁 *Servicios registrados* — ${a?.codigo || 'asistencia ' + asistenciaId}`,
+      `Ser querido: ${a?.nombre_ser_querido || 's/n'}`,
+    ]
+    if (novenario.length) {
+      lineas.push('', '*Confirmación de novenario / última noche*')
+      novenario.forEach(n => lineas.push(`• ${n.descripcion}${n.direccion ? ` — ${n.direccion}` : ''}`))
+    }
+    if (adicionales.length) {
+      lineas.push('', '*Servicios adicionales ofrecidos*')
+      adicionales.forEach(n => lineas.push(`• ${n.descripcion}`))
+    }
+    lineas.push('', `Registró: ${nombre || usuarioId}`)
+
+    await gchat.enviarOperaciones(lineas.join('\n'))
+  } catch (err) {
+    console.warn('[sync_gestion] notificarServicios:', err.message)
   }
 }
 

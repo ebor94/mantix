@@ -1,6 +1,7 @@
 const db = require('../config/db')
 const { buscarUsuarioPorSam } = require('../services/ldap.service')
 const { sendTextoSimple }     = require('../../services/whatsappService')
+const gchat                   = require('../services/googleChat.service')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -138,7 +139,22 @@ async function confirmar(req, res, next) {
     )
     await insertarHistorial(id, 'PENDIENTE_CONFIRMAR', 'PENDIENTE_VEHICULO', usuario, nota || 'Confirmada')
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
-    res.json(nueva[0])
+
+    const ex = nueva[0]
+    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
+    gchat.enviarOperaciones([
+      `✅ *${ex.tipo === 'CEREMONIA' ? 'Ceremonia' : 'Exequia'} confirmada* — ${ex.asistencia_codigo}`,
+      `Ser querido: ${ex.ser_querido || 's/n'}`,
+      `📅 ${fecha}  🕐 ${String(ex.hora).slice(0, 5)}`,
+      `📍 ${[ex.lugar, ex.barrio, ex.parroquia].filter(Boolean).join(', ')}`,
+      ex.direccion ? `Dirección: ${ex.direccion}` : null,
+      `Confirmó: ${usuario}`,
+      nota ? `Nota: ${nota}` : null,
+      '',
+      '_Pendiente asignar vehículo y conductor._',
+    ].filter(Boolean).join('\n')).catch(() => {})
+
+    res.json(ex)
   } catch (err) { next(err) }
 }
 

@@ -1,5 +1,6 @@
-const db   = require('../config/db')
-const glpi = require('../services/glpi.service')
+const db    = require('../config/db')
+const glpi  = require('../services/glpi.service')
+const gchat = require('../services/googleChat.service')
 const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 
 // Rol → estados en que puede trabajar
@@ -242,6 +243,18 @@ async function crear(req, res, next) {
     }
 
     await insertarHistorial(result.insertId, null, 'NUEVO', usuario, nombre)
+
+    // Aviso operativo. Fire-and-forget: la asistencia ya está creada y un
+    // webhook caído no debe afectar la respuesta al asesor.
+    gchat.enviarOperaciones([
+      `🆕 *Nueva asistencia* ${codigo}`,
+      `Ser querido: ${nombre_ser_querido || 's/n'}`,
+      identificacion ? `Identificación: ${identificacion}` : null,
+      lugar_asistencia ? `Lugar: ${lugar_asistencia}` : null,
+      nombre_contacto ? `Contacto: ${nombre_contacto}${telefono_contacto ? ' · ' + telefono_contacto : ''}` : null,
+      conductor ? `Conductor: ${conductor}` : null,
+      `Registró: ${nombre || usuario}`,
+    ].filter(Boolean).join('\n')).catch(() => {})
 
     glpi.crearTicket({ id: result.insertId, codigo, nombre_ser_querido, lugar_asistencia, nombre_contacto })
       .then(ticketId => {
