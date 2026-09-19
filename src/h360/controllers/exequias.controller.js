@@ -266,10 +266,20 @@ async function programacionPublica(req, res, next) {
     if (!token || token !== esperado) return res.status(404).json({ mensaje: 'No encontrado' })
 
     // Exequias del día actual en estado PROGRAMADA o REALIZADA, ordenadas por hora
+    // Sala y residencia van como subconsultas, no como JOIN: una asistencia
+    // podría tener más de un homenaje registrado y un JOIN duplicaría la
+    // exequia en la pantalla.
     const [rows] = await db.query(`
       SELECT e.id, e.tipo, e.hora, e.lugar, e.barrio, e.parroquia, e.direccion,
              e.estado, e.conductor_id, v.placa AS vehiculo_placa,
-             a.nombre_ser_querido AS ser_querido
+             a.nombre_ser_querido AS ser_querido,
+             (SELECT sv.nombre FROM homenajes_sala hs
+                JOIN salas_velacion sv ON sv.id = hs.sala_id
+               WHERE hs.asistencia_id = a.id
+               ORDER BY hs.id DESC LIMIT 1)                       AS sala_nombre,
+             (SELECT hr.id FROM homenajes_residencia hr
+               WHERE hr.asistencia_id = a.id
+               ORDER BY hr.id DESC LIMIT 1)                       AS residencia_id
         FROM exequias e
         JOIN asistencias a ON a.id = e.asistencia_id
    LEFT JOIN vehiculos  v ON v.id = e.vehiculo_id
