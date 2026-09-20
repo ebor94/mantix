@@ -100,23 +100,78 @@ async function crear(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PATCH /exequias/:id (solo si PENDIENTE_CONFIRMAR)
+// PATCH /exequias/:id — editable mientras no esté en un estado terminal
+const CAMPOS_EDITABLES = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones']
+
 async function actualizar(req, res, next) {
   try {
     const { id } = req.params
-    const [rows] = await db.query('SELECT estado FROM exequias WHERE id = ?', [id])
+    const { usuario } = req.user
+    const [rows] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
-    if (rows[0].estado !== 'PENDIENTE_CONFIRMAR' && req.user.rol !== 'admin')
-      return res.status(409).json({ mensaje: 'La exequia ya fue confirmada; no se puede editar' })
+    const antes = rows[0]
 
-    const CAMPOS = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones']
+    // Una exequia se puede corregir mientras siga viva: las parroquias cambian
+    // horarios y el dato tiene que poder seguirlos. Solo se cierran los estados
+    // terminales, donde editar reescribiría algo ya ocurrido.
+    if (['REALIZADA', 'CANCELADA'].includes(antes.estado))
+      return res.status(409).json({
+        mensaje: `No se puede editar una exequia ${antes.estado.toLowerCase()}.`,
+      })
+
     const updates = {}
-    for (const k of CAMPOS) if (req.body[k] !== undefined) updates[k] = req.body[k]
+    for (const k of CAMPOS_EDITABLES) if (req.body[k] !== undefined) updates[k] = req.body[k]
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
+
+    // Qué cambió, para dejarlo en el historial
+    const norm = (k, v) => (k === 'fecha' ? String(v ?? '').slice(0, 10)
+                          : k === 'hora'  ? String(v ?? '').slice(0, 5)
+                          : String(v ?? ''))
+    const cambios = Object.keys(updates)
+      .filter(k => norm(k, updates[k]) !== norm(k, antes[k]))
+      .map(k => `${k}: "${norm(k, antes[k]) || '—'}" → "${norm(k, updates[k]) || '—'}"`)
+
     await db.query('UPDATE exequias SET ? WHERE id = ?', [updates, id])
+
+    if (cambios.length)
+      await insertarHistorial(id, antes.estado, antes.estado, usuario, 'Editada — ' + cambios.join(' · '))
+
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
-    res.json(nueva[0])
+
+    // Si ya tenía conductor asignado y cambió algo que le afecta, hay que
+    // volver a avisarle: el WhatsApp anterior quedó con datos viejos.
+    const CLAVES_AVISO = ['fecha', 'hora', 'lugar', 'barrio', 'parroquia', 'direccion']
+    const requiereReaviso = antes.conductor_id &&
+      cambios.some(c => CLAVES_AVISO.includes(c.split(':')[0]))
+
+    res.json({ ...nueva[0], cambios, requiere_reaviso: !!requiereReaviso })
+  } catch (err) { next(err) }
+}
+
+// DELETE /exequias/:id
+async function eliminar(req, res, next) {
+  try {
+    const { id } = req.params
+    const { rol } = req.user
+    const [rows] = await db.query('SELECT estado, conductor_id FROM exequias WHERE id = ?', [id])
+    if (!rows.length) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
+
+    // Una exequia ya realizada es historia del servicio: no se borra.
+    // Para dar de baja una viva existe "cancelar", que deja motivo y rastro;
+    // eliminar queda para errores de captura.
+    if (rows[0].estado === 'REALIZADA')
+      return res.status(409).json({
+        mensaje: 'No se puede eliminar una exequia ya realizada. Queda como parte del historial del servicio.',
+      })
+    if (rows[0].estado === 'PROGRAMADA' && rol !== 'admin')
+      return res.status(409).json({
+        mensaje: 'Esta exequia ya está programada con vehículo y conductor. Usa "Cancelar" para darla de baja dejando el motivo registrado, o pide a un admin que la elimine.',
+      })
+
+    // exequia_historial cae por ON DELETE CASCADE
+    await db.query('DELETE FROM exequias WHERE id = ?', [id])
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
@@ -313,7 +368,7 @@ async function programacionPublica(req, res, next) {
 }
 
 module.exports = {
-  listar, obtener, crear, actualizar,
+  listar, obtener, crear, actualizar, eliminar,
   confirmar, asignarVehiculo, marcarRealizada, cancelar,
   programacionPublica,
 }

@@ -181,6 +181,14 @@
       ]
     },
     {
+      "clave": "accion.exequias.eliminar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.exequias.marcar_realizada",
       "modulo": "exequias",
       "roles": [
