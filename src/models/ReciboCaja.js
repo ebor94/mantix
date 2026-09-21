@@ -84,6 +84,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       field: 'observacion_cajero'
     },
+    numeroReciboErp: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: 'numero_recibo_erp',
+      comment: 'N° de recibo del ERP capturado al aprobar en cuadre (trazabilidad bancarios)'
+    },
     pdfUrl: {
       type: DataTypes.STRING(500),
       allowNull: true,

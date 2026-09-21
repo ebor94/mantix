@@ -111,13 +111,13 @@ async function generarPlanoErp(req, res, next) {
  * Valida en el servicio el permiso por forma de pago:
  *   - EFECTIVO requiere caja.aprobar_efectivo (rol CAJERO)
  *   - TRANSFERENCIA/CORRESPONSAL/POSFECHADO_COBRADO requiere caja.aprobar_bancarios (rol CARTERA)
- * Body: { reciboIds: number[], observacion?: string }
+ * Body: { reciboIds, observacion?, erpPorRecibo? }
  */
 async function aprobarRecibos(req, res, next) {
   try {
-    const { reciboIds, observacion } = req.body;
+    const { reciboIds, observacion, erpPorRecibo } = req.body;
     const result = await reciboService.aprobarRecibos(
-      reciboIds, req.usuario, observacion || null
+      reciboIds, req.usuario, { observacion: observacion || null, erpPorRecibo: erpPorRecibo || {} }
     );
     res.json({
       success: true,

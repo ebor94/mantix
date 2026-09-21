@@ -41,8 +41,9 @@ const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 //   POSFECHADO_COBRADO    → aprueba CARTERA   (típicamente entra como consignación/transferencia)
 // Efecty y Super Giros son pagos BANCARIOS: generan recibo y los aprueba
 // cartera (caja.aprobar_bancarios), no el cajero de efectivo.
-const FORMAS_EFECTIVO  = ['EFECTIVO', 'PAGO_EN_CAJA'];
-const FORMAS_BANCARIAS = ['TRANSFERENCIA', 'CORRESPONSAL', 'POSFECHADO_COBRADO', 'EFECTY', 'SUPER_GIROS'];
+const {
+  FORMAS_EFECTIVO, FORMAS_BANCARIAS, normalizarErp, recibosBancariosSinErp
+} = require('./reciboCajaAprobacion.helpers');
 
 /**
  * Lee los permisos del módulo caja desde el usuario.
@@ -387,7 +388,7 @@ async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta,
  * @param {string|null} observacion
  * @returns {{ aprobados:number, recibos:ReciboCaja[] }}
  */
-async function aprobarRecibos(reciboIds, usuario, observacion = null) {
+async function aprobarRecibos(reciboIds, usuario, { observacion = null, erpPorRecibo = {} } = {}) {
   if (!Array.isArray(reciboIds) || reciboIds.length === 0) {
     throw new AppError('Debe enviar al menos un reciboId', 400);
   }
@@ -466,25 +467,41 @@ async function aprobarRecibos(reciboIds, usuario, observacion = null) {
       );
     }
 
+    // N° de recibo ERP obligatorio para bancarios (trazabilidad con el ERP).
+    const erpNorm = normalizarErp(erpPorRecibo);
+    const faltantesErp = recibosBancariosSinErp(recibos, erpNorm);
+    if (faltantesErp.length > 0) {
+      await transaction.rollback();
+      const lista = faltantesErp.map(r => r.numeroRecibo).join(', ');
+      throw new AppError(`Falta el N° de recibo ERP en: ${lista}`, 400);
+    }
+
     const ahora = new Date();
-    await ReciboCaja.update(
-      {
-        estadoCuadre: 'APROBADO',
-        aprobadoPor: usuario.id,
-        aprobadoAt: ahora,
-        observacionCajero: observacion
-      },
-      { where: { id: recibos.map(r => r.id) }, transaction }
-    );
+    for (const r of recibos) {
+      await r.update(
+        {
+          estadoCuadre: 'APROBADO',
+          aprobadoPor: usuario.id,
+          aprobadoAt: ahora,
+          observacionCajero: observacion,
+          numeroReciboErp: erpNorm[String(r.id)] || null
+        },
+        { transaction }
+      );
+    }
 
     // Trazabilidad por recibo
-    const trazas = recibos.map(r => ({
-      afiliadoId: r.afiliadoId,
-      tipo: 'APROBACION_RECIBO',
-      descripcion: `Recibo ${r.numeroRecibo} (${r.formaPago}) aprobado en cuadre de caja` +
-        (observacion ? ` — ${observacion}` : ''),
-      usuarioId: usuario.id
-    }));
+    const trazas = recibos.map(r => {
+      const erp = erpNorm[String(r.id)];
+      return {
+        afiliadoId: r.afiliadoId,
+        tipo: 'APROBACION_RECIBO',
+        descripcion: `Recibo ${r.numeroRecibo} (${r.formaPago}) aprobado en cuadre de caja` +
+          (erp ? ` — ERP: ${erp}` : '') +
+          (observacion ? ` — ${observacion}` : ''),
+        usuarioId: usuario.id
+      };
+    });
     await Trazabilidad.bulkCreate(trazas, { transaction });
 
     await transaction.commit();
