@@ -3,6 +3,13 @@ const glpi  = require('../services/glpi.service')
 const gchat = require('../services/googleChat.service')
 const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 
+// El certificado de defunción se estaba llenando con "0" o "PTE" mientras no
+// se tenía el número real, y eso lo daba por resuelto. Los reales son
+// numéricos y largos (14 dígitos en los registros actuales).
+const MIN_DIGITOS_CERTIFICADO = 7
+const RE_CERTIFICADO = new RegExp(`^\\d{${MIN_DIGITOS_CERTIFICADO},}$`)
+const certificadoValido = v => RE_CERTIFICADO.test(String(v ?? '').trim())
+
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
@@ -432,11 +439,10 @@ async function guardarEtapa(req, res, next) {
     // El certificado de defunción es obligatorio para cerrar F-02: si no vino
     // en F-01, hay que registrarlo aquí.
     if (etapa === 'F02_INVENTARIO_CUERPO' && completar) {
-      const yaRegistrado = (asist[0].certificado_defuncion || '').trim()
-      const vieneEnF02   = String(datos?.certificado_defuncion || '').trim()
-      if (!yaRegistrado && !vieneEnF02)
+      if (!certificadoValido(asist[0].certificado_defuncion) &&
+          !certificadoValido(datos?.certificado_defuncion))
         return res.status(400).json({
-          mensaje: 'El número de certificado de defunción es obligatorio para cerrar F-02.'
+          mensaje: `El certificado de defunción debe ser numérico y tener al menos ${MIN_DIGITOS_CERTIFICADO} dígitos.`
         })
     }
 
@@ -485,11 +491,16 @@ async function guardarEtapa(req, res, next) {
     // Certificado de defunción: cuando F-01 quedó sin él, se puede completar
     // desde F-02. El WHERE solo rellena vacíos — sobrescribir uno ya registrado
     // sigue exigiendo reapertura de F-01 con token.
-    if (etapa === 'F02_INVENTARIO_CUERPO' && datos?.certificado_defuncion) {
+    if (etapa === 'F02_INVENTARIO_CUERPO' && certificadoValido(datos?.certificado_defuncion)) {
+      // Rellena el vacío y también reemplaza un valor inválido tipo "0" o "PTE".
+      // Un certificado ya válido no se toca: cambiarlo exige reapertura de F-01.
       await db.query(
         `UPDATE asistencias SET certificado_defuncion = ?
-          WHERE id = ? AND (certificado_defuncion IS NULL OR certificado_defuncion = '')`,
-        [String(datos.certificado_defuncion).trim(), id]
+          WHERE id = ?
+            AND (certificado_defuncion IS NULL
+                 OR certificado_defuncion = ''
+                 OR certificado_defuncion NOT REGEXP ?)`,
+        [String(datos.certificado_defuncion).trim(), id, `^[0-9]{${MIN_DIGITOS_CERTIFICADO},}$`]
       )
     }
 
