@@ -223,10 +223,12 @@ async function asignarVehiculo(req, res, next) {
     if (!vehiculo_id || !conductor_id)
       return res.status(400).json({ mensaje: 'Vehículo y conductor son requeridos' })
 
-    const [rows] = await db.query('SELECT estado FROM exequias WHERE id = ?', [id])
+    const [rows] = await db.query('SELECT estado, conductor_id FROM exequias WHERE id = ?', [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
     if (!['PENDIENTE_VEHICULO', 'PROGRAMADA'].includes(rows[0].estado))
       return res.status(409).json({ mensaje: `No se puede asignar vehículo en estado ${rows[0].estado}` })
+
+    const conductorAnterior = rows[0].conductor_id
 
     const [v] = await db.query('SELECT id, activo FROM vehiculos WHERE id = ?', [vehiculo_id])
     if (!v.length) return res.status(400).json({ mensaje: 'Vehículo no existe' })
@@ -244,9 +246,46 @@ async function asignarVehiculo(req, res, next) {
     // un fallo aquí se reporta pero no la revierte ni devuelve error.
     const notificacion = await notificarConductor(id, conductor_id)
 
+    // Si había otro conductor, se le avisa que ya no va: de lo contrario se
+    // queda con el mensaje anterior y se presenta a un servicio que no es suyo.
+    let notificacionRelevo = null
+    if (conductorAnterior && conductorAnterior !== conductor_id) {
+      notificacionRelevo = await avisarConductorRelevado(id, conductorAnterior)
+    }
+
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
-    res.json({ ...nueva[0], notificacion })
+    res.json({ ...nueva[0], notificacion, notificacion_relevo: notificacionRelevo })
   } catch (err) { next(err) }
+}
+
+/**
+ * Avisa a un conductor que fue relevado de una exequia.
+ * No lanza ni registra en las columnas wa_*: esas guardan el envío al conductor
+ * vigente, y pisarlas con este aviso perdería ese rastro.
+ */
+async function avisarConductorRelevado(exequiaId, conductorId) {
+  try {
+    const [[ex]] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [exequiaId])
+    if (!ex) return { ok: false, motivo: 'Exequia no encontrada' }
+
+    const conductor = await buscarUsuarioPorSam(conductorId)
+    if (!conductor?.telefono)
+      return { ok: false, motivo: `${conductorId} no tiene celular en el directorio activo` }
+
+    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
+    const texto = [
+      `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} reasignada`,
+      `${fecha} ${String(ex.hora).slice(0, 5)}`,
+      `${ex.lugar || ''}`,
+      'Este servicio quedo a cargo de otro conductor. Usted YA NO debe presentarse.',
+    ].filter(Boolean).join(' · ')
+
+    await sendTextoSimple(conductor.telefono, texto)
+    return { ok: true, conductor: conductor.nombre, telefono: conductor.telefono }
+  } catch (err) {
+    console.warn('[exequias] avisarConductorRelevado:', err.message)
+    return { ok: false, motivo: err.message }
+  }
 }
 
 // Arma el aviso y lo envía al celular que el conductor tenga en el AD.
