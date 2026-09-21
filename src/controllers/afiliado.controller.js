@@ -137,10 +137,6 @@ async function emitirPdfYEnviarWhatsapp(afiliadoId) {
     const pdfInfo = await pdfService.generarReciboCajaPDF(reciboJson, afiliadoJson, asesorJson);
     await recibo.update({ pdfUrl: pdfInfo.url });
 
-    // Pago en caja: el recibo existe para el cuadre de la cajera, pero NO se
-    // envía el voucher por WhatsApp al cliente.
-    if (recibo.formaPago === 'PAGO_EN_CAJA') return;
-
     // 2) Generar la imagen-voucher PNG. Se descarga en el servidor en
     //    uploads/recibos/{numeroRecibo}.png y queda accesible via PUBLIC_API_URL.
     const imgInfo = await pdfService.generarReciboCajaImagen(
