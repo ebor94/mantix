@@ -46,9 +46,13 @@ async function syncFromVisita(visitaId, homenajeSalaId, asistenciaId, serviciosD
   const originRef = `VISITA_SALA:${visitaId}`
   const raw = typeof serviciosData === 'string' ? JSON.parse(serviciosData || '{}') : (serviciosData || {})
 
+  // Un servicio entra al listado si se ofreció o si se vendió; "vendido" es lo
+  // que dispara el aviso, "ofrecido" solo deja el registro.
   const marcados = Object.entries(CATALOGO_SERVICIOS)
-    .filter(([key]) => isMarcado(raw[key]))
-    .map(([key, label]) => ({ tipo: key, descripcion: label, direccion: null }))
+    .filter(([key]) => isMarcado(raw[key]) || esVendido(raw[key]))
+    .map(([key, label]) => ({
+      tipo: key, descripcion: label, direccion: null, vendido: esVendido(raw[key]),
+    }))
 
   // Bloque novenario/última noche embebido en la visita (opcional)
   if (extra) marcados.push(...extraerNovenario(extra))
@@ -94,6 +98,10 @@ function isMarcado(v) {
   return false
 }
 
+function esVendido(v) {
+  return !!(v && typeof v === 'object' && v.vendido === true)
+}
+
 async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenciaId, asistenciaId, marcados, usuarioId, nombre }) {
   const tiposMarcados = new Set(marcados.map(m => m.tipo))
 
@@ -116,24 +124,39 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
 
   // 2) Inserta las nuevas (ignora si ya existen — evita duplicar gestionadas).
   //    Actualiza direccion en filas PENDIENTES si viene una nueva.
+  // Qué había vendido antes de este guardado, para avisar solo de lo que
+  // acaba de venderse y no repetirlo en cada guardado posterior.
+  const [previos] = await db.query(
+    'SELECT tipo_servicio, vendido FROM gestion_servicios WHERE origen_ref = ?', [originRef])
+  const vendidosAntes = new Set(previos.filter(p => p.vendido === 1).map(p => p.tipo_servicio))
+
   const nuevos = []
-  for (const { tipo, descripcion, direccion } of marcados) {
+  for (const { tipo, descripcion, direccion, vendido } of marcados) {
     const [r] = await db.query(
       `INSERT INTO gestion_servicios
        (homenaje_sala_id, homenaje_residencia_id, asistencia_id, tipo_servicio,
-        descripcion, direccion, origen, origen_ref, ofrecido_por, ofrecido_por_nombre)
-       VALUES (?,?,?,?,?,?,?,?,?,?)
+        descripcion, vendido, vendido_at, direccion, origen, origen_ref,
+        ofrecido_por, ofrecido_por_nombre)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE
-         direccion = IF(estado = 'PENDIENTE', VALUES(direccion), direccion),
+         direccion  = IF(estado = 'PENDIENTE', VALUES(direccion), direccion),
+         vendido    = VALUES(vendido),
+         vendido_at = IF(VALUES(vendido) = 1, COALESCE(vendido_at, NOW()), NULL),
          ofrecido_por = COALESCE(ofrecido_por, VALUES(ofrecido_por)),
          ofrecido_por_nombre = COALESCE(ofrecido_por_nombre, VALUES(ofrecido_por_nombre))`,
       [homenajeSalaId, homenajeResidenciaId, asistenciaId, tipo, descripcion,
+       vendido ? 1 : 0, vendido ? new Date() : null,
        direccion || null, origen, originRef, usuarioId, nombre || null]
     )
-    // affectedRows: 1 = insertado, 2 = actualizado, 0 = sin cambios. Solo se
-    // avisa de lo recién insertado; de lo contrario cada guardado de borrador
-    // repetiría el aviso de servicios ya marcados antes.
-    if (r.affectedRows === 1) nuevos.push({ tipo, descripcion, direccion })
+
+    // Novenario y última noche no se venden: avisan al quedar marcados, y por
+    // eso se detectan como inserción nueva (affectedRows === 1).
+    // Los servicios adicionales avisan al pasar a vendido.
+    const esNovenario = tipo === 'novenario_residencia' || tipo === 'ultima_noche_residencia'
+    const avisar = esNovenario
+      ? r.affectedRows === 1
+      : (vendido && !vendidosAntes.has(tipo))
+    if (avisar) nuevos.push({ tipo, descripcion, direccion, vendido })
   }
 
   if (nuevos.length) await notificarServicios({ asistenciaId, nuevos, usuarioId, nombre })
@@ -161,7 +184,7 @@ async function notificarServicios({ asistenciaId, nuevos, usuarioId, nombre }) {
       novenario.forEach(n => lineas.push(`• ${n.descripcion}${n.direccion ? ` — ${n.direccion}` : ''}`))
     }
     if (adicionales.length) {
-      lineas.push('', '*Servicios adicionales ofrecidos*')
+      lineas.push('', '💰 *Servicios adicionales VENDIDOS*')
       adicionales.forEach(n => lineas.push(`• ${n.descripcion}`))
     }
     lineas.push('', `Registró: ${nombre || usuarioId}`)
