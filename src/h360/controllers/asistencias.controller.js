@@ -466,7 +466,12 @@ async function guardarEtapa(req, res, next) {
         puedeAvanzar = requeridas.every(e => completadas.has(e))
       }
 
-      if (puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
+      // Cerrar una etapa rezagada (p. ej. F-03 cuando el caso ya está en
+      // PRESERVACION) no debe empujar el estado: esa etapa no pertenece a los
+      // requisitos del estado actual y avanzar dejaría fuera otras pendientes.
+      const esDelEstadoActual = requeridas.length === 0 || requeridas.includes(etapa)
+
+      if (esDelEstadoActual && puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
         await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
         await insertarHistorial(id, estadoActual, transicion.siguiente, usuario, nombre)
         glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
