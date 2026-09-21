@@ -42,6 +42,37 @@ const ETAPAS_PARA_CERRAR = {
                           APROBACION:   [] },
 }
 
+// Requisitos para salir de cada estado, sin distinguir rol.
+// Se derivan de ETAPAS_PARA_CERRAR, que los repite por rol con los mismos
+// valores: qué etapas se exigen es una regla del proceso, no un permiso.
+const REQUISITOS_CIERRE = Object.values(ETAPAS_PARA_CERRAR).reduce((acc, porEstado) => {
+  for (const [estado, etapas] of Object.entries(porEstado)) acc[estado] = etapas
+  return acc
+}, {})
+
+const ETIQUETA_ETAPA = {
+  F02_INVENTARIO_CUERPO:  'F-02 Inventario recibido',
+  F03_INVENTARIO_RETOQUE: 'F-03 Inventario retoque',
+  F04_TANATOPRAXIA:       'F-04 Tanatopraxia',
+  F05_ENTREGA:            'F-05 Encuentro',
+  F06_ENCOFRADO:          'F-06 Encofrado',
+  F07_SALIDA_NO_CONFORME: 'F-07 Salida no conforme',
+}
+
+// Devuelve las etapas que faltan por cerrar para poder salir de `estado`.
+async function etapasPendientesPara(asistenciaId, estado) {
+  const requeridas = REQUISITOS_CIERRE[estado] || []
+  if (!requeridas.length) return []
+  const [filas] = await db.query(
+    `SELECT etapa FROM asistencia_etapas
+      WHERE asistencia_id = ? AND completado = 1
+        AND etapa IN (${requeridas.map(() => '?').join(',')})`,
+    [asistenciaId, ...requeridas]
+  )
+  const cerradas = new Set(filas.map(f => f.etapa))
+  return requeridas.filter(e => !cerradas.has(e))
+}
+
 // Transiciones del flujo
 const TRANSICIONES = {
   NUEVO:        { siguiente: 'ASISTENCIA',   roles: ['asesor', 'coordinador', 'admin'] },
@@ -164,6 +195,13 @@ async function obtener(req, res, next) {
     asistencia.etapas      = etapas
     asistencia.aprobaciones= aprobaciones
     asistencia.historial   = historial
+
+    // Qué falta para poder salir del estado actual. Va aquí para que la vista
+    // lo muestre sin reimplementar la regla: la autoridad sigue siendo el
+    // backend, que la vuelve a comprobar al avanzar.
+    const pendientes = await etapasPendientesPara(asistencia.id, asistencia.estado)
+    asistencia.etapas_pendientes = pendientes.map(e => ({ etapa: e, label: ETIQUETA_ETAPA[e] || e }))
+
     res.json(asistencia)
   } catch (err) { next(err) }
 }
@@ -317,6 +355,19 @@ async function cambiarEstado(req, res, next) {
       return res.status(400).json({ mensaje: `El siguiente estado debe ser ${transicion.siguiente}` })
     if (!transicion.roles.includes(rol))
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede ejecutar esta transición` })
+
+    // El avance manual exige las mismas etapas que el cierre automático. Sin
+    // esto se podía saltar un formulario obligatorio —p. ej. pasar de
+    // PRESERVACION a ENCOFRADO con la tanatopraxia en borrador— y el caso
+    // seguía adelante sin que nada lo advirtiera.
+    const pendientes = await etapasPendientesPara(id, asistencia.estado)
+    if (pendientes.length) {
+      const nombres = pendientes.map(e => ETIQUETA_ETAPA[e] || e).join(', ')
+      return res.status(409).json({
+        mensaje: `No se puede avanzar a ${nuevoEstado}: falta cerrar ${nombres}.`,
+        etapas_pendientes: pendientes,
+      })
+    }
 
     const updates = { estado: nuevoEstado }
     if (nuevoEstado === 'CERRADO') updates.closed_at = new Date()
