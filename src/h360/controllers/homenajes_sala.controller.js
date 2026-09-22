@@ -42,7 +42,15 @@ async function listar(req, res, next) {
     const params = []
     if (asistencia_id) { conds.push('h.asistencia_id = ?'); params.push(asistencia_id) }
     if (sala_id)       { conds.push('h.sala_id = ?');       params.push(sala_id) }
-    if (estado)        { conds.push('h.estado = ?');        params.push(estado) }
+    // `estado` acepta varios separados por coma (ej. ABIERTO,SALIDA_REGISTRADA),
+    // para poder pedir "los que siguen abiertos" en una sola consulta.
+    const estados = String(estado || '').split(',').map(e => e.trim()).filter(Boolean)
+    if (estados.length === 1) {
+      conds.push('h.estado = ?'); params.push(estados[0])
+    } else if (estados.length > 1) {
+      conds.push(`h.estado IN (${estados.map(() => '?').join(',')})`)
+      params.push(...estados)
+    }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
 
     const [rows] = await db.query(
