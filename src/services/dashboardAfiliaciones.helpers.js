@@ -107,6 +107,28 @@ function ensamblarPorOrigen(rows, convenioNombreById = {}) {
     .sort((a, b) => b.registradas - a.registradas);
 }
 
+// Etiquetas legibles del tipo de novedad (mismas que usa el PDF de liquidación).
+const NOVEDAD_LABEL = {
+  NUEVO: 'Ingreso',
+  CAMBIO: 'Cambio',
+  TRASLADO: 'Traslado',
+  ACTUALIZACION: 'Actualización',
+  TRASLADO_COMPETENCIA: 'Tras. comp.',
+  TRASLADO_CANAL: 'Tras. canal'
+};
+
+/** Etiqueta cada fila por tipo de novedad (Ingreso, Traslado, ...) y ordena desc. */
+function ensamblarPorNovedad(rows) {
+  return (rows || [])
+    .map(r => ({
+      novedad: r.novedad ?? null,
+      label: NOVEDAD_LABEL[r.novedad] || r.novedad || 'Sin novedad',
+      registradas: Number(r.registradas || 0),
+      aprobadas: Number(r.aprobadas || 0)
+    }))
+    .sort((a, b) => b.registradas - a.registradas);
+}
+
 /** Arma el ranking de asesores (nombre, tasa), ordena desc y corta a topN. */
 function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
   return (rows || [])
@@ -127,5 +149,5 @@ function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
 
 module.exports = {
   getPermisos, resolverScope, normalizarRango, elegirGranularidad, construirWhere,
-  ensamblarKpis, ensamblarPorOrigen, ensamblarRanking
+  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking
 };

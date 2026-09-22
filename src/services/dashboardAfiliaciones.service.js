@@ -2,7 +2,7 @@ const { Op, fn, col, literal } = require('sequelize');
 const { Afiliado, Convenio, Usuario } = require('../models');
 const {
   resolverScope, normalizarRango, elegirGranularidad, construirWhere,
-  ensamblarKpis, ensamblarPorOrigen, ensamblarRanking
+  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking
 } = require('./dashboardAfiliaciones.helpers');
 
 const TOP_RANKING = 15;
@@ -107,12 +107,28 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
     ranking = ensamblarRanking(rankingRows, usuarioById, TOP_RANKING);
   }
 
+  // ── Por tipo de novedad ───────────────────────────────────────
+  // Visible para todos (a diferencia de porOrigen/ranking): el where ya
+  // scopea al asesor cuando no es global, así que ve solo lo suyo.
+  const novedadRows = await Afiliado.findAll({
+    where,
+    attributes: [
+      'novedad',
+      [fn('COUNT', col('id')), 'registradas'],
+      [SUM_APROBADAS, 'aprobadas']
+    ],
+    group: ['novedad'],
+    raw: true
+  });
+  const porNovedad = ensamblarPorNovedad(novedadRows);
+
   return {
     rango: { desde: rango.desde, hasta: rango.hasta, granularidad },
     esGlobal: scope.esGlobal,
     kpis,
     serie,
     porOrigen,
+    porNovedad,
     ranking
   };
 }
