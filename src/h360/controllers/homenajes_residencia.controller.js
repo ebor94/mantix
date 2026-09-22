@@ -9,6 +9,7 @@
  */
 const db = require('../config/db')
 const { sendOTP } = require('../../services/whatsappService')
+const { avanzarPorEvento } = require('./asistencias.controller')
 
 // TTL del token en minutos
 const TOKEN_TTL_MIN = 10
@@ -429,7 +430,18 @@ async function guardarEquipoVelacion(req, res, next) {
         [JSON.stringify(equipo_velacion_data), id])
     }
     const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [id])
-    res.json({ ok: true, homenaje: rows[0] })
+
+    // Igual que en sala: finalizar da por terminada la velación, así que la
+    // asistencia pasa de SALA a APROBACION. Si no estaba en SALA no se toca.
+    const asistencia = finalizar
+      ? await avanzarPorEvento(rows[0].asistencia_id, 'APROBACION', {
+          usuario: req.user.usuario,
+          nombre:  req.user.nombre,
+          comentario: 'Homenaje en residencia finalizado',
+        })
+      : null
+
+    res.json({ ok: true, homenaje: rows[0], asistencia })
   } catch (err) { next(err) }
 }
 
