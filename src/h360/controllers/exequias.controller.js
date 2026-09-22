@@ -226,10 +226,19 @@ async function asignarVehiculo(req, res, next) {
     if (!vehiculo_id || !conductor_id)
       return res.status(400).json({ mensaje: 'Vehículo y conductor son requeridos' })
 
-    const [rows] = await db.query('SELECT estado, conductor_id FROM exequias WHERE id = ?', [id])
+    const [rows] = await db.query('SELECT estado, conductor_id, hora FROM exequias WHERE id = ?', [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
     if (!['PENDIENTE_VEHICULO', 'PROGRAMADA'].includes(rows[0].estado))
       return res.status(409).json({ mensaje: `No se puede asignar vehículo en estado ${rows[0].estado}` })
+
+    // La hora es opcional mientras la exequia se está cuadrando, pero aquí deja
+    // de serlo: asignar la programa y le manda el WhatsApp al conductor, que
+    // sin hora no sabe a qué presentarse.
+    if (!rows[0].hora)
+      return res.status(409).json({
+        mensaje: 'Falta la hora de la exequia. Edítala antes de asignar el vehículo: el conductor recibe el aviso con esa hora.',
+        falta_hora: true,
+      })
 
     const conductorAnterior = rows[0].conductor_id
 
