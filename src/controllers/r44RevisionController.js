@@ -287,6 +287,72 @@ const r44RevisionController = {
   },
 
   /**
+   * PATCH /api/r44/revisores/proveedores/:id/datos
+   * El revisor edita los campos del R-44 (identificación, representante legal,
+   * financiero, referencias, SARLAFT) para validar/actualizar información.
+   * Escribe en todas las tablas sin importar el estado. Rol: revisores/admin.
+   * Body (nombres de columna directos): { proveedor, representante_legal,
+   *   financiero, sarlaft, referencias_bancarias[], referencias_comerciales[] }
+   */
+  async editarProveedor(req, res, next) {
+    const { sequelize, R44RepresentanteLegal, R44InfoFinanciera,
+            R44RefBancaria, R44RefComercial, R44SarlaftDatos } = require('../models');
+    const t = await sequelize.transaction();
+    try {
+      const proveedor = await R44Proveedor.findByPk(req.params.id, { transaction: t });
+      if (!proveedor) { await t.rollback(); return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' }); }
+
+      const body = req.body || {};
+      const clean = (o) => {
+        const r = {};
+        for (const k in o) { let v = o[k]; if (v === '') v = null; r[k] = v; }
+        return r;
+      };
+      const cols = (Model, extra = []) =>
+        Object.keys(Model.rawAttributes).filter((k) => ![ 'id', 'proveedor_id', 'created_at', 'updated_at', ...extra ].includes(k));
+      const pick = (o, allowed) => {
+        const r = {};
+        if (!o) return r;
+        for (const k of allowed) if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k];
+        return r;
+      };
+
+      // Proveedor (no se permite tocar id/usuario_id/radicado/estado)
+      if (body.proveedor) {
+        const permitidas = cols(R44Proveedor, ['usuario_id', 'radicado', 'estado']);
+        await proveedor.update(clean(pick(body.proveedor, permitidas)), { transaction: t });
+      }
+      // Hijos hasOne: crear si no existen
+      const upsertHijo = async (Model, datos) => {
+        if (!datos) return;
+        const [row] = await Model.findOrCreate({ where: { proveedor_id: proveedor.id }, transaction: t });
+        await row.update(clean(pick(datos, cols(Model))), { transaction: t });
+      };
+      await upsertHijo(R44RepresentanteLegal, body.representante_legal);
+      await upsertHijo(R44InfoFinanciera, body.financiero);
+      await upsertHijo(R44SarlaftDatos, body.sarlaft);
+
+      // Referencias (arrays): se reemplazan las existentes
+      const reemplazarRefs = async (Model, arr, obligatorio) => {
+        if (!Array.isArray(arr)) return;
+        await Model.destroy({ where: { proveedor_id: proveedor.id }, transaction: t });
+        const filas = arr
+          .map((r, i) => ({ proveedor_id: proveedor.id, orden: i + 1, ...clean(pick(r, cols(Model, ['orden']))) }))
+          .filter((r) => r[obligatorio]);
+        if (filas.length) await Model.bulkCreate(filas, { transaction: t });
+      };
+      await reemplazarRefs(R44RefBancaria, body.referencias_bancarias, 'entidad');
+      await reemplazarRefs(R44RefComercial, body.referencias_comerciales, 'empresa');
+
+      await t.commit();
+      return res.json({ ok: true, message: 'Datos actualizados' });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  },
+
+  /**
    * GET /api/r44/revisores/documentos/:id/descargar
    * Sirve el archivo adjunto (RUT, Cámara, Renta, Cédula) desde disco.
    * Solo revisores/admin. Se muestra inline (PDF/imagen) en el navegador.

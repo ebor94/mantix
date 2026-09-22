@@ -63,6 +63,10 @@ router.get('/revisores/proveedores/:id',
 router.patch('/revisores/proveedores/:id/estado',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.actualizarEstado);
 
+// El revisor edita los campos del R-44 (identificación, RL, financiero, refs, SARLAFT)
+router.patch('/revisores/proveedores/:id/datos',
+  r44Auth, r44Authorize(...REVISORES), r44RevCtrl.editarProveedor);
+
 // Formato R-44 en PDF: (re)generar+archivar en Drive / descargar inline
 router.post('/revisores/proveedores/:id/r44-pdf',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.generarR44);
