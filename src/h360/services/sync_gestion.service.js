@@ -1,7 +1,7 @@
 /**
  * sync_gestion.service.js
  * Sincroniza filas en gestion_servicios cuando se guarda una visita
- * (servicios adicionales marcados) o una salida (novenario/última noche
+ * (servicios adicionales VENDIDOS) o una salida (novenario/última noche
  * en residencia). Conserva las filas ya GESTIONADAS/DESCARTADAS y
  * refresca las PENDIENTES según lo que venga marcado ahora.
  */
@@ -46,12 +46,12 @@ async function syncFromVisita(visitaId, homenajeSalaId, asistenciaId, serviciosD
   const originRef = `VISITA_SALA:${visitaId}`
   const raw = typeof serviciosData === 'string' ? JSON.parse(serviciosData || '{}') : (serviciosData || {})
 
-  // Un servicio entra al listado si se ofreció o si se vendió; "vendido" es lo
-  // que dispara el aviso, "ofrecido" solo deja el registro.
+  // Solo los VENDIDOS llegan a la bandeja de gestión. Lo apenas ofrecido no
+  // genera trabajo para el coordinador y llenaba el listado de ruido.
   const marcados = Object.entries(CATALOGO_SERVICIOS)
-    .filter(([key]) => isMarcado(raw[key]) || esVendido(raw[key]))
+    .filter(([key]) => esVendido(raw[key]))
     .map(([key, label]) => ({
-      tipo: key, descripcion: label, direccion: null, vendido: esVendido(raw[key]),
+      tipo: key, descripcion: label, direccion: null, vendido: true,
     }))
 
   // Bloque novenario/última noche embebido en la visita (opcional)
@@ -91,12 +91,6 @@ async function syncFromSalida(homenajeSalaId, asistenciaId, salidaData, usuarioI
 }
 
 // ─────────── internos ───────────
-
-function isMarcado(v) {
-  if (v === true) return true
-  if (v && typeof v === 'object') return v.ofrecido === true || v.marcado === true || v.checked === true
-  return false
-}
 
 function esVendido(v) {
   return !!(v && typeof v === 'object' && v.vendido === true)
