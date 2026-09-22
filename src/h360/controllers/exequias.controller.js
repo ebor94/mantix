@@ -258,6 +258,46 @@ async function asignarVehiculo(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Nombres fijos y sin tildes: el aviso va por WhatsApp y así no depende del
+// ICU que tenga instalado el servidor ni de la zona horaria del proceso.
+const DIAS  = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO']
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+/**
+ * "2026-09-19" + "15:00:00" → "SABADO Sep 19 , 3 PM" (sin minutos si son 00).
+ *
+ * mysql2 entrega las columnas DATE como objeto Date, no como texto: por eso
+ * `fecha` se normaliza antes. Sin eso, String(fecha).slice(0,10) daba
+ * "Sat Sep 19" y el conductor recibía el día en inglés.
+ */
+function fechaHoraLarga(fecha, hora) {
+  const [y, m, d] = fecha instanceof Date
+    ? [fecha.getFullYear(), fecha.getMonth() + 1, fecha.getDate()]
+    : String(fecha ?? '').slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d || m > 12) return ''
+
+  // Date.UTC evita que la zona horaria del servidor corra el día.
+  const cal = `${DIAS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${MESES[m - 1]} ${d}`
+
+  // Number('') es 0, no NaN: sin mirar las partes, una hora vacía sería "12 AM".
+  const partes = String(hora ?? '').split(':')
+  if (partes.length < 2 || partes[0] === '') return cal
+  const [hh, mm] = partes.map(Number)
+  if (Number.isNaN(hh) || hh < 0 || hh > 23) return cal
+
+  const h12 = hh % 12 === 0 ? 12 : hh % 12
+  const suf = hh < 12 ? 'AM' : 'PM'
+  return `${cal} , ${mm ? `${h12}:${String(mm).padStart(2, '0')}` : h12} ${suf}`
+}
+
+/** Lugar + parroquia. Descarta los "N/A" que se escriben cuando no aplica. */
+function lugarLargo(ex) {
+  return [ex.lugar, ex.parroquia]
+    .map(v => String(v || '').trim())
+    .filter(v => v && v.toUpperCase() !== 'N/A')
+    .join(' , ')
+}
+
 /**
  * Avisa a un conductor que fue relevado de una exequia.
  * No lanza ni registra en las columnas wa_*: esas guardan el envío al conductor
@@ -272,11 +312,10 @@ async function avisarConductorRelevado(exequiaId, conductorId) {
     if (!conductor?.telefono)
       return { ok: false, motivo: `${conductorId} no tiene celular en el directorio activo` }
 
-    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
     const texto = [
       `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} reasignada`,
-      `${fecha} ${String(ex.hora).slice(0, 5)}`,
-      `${ex.lugar || ''}`,
+      fechaHoraLarga(ex.fecha, ex.hora),
+      lugarLargo(ex),
       'Este servicio quedo a cargo de otro conductor. Usted YA NO debe presentarse.',
     ].filter(Boolean).join(' · ')
 
@@ -312,14 +351,13 @@ async function notificarConductor(exequiaId, conductorId) {
         motivo: `${conductor.nombre} no tiene celular registrado en el directorio activo (campo "mobile")`,
       })
 
-    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
-    const lugar = [ex.lugar, ex.barrio, ex.parroquia].filter(Boolean).join(', ')
     const texto = [
       `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} asignada`,
-      `${fecha} ${String(ex.hora).slice(0, 5)}`,
-      lugar,
+      fechaHoraLarga(ex.fecha, ex.hora),
+      lugarLargo(ex),
       `Carroza ${ex.vehiculo_placa || 's/n'}`,
-      `Ser querido: ${ex.ser_querido || 's/n'}`,
+      // La cruz antecede al nombre del ser querido, como en los avisos impresos.
+      `Ser querido: + ${String(ex.ser_querido || 's/n').trim()}`,
     ].filter(Boolean).join(' · ')
 
     const envio = await sendTextoSimple(conductor.telefono, texto)
