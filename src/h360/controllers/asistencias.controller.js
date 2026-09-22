@@ -660,4 +660,42 @@ async function agregarNota(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir }
+/**
+ * Avance de estado disparado por un hecho registrado en otro módulo — hoy,
+ * finalizar el homenaje de sala, que da por terminada la velación.
+ *
+ * No exige el rol de la transición: quien registra el hecho es quien lo vive,
+ * y negarlo aquí dejaría el homenaje finalizado con la asistencia atrás sin
+ * que nadie lo note. El movimiento queda en el historial con su comentario.
+ *
+ * Nunca lanza: devuelve { ok, motivo } para que quien llama informe sin
+ * perder lo que ya guardó.
+ */
+async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, comentario } = {}) {
+  try {
+    const [[a]] = await db.query('SELECT * FROM asistencias WHERE id = ?', [asistenciaId])
+    if (!a) return { ok: false, motivo: 'La asistencia no existe' }
+    if (a.estado === destino) return { ok: false, motivo: `ya estaba en ${destino}` }
+
+    const transicion = TRANSICIONES[a.estado]
+    if (!transicion || transicion.siguiente !== destino)
+      return { ok: false, motivo: `está en ${a.estado} y desde ahí no pasa a ${destino}` }
+
+    const pendientes = await etapasPendientesPara(asistenciaId, a.estado)
+    if (pendientes.length)
+      return { ok: false, motivo: `falta cerrar ${pendientes.map(e => ETIQUETA_ETAPA[e] || e).join(', ')}` }
+
+    await db.query('UPDATE asistencias SET estado = ? WHERE id = ?', [destino, asistenciaId])
+    await insertarHistorial(asistenciaId, a.estado, destino, usuario, nombre, comentario || null)
+
+    glpi.notificarTransicion(a.glpi_ticket_id, destino, { ...a, estado: destino })
+      .catch(err => console.warn('[GLPI] notificarTransicion:', err.message))
+
+    return { ok: true, desde: a.estado, hasta: destino }
+  } catch (err) {
+    console.warn('[asistencias] avanzarPorEvento:', err.message)
+    return { ok: false, motivo: err.message }
+  }
+}
+
+module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }

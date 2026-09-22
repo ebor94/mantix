@@ -8,6 +8,7 @@
  */
 const db = require('../config/db')
 const { syncFromIngreso, syncFromVisita, syncFromSalida } = require('../services/sync_gestion.service')
+const { avanzarPorEvento } = require('./asistencias.controller')
 
 // ── Helpers de bloqueo por firma ────────────────────────────────────────────
 function parseJson(v) {
@@ -241,7 +242,18 @@ async function guardarSalida(req, res, next) {
       await syncFromSalida(rows[0].id, rows[0].asistencia_id, salida_data, req.user.usuario, req.user.nombre)
     } catch (e) { console.warn('[sync gestion salida]', e.message) }
 
-    res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado })
+    // Finalizar el homenaje da por terminada la velación, así que la
+    // asistencia pasa de SALA a APROBACION sin moverla a mano en otra
+    // pantalla. Si no estaba en SALA se informa y no se toca.
+    const asistencia = finalizar
+      ? await avanzarPorEvento(rows[0].asistencia_id, 'APROBACION', {
+          usuario: req.user.usuario,
+          nombre:  req.user.nombre,
+          comentario: 'Homenaje de sala finalizado',
+        })
+      : null
+
+    res.json({ ok: true, homenaje: rows[0], desbloqueado: yaFirmado, asistencia })
   } catch (err) { next(err) }
 }
 
