@@ -76,8 +76,10 @@ async function crear(req, res, next) {
       lugar, barrio, parroquia, direccion, observaciones,
     } = req.body
 
-    if (!asistencia_id || !tipo || !fecha || !hora || !lugar)
-      return res.status(400).json({ mensaje: 'Faltan datos obligatorios: asistencia, tipo, fecha, hora, lugar' })
+    // La hora es opcional: al abrir el servicio la familia suele tener el día
+    // pero todavía no la hora, y obligarla llevaba a inventar un valor.
+    if (!asistencia_id || !tipo || !fecha || !lugar)
+      return res.status(400).json({ mensaje: 'Faltan datos obligatorios: asistencia, tipo, fecha, lugar' })
     if (!['EXEQUIA', 'CEREMONIA'].includes(tipo))
       return res.status(400).json({ mensaje: 'Tipo debe ser EXEQUIA o CEREMONIA' })
 
@@ -89,7 +91,7 @@ async function crear(req, res, next) {
       `INSERT INTO exequias
        (asistencia_id, tipo, fecha, hora, lugar, barrio, parroquia, direccion, observaciones, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [asistencia_id, tipo, fecha, hora, lugar,
+      [asistencia_id, tipo, fecha, hora || null, lugar,
        barrio || null, parroquia || null, direccion || null,
        observaciones || null, usuario]
     )
@@ -121,6 +123,8 @@ async function actualizar(req, res, next) {
 
     const updates = {}
     for (const k of CAMPOS_EDITABLES) if (req.body[k] !== undefined) updates[k] = req.body[k]
+    // Vaciar la hora la deja en NULL: '' no es un TIME válido y la rechaza MySQL.
+    if (updates.hora === '') updates.hora = null
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
 
@@ -196,11 +200,10 @@ async function confirmar(req, res, next) {
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
 
     const ex = nueva[0]
-    const fecha = String(ex.fecha).slice(0, 10).split('-').reverse().join('/')
     gchat.enviarOperaciones([
       `✅ *${ex.tipo === 'CEREMONIA' ? 'Ceremonia' : 'Exequia'} confirmada* — ${ex.asistencia_codigo}`,
       `Ser querido: ${ex.ser_querido || 's/n'}`,
-      `📅 ${fecha}  🕐 ${String(ex.hora).slice(0, 5)}`,
+      `📅 ${fechaHoraLarga(ex.fecha, ex.hora)}${ex.hora ? '' : '  🕐 hora por definir'}`,
       `📍 ${[ex.lugar, ex.barrio, ex.parroquia].filter(Boolean).join(', ')}`,
       ex.direccion ? `Dirección: ${ex.direccion}` : null,
       `Confirmó: ${usuario}`,
