@@ -21,6 +21,14 @@ const CATALOGO_SERVICIOS = {
 const NOVENARIO_LABEL   = 'Novenario en residencia'
 const ULTIMA_NOCHE_LABEL = 'Última noche en residencia'
 
+// Novenario y última noche son un hecho del caso, no de cada formulario: el
+// mismo dato se pregunta en el ingreso, en cada visita y en la salida. La clave
+// única de la tabla es (origen_ref, tipo), así que cada formulario creaba su
+// propia fila y el coordinador terminaba con el mismo novenario dos y tres
+// veces. Se registran una sola vez por asistencia.
+const TIPOS_UNA_VEZ_POR_CASO = ['novenario_residencia', 'ultima_noche_residencia']
+const esUnaVezPorCaso = tipo => TIPOS_UNA_VEZ_POR_CASO.includes(tipo)
+
 // Extrae los marcados de novenario/última noche desde un bloque de datos que
 // contenga { novenario, ultima_noche, direccion }. Retorna [] si no aplica.
 function extraerNovenario(bloque) {
@@ -124,8 +132,31 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
     'SELECT tipo_servicio, vendido FROM gestion_servicios WHERE origen_ref = ?', [originRef])
   const vendidosAntes = new Set(previos.filter(p => p.vendido === 1).map(p => p.tipo_servicio))
 
+  // Qué novenario/última noche ya quedó registrado para este caso, venga del
+  // formulario que venga.
+  const [yaEnElCaso] = asistenciaId
+    ? await db.query(
+        `SELECT tipo_servicio, origen_ref FROM gestion_servicios
+          WHERE asistencia_id = ? AND tipo_servicio IN (?, ?)`,
+        [asistenciaId, ...TIPOS_UNA_VEZ_POR_CASO])
+    : [[]]
+  const origenPorTipo = new Map(yaEnElCaso.map(r => [r.tipo_servicio, r.origen_ref]))
+
   const nuevos = []
   for (const { tipo, descripcion, direccion, vendido } of marcados) {
+    // Ya registrado desde otro formulario del mismo caso: no se duplica. Si
+    // ahora llega la dirección y la fila sigue pendiente, se aprovecha.
+    const origenPrevio = origenPorTipo.get(tipo)
+    if (esUnaVezPorCaso(tipo) && origenPrevio && origenPrevio !== originRef) {
+      if (direccion) {
+        await db.query(
+          `UPDATE gestion_servicios SET direccion = ?
+            WHERE asistencia_id = ? AND tipo_servicio = ? AND estado = 'PENDIENTE'`,
+          [direccion, asistenciaId, tipo])
+      }
+      continue
+    }
+
     const [r] = await db.query(
       `INSERT INTO gestion_servicios
        (homenaje_sala_id, homenaje_residencia_id, asistencia_id, tipo_servicio,
@@ -146,7 +177,7 @@ async function sincronizar({ originRef, origen, homenajeSalaId, homenajeResidenc
     // Novenario y última noche no se venden: avisan al quedar marcados, y por
     // eso se detectan como inserción nueva (affectedRows === 1).
     // Los servicios adicionales avisan al pasar a vendido.
-    const esNovenario = tipo === 'novenario_residencia' || tipo === 'ultima_noche_residencia'
+    const esNovenario = esUnaVezPorCaso(tipo)
     const avisar = esNovenario
       ? r.affectedRows === 1
       : (vendido && !vendidosAntes.has(tipo))
@@ -165,9 +196,8 @@ async function notificarServicios({ asistenciaId, nuevos, usuarioId, nombre }) {
     const [[a]] = await db.query(
       'SELECT codigo, nombre_ser_querido FROM asistencias WHERE id = ?', [asistenciaId])
 
-    const esNovenario  = t => t === 'novenario_residencia' || t === 'ultima_noche_residencia'
-    const novenario    = nuevos.filter(n =>  esNovenario(n.tipo))
-    const adicionales  = nuevos.filter(n => !esNovenario(n.tipo))
+    const novenario    = nuevos.filter(n =>  esUnaVezPorCaso(n.tipo))
+    const adicionales  = nuevos.filter(n => !esUnaVezPorCaso(n.tipo))
 
     const lineas = [
       `🎁 *Servicios registrados* — ${a?.codigo || 'asistencia ' + asistenciaId}`,

@@ -122,6 +122,18 @@ async function obtener(req, res, next) {
     homenaje.familiar_encuentro = (f05?.nombre_familiar || '').trim() || null
     homenaje.encuentro_cerrado  = f05?.completado === 1
 
+    // El novenario / última noche se pregunta en el ingreso, en cada visita y
+    // en la salida. Se informa lo ya registrado para no volver a capturarlo.
+    const [novenario] = await db.query(
+      `SELECT tipo_servicio, descripcion, direccion, origen, estado, fecha_ofrecimiento
+         FROM gestion_servicios
+        WHERE asistencia_id = ?
+          AND tipo_servicio IN ('novenario_residencia', 'ultima_noche_residencia')
+        ORDER BY id`,
+      [homenaje.asistencia_id]
+    )
+    homenaje.novenario_registrado = novenario
+
     res.json(homenaje)
   } catch (err) { next(err) }
 }
