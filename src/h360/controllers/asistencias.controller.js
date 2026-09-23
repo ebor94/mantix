@@ -31,21 +31,21 @@ const ETAPAS_POR_ROL = {
 
 // Etapas requeridas para cerrar cada estado por rol.
 // Flujo: ENCOFRADO(F06) → ENCUENTRO(F05) → SALA (manual) → APROBACION.
-// F-03 no figura como requisito: son las prendas para retoque que trae la
-// familia y pueden llegar después de que ya se esté preservando. Se sigue
-// pudiendo diligenciar más tarde, con el caso en otro estado.
+// F-03 no se exige para empezar a preservar —son las prendas de retoque que
+// trae la familia y pueden llegar más tarde—, pero sí para encofrar: al cerrar
+// el cofre ya no hay manera de inventariar lo que el ser querido lleva puesto.
 const ETAPAS_PARA_CERRAR = {
   asistente:            { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'] },
-  tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA'] },
+  tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'] },
   asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'],
-                          PRESERVACION: ['F04_TANATOPRAXIA'],
+                          PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
                           ENCOFRADO:    ['F06_ENCOFRADO'] },
   supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
                           SALA:         [] },
   asesor:               { ENCUENTRO:    ['F05_ENTREGA'] },
   admin:                { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'],
-                          PRESERVACION: ['F04_TANATOPRAXIA'],
+                          PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
                           ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
                           SALA:         [],
