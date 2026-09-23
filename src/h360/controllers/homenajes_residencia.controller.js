@@ -45,11 +45,14 @@ async function insertarAuditoria(homenaje_residencia_id, seccion, accion, snapsh
 // GET /api/h360/homenajes-residencia?asistencia_id=X&estado=X&page&limit
 async function listar(req, res, next) {
   try {
-    const { asistencia_id, estado, page = 1, limit = 50 } = req.query
+    const { asistencia_id, estado, fecha_desde, fecha_hasta, page = 1, limit = 50 } = req.query
     const conds = []
     const params = []
     if (asistencia_id) { conds.push('h.asistencia_id = ?'); params.push(parseInt(asistencia_id, 10)) }
     if (estado)        { conds.push('h.estado = ?');        params.push(estado) }
+    // Rango sobre la fecha de apertura, que es la que muestra la tarjeta.
+    if (fecha_desde)   { conds.push('DATE(h.created_at) >= ?'); params.push(fecha_desde) }
+    if (fecha_hasta)   { conds.push('DATE(h.created_at) <= ?'); params.push(fecha_hasta) }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
     const offset = (page - 1) * limit
 
