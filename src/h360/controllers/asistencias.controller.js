@@ -533,6 +533,21 @@ async function guardarEtapa(req, res, next) {
       )
     }
 
+    // Fecha y hora de fallecimiento: el F-01 se llena en la llamada, cuando a
+    // veces no se saben. El F-02 las captura junto con el certificado y aquí se
+    // rellenan, solo si siguen vacías: corregir una ya registrada exige
+    // reapertura del F-01, igual que el certificado.
+    if (etapa === 'F02_INVENTARIO_CUERPO') {
+      for (const campo of ['fecha_fallecimiento', 'hora_fallecimiento']) {
+        const valor = String(datos?.[campo] ?? '').trim()
+        if (!valor) continue
+        await db.query(
+          `UPDATE asistencias SET ${campo} = ? WHERE id = ? AND ${campo} IS NULL`,
+          [valor, id]
+        )
+      }
+    }
+
     // Registro de uso de cofre al completar F-06 (fire-and-forget)
     if (etapa === 'F06_ENCOFRADO' && completar) {
       registrarUsoCofre(datos, id, usuario).catch(e => console.warn('[cofres]', e.message))
