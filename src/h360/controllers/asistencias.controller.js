@@ -319,10 +319,12 @@ async function crear(req, res, next) {
 // - Llamado por n8n (o admin) con { asistente_id, tanatologo_id } para asignar actores.
 // - Llamado por el asesor sin body para avanzar de NUEVO → ASISTENCIA sin pre-asignar
 //   (el asistente/tanatólogo que finalmente diligencie F-02/F-04 se auto-asigna).
+//   Puede traer `conductor` cuando el F-01 quedó sin él: al despachar ya se sabe
+//   quién sale, y es el último momento para registrarlo.
 async function asignarActores(req, res, next) {
   try {
     const { id } = req.params
-    const { asistente_id, tanatologo_id } = req.body || {}
+    const { asistente_id, tanatologo_id, conductor } = req.body || {}
     const { usuario, nombre } = req.user
 
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
@@ -333,12 +335,14 @@ async function asignarActores(req, res, next) {
     const updates = {}
     if (asistente_id)  updates.asistente_id  = asistente_id
     if (tanatologo_id) updates.tanatologo_id = tanatologo_id
+    const conductorNuevo = String(conductor ?? '').trim()
+    if (conductorNuevo) updates.conductor = conductorNuevo
     updates.estado = 'ASISTENCIA'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
     const motivo = (asistente_id || tanatologo_id)
       ? `Actores asignados: ${asistente_id || '-'} / ${tanatologo_id || '-'}`
-      : `Avanzado a ASISTENCIA por ${nombre || usuario}`
+      : `Avanzado a ASISTENCIA por ${nombre || usuario}${conductorNuevo ? ` · Conductor: ${conductorNuevo}` : ''}`
     await insertarHistorial(id, 'NUEVO', 'ASISTENCIA', usuario, nombre, motivo)
 
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
