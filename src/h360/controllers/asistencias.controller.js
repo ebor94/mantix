@@ -173,7 +173,7 @@ async function listar(req, res, next) {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
 
     const [rows] = await db.query(
-      `SELECT id, codigo, estado, nombre_ser_querido, identificacion,
+      `SELECT id, codigo, estado, nombre_ser_querido, identificacion, contrato,
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
               conductor, asesor_id, asistente_id, tanatologo_id,
               motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
