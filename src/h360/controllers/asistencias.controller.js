@@ -83,6 +83,22 @@ async function etapasPendientesPara(asistenciaId, estado) {
   return requeridas.filter(e => !cerradas.has(e))
 }
 
+// Columnas por las que puede ordenar el listado. Lista blanca: el nombre entra
+// en el SQL, así que nunca se interpola lo que llegue por query.
+const ORDEN_ESTADOS = ['NUEVO', 'ASISTENCIA', 'PRESERVACION', 'ENCOFRADO', 'ENCUENTRO',
+                       'SALA', 'APROBACION', 'CERRADO', 'RECHAZADO', 'DESISTIDO']
+const COLUMNAS_ORDEN = {
+  codigo:             'codigo',
+  contrato:           'contrato',
+  nombre_ser_querido: 'nombre_ser_querido',
+  nombre_contacto:    'nombre_contacto',
+  lugar_asistencia:   'lugar_asistencia',
+  // El estado ordena por avance del proceso: alfabéticamente "APROBACION" iría
+  // antes que "NUEVO" y no diría nada.
+  estado:             `FIELD(estado, ${ORDEN_ESTADOS.map(e => `'${e}'`).join(', ')})`,
+  created_at:         'created_at',
+}
+
 // Transiciones del flujo
 const TRANSICIONES = {
   NUEVO:        { siguiente: 'ASISTENCIA',   roles: ['asesor', 'coordinador', 'admin'] },
@@ -121,7 +137,7 @@ async function generarCodigo() {
 // GET /asistencias
 async function listar(req, res, next) {
   try {
-    const { estado, identificacion, q, fecha_desde, fecha_hasta, page = 1, limit = 20 } = req.query
+    const { estado, identificacion, q, fecha_desde, fecha_hasta, orden, dir, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const { rol, usuario } = req.user
 
@@ -172,6 +188,12 @@ async function listar(req, res, next) {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
 
+    // `id` de desempate: sin él, dos filas con el mismo valor pueden cambiar de
+    // posición entre páginas y "Cargar más" repetiría o se saltaría registros.
+    const columna   = COLUMNAS_ORDEN[orden] || COLUMNAS_ORDEN.created_at
+    const direccion = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC'
+    const orderBy   = `ORDER BY ${columna} ${direccion}, id ${direccion}`
+
     const [rows] = await db.query(
       `SELECT id, codigo, estado, nombre_ser_querido, identificacion, contrato,
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
@@ -179,7 +201,7 @@ async function listar(req, res, next) {
               motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
               created_at, updated_at
        FROM asistencias ${where}
-       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+       ${orderBy} LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
     )
     const [[{ total }]] = await db.query(`SELECT COUNT(*) as total FROM asistencias ${where}`, params)
