@@ -42,7 +42,8 @@ const FORMA_PAGO_AL_COBRAR_POSFECHADO = 'POSFECHADO_COBRADO';
 // Efecty y Super Giros son pagos BANCARIOS: generan recibo y los aprueba
 // cartera (caja.aprobar_bancarios), no el cajero de efectivo.
 const {
-  FORMAS_EFECTIVO, FORMAS_BANCARIAS, normalizarErp, recibosBancariosSinErp
+  FORMAS_EFECTIVO, FORMAS_BANCARIAS, normalizarErp, recibosBancariosSinErp,
+  normalizarItemsMasivo, clasificarItemsMasivo
 } = require('./reciboCajaAprobacion.helpers');
 
 /**
@@ -519,6 +520,75 @@ async function aprobarRecibos(reciboIds, usuario, { observacion = null, erpPorRe
 }
 
 /**
+ * Aprobación masiva por lista: recibe items [{ numeroRecibo, numeroReciboErp }],
+ * busca cada recibo por su número (PENDIENTE), valida (permiso por forma de pago,
+ * sede del cajero acotado, N° ERP obligatorio para bancarios) y aprueba los
+ * válidos en una transacción. Éxito parcial: devuelve aprobados + fallidos.
+ * NO valida afiliación aprobada (paridad con aprobarRecibos).
+ */
+async function aprobarRecibosMasivo(items, usuario) {
+  const p = permisosCaja(usuario);
+  if (!p.efectivo && !p.bancarios) {
+    throw new AppError('No tienes permisos para aprobar recibos', 403);
+  }
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+  if (esCajeroScoped && !usuario.sede_id) {
+    throw new AppError('No tienes una sede asignada para aprobar recibos', 403);
+  }
+
+  const normalizados = normalizarItemsMasivo(items);
+  if (normalizados.length === 0) {
+    return { aprobados: 0, fallidos: [] };
+  }
+  const numeros = normalizados.map(it => it.numeroRecibo);
+
+  const transaction = await sequelize.transaction();
+  try {
+    const recibos = await ReciboCaja.findAll({
+      where: { numeroRecibo: { [Op.in]: numeros }, estadoCuadre: 'PENDIENTE' },
+      include: [{ model: Usuario, as: 'asesor', attributes: ['id', 'sede_id'] }],
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    const recibosPorNumero = Object.fromEntries(recibos.map(r => [r.numeroRecibo, r]));
+
+    const { aprobables, fallidos } = clasificarItemsMasivo(normalizados, recibosPorNumero, {
+      permisos: p, esCajeroScoped, sedeUsuario: usuario.sede_id
+    });
+
+    const ahora = new Date();
+    for (const { recibo, erp } of aprobables) {
+      await recibo.update({
+        estadoCuadre: 'APROBADO',
+        aprobadoPor: usuario.id,
+        aprobadoAt: ahora,
+        numeroReciboErp: erp || null
+      }, { transaction });
+    }
+
+    if (aprobables.length > 0) {
+      await Trazabilidad.bulkCreate(
+        aprobables.map(({ recibo, erp }) => ({
+          afiliadoId: recibo.afiliadoId,
+          tipo: 'APROBACION_RECIBO',
+          descripcion: `Recibo ${recibo.numeroRecibo} (${recibo.formaPago}) aprobado en cuadre de caja (masivo)` +
+            (erp ? ` — ERP: ${erp}` : ''),
+          usuarioId: usuario.id
+        })),
+        { transaction }
+      );
+    }
+
+    await transaction.commit();
+    logger.info(`[ReciboCaja] Aprobación masiva: ${aprobables.length} aprobados, ${fallidos.length} con novedad (usuario ${usuario.id})`);
+    return { aprobados: aprobables.length, fallidos };
+  } catch (err) {
+    if (!transaction.finished) await transaction.rollback();
+    throw err;
+  }
+}
+
+/**
  * Lista afiliaciones con pago POSFECHADO pendientes de cobro (sin recibo aún)
  * filtrando por asesor (o todas para super_admin).
  */
@@ -718,6 +788,7 @@ module.exports = {
   exportarCuadreExcel,
   generarPlanoErpExcel,
   aprobarRecibos,
+  aprobarRecibosMasivo,
   listarPosfechadosPendientes,
   getReciboById,
   permisosCaja,

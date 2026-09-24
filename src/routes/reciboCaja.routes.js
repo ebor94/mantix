@@ -68,6 +68,13 @@ router.post('/aprobar',
   controller.aprobarRecibos
 );
 
+// ── Cajero/Cartera: aprobar masivo por lista (N° recibo + N° ERP) ──
+router.post('/aprobar-masivo',
+  auth,
+  requirePermiso('caja', 'ver_cuadre'),
+  controller.aprobarRecibosMasivo
+);
+
 // ── Detalle de recibo (acceso validado dentro del servicio) ──────
 router.get('/:id', auth, controller.getReciboById);
 

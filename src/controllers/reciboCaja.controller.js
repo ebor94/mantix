@@ -128,6 +128,26 @@ async function aprobarRecibos(req, res, next) {
 }
 
 /**
+ * POST /api/recibos/aprobar-masivo
+ * Body: { items: [{ numeroRecibo, numeroReciboErp }] }
+ * Aprueba masivamente por lista (éxito parcial). Permiso fino lo valida el servicio.
+ */
+async function aprobarRecibosMasivo(req, res, next) {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError('Envía una lista de recibos (items) para aprobar', 400);
+    }
+    const data = await reciboService.aprobarRecibosMasivo(items, req.usuario);
+    res.json({
+      success: true,
+      message: `${data.aprobados} recibo(s) aprobado(s), ${data.fallidos.length} con novedad`,
+      data
+    });
+  } catch (err) { next(err); }
+}
+
+/**
  * POST /api/recibos/cobrar-posfechado/:afiliadoId
  * Marca un pago POSFECHADO como cobrado, asignando consecutivo y emitiendo el recibo.
  * Body: { banco?, referencia?, observacion?, soporteUrl? }
@@ -347,6 +367,7 @@ module.exports = {
   exportarCuadre,
   generarPlanoErp,
   aprobarRecibos,
+  aprobarRecibosMasivo,
   cobrarPosfechado,
   getPosfechadosPendientes,
   getReciboById,
