@@ -90,6 +90,23 @@ module.exports = (sequelize, DataTypes) => {
       field: 'numero_recibo_erp',
       comment: 'N° de recibo del ERP capturado al aprobar en cuadre (trazabilidad bancarios)'
     },
+    formaPagoRecibido: {
+      type: DataTypes.ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA'),
+      allowNull: true,
+      field: 'forma_pago_recibido',
+      comment: 'Forma real con que el cliente pagó en caja un recibo PAGO_EN_CAJA'
+    },
+    pagoRecibidoAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'pago_recibido_at'
+    },
+    pagoRecibidoPor: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'pago_recibido_por',
+      comment: 'FK a usuarios — cajero que recibió el pago en caja'
+    },
     pdfUrl: {
       type: DataTypes.STRING(500),
       allowNull: true,

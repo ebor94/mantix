@@ -589,6 +589,65 @@ async function aprobarRecibosMasivo(items, usuario) {
 }
 
 /**
+ * Recibir en caja el pago de un recibo PAGO_EN_CAJA. El cliente paga en caja
+ * (efectivo/tarjeta/transferencia) un valor igual o mayor al del recibo. Se
+ * actualiza el valor, se guarda la forma recibida y quién/cuándo, y se deja
+ * trazabilidad. El estado de cuadre NO cambia (sigue PENDIENTE).
+ */
+async function recibirPagoEnCaja(reciboId, usuario, { valor, formaPagoRecibido } = {}) {
+  const p = permisosCaja(usuario);
+  if (!p.efectivo && !p.superAdmin) {
+    throw new AppError('No tienes permisos para recibir pagos en caja', 403);
+  }
+  const esCajeroScoped = p.efectivo && !p.bancarios && !p.superAdmin;
+  if (esCajeroScoped && !usuario.sede_id) {
+    throw new AppError('No tienes una sede asignada para recibir pagos', 403);
+  }
+
+  const FORMAS_RECIBIDO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'];
+  if (!FORMAS_RECIBIDO.includes(formaPagoRecibido)) {
+    throw new AppError('Forma de pago recibida inválida (efectivo, tarjeta o transferencia)', 400);
+  }
+
+  const recibo = await ReciboCaja.findByPk(reciboId, {
+    include: [{ model: Usuario, as: 'asesor', attributes: ['id', 'sede_id'] }]
+  });
+  if (!recibo) throw new AppError('Recibo no encontrado', 404);
+  if (recibo.formaPago !== 'PAGO_EN_CAJA') {
+    throw new AppError('Este recibo no es de pago en caja', 400);
+  }
+  if (recibo.pagoRecibidoAt) {
+    throw new AppError('El pago de este recibo ya fue recibido en caja', 400);
+  }
+  if (esCajeroScoped && recibo.asesor?.sede_id !== usuario.sede_id) {
+    throw new AppError('Recibo de otra sede', 403);
+  }
+
+  const valorInicial = Number(recibo.valor);
+  const valorNum = Number(valor);
+  if (!Number.isFinite(valorNum) || valorNum < valorInicial) {
+    throw new AppError('El valor pagado no puede ser menor al valor del recibo', 400);
+  }
+
+  await recibo.update({
+    valor: valorNum,
+    formaPagoRecibido,
+    pagoRecibidoAt: new Date(),
+    pagoRecibidoPor: usuario.id
+  });
+
+  await Trazabilidad.create({
+    afiliadoId: recibo.afiliadoId,
+    tipo: 'PAGO_EN_CAJA_RECIBIDO',
+    descripcion: `Pago en caja recibido: $${valorNum} (${formaPagoRecibido})` +
+      (valorNum !== valorInicial ? ` — valor actualizado de $${valorInicial} a $${valorNum}` : ''),
+    usuarioId: usuario.id
+  });
+
+  return recibo;
+}
+
+/**
  * Lista afiliaciones con pago POSFECHADO pendientes de cobro (sin recibo aún)
  * filtrando por asesor (o todas para super_admin).
  */
@@ -789,6 +848,7 @@ module.exports = {
   generarPlanoErpExcel,
   aprobarRecibos,
   aprobarRecibosMasivo,
+  recibirPagoEnCaja,
   listarPosfechadosPendientes,
   getReciboById,
   permisosCaja,

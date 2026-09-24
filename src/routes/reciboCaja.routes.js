@@ -88,4 +88,11 @@ router.post('/:id/reenviar-whatsapp', auth, controller.reenviarWhatsapp);
 // ── Regenerar el PDF del recibo desde los valores actuales (caja/admin) ──
 router.post('/:id/regenerar-pdf', auth, controller.regenerarPDF);
 
+// ── Cajero: recibir en caja el pago de un recibo PAGO_EN_CAJA ──
+router.post('/:id/recibir-pago',
+  auth,
+  requirePermiso('caja', 'ver_cuadre'),
+  controller.recibirPagoEnCaja
+);
+
 module.exports = router;

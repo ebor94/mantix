@@ -148,6 +148,20 @@ async function aprobarRecibosMasivo(req, res, next) {
 }
 
 /**
+ * POST /api/recibos/:id/recibir-pago
+ * Body: { valor, formaPagoRecibido }
+ * Registra el pago en caja de un recibo PAGO_EN_CAJA (actualiza valor + forma recibida).
+ */
+async function recibirPagoEnCaja(req, res, next) {
+  try {
+    const reciboId = parseInt(req.params.id, 10);
+    const { valor, formaPagoRecibido } = req.body;
+    const recibo = await reciboService.recibirPagoEnCaja(reciboId, req.usuario, { valor, formaPagoRecibido });
+    res.json({ success: true, message: 'Pago en caja recibido', data: recibo });
+  } catch (err) { next(err); }
+}
+
+/**
  * POST /api/recibos/cobrar-posfechado/:afiliadoId
  * Marca un pago POSFECHADO como cobrado, asignando consecutivo y emitiendo el recibo.
  * Body: { banco?, referencia?, observacion?, soporteUrl? }
@@ -368,6 +382,7 @@ module.exports = {
   generarPlanoErp,
   aprobarRecibos,
   aprobarRecibosMasivo,
+  recibirPagoEnCaja,
   cobrarPosfechado,
   getPosfechadosPendientes,
   getReciboById,
