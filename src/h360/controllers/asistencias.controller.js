@@ -10,6 +10,11 @@ const MIN_DIGITOS_CERTIFICADO = 7
 const RE_CERTIFICADO = new RegExp(`^\\d{${MIN_DIGITOS_CERTIFICADO},}$`)
 const certificadoValido = v => RE_CERTIFICADO.test(String(v ?? '').trim())
 
+// Los nombres se registran en mayúsculas —así están en los listados, actas y
+// avisos—, pero entraban como los escribiera cada asesor. Se normaliza en el
+// servidor para que la regla no dependa de la pantalla desde la que se guarde.
+const normalizarNombre = v => String(v ?? '').trim().toUpperCase()
+
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
@@ -180,8 +185,8 @@ async function listar(req, res, next) {
     if (identificacion){ conditions.push('identificacion LIKE ?'); params.push(`%${identificacion}%`) }
     if (q) {
       const term = `%${q}%`
-      conditions.push('(codigo LIKE ? OR nombre_ser_querido LIKE ? OR identificacion LIKE ?)')
-      params.push(term, term, term)
+      conditions.push('(codigo LIKE ? OR nombre_ser_querido LIKE ? OR identificacion LIKE ? OR contrato LIKE ?)')
+      params.push(term, term, term, term)
     }
     if (fecha_desde)   { conditions.push('DATE(created_at) >= ?'); params.push(fecha_desde) }
     if (fecha_hasta)   { conditions.push('DATE(created_at) <= ?'); params.push(fecha_hasta) }
@@ -294,7 +299,7 @@ async function crear(req, res, next) {
             lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
-            codigo, nombre_ser_querido, identificacion, contrato, certificado_defuncion,
+            codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,

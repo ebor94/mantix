@@ -186,6 +186,9 @@ async function actualizarF01(req, res, next) {
 
     const updates = {}
     for (const k of CAMPOS_F01) if (cambios[k] !== undefined) updates[k] = cambios[k]
+    // Mismo criterio que al crear: el nombre del ser querido va en mayúsculas.
+    if (updates.nombre_ser_querido !== undefined)
+      updates.nombre_ser_querido = String(updates.nombre_ser_querido ?? '').trim().toUpperCase()
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar.' })
 
