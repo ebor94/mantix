@@ -15,6 +15,15 @@ const certificadoValido = v => RE_CERTIFICADO.test(String(v ?? '').trim())
 // servidor para que la regla no dependa de la pantalla desde la que se guarde.
 const normalizarNombre = v => String(v ?? '').trim().toUpperCase()
 
+// Contrato: conviven dos formatos, cinco dígitos (42226) y prefijado
+// (SCR-3937), así que no sirve exigir solo números. Longitud mínima y al menos
+// un dígito deja fuera los rellenos tipo "0", "PTE" o "N/A".
+const MIN_LARGO_CONTRATO = 4
+const contratoValido = v => {
+  const s = String(v ?? '').trim()
+  return s.length >= MIN_LARGO_CONTRATO && /\d/.test(s)
+}
+
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
@@ -467,7 +476,7 @@ async function guardarEtapa(req, res, next) {
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
     const [asist] = await db.query(
-      'SELECT estado, certificado_defuncion FROM asistencias WHERE id = ?', [id])
+      'SELECT estado, certificado_defuncion, contrato FROM asistencias WHERE id = ?', [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
     // El certificado de defunción es obligatorio para cerrar F-02: si no vino
@@ -477,6 +486,15 @@ async function guardarEtapa(req, res, next) {
           !certificadoValido(datos?.certificado_defuncion))
         return res.status(400).json({
           mensaje: `El certificado de defunción debe ser numérico y tener al menos ${MIN_DIGITOS_CERTIFICADO} dígitos.`
+        })
+    }
+
+    // El número de contrato es obligatorio para cerrar el encuentro: si la
+    // solicitud quedó sin él, hay que registrarlo aquí.
+    if (etapa === 'F05_ENTREGA' && completar) {
+      if (!contratoValido(asist[0].contrato) && !contratoValido(datos?.contrato))
+        return res.status(400).json({
+          mensaje: `El número de contrato es obligatorio: al menos ${MIN_LARGO_CONTRATO} caracteres e incluir algún número.`
         })
     }
 
@@ -535,6 +553,16 @@ async function guardarEtapa(req, res, next) {
                  OR certificado_defuncion = ''
                  OR certificado_defuncion NOT REGEXP ?)`,
         [String(datos.certificado_defuncion).trim(), id, `^[0-9]{${MIN_DIGITOS_CERTIFICADO},}$`]
+      )
+    }
+
+    // Contrato: cuando la solicitud quedó sin él, se completa desde el F-05.
+    // Como con el certificado, solo rellena vacíos o rellenos inválidos; uno ya
+    // registrado se corrige con reapertura del F-01.
+    if (etapa === 'F05_ENTREGA' && contratoValido(datos?.contrato) && !contratoValido(asist[0].contrato)) {
+      await db.query(
+        'UPDATE asistencias SET contrato = ? WHERE id = ?',
+        [String(datos.contrato).trim().toUpperCase(), id]
       )
     }
 
