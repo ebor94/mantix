@@ -552,6 +552,17 @@
       ]
     },
     {
+      "clave": "etapa.F08_DESINFECCION.editar",
+      "modulo": "etapas",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "ruta.asistencias.ver",
       "modulo": "asistencias",
       "roles": [
@@ -676,8 +687,8 @@
     }
   ],
   "requisitos_cierre": {
-    "ASISTENCIA": "F02_INVENTARIO_CUERPO+F03_INVENTARIO_RETOQUE",
-    "PRESERVACION": "F04_TANATOPRAXIA",
+    "ASISTENCIA": "F02_INVENTARIO_CUERPO+F08_DESINFECCION",
+    "PRESERVACION": "F04_TANATOPRAXIA+F03_INVENTARIO_RETOQUE",
     "ENCOFRADO": "F06_ENCOFRADO",
     "ENCUENTRO": "F05_ENTREGA",
     "SALA": "",

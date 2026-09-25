@@ -34,13 +34,13 @@ const ESTADOS_POR_ROL = {
 
 // Rol → etapas que puede guardar
 const ETAPAS_POR_ROL = {
-  asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
+  asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F08_DESINFECCION'],
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
-  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME'],
+  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
   supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
-  asesor:               ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F05_ENTREGA'],
-  coordinador:          ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
-  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
+  asesor:               ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F05_ENTREGA', 'F08_DESINFECCION'],
+  coordinador:          ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F08_DESINFECCION'],
+  admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
 }
 
 // Etapas requeridas para cerrar cada estado por rol.
@@ -49,16 +49,16 @@ const ETAPAS_POR_ROL = {
 // trae la familia y pueden llegar más tarde—, pero sí para encofrar: al cerrar
 // el cofre ya no hay manera de inventariar lo que el ser querido lleva puesto.
 const ETAPAS_PARA_CERRAR = {
-  asistente:            { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'] },
+  asistente:            { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F08_DESINFECCION'] },
   tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'] },
-  asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'],
+  asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F08_DESINFECCION'],
                           PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
                           ENCOFRADO:    ['F06_ENCOFRADO'] },
   supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
                           SALA:         [] },
   asesor:               { ENCUENTRO:    ['F05_ENTREGA'] },
-  admin:                { ASISTENCIA:   ['F02_INVENTARIO_CUERPO'],
+  admin:                { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F08_DESINFECCION'],
                           PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
                           ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
@@ -81,6 +81,7 @@ const ETIQUETA_ETAPA = {
   F05_ENTREGA:            'F-05 Encuentro',
   F06_ENCOFRADO:          'F-06 Encofrado',
   F07_SALIDA_NO_CONFORME: 'F-07 Salida no conforme',
+  F08_DESINFECCION:       'Desinfección del vehículo',
 }
 
 // Devuelve las etapas que faltan por cerrar para poder salir de `estado`.
@@ -486,6 +487,15 @@ async function guardarEtapa(req, res, next) {
           !certificadoValido(datos?.certificado_defuncion))
         return res.status(400).json({
           mensaje: `El certificado de defunción debe ser numérico y tener al menos ${MIN_DIGITOS_CERTIFICADO} dígitos.`
+        })
+    }
+
+    // La desinfección no cierra sin vehículo ni frecuencia: son los dos datos
+    // que dan sentido al registro.
+    if (etapa === 'F08_DESINFECCION' && completar) {
+      if (!String(datos?.vehiculo_placa ?? '').trim() || !String(datos?.frecuencia ?? '').trim())
+        return res.status(400).json({
+          mensaje: 'Indica la placa del vehículo y la frecuencia de limpieza y desinfección.'
         })
     }
 
