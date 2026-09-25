@@ -129,6 +129,21 @@
       ]
     },
     {
+      "clave": "accion.asistencias.resumen",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
       "clave": "accion.cofres.usos",
       "modulo": "cofres",
       "roles": [

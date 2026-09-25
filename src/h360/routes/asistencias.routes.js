@@ -6,6 +6,8 @@ const { requireRol } = require('../middleware/auth')
 const ROLES_CAMPO  = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'asesor', 'coordinador', 'admin']
 const ROLES_AVANCE = ['asistente', 'tanatologo', 'asistente_tanatologo', 'supervisora', 'coordinador', 'contabilidad', 'admin']
 
+// Antes de /:id, que si no captura "resumen" como identificador
+router.get ('/resumen',            ctrl.resumen)
 router.get ('/',                   ctrl.listar)
 router.get ('/:id',                ctrl.obtener)
 router.get ('/:id/historial',      ctrl.obtenerHistorial)

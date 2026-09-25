@@ -150,6 +150,47 @@ async function generarCodigo() {
 }
 
 // GET /asistencias
+/**
+ * Qué casos le pertenecen a un rol operativo. Se usa en el listado y en el
+ * resumen para que los números del tablero coincidan con lo que la persona ve.
+ *
+ * No incluye el recorte por estado que hace el listado cuando no se pide uno:
+ * ese es el "qué muestro primero" de esa pantalla, y aplicado a un resumen por
+ * estado dejaría en cero todo lo demás.
+ */
+function condicionesDePertenencia(rol, usuario) {
+  if (rol === 'asistente')  return ['(asistente_id = ? OR asistente_id IS NULL)', [usuario]]
+  if (rol === 'tanatologo') return ['(tanatologo_id = ? OR tanatologo_id IS NULL)', [usuario]]
+  return [null, []]
+}
+
+// GET /asistencias/resumen — conteos para el tablero.
+// El tablero contaba sobre el listado paginado, así que solo veía las 20 más
+// recientes: los estados viejos (APROBACION, CERRADO) salían en cero.
+async function resumen(req, res, next) {
+  try {
+    const { rol, usuario } = req.user
+    const [cond, params] = condicionesDePertenencia(rol, usuario)
+    const where = cond ? `WHERE ${cond}` : ''
+
+    const [filas] = await db.query(
+      `SELECT estado, COUNT(*) total FROM asistencias ${where} GROUP BY estado`, params)
+    const por_estado = Object.fromEntries(filas.map(f => [f.estado, f.total]))
+
+    const [[{ cerradas_mes }]] = await db.query(
+      `SELECT COUNT(*) AS cerradas_mes FROM asistencias
+        ${where ? where + ' AND' : 'WHERE'} estado = 'CERRADO'
+          AND YEAR(COALESCE(closed_at, updated_at)) = YEAR(CURDATE())
+          AND MONTH(COALESCE(closed_at, updated_at)) = MONTH(CURDATE())`, params)
+
+    res.json({
+      por_estado,
+      cerradas_mes,
+      total: filas.reduce((a, f) => a + f.total, 0),
+    })
+  } catch (err) { next(err) }
+}
+
 async function listar(req, res, next) {
   try {
     const { estado, identificacion, q, fecha_desde, fecha_hasta, orden, dir, page = 1, limit = 20 } = req.query
@@ -160,13 +201,12 @@ async function listar(req, res, next) {
     const params   = []
 
     // Filtrar por rol operativo
+    const [condRol, paramsRol] = condicionesDePertenencia(rol, usuario)
+    if (condRol) { conditions.push(condRol); params.push(...paramsRol) }
+
     if (rol === 'asistente') {
-      conditions.push('(asistente_id = ? OR asistente_id IS NULL)')
-      params.push(usuario)
       if (!estado) { conditions.push("estado IN ('NUEVO','ASISTENCIA')") }
     } else if (rol === 'tanatologo') {
-      conditions.push('(tanatologo_id = ? OR tanatologo_id IS NULL)')
-      params.push(usuario)
       if (!estado) {
         // También ver casos en ENCOFRADO con salida no conforme pendiente (F-07)
         conditions.push(`(estado = 'PRESERVACION' OR EXISTS (
@@ -782,4 +822,4 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { listar, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
+module.exports = { listar, resumen, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
