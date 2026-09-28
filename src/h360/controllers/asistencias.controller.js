@@ -530,12 +530,19 @@ async function guardarEtapa(req, res, next) {
         })
     }
 
-    // La desinfección no cierra sin vehículo ni frecuencia: son los dos datos
-    // que dan sentido al registro.
+    // La desinfección no cierra con campos vacíos. La foto queda fuera a
+    // propósito: es el único dato opcional del formulario.
     if (etapa === 'F08_DESINFECCION' && completar) {
-      if (!String(datos?.vehiculo_placa ?? '').trim() || !String(datos?.frecuencia ?? '').trim())
+      const faltan = [
+        ['vehiculo_placa', 'la placa del vehículo'],
+        ['frecuencia',     'la frecuencia de limpieza y desinfección'],
+        ['observaciones',  'las observaciones'],
+      ].filter(([campo]) => !String(datos?.[campo] ?? '').trim()).map(([, texto]) => texto)
+
+      if (faltan.length)
         return res.status(400).json({
-          mensaje: 'Indica la placa del vehículo y la frecuencia de limpieza y desinfección.'
+          mensaje: `Falta diligenciar ${faltan.join(', ')}.`,
+          campos_faltantes: faltan,
         })
     }
 
