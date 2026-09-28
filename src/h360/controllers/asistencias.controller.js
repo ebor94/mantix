@@ -99,6 +99,27 @@ function requisitosEfectivos(requeridas, estado, conductorRol) {
   return requeridas
 }
 
+/**
+ * Con conductor externo la desinfección no aplica: el vehículo no es de la
+ * empresa. En vez de dejar la etapa fantasma —vacía y en solo lectura, como si
+ * alguien la hubiera cerrado— se registra cerrada diciendo por qué.
+ *
+ * Si ya la diligenciaron, no se toca.
+ */
+async function registrarDesinfeccionNoAplica(asistenciaId, conductorRol, usuario) {
+  if (conductorRol !== 'asistente') return
+  const datos = {
+    no_aplica:     true,
+    observaciones: 'No aplica desinfección: la asistencia se realizó en un vehículo externo.',
+  }
+  await db.query(
+    `INSERT INTO asistencia_etapas (asistencia_id, etapa, datos, usuario_id, completado)
+     VALUES (?, 'F08_DESINFECCION', ?, ?, 1)
+     ON DUPLICATE KEY UPDATE id = id`,
+    [asistenciaId, JSON.stringify(datos), usuario]
+  )
+}
+
 // Devuelve las etapas que faltan por cerrar para poder salir de `estado`.
 async function etapasPendientesPara(asistenciaId, estado) {
   const [[caso]] = await db.query(
@@ -515,6 +536,9 @@ async function cambiarEstado(req, res, next) {
       })
     }
 
+    if (asistencia.estado === 'ASISTENCIA')
+      await registrarDesinfeccionNoAplica(id, asistencia.conductor_rol, usuario)
+
     const updates = { estado: nuevoEstado }
     if (nuevoEstado === 'CERRADO') updates.closed_at = new Date()
 
@@ -724,6 +748,8 @@ async function guardarEtapa(req, res, next) {
       const esDelEstadoActual = requeridas.length === 0 || requeridas.includes(etapa)
 
       if (esDelEstadoActual && puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
+        if (estadoActual === 'ASISTENCIA')
+          await registrarDesinfeccionNoAplica(id, asist[0].conductor_rol, usuario)
         await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
         await insertarHistorial(id, estadoActual, transicion.siguiente, usuario, nombre)
         glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
