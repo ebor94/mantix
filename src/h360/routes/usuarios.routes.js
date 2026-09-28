@@ -5,24 +5,40 @@
 const router = require('express').Router()
 const { listarMiembrosGrupo } = require('../services/ldap.service')
 
+// Grupos cuyos miembros conducen. Los asistentes externos conducen y además
+// hacen la asistencia, así que el conductor del F-01 es quien queda a cargo del
+// caso; por eso el rol viaja con cada opción.
+const GRUPOS_CONDUCTORES = [
+  { envVar: 'LDAP_GROUP_ASIST_TANATOLOGO', rol: 'asistente_tanatologo' },
+  { envVar: 'LDAP_GROUP_ASISTENTE',        rol: 'asistente' },
+]
+
 /**
  * GET /api/h360/usuarios/conductores
- * Retorna los miembros activos del grupo LDAP_GROUP_ASIST_TANATOLOGO
- * para usar como opciones en el selector de conductor en F-01.
+ * Opciones del selector de conductor en F-01 y en el despacho.
+ * Cada una trae `usuario` (lo que se guarda) y `rol` (de qué grupo salió).
  */
-router.get('/conductores', async (req, res, next) => {
-  try {
-    const groupName = process.env.LDAP_GROUP_ASIST_TANATOLOGO
-    if (!groupName) {
-      return res.status(500).json({ mensaje: 'Variable LDAP_GROUP_ASIST_TANATOLOGO no configurada' })
+router.get('/conductores', async (req, res) => {
+  const porUsuario = new Map()
+
+  for (const { envVar, rol } of GRUPOS_CONDUCTORES) {
+    const grupo = process.env[envVar]
+    if (!grupo) continue
+    try {
+      for (const m of await listarMiembrosGrupo(grupo)) {
+        // Si alguien está en los dos grupos gana el primero, que es el de más
+        // alcance y el que le daría el login.
+        if (!porUsuario.has(m.usuario)) porUsuario.set(m.usuario, { ...m, rol })
+      }
+    } catch (err) {
+      // Que falle un grupo no debe dejar el formulario sin opciones.
+      console.error(`[usuarios/conductores] ${envVar}:`, err.message)
     }
-    const miembros = await listarMiembrosGrupo(groupName)
-    res.json(miembros)
-  } catch (err) {
-    console.error('[usuarios/conductores]', err.message)
-    // Devolver lista vacía en vez de 500 para no bloquear el formulario
-    res.json([])
   }
+
+  const conductores = [...porUsuario.values()].sort((a, b) =>
+    String(a.nombre || a.usuario).localeCompare(String(b.nombre || b.usuario), 'es'))
+  res.json(conductores)
 })
 
 module.exports = router

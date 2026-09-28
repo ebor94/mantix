@@ -572,7 +572,6 @@
       "roles": [
         "admin",
         "asesor",
-        "asistente",
         "asistente_tanatologo",
         "coordinador"
       ]

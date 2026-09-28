@@ -4,6 +4,7 @@
  * de una asistencia. Token de 6 dígitos, TTL 30 min, un solo uso.
  */
 const db = require('../config/db')
+const { rolDelConductor } = require('./asistencias.controller')
 const gchat = require('../services/googleChat.service')
 
 const ETAPAS_VALIDAS = ['F01','F02','F03','F04','F05','F06','F07']
@@ -162,7 +163,7 @@ const CAMPOS_F01 = [
   'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
   'causa_fallecimiento', 'categoria_sanitaria',
   'lugar_asistencia', 'nombre_contacto', 'telefono_contacto',
-  'conductor', 'fecha_contacto',
+  'conductor', 'conductor_id', 'fecha_contacto',
 ]
 async function actualizarF01(req, res, next) {
   try {
@@ -189,6 +190,14 @@ async function actualizarF01(req, res, next) {
     // Mismo criterio que al crear: el nombre del ser querido va en mayúsculas.
     if (updates.nombre_ser_querido !== undefined)
       updates.nombre_ser_querido = String(updates.nombre_ser_querido ?? '').trim().toUpperCase()
+
+    // Cambiar de conductor cambia quién queda a cargo del caso, así que se
+    // vuelve a resolver su rol: de él depende si se exige la desinfección.
+    if (updates.conductor_id !== undefined) {
+      const sam = String(updates.conductor_id ?? '').trim()
+      updates.conductor_id  = sam || null
+      updates.conductor_rol = sam ? await rolDelConductor(sam) : null
+    }
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar.' })
 

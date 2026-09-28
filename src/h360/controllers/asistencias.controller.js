@@ -2,6 +2,7 @@ const db    = require('../config/db')
 const glpi  = require('../services/glpi.service')
 const gchat = require('../services/googleChat.service')
 const { PERMISOS_ABIERTOS } = require('../middleware/auth')
+const { buscarUsuarioPorSam } = require('../services/ldap.service')
 
 // El certificado de defunción se estaba llenando con "0" o "PTE" mientras no
 // se tenía el número real, y eso lo daba por resuelto. Los reales son
@@ -34,7 +35,7 @@ const ESTADOS_POR_ROL = {
 
 // Rol → etapas que puede guardar
 const ETAPAS_POR_ROL = {
-  asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F08_DESINFECCION'],
+  asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
   supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
@@ -84,9 +85,26 @@ const ETIQUETA_ETAPA = {
   F08_DESINFECCION:       'Desinfección del vehículo',
 }
 
+/**
+ * Requisitos efectivos para salir de `estado`, según quién quedó a cargo.
+ *
+ * La lista por rol sigue siendo idéntica para todos —es regla del proceso, no
+ * permiso—; lo que cambia es el caso: la desinfección la registra quien
+ * conduce, y a un asistente externo no se le pide, porque su parte es el
+ * inventario. Sin conductor conocido se exige, que es lo que había antes.
+ */
+function requisitosEfectivos(requeridas, estado, conductorRol) {
+  if (estado === 'ASISTENCIA' && conductorRol === 'asistente')
+    return requeridas.filter(e => e !== 'F08_DESINFECCION')
+  return requeridas
+}
+
 // Devuelve las etapas que faltan por cerrar para poder salir de `estado`.
 async function etapasPendientesPara(asistenciaId, estado) {
-  const requeridas = REQUISITOS_CIERRE[estado] || []
+  const [[caso]] = await db.query(
+    'SELECT conductor_rol FROM asistencias WHERE id = ?', [asistenciaId])
+  const requeridas = requisitosEfectivos(
+    REQUISITOS_CIERRE[estado] || [], estado, caso?.conductor_rol)
   if (!requeridas.length) return []
   const [filas] = await db.query(
     `SELECT etapa FROM asistencia_etapas
@@ -112,6 +130,27 @@ const COLUMNAS_ORDEN = {
   // antes que "NUEVO" y no diría nada.
   estado:             `FIELD(estado, ${ORDEN_ESTADOS.map(e => `'${e}'`).join(', ')})`,
   created_at:         'created_at',
+}
+
+/**
+ * Rol del conductor asignado, resuelto contra el directorio en el momento de
+ * asignarlo y guardado en la asistencia.
+ *
+ * No se consulta en cada guardado a propósito: de ese rol depende si se exige
+ * la desinfección, y esa validación corre cuando el asistente cierra la etapa
+ * —en la calle, con mala señal—. Si el AD no contesta en ese momento, la regla
+ * no debería cambiar de parecer.
+ */
+async function rolDelConductor(conductorId) {
+  const sam = String(conductorId ?? '').trim()
+  if (!sam) return null
+  try {
+    const u = await buscarUsuarioPorSam(sam)
+    return u?.rol || null
+  } catch (err) {
+    console.warn('[asistencias] rolDelConductor:', err.message)
+    return null
+  }
 }
 
 // Transiciones del flujo
@@ -159,7 +198,10 @@ async function generarCodigo() {
  * estado dejaría en cero todo lo demás.
  */
 function condicionesDePertenencia(rol, usuario) {
-  if (rol === 'asistente')  return ['(asistente_id = ? OR asistente_id IS NULL)', [usuario]]
+  // El asistente externo conduce y asiste: su caso es donde lo asignaron como
+  // conductor. Se conservan también los que ya trabajó, para que nada
+  // desaparezca a medio camino.
+  if (rol === 'asistente')  return ['(conductor_id = ? OR asistente_id = ?)', [usuario, usuario]]
   if (rol === 'tanatologo') return ['(tanatologo_id = ? OR tanatologo_id IS NULL)', [usuario]]
   return [null, []]
 }
@@ -331,8 +373,12 @@ async function crear(req, res, next) {
       peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
       causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
-      lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto,
+      lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
     } = req.body
+
+    // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
+    // asistencia se exige la desinfección.
+    const conductorRol = await rolDelConductor(conductor_id)
 
     // Reintenta hasta 3 veces si el codigo generado colisiona (race condition
     // entre asesores creando simultaneamente).
@@ -346,15 +392,17 @@ async function crear(req, res, next) {
             peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
-            lugar_asistencia, condiciones_logisticas, conductor, fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            lugar_asistencia, condiciones_logisticas, conductor, conductor_id, conductor_rol,
+            fecha_contacto, asesor_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
-            conductor, fecha_contacto || null, usuario,
+            conductor, conductor_id || null, conductorRol,
+            fecha_contacto || null, usuario,
           ]
         )
         break
@@ -401,7 +449,7 @@ async function crear(req, res, next) {
 async function asignarActores(req, res, next) {
   try {
     const { id } = req.params
-    const { asistente_id, tanatologo_id, conductor } = req.body || {}
+    const { asistente_id, tanatologo_id, conductor, conductor_id } = req.body || {}
     const { usuario, nombre } = req.user
 
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
@@ -413,7 +461,14 @@ async function asignarActores(req, res, next) {
     if (asistente_id)  updates.asistente_id  = asistente_id
     if (tanatologo_id) updates.tanatologo_id = tanatologo_id
     const conductorNuevo = String(conductor ?? '').trim()
-    if (conductorNuevo) updates.conductor = conductorNuevo
+    if (conductorNuevo) {
+      updates.conductor = conductorNuevo
+      const sam = String(conductor_id ?? '').trim()
+      if (sam) {
+        updates.conductor_id  = sam
+        updates.conductor_rol = await rolDelConductor(sam)
+      }
+    }
     updates.estado = 'ASISTENCIA'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
@@ -517,7 +572,7 @@ async function guardarEtapa(req, res, next) {
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
     const [asist] = await db.query(
-      'SELECT estado, certificado_defuncion, contrato FROM asistencias WHERE id = ?', [id])
+      'SELECT estado, certificado_defuncion, contrato, conductor_rol FROM asistencias WHERE id = ?', [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
     // El certificado de defunción es obligatorio para cerrar F-02: si no vino
@@ -648,7 +703,8 @@ async function guardarEtapa(req, res, next) {
       const estadoActual  = asist[0].estado
       const transicion    = TRANSICIONES[estadoActual]
       const estadosPorRol = ESTADOS_POR_ROL[rol] || []
-      const requeridas    = (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || []
+      const requeridas    = requisitosEfectivos(
+        (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || [], estadoActual, asist[0].conductor_rol)
 
       let puedeAvanzar = true
       if (requeridas.length > 0) {
@@ -829,4 +885,4 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { listar, resumen, obtener, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
+module.exports = { listar, resumen, obtener, rolDelConductor, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
