@@ -285,7 +285,9 @@ async function buscarUsuarioPorSam(sam) {
     const entries = await searchAsync(
       svcClient, searchBase,
       `(&${USER_FILTER}(sAMAccountName=${escapeFilter(sam)}))`,
-      ['sAMAccountName', 'displayName', 'mail', 'mobile', 'telephoneNumber']
+      // memberOf es lo que permite saber el rol: sin pedirlo, quien consulte
+      // por este camino recibe el usuario pero nunca su rol.
+      ['sAMAccountName', 'displayName', 'mail', 'mobile', 'telephoneNumber', 'memberOf']
     )
     if (!entries.length) return null
     const a = extraerAtributos(entries[0])
@@ -294,6 +296,7 @@ async function buscarUsuarioPorSam(sam) {
       nombre:   a.displayName || a.sam,
       mail:     a.mail || '',
       telefono: a.telefono || '',
+      rol:      detectarRol(a.memberOf || []),
     }
   } catch (err) {
     console.warn(`[LDAP] buscarUsuarioPorSam(${sam}):`, err.message)
