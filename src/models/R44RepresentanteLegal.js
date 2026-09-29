@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
     fecha_expedicion:   DataTypes.DATEONLY,
     fecha_nacimiento:   DataTypes.DATEONLY,
     lugar_nacimiento:   DataTypes.STRING(100),
-    cedula_numero_serie: DataTypes.STRING(30),
+    cedula_numero_serie: DataTypes.STRING(60),
     correo:             DataTypes.STRING(150),
     telefono:           DataTypes.STRING(30),
     direccion_domicilio: DataTypes.STRING(250),
