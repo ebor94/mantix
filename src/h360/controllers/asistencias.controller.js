@@ -317,7 +317,15 @@ async function listar(req, res, next) {
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
               conductor, asesor_id, asistente_id, tanatologo_id,
               motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
-              created_at, updated_at
+              created_at, updated_at,
+              -- Qué le falta al caso. Una exequia cancelada no cuenta: vuelve a
+              -- quedar sin programar.
+              NOT EXISTS (SELECT 1 FROM exequias e
+                           WHERE e.asistencia_id = asistencias.id AND e.estado <> 'CANCELADA')
+                AS pendiente_exequia,
+              NOT EXISTS (SELECT 1 FROM homenajes_sala hs WHERE hs.asistencia_id = asistencias.id)
+                AND NOT EXISTS (SELECT 1 FROM homenajes_residencia hr WHERE hr.asistencia_id = asistencias.id)
+                AS pendiente_velacion
        FROM asistencias ${where}
        ${orderBy} LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
