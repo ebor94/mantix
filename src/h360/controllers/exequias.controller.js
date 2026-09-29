@@ -96,6 +96,7 @@ async function crear(req, res, next) {
     const {
       asistencia_id, tipo, fecha, hora,
       lugar, barrio, parroquia, direccion, observaciones,
+      destino_final, lugar_destino_final,
     } = req.body
 
     // La hora es opcional: al abrir el servicio la familia suele tener el día
@@ -111,11 +112,16 @@ async function crear(req, res, next) {
 
     const [r] = await db.query(
       `INSERT INTO exequias
-       (asistencia_id, tipo, fecha, hora, lugar, barrio, parroquia, direccion, observaciones, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+       (asistencia_id, tipo, fecha, hora, lugar, barrio, parroquia, direccion, observaciones,
+        destino_final, lugar_destino_final, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [asistencia_id, tipo, fecha, hora || null, lugar,
        barrio || null, parroquia || null, direccion || null,
-       observaciones || null, usuario]
+       observaciones || null,
+       // El tipo se propone desde el encofrado; ambos son opcionales.
+       ['INHUMACION', 'CREMACION'].includes(destino_final) ? destino_final : null,
+       String(lugar_destino_final ?? '').trim() || null,
+       usuario]
     )
     await insertarHistorial(r.insertId, null, 'PENDIENTE_CONFIRMAR', usuario, 'Exequia creada')
 
@@ -125,7 +131,8 @@ async function crear(req, res, next) {
 }
 
 // PATCH /exequias/:id — editable mientras no esté en un estado terminal
-const CAMPOS_EDITABLES = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones']
+const CAMPOS_EDITABLES = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones',
+                          'destino_final','lugar_destino_final']
 
 async function actualizar(req, res, next) {
   try {
@@ -147,6 +154,8 @@ async function actualizar(req, res, next) {
     for (const k of CAMPOS_EDITABLES) if (req.body[k] !== undefined) updates[k] = req.body[k]
     // Vaciar la hora la deja en NULL: '' no es un TIME válido y la rechaza MySQL.
     if (updates.hora === '') updates.hora = null
+    // Lo mismo con el destino: '' no es un valor del ENUM.
+    if (updates.destino_final === '') updates.destino_final = null
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
 
