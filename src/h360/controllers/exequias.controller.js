@@ -29,6 +29,28 @@ const SELECT_FULL = `
     LEFT JOIN vehiculos v ON v.id = e.vehiculo_id
 `
 
+// Estados en que una asistencia ya debería tener exequia programada. NUEVO
+// queda fuera —apenas se está recibiendo— y los terminales también.
+const ESTADOS_VIVOS = ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO', 'ENCUENTRO', 'SALA', 'APROBACION']
+
+// GET /exequias/pendientes — asistencias vivas que todavía no tienen exequia.
+// Una cancelada no cuenta: el caso vuelve a quedar sin programar.
+async function pendientes(req, res, next) {
+  try {
+    const [rows] = await db.query(
+      `SELECT a.id, a.codigo, a.nombre_ser_querido, a.contrato, a.estado, a.created_at
+         FROM asistencias a
+    LEFT JOIN exequias e ON e.asistencia_id = a.id AND e.estado <> 'CANCELADA'
+        WHERE e.id IS NULL
+          AND a.estado IN (${ESTADOS_VIVOS.map(() => '?').join(',')})
+        ORDER BY FIELD(a.estado, ${ESTADOS_VIVOS.map(() => '?').join(',')}) DESC,
+                 a.created_at ASC`,
+      [...ESTADOS_VIVOS, ...ESTADOS_VIVOS]
+    )
+    res.json(rows)
+  } catch (err) { next(err) }
+}
+
 // GET /exequias  ?estado=&fecha=&asistencia_id=&fecha_desde=&fecha_hasta=
 async function listar(req, res, next) {
   try {
@@ -457,7 +479,7 @@ async function programacionPublica(req, res, next) {
 }
 
 module.exports = {
-  listar, obtener, crear, actualizar, eliminar,
+  listar, pendientes, obtener, crear, actualizar, eliminar,
   confirmar, asignarVehiculo, marcarRealizada, cancelar,
   programacionPublica,
 }

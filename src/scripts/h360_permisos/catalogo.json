@@ -213,6 +213,21 @@
       ]
     },
     {
+      "clave": "accion.exequias.pendientes",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
       "clave": "accion.gestion_servicios.editar",
       "modulo": "gestion_servicios",
       "roles": [

@@ -3,6 +3,8 @@ const { requireRol } = require('../middleware/auth')
 const ctrl = require('../controllers/exequias.controller')
 
 router.get('/',                       ctrl.listar)
+// Antes de /:id, que si no captura "pendientes" como identificador
+router.get('/pendientes',             ctrl.pendientes)
 router.get('/:id',                    ctrl.obtener)
 router.post('/',                      requireRol('asesor', 'coordinador', 'admin'),               ctrl.crear)
 // Recepción confirma, y al confirmar suele tener que completar lo que faltaba
