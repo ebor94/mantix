@@ -333,6 +333,17 @@ function fechaHoraLarga(fecha, hora) {
   return `${cal} , ${mm ? `${h12}:${String(mm).padStart(2, '0')}` : h12} ${suf}`
 }
 
+const ETIQUETA_DESTINO = { INHUMACION: 'Inhumación', CREMACION: 'Cremación' }
+
+/** "Cremación en Jardines La Colina" — vacío si no se ha definido. */
+function destinoLargo(ex) {
+  const tipo  = ETIQUETA_DESTINO[ex.destino_final] || ''
+  const lugar = String(ex.lugar_destino_final || '').trim()
+  if (!tipo && !lugar) return ''
+  if (!lugar) return tipo
+  return tipo ? `${tipo} en ${lugar}` : `Destino final: ${lugar}`
+}
+
 /** Lugar + parroquia. Descarta los "N/A" que se escriben cuando no aplica. */
 function lugarLargo(ex) {
   return [ex.lugar, ex.parroquia]
@@ -399,8 +410,10 @@ async function notificarConductor(exequiaId, conductorId) {
       fechaHoraLarga(ex.fecha, ex.hora),
       lugarLargo(ex),
       `Carroza ${ex.vehiculo_placa || 's/n'}`,
+      destinoLargo(ex),
       // La cruz antecede al nombre del ser querido, como en los avisos impresos.
       `Ser querido: + ${String(ex.ser_querido || 's/n').trim()}`,
+      'Responde este mensaje con un OK',
     ].filter(Boolean).join(' · ')
 
     const envio = await sendTextoSimple(conductor.telefono, texto)
@@ -462,6 +475,7 @@ async function programacionPublica(req, res, next) {
     // exequia en la pantalla.
     const [rows] = await db.query(`
       SELECT e.id, e.tipo, e.hora, e.lugar, e.barrio, e.parroquia, e.direccion,
+             e.destino_final, e.lugar_destino_final,
              e.estado, e.conductor_id, v.placa AS vehiculo_placa,
              a.nombre_ser_querido AS ser_querido,
              (SELECT sv.nombre FROM homenajes_sala hs
