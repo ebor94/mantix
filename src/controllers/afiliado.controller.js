@@ -16,6 +16,7 @@ const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
 const { encodeId, decodeId } = require('../utils/hashId');
 const logger = require('../utils/logger');
+const empresarialRegistro = require('../services/empresarialRegistro.service');
 
 /**
  * Construye la URL pública del PDF de un recibo, usando la variable de
@@ -329,6 +330,73 @@ async function createPublicoConvenio(req, res, next) {
   } catch (error) {
     next(error);
   }
+}
+
+/**
+ * GET /afiliados/publico/empresa/:slug
+ *
+ * Configuración pública del canal empresarial para el formulario de
+ * autoafiliación: nombre, NIT, vigencia y planes disponibles (con sus
+ * reglas). No expone asesorId ni ningún otro dato interno de la empresa.
+ */
+async function getPublicoEmpresa(req, res, next) {
+  try {
+    const e = await empresarialRegistro.buscarEmpresaPublicaPorSlug(req.params.slug);
+    res.json({
+      success: true,
+      data: {
+        nombre: e.nombre,
+        nit: e.nit,
+        vigenciaInicio: e.vigenciaInicio,
+        vigenciaCierre: e.vigenciaCierre,
+        planes: (e.planes || []).map(p => ({ planTipo: p.planTipo, valorMensual: p.valorMensual, reglas: p.reglas }))
+      }
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /afiliados/publico/empresa/:slug/cotizar
+ *
+ * Dry-run de cotización para el formulario público: el NIT se fuerza desde
+ * la empresa resuelta por slug, no desde el cuerpo, para que un anónimo no
+ * pueda cotizar (ni, de rebote, sondear) el plan de una empresa distinta.
+ */
+async function cotizarPublicoEmpresa(req, res, next) {
+  try {
+    const e = await empresarialRegistro.buscarEmpresaPublicaPorSlug(req.params.slug);
+    const data = await empresarialRegistro.cotizar({ ...req.body, nit: e.nit });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /afiliados/publico/empresa/:slug/registrar
+ *
+ * Registro público del canal empresarial. Mismo espíritu que
+ * createPublicoConvenio: el cliente no elige canal, NIT, empresa, producto
+ * ni origen — todo eso se fuerza desde la empresa resuelta por slug. El
+ * `grupo` (=planTipo) sí viene del cliente, pero queda validado contra los
+ * planes de la empresa dentro de afiliadoService.createAfiliadoWithBeneficiarios
+ * (rama EMPRESARIAL), que también exige la empresa configurada y recalcula
+ * el contrato en servidor.
+ */
+async function createPublicoEmpresa(req, res, next) {
+  try {
+    const e = await empresarialRegistro.buscarEmpresaPublicaPorSlug(req.params.slug);
+
+    const body = { ...req.body };
+    body.canal = 'EMPRESARIAL';
+    body.nit = e.nit;
+    body.empresaId = e.id;
+    body.producto = 'INTEGRAL';
+    body.origen = 'CONVENIO_PUBLICO';
+    body.asesorId = e.asesorId || null;
+    delete body.estadoRegistro;
+
+    const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
+    res.status(201).json({ success: true, data: result });
+  } catch (err) { next(err); }
 }
 
 /**
@@ -1065,6 +1133,9 @@ module.exports = {
   createPublico,
   createPublicoConvenio,
   createPublicoConvenioInvitacion,
+  getPublicoEmpresa,
+  cotizarPublicoEmpresa,
+  createPublicoEmpresa,
   getAll,
   getById,
   getByHash,

@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/afiliado.controller');
 const dashboardAfiliacionesController = require('../controllers/dashboardAfiliaciones.controller');
 const empresarialCtrl = require('../controllers/empresarialRegistro.controller');
@@ -69,6 +70,29 @@ router.post(
   validate(createAfiliadoSchema),
   controller.createPublicoConvenio
 );
+
+// ── Públicas (sin sesión) del canal empresarial por slug ───────────────────
+// No hay un limiter público importable en este archivo (afiliado.routes.js
+// no define uno propio: /veolia y /convenio/:slug no llevan rate limiter).
+// Se define aquí una instancia igual a `limitePublico` de
+// src/routes/convenio.routes.js (mismos límites: 120 req / 5 min por IP),
+// porque estos endpoints tienen la misma naturaleza que los de convenio —
+// un GET que revela configuración pública y un POST de cotización que
+// ejecuta el motor de pricing en cada llamada. Deben ir ANTES de /:id.
+const limitePublicoEmpresa = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Demasiadas solicitudes. Intente de nuevo en unos minutos.'
+  }
+});
+
+router.get('/publico/empresa/:slug', limitePublicoEmpresa, controller.getPublicoEmpresa);
+router.post('/publico/empresa/:slug/cotizar', limitePublicoEmpresa, controller.cotizarPublicoEmpresa);
+router.post('/publico/empresa/:slug/registrar', limitePublicoEmpresa, controller.createPublicoEmpresa);
 
 // ── POST /afiliados/convenio/invitacion/:token — autoafiliación por invitación ─
 // Sin autenticación, igual que /convenio/:slug. El convenio y la identidad del
