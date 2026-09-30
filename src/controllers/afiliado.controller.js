@@ -976,7 +976,7 @@ async function liquidacionPdf(req, res, next) {
     const { afiliadoIds } = req.body || {};
 
     // Calcula agregados + valida ownership y estado APROBADO
-    const { afiliaciones, totales } = await afiliadoService.calcularLiquidacion(
+    const { afiliaciones, totales, valorAsistenciaEmpresarial } = await afiliadoService.calcularLiquidacion(
       afiliadoIds, req.usuario
     );
 
@@ -999,7 +999,8 @@ async function liquidacionPdf(req, res, next) {
       afiliaciones,
       totales,
       asesor ? asesor.toJSON() : { nombre: '', apellido: '', prefijo_recibo: prefijo },
-      res
+      res,
+      { valorAsistenciaEmpresarial }
     );
   } catch (err) { next(err); }
 }

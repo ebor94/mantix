@@ -1107,11 +1107,30 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     slot.max = slot.max == null ? valor : Math.max(slot.max, valor);
   };
 
+  // EMPRESARIAL no tiene tarifa (tarifaId es null); el valor de asistencia
+  // vigente vive en empresarial_parametros. Se obtiene una sola vez, solo si
+  // hay pendientes EMPRESARIAL con asistencia, con fallback a 0 si no hay
+  // parámetros vigentes (no debe romper la liquidación individual).
+  let valorAsistenciaEmpresarial = 0;
+  const hayEmpresarialConAsistencia = pendientes.some(
+    a => a.canal === 'EMPRESARIAL' && a.asistenciaFueraDeCasa === 'SI'
+  );
+  if (hayEmpresarialConAsistencia) {
+    try {
+      const parametros = await getParametrosVigentes();
+      valorAsistenciaEmpresarial = Number(parametros.valorAsistencia || 0);
+    } catch (_) {
+      valorAsistenciaEmpresarial = 0;
+    }
+  }
+
   for (const a of pendientes) {
     const contrato = a.contrato;
     const tarifa   = contrato?.tarifa;
     const valorPlan       = Number(contrato?.valorPlanExequial || 0);
-    const valorAsistencia = Number(tarifa?.valorAsistencia || 0);
+    const valorAsistencia = a.canal === 'EMPRESARIAL'
+      ? valorAsistenciaEmpresarial
+      : Number(tarifa?.valorAsistencia || 0);
     const valorAdic       = Number(contrato?.valorAdicionales || 0);
     const valorTotalContr = Number(contrato?.valorTotal || 0);
 
@@ -1159,7 +1178,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     totales.totalGeneral += valorTotalContr;
   }
 
-  return { afiliaciones: pendientes, totales };
+  return { afiliaciones: pendientes, totales, valorAsistenciaEmpresarial };
 }
 
 module.exports = {

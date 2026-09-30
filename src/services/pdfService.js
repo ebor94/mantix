@@ -1238,7 +1238,7 @@ doc.fontSize(20)
    * @param {Writable} outStream     Stream al que se pipea el PDF (res del controller)
    * @returns {Promise<void>}        Resuelve cuando el stream termina de escribir
    */
-  generarLiquidacionPDF(afiliaciones, totales, asesor, outStream) {
+  generarLiquidacionPDF(afiliaciones, totales, asesor, outStream, opts = {}) {
     return new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({
@@ -1334,6 +1334,12 @@ doc.fontSize(20)
           const benefs   = Array.isArray(a.beneficiarios) ? a.beneficiarios : [];
           const primaSeg = seguros.reduce((s, x) => s + Number(x.prima || 0), 0);
           const cantAdic = benefs.filter(b => b.tipoBeneficiario === 'ADICIONAL').length;
+          // EMPRESARIAL no tiene tarifa (contrato.tarifa es null); el valor de
+          // asistencia vigente viene de empresarial_parametros, pasado por el
+          // caller. Los demás canales siguen leyendo contrato.tarifa como antes.
+          const valorAsist = a.canal === 'EMPRESARIAL'
+            ? (opts?.valorAsistenciaEmpresarial || 0)
+            : contrato?.tarifa?.valorAsistencia;
 
           const filas = [
             `#${a.id}`,
@@ -1342,7 +1348,7 @@ doc.fontSize(20)
             `${a.producto || ''} · ${a.grupo || ''}`,
             this.formatearNumero(contrato.valorPlanExequial),
             a.asistenciaFueraDeCasa === 'SI'
-              ? this.formatearNumero(contrato?.tarifa?.valorAsistencia)
+              ? this.formatearNumero(valorAsist)
               : '—',
             seguros.length ? this.formatearNumero(primaSeg) : '—',
             cantAdic ? `${cantAdic} · ${this.formatearNumero(contrato.valorAdicionales)}` : '—',
