@@ -13,6 +13,10 @@ async function editar(req, res, next) {
   try { res.json({ success: true, data: await empresaAdmin.editarEmpresa(req.params.id, req.body) }); }
   catch (err) { next(err); }
 }
+async function listarAsesores(req, res, next) {
+  try { res.json({ success: true, data: await empresaAdmin.listarAsesores() }); }
+  catch (err) { next(err); }
+}
 
 async function editarPlan(req, res, next) {
   try { res.json({ success: true, data: await parametroSvc.editarPlan(req.params.id, req.params.planTipo, req.body) }); }
@@ -36,6 +40,6 @@ async function activarParametro(req, res, next) {
 }
 
 module.exports = {
-  listar, crear, editar,
+  listar, crear, editar, listarAsesores,
   editarPlan, listarParametros, crearParametro, editarParametro, activarParametro
 };

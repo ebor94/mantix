@@ -1,4 +1,4 @@
-const { crearEmpresaAdminSchema, editarPlanSchema, parametroSchema } = require('../empresaAdmin.validation');
+const { crearEmpresaAdminSchema, editarEmpresaAdminSchema, editarPlanSchema, parametroSchema } = require('../empresaAdmin.validation');
 
 describe('crearEmpresaAdminSchema', () => {
   test('válido', () => {
@@ -20,6 +20,35 @@ describe('crearEmpresaAdminSchema', () => {
       nit: '900123456', nombre: 'ACME', rangoAfiliados: 'R7',
       vigenciaInicio: '2027-01-01', vigenciaCierre: '2026-01-01'
     });
+    expect(error).toBeTruthy();
+  });
+  test('slug/asesorId/publicoActivo válidos', () => {
+    const { error } = crearEmpresaAdminSchema.validate({
+      nit: '900123456', nombre: 'ACME SAS', rangoAfiliados: 'R7',
+      vigenciaInicio: '2026-01-01', vigenciaCierre: '2027-01-01',
+      slug: 'acme-sas', asesorId: 5, publicoActivo: 1
+    });
+    expect(error).toBeUndefined();
+  });
+  test('slug inválido', () => {
+    const { error } = crearEmpresaAdminSchema.validate({
+      nit: '900123456', nombre: 'ACME SAS', rangoAfiliados: 'R7',
+      vigenciaInicio: '2026-01-01', vigenciaCierre: '2027-01-01',
+      slug: 'Bad Slug!'
+    });
+    expect(error).toBeTruthy();
+  });
+});
+
+describe('editarEmpresaAdminSchema', () => {
+  test('slug/asesorId/publicoActivo válidos', () => {
+    const { error } = editarEmpresaAdminSchema.validate({
+      slug: 'acme-sas', asesorId: 5, publicoActivo: 1
+    });
+    expect(error).toBeUndefined();
+  });
+  test('slug inválido', () => {
+    const { error } = editarEmpresaAdminSchema.validate({ slug: 'Bad Slug!' });
     expect(error).toBeTruthy();
   });
 });

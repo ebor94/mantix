@@ -15,6 +15,9 @@ router.post('/parametros', guard, validate(parametroSchema), controller.crearPar
 router.put('/parametros/:anio', guard, validate(parametroSchema), controller.editarParametro);
 router.post('/parametros/:anio/activar', guard, controller.activarParametro);
 
+// Asesores para el selector (va antes de /:id para no colisionar)
+router.get('/asesores', guard, controller.listarAsesores);
+
 // Empresas
 router.get('/', guard, controller.listar);
 router.post('/', guard, validate(crearEmpresaAdminSchema), controller.crear);

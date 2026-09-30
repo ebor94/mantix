@@ -13,7 +13,10 @@ const crearEmpresaAdminSchema = Joi.object({
   rangoAfiliados: Joi.string().valid('R7', 'R15').required(),
   vigenciaInicio: Joi.date().iso().required(),
   vigenciaCierre: Joi.date().iso().greater(Joi.ref('vigenciaInicio')).required()
-    .messages({ 'date.greater': 'La vigencia de cierre debe ser posterior al inicio' })
+    .messages({ 'date.greater': 'La vigencia de cierre debe ser posterior al inicio' }),
+  slug: Joi.string().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
+  asesorId: Joi.number().integer().allow(null),
+  publicoActivo: Joi.number().valid(0, 1)
 });
 
 const editarEmpresaAdminSchema = Joi.object({
@@ -21,7 +24,10 @@ const editarEmpresaAdminSchema = Joi.object({
   rangoAfiliados: Joi.string().valid('R7', 'R15'),
   vigenciaInicio: Joi.date().iso(),
   vigenciaCierre: Joi.date().iso(),
-  activo: Joi.number().valid(0, 1)
+  activo: Joi.number().valid(0, 1),
+  slug: Joi.string().max(80).pattern(/^[a-z0-9-]+$/).allow('', null),
+  asesorId: Joi.number().integer().allow(null),
+  publicoActivo: Joi.number().valid(0, 1)
 }).min(1);
 
 const editarPlanSchema = Joi.object({
