@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const controller = require('../controllers/afiliado.controller');
 const dashboardAfiliacionesController = require('../controllers/dashboardAfiliaciones.controller');
+const empresarialCtrl = require('../controllers/empresarialRegistro.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { auth, requirePermiso, softAuth } = require('../middleware/auth');
@@ -189,6 +190,21 @@ router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 
 // ── GET /afiliados/dashboard — indicadores agregados (auth; scope en servicio) ─
 router.get('/dashboard', auth, dashboardAfiliacionesController.dashboard);
+
+// ── GET /afiliados/empresa-canal/:nit — canal empresarial: empresa + planes ─
+//    Debe ir ANTES de /:id para no colisionar con el catch-all genérico.
+router.get('/empresa-canal/:nit',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  empresarialCtrl.buscarEmpresa
+);
+
+// ── POST /afiliados/cotizar-empresarial — canal empresarial: cotización ────
+router.post('/cotizar-empresarial',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  empresarialCtrl.cotizar
+);
 
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
 router.get('/:id', auth, controller.getById);
