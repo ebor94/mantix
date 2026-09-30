@@ -1,5 +1,5 @@
 const empresaAdmin = require('../services/empresaAdmin.service');
-// Nota: los handlers de planes/parámetros se agregan en Task 6 (no importar su servicio aún).
+const parametroSvc = require('../services/empresaParametro.service');
 
 async function listar(req, res, next) {
   try { res.json({ success: true, data: await empresaAdmin.listarEmpresas() }); }
@@ -14,4 +14,28 @@ async function editar(req, res, next) {
   catch (err) { next(err); }
 }
 
-module.exports = { listar, crear, editar };
+async function editarPlan(req, res, next) {
+  try { res.json({ success: true, data: await parametroSvc.editarPlan(req.params.id, req.params.planTipo, req.body) }); }
+  catch (err) { next(err); }
+}
+async function listarParametros(req, res, next) {
+  try { res.json({ success: true, data: await parametroSvc.listarParametros() }); }
+  catch (err) { next(err); }
+}
+async function crearParametro(req, res, next) {
+  try { res.status(201).json({ success: true, data: await parametroSvc.crearParametro(req.body) }); }
+  catch (err) { next(err); }
+}
+async function editarParametro(req, res, next) {
+  try { res.json({ success: true, data: await parametroSvc.editarParametro(req.params.anio, req.body) }); }
+  catch (err) { next(err); }
+}
+async function activarParametro(req, res, next) {
+  try { res.json({ success: true, data: await parametroSvc.activarParametro(req.params.anio) }); }
+  catch (err) { next(err); }
+}
+
+module.exports = {
+  listar, crear, editar,
+  editarPlan, listarParametros, crearParametro, editarParametro, activarParametro
+};
