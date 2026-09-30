@@ -222,8 +222,11 @@ async function create(req, res, next) {
     emitirPdfYEnviarWhatsapp(result.id).catch(() => {});
 
     // Fire-and-forget: solicitar envío de la firma electrónica via n8n
-    // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto).
-    notificarFirma(result.id).catch(() => {});
+    // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto.
+    // Tampoco aplica a EMPRESARIAL: ese canal no usa el flujo de firma).
+    if (body.canal !== 'EMPRESARIAL') {
+      notificarFirma(result.id).catch(() => {});
+    }
 
     // Fire-and-forget: sincronizar con sv_crm_personas + prospecto (estado AFILIADO,
     // asignado al equivalente del asesor en el CRM vía el puente de identidad SSO).
@@ -542,6 +545,9 @@ async function reenviarFirma(req, res, next) {
     if (afiliado.origen !== 'ASESOR') {
       throw new AppError('El reenvío de firma solo aplica a afiliaciones del canal asesor', 400);
     }
+    if (afiliado.canal === 'EMPRESARIAL') {
+      throw new AppError('El reenvío de firma no aplica al canal empresarial', 400);
+    }
 
     // Se espera (await) para reportar el resultado real al usuario, a diferencia
     // del registro que la dispara fire-and-forget.
@@ -573,6 +579,9 @@ async function validarFirma(req, res, next) {
     }
     if (afiliado.origen !== 'ASESOR') {
       throw new AppError('La validación de firma solo aplica a afiliaciones del canal asesor', 400);
+    }
+    if (afiliado.canal === 'EMPRESARIAL') {
+      throw new AppError('La validación de firma no aplica al canal empresarial', 400);
     }
     if (afiliado.fechaFirmaAdobe) {
       throw new AppError('La afiliación ya tiene la firma validada', 400);
