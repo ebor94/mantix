@@ -22,7 +22,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TINYINT(1),
       allowNull: false,
       defaultValue: 1
-    }
+    },
+    rangoAfiliados: {
+      type: DataTypes.ENUM('R7', 'R15'),
+      allowNull: true,
+      field: 'rango_afiliados'
+    },
+    vigenciaInicio: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      field: 'vigencia_inicio'
+    },
+    vigenciaCierre: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      field: 'vigencia_cierre'
+    },
   }, {
     tableName: 'empresas',
     timestamps: true
@@ -34,6 +49,12 @@ module.exports = (sequelize, DataTypes) => {
       as: 'afiliados',
       foreignKey: 'empresaId',
       onDelete: 'SET NULL'
+    });
+
+    Empresa.hasMany(models.EmpresaPlan, {
+      as: 'planes',
+      foreignKey: 'empresaId',
+      onDelete: 'CASCADE'
     });
   };
 
