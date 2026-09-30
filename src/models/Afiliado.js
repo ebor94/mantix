@@ -412,6 +412,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,           // signed: usuarios.id es INT signed
       allowNull: true,
       field: 'legalizacion_asesor_id'
+    },
+    liquidado: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+      comment: '1 = liquidado (incluido en una liquidación de comisiones). Una sola vez.'
+    },
+    fechaLiquidacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'fecha_liquidacion'
+    },
+    liquidacionAsesorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'liquidacion_asesor_id'
     }
   }, {
     tableName: 'afiliados',

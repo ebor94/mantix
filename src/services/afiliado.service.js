@@ -1035,6 +1035,36 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     );
   }
 
+  // ── Liquidación única: excluir las ya liquidadas y marcar las nuevas ──
+  // Una afiliación se liquida una sola vez (evita doble comisión). Igual que
+  // legalizar, las ya liquidadas se ignoran; el PDF y los totales incluyen
+  // solo las recién liquidadas.
+  const pendientes = afiliaciones.filter(a => !a.liquidado);
+  if (pendientes.length === 0) {
+    throw new AppError('Todas las afiliaciones seleccionadas ya fueron liquidadas', 400);
+  }
+  const ahora = new Date();
+  const tLiq = await sequelize.transaction();
+  try {
+    await Afiliado.update(
+      { liquidado: 1, fechaLiquidacion: ahora, liquidacionAsesorId: usuario.id },
+      { where: { id: { [Op.in]: pendientes.map(a => a.id) } }, transaction: tLiq }
+    );
+    await Trazabilidad.bulkCreate(
+      pendientes.map(a => ({
+        afiliadoId:  a.id,
+        tipo:        'LIQUIDACION',
+        descripcion: `Liquidación generada por ${usuario.nombre || 'asesor'} (id ${usuario.id})`,
+        usuarioId:   usuario.id
+      })),
+      { transaction: tLiq }
+    );
+    await tLiq.commit();
+  } catch (err) {
+    await tLiq.rollback();
+    throw err;
+  }
+
   // ── Agregados ──────────────────────────────────────────────────
   const totales = {
     productosPorGrupo: {}, // { BASICO: { cantidad, min, max, total } }
@@ -1042,7 +1072,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     segurosPorNombre:   {}, // { SOLICANASTA: { cantidad, min, max, total } }
     adicionales:        { cantidad: 0, min: null, max: null, total: 0 },
     totalGeneral:       0,
-    cantidadAfiliados:  afiliaciones.length
+    cantidadAfiliados:  pendientes.length
   };
 
   const upsertMinMax = (slot, valor) => {
@@ -1050,7 +1080,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     slot.max = slot.max == null ? valor : Math.max(slot.max, valor);
   };
 
-  for (const a of afiliaciones) {
+  for (const a of pendientes) {
     const contrato = a.contrato;
     const tarifa   = contrato?.tarifa;
     const valorPlan       = Number(contrato?.valorPlanExequial || 0);
@@ -1102,7 +1132,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     totales.totalGeneral += valorTotalContr;
   }
 
-  return { afiliaciones, totales };
+  return { afiliaciones: pendientes, totales };
 }
 
 module.exports = {

@@ -26,7 +26,8 @@ module.exports = (sequelize, DataTypes) => {
         'LEGALIZACION',
         'ANULACION',
         'REGENERACION_CERTIFICADO',
-        'PAGO_EN_CAJA_RECIBIDO'
+        'PAGO_EN_CAJA_RECIBIDO',
+        'LIQUIDACION'
       ),
       allowNull: false
     },
