@@ -25,6 +25,18 @@ async function buscarEmpresaConPlanes(nit) {
   return empresa;
 }
 
+async function buscarEmpresaPublicaPorSlug(slug) {
+  const { Empresa, EmpresaPlan } = require('../models');
+  const empresa = await Empresa.findOne({
+    where: { slug, publicoActivo: 1 },
+    include: [{ model: EmpresaPlan, as: 'planes', required: false, where: { activo: 1 } }]
+  });
+  if (!empresa) throw new AppError('Empresa no disponible', 404);
+  if (!empresa.vigenciaInicio || !empresa.vigenciaCierre) throw new AppError('Empresa no disponible', 404);
+  if (!empresa.planes || empresa.planes.length === 0) throw new AppError('Empresa no disponible', 404);
+  return empresa;
+}
+
 function resolverPlan(empresa, planTipo) {
   const plan = (empresa.planes || []).find(p => p.planTipo === planTipo && p.activo);
   if (!plan) throw new AppError(`La empresa no tiene el plan ${planTipo} activo`, 400);
@@ -100,6 +112,6 @@ function assertReglasPlan(plan, afiliadoData, beneficiarios = []) {
 }
 
 module.exports = {
-  buscarEmpresaConPlanes, resolverPlan, valorSegurosMensual, contarAdicionales,
+  buscarEmpresaConPlanes, buscarEmpresaPublicaPorSlug, resolverPlan, valorSegurosMensual, contarAdicionales,
   construirContratoEmpresarial, cotizar, assertReglasPlan
 };
