@@ -4,6 +4,8 @@ const { buscarTarifa, calcularContrato } = require('./tarifa.service');
 const { buscarPorNit, crearEmpresa } = require('./empresa.service');
 const reciboCajaService = require('./reciboCaja.service');
 const convenioService = require('./convenio.service');
+const empresarialRegistro = require('./empresarialRegistro.service');
+const { getParametrosVigentes } = require('./empresarialPricing.service');
 const invitacionService = require('./invitacion.service');
 const AppError = require('../utils/AppError');
 const { validarGrupoIndivII } = require('../validations/grupoIndivII');
@@ -135,13 +137,36 @@ async function createAfiliadoWithBeneficiarios(data) {
     afiliadoData.convenioId, afiliadoData, beneficiarios
   );
 
+  // ── Canal EMPRESARIAL: empresa exigida, reglas del plan, contrato recalculado ──
+  let contratoEmpresarialOverride = null;
+  let empresaEmpresarial = null;
+  if (afiliadoData.canal === 'EMPRESARIAL') {
+    empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoData.nit); // 404 si no configurada
+    const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoData.grupo);   // grupo = planTipo
+    empresarialRegistro.assertReglasPlan(plan, afiliadoData, beneficiarios);                 // 400 si no cumple
+    const parametros = await getParametrosVigentes();
+    const adicionales = empresarialRegistro.contarAdicionales(beneficiarios);
+    const segMensual = await empresarialRegistro.valorSegurosMensual(seguros);
+    contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
+      plan, parametros, beneficiariosAdicionales: adicionales,
+      asistencia: afiliadoData.asistenciaFueraDeCasa === 'SI',
+      valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
+      fechaRegistro: afiliadoData.fechaPago || new Date()
+    });
+  }
+
   const transaction = await sequelize.transaction();
 
   try {
     // ── 1. Resolver empresa por NIT ──────────────────────────
     if (afiliadoData.nit) {
-      let empresa = await buscarPorNit(afiliadoData.nit);
+      let empresa = afiliadoData.canal === 'EMPRESARIAL'
+        ? empresaEmpresarial
+        : await buscarPorNit(afiliadoData.nit);
       if (!empresa) {
+        if (afiliadoData.canal === 'EMPRESARIAL') {
+          throw new AppError('Empresa no configurada para el canal empresarial', 400);
+        }
         // Si no existe, la creamos con los datos que vienen del formulario
         empresa = await Empresa.create(
           { nit: afiliadoData.nit, nombre: afiliadoData.nombreEmpresa || afiliadoData.nit },
@@ -171,9 +196,10 @@ async function createAfiliadoWithBeneficiarios(data) {
     }
 
     // ── 5. Guardar contrato/valor ────────────────────────────
-    if (contrato && Object.keys(contrato).length > 0) {
+    const contratoFinal = afiliadoData.canal === 'EMPRESARIAL' ? contratoEmpresarialOverride : contrato;
+    if (contratoFinal && Object.keys(contratoFinal).length > 0) {
       await ContratoValor.create(
-        { ...contrato, afiliadoId: afiliado.id },
+        { ...contratoFinal, afiliadoId: afiliado.id },
         { transaction }
       );
     }
@@ -182,6 +208,7 @@ async function createAfiliadoWithBeneficiarios(data) {
     //      Solo formas EFECTIVO / TRANSFERENCIA / CORRESPONSAL,
     //      origen ASESOR y asesor con prefijo_recibo configurado.
     //      POSFECHADO se cobra después con cobrarPosfechado().
+    //      EMPRESARIAL nunca genera recibo (ver reciboCaja.service).
     try {
       await reciboCajaService.crearReciboParaAfiliacion(afiliado, transaction);
     } catch (errRecibo) {

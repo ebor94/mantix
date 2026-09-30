@@ -149,6 +149,7 @@ function buildReciboPayload({ afiliado, asesor, prefijo, consecutivo, numeroReci
  */
 async function crearReciboParaAfiliacion(afiliado, transaction) {
   if (!afiliado.asesorId) return null; // origen VEOLIA público, sin asesor → sin recibo
+  if (afiliado.canal === 'EMPRESARIAL') return null; // empresarial se factura a la empresa, sin recibo
   if (!afiliado.formaPago) return null;
   if (!FORMAS_PAGO_QUE_GENERAN_RECIBO.includes(afiliado.formaPago)) return null;
 
