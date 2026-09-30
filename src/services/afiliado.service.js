@@ -631,6 +631,31 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
   // regla INDIV II. El grupo no cambia en este flujo, se usa el ya guardado.
   validarGrupoIndivII(afiliado.grupo, beneficiarios);
 
+  // ── Canal EMPRESARIAL: revalidar reglas del plan y recalcular el contrato ──
+  // (Task 4 del plan de canal empresarial C). Gateado por canal: para
+  // individual/Veolia/convenio el comportamiento de esta función queda
+  // intacto. Se valida ANTES de abrir la transacción, igual que
+  // createAfiliadoWithBeneficiarios, para no escribir nada si el nuevo grupo
+  // familiar no cumple las reglas del plan.
+  let contratoEmpresarialOverride = null;
+  if (afiliado.canal === 'EMPRESARIAL') {
+    const afiliadoPlain = afiliado.get({ plain: true });
+    const empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoPlain.nit); // 404 si no configurada
+    const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoPlain.grupo);         // grupo = planTipo
+    empresarialRegistro.assertReglasPlan(plan, afiliadoPlain, beneficiarios);                       // 400 si no cumple
+
+    const parametros = await getParametrosVigentes();
+    const adicionales = empresarialRegistro.contarAdicionales(beneficiarios);
+    const segurosActuales = await Seguro.findAll({ where: { afiliadoId } });
+    const segMensual = await empresarialRegistro.valorSegurosMensual(segurosActuales);
+    contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
+      plan, parametros, beneficiariosAdicionales: adicionales,
+      asistencia: afiliadoPlain.asistenciaFueraDeCasa === 'SI',
+      valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
+      fechaRegistro: afiliadoPlain.fechaPago || afiliadoPlain.createdAt
+    });
+  }
+
   const transaction = await sequelize.transaction();
   try {
     // Mapear documentoUrl previo por numeroDocumento para preservarlo si la
@@ -661,6 +686,15 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
       });
       await Beneficiario.bulkCreate(conId, { transaction });
     }
+
+    // ── Canal EMPRESARIAL: persistir el contrato recalculado ────────────
+    if (contratoEmpresarialOverride) {
+      await ContratoValor.update(contratoEmpresarialOverride, {
+        where: { afiliadoId },
+        transaction
+      });
+    }
+
     await Trazabilidad.create({
       afiliadoId,
       tipo: 'ACTUALIZACION_BENEFICIARIOS',
