@@ -215,11 +215,12 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Usuario (asesor) que registró la afiliación'
     },
     origen: {
-      type: DataTypes.ENUM('ASESOR', 'VEOLIA', 'CONVENIO'),
+      type: DataTypes.ENUM('ASESOR', 'VEOLIA', 'CONVENIO', 'CONVENIO_PUBLICO'),
       allowNull: false,
       defaultValue: 'ASESOR',
-      comment: 'ASESOR = registrado por asesor; VEOLIA y CONVENIO = registro público sin sesión. ' +
-               'Un solo valor CONVENIO para todos los convenios: el cuál se identifica con convenioId.'
+      comment: 'ASESOR = registrado por asesor; VEOLIA, CONVENIO y CONVENIO_PUBLICO = registro público sin sesión. ' +
+               'Un solo valor CONVENIO para todos los convenios: el cuál se identifica con convenioId. ' +
+               'CONVENIO_PUBLICO = registro público del canal empresarial (subsistema C) por slug de empresa.'
     },
 
     // ── Primera cuota / soporte de pago ───────────────────────

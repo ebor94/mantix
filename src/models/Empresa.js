@@ -38,6 +38,23 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       field: 'vigencia_cierre'
     },
+    slug: {
+      type: DataTypes.STRING(80),
+      allowNull: true,
+      unique: true
+    },
+    asesorId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      field: 'asesor_id',
+      references: { model: 'usuarios', key: 'id' }
+    },
+    publicoActivo: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 0,
+      field: 'publico_activo'
+    },
   }, {
     tableName: 'empresas',
     timestamps: true
@@ -56,6 +73,9 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'empresaId',
       onDelete: 'CASCADE'
     });
+
+    // Asesor responsable del registro público de la empresa (canal C)
+    Empresa.belongsTo(models.Usuario, { as: 'asesor', foreignKey: 'asesorId' });
   };
 
   return Empresa;
