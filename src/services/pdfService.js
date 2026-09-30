@@ -1445,6 +1445,25 @@ doc.fontSize(20)
           .text(`$ ${this.formatearNumero(totales.totalGeneral)}`, 350, y + 9, { width: 215, align: 'right' });
         y += 40;
 
+        // ── LISTADO DE CÉDULAS ──────────────────────────────────────
+        const cedulas = afiliaciones
+          .map(a => a.numeroDocumento)
+          .filter(Boolean);
+        if (cedulas.length) {
+          if (y > 700) { doc.addPage(); y = 50; }
+          doc.fillColor(DARK).font('Helvetica-Bold').fontSize(11)
+            .text(`CÉDULAS DE LOS AFILIADOS (${cedulas.length})`, 40, y);
+          y += 18;
+
+          const cedulasTexto = cedulas.join(' · ');
+          const cedulasH = doc.font('Helvetica').fontSize(9)
+            .heightOfString(cedulasTexto, { width: 532, lineGap: 2 });
+          if (y + cedulasH > 740) { doc.addPage(); y = 50; }
+          doc.fillColor(DARK).font('Helvetica').fontSize(9)
+            .text(cedulasTexto, 40, y, { width: 532, lineGap: 2 });
+          y += cedulasH + 16;
+        }
+
         // ── Pie ─────────────────────────────────────────────────────
         if (y > 720) { doc.addPage(); y = 50; }
         doc.font('Helvetica-Oblique').fontSize(7).fillColor(MUTED)
