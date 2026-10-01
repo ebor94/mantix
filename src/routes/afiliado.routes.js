@@ -92,7 +92,7 @@ const limitePublicoEmpresa = rateLimit({
 
 router.get('/publico/empresa/:slug', limitePublicoEmpresa, controller.getPublicoEmpresa);
 router.post('/publico/empresa/:slug/cotizar', limitePublicoEmpresa, controller.cotizarPublicoEmpresa);
-router.post('/publico/empresa/:slug/registrar', limitePublicoEmpresa, controller.createPublicoEmpresa);
+router.post('/publico/empresa/:slug/registrar', limitePublicoEmpresa, validate(createAfiliadoSchema), controller.createPublicoEmpresa);
 
 // ── POST /afiliados/convenio/invitacion/:token — autoafiliación por invitación ─
 // Sin autenticación, igual que /convenio/:slug. El convenio y la identidad del

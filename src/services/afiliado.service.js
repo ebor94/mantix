@@ -776,6 +776,38 @@ async function reenviarAfiliacion(id, data, usuario) {
     beneficiarios
   );
 
+  // ── Canal EMPRESARIAL: revalidar reglas del plan y recalcular el contrato ──
+  // Fix de seguridad (revisión final del canal empresarial C): antes esta
+  // función solo corría assertReglasConvenio, que es no-op para EMPRESARIAL
+  // porque convenioId es null, y persistía el contrato tal cual lo mandara
+  // el cliente — permitiendo esquivar las reglas del plan y manipular el
+  // valorTotal de una afiliación facturada a la empresa. Gateado por canal:
+  // para individual/Veolia/convenio el comportamiento de esta función queda
+  // intacto. Se valida ANTES de abrir la transacción, igual que
+  // createAfiliadoWithBeneficiarios / actualizarBeneficiariosConsulta.
+  let contratoEmpresarialOverride = null;
+  if (afiliado.canal === 'EMPRESARIAL') {
+    const afiliadoPlain = { ...afiliado.get({ plain: true }), ...afiliadoData };
+    const empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoPlain.nit); // 404 si no configurada
+    const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoPlain.grupo);         // grupo = planTipo
+    empresarialRegistro.assertReglasPlan(plan, afiliadoPlain, beneficiarios);                       // 400 si no cumple
+
+    const parametros = await getParametrosVigentes();
+    const adicionales = empresarialRegistro.contarAdicionales(beneficiarios);
+    // Igual que el resto de esta función: si no vienen seguros nuevos en el
+    // payload, se usan los ya guardados para el cálculo (no se reemplazan).
+    const segurosParaCalculo = seguros.length > 0
+      ? seguros
+      : await Seguro.findAll({ where: { afiliadoId: id } });
+    const segMensual = await empresarialRegistro.valorSegurosMensual(segurosParaCalculo);
+    contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
+      plan, parametros, beneficiariosAdicionales: adicionales,
+      asistencia: afiliadoPlain.asistenciaFueraDeCasa === 'SI',
+      valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
+      fechaRegistro: afiliadoPlain.fechaPago || afiliadoPlain.createdAt
+    });
+  }
+
   const transaction = await sequelize.transaction();
 
   try {
@@ -828,10 +860,14 @@ async function reenviarAfiliacion(id, data, usuario) {
       await Seguro.bulkCreate(sConId, { transaction });
     }
 
-    // Reemplazar contrato
-    if (contrato && Object.keys(contrato).length > 0) {
+    // Reemplazar contrato — EMPRESARIAL siempre persiste el recalculado en
+    // servidor (contratoEmpresarialOverride), ignorando el contrato que haya
+    // mandado el cliente; el resto de canales mantiene el comportamiento
+    // original (persiste el contrato del payload tal cual).
+    const contratoFinal = afiliado.canal === 'EMPRESARIAL' ? contratoEmpresarialOverride : contrato;
+    if (contratoFinal && Object.keys(contratoFinal).length > 0) {
       await ContratoValor.destroy({ where: { afiliadoId: id }, transaction });
-      await ContratoValor.create({ ...contrato, afiliadoId: id }, { transaction });
+      await ContratoValor.create({ ...contratoFinal, afiliadoId: id }, { transaction });
     }
 
     await transaction.commit();
