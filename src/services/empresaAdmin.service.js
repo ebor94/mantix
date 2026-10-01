@@ -21,9 +21,38 @@ async function listarEmpresas() {
   });
 }
 
+/**
+ * Siembra (idempotente) los planTipos que le falten a la empresa, usando los
+ * precios estándar del rango vigente y las plantillas de reglas. No toca los
+ * planes que ya existen. Devuelve cuántos creó.
+ *
+ * Importante: las empresas que ya existían en la tabla `empresas` (por
+ * convenios, Veolia o afiliaciones previas) no pasaron por `crearEmpresa`, así
+ * que nunca tuvieron planes; `editarEmpresa` los genera aquí al guardar.
+ */
+async function sembrarPlanesFaltantes(empresaId, rango, parametros, transaction) {
+  const precios = parametros.preciosEstandar?.[rango] || {};
+  const existentes = await EmpresaPlan.findAll({
+    where: { empresaId }, attributes: ['planTipo'], transaction
+  });
+  const yaHay = new Set(existentes.map(p => p.planTipo));
+  const faltantes = PLAN_TIPOS.filter(t => !yaHay.has(t));
+  if (faltantes.length === 0) return 0;
+  await EmpresaPlan.bulkCreate(
+    faltantes.map(tipo => ({
+      empresaId,
+      planTipo: tipo,
+      valorMensual: Number(precios[tipo]) || 0,
+      reglas: plantillaReglas(tipo),
+      activo: 1
+    })),
+    { transaction }
+  );
+  return faltantes.length;
+}
+
 async function crearEmpresa(payload) {
   const parametros = await getParametrosVigentes(); // 409 si no hay año vigente
-  const precios = parametros.preciosEstandar?.[payload.rangoAfiliados] || {};
   const existe = await Empresa.findOne({ where: { nit: payload.nit } });
   if (existe) throw new AppError('Ya existe una empresa con ese NIT', 409);
   await verificarSlugDisponible(payload.slug || null, null);
@@ -42,16 +71,7 @@ async function crearEmpresa(payload) {
       activo: 1
     }, { transaction: t });
 
-    await EmpresaPlan.bulkCreate(
-      PLAN_TIPOS.map(tipo => ({
-        empresaId: empresa.id,
-        planTipo: tipo,
-        valorMensual: Number(precios[tipo]) || 0,
-        reglas: plantillaReglas(tipo),
-        activo: 1
-      })),
-      { transaction: t }
-    );
+    await sembrarPlanesFaltantes(empresa.id, payload.rangoAfiliados, parametros, t);
 
     await t.commit();
     return Empresa.findByPk(empresa.id, { include: [{ model: EmpresaPlan, as: 'planes' }] });
@@ -69,7 +89,21 @@ async function editarEmpresa(id, payload) {
     throw new AppError('La vigencia de cierre debe ser posterior al inicio', 400);
   }
   if (payload.slug) await verificarSlugDisponible(payload.slug, id);
-  await empresa.update(payload);
+
+  const t = await sequelize.transaction();
+  try {
+    await empresa.update(payload, { transaction: t });
+    // Generar los planes faltantes para empresas que ya existían y ahora tienen
+    // rango (nunca pasaron por crearEmpresa). Idempotente: no duplica los que haya.
+    if (empresa.rangoAfiliados) {
+      const parametros = await getParametrosVigentes(); // 409 si no hay año vigente
+      await sembrarPlanesFaltantes(empresa.id, empresa.rangoAfiliados, parametros, t);
+    }
+    await t.commit();
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
   return Empresa.findByPk(id, { include: [{ model: EmpresaPlan, as: 'planes' }] });
 }
 
