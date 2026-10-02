@@ -107,6 +107,11 @@ function resumirErrores(errores) {
   return `El grupo familiar no cumple las condiciones del plan:\n· ${errores.map(e => e.mensaje).join('\n· ')}`;
 }
 function assertReglasPlan(plan, afiliadoData, beneficiarios = []) {
+  // Decisión de negocio: el canal empresarial NO valida reglas de beneficiarios
+  // (parentesco, edad ni cantidad) — la empresa afilia libremente. No-op.
+  // Para reactivar la validación por plan, quitar este early return.
+  return;
+  // eslint-disable-next-line no-unreachable
   const res = validarConjunto(plan.reglas, { titular: titularDesdePayload(afiliadoData), beneficiarios }, {});
   if (!res.valido) throw new AppError(resumirErrores(res.errores), 400, { errores: res.errores });
 }
