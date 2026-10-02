@@ -62,6 +62,7 @@ async function crearEmpresa(payload) {
     const empresa = await Empresa.create({
       nit: payload.nit,
       nombre: payload.nombre,
+      email: payload.email || null,
       rangoAfiliados: payload.rangoAfiliados,
       vigenciaInicio: payload.vigenciaInicio,
       vigenciaCierre: payload.vigenciaCierre,
@@ -89,6 +90,8 @@ async function editarEmpresa(id, payload) {
     throw new AppError('La vigencia de cierre debe ser posterior al inicio', 400);
   }
   if (payload.slug) await verificarSlugDisponible(payload.slug, id);
+  // Normalizar correo vacío a null para no guardar cadenas vacías.
+  if (payload.email != null && String(payload.email).trim() === '') payload.email = null;
 
   const t = await sequelize.transaction();
   try {

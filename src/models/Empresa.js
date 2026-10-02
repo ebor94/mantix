@@ -18,6 +18,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(200),
       allowNull: false
     },
+    email: {
+      type: DataTypes.STRING(150),
+      allowNull: true
+    },
     activo: {
       type: DataTypes.TINYINT(1),
       allowNull: false,

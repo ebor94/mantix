@@ -10,6 +10,7 @@ const preciosPorRango = Joi.object({
 const crearEmpresaAdminSchema = Joi.object({
   nit: Joi.string().max(20).required().trim(),
   nombre: Joi.string().max(200).required().trim(),
+  email: Joi.string().email().max(150).allow('', null),
   rangoAfiliados: Joi.string().valid('R7', 'R15').required(),
   vigenciaInicio: Joi.date().iso().required(),
   vigenciaCierre: Joi.date().iso().greater(Joi.ref('vigenciaInicio')).required()
@@ -21,6 +22,7 @@ const crearEmpresaAdminSchema = Joi.object({
 
 const editarEmpresaAdminSchema = Joi.object({
   nombre: Joi.string().max(200).trim(),
+  email: Joi.string().email().max(150).allow('', null),
   rangoAfiliados: Joi.string().valid('R7', 'R15'),
   vigenciaInicio: Joi.date().iso(),
   vigenciaCierre: Joi.date().iso(),

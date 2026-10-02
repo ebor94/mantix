@@ -33,6 +33,9 @@ const N8N_APROBACION_PUBLICA_URL =
 const N8N_ANULACION_URL =
   process.env.N8N_ANULACION_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/anulacion-afiliacion';
+const N8N_BIENVENIDA_EMPRESARIAL_URL =
+  process.env.N8N_BIENVENIDA_EMPRESARIAL_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/bienvenida-empresarial';
 const PORTAL_URL =
   process.env.R44_PORTAL_URL || 'https://losolivoscucuta.com/portalproveedores/login';
 const DRIVE_ROOT_FOLDER_ID =
@@ -302,6 +305,31 @@ async function notificarAnulacionAfiliacion(afiliadoId, motivo, anuladoPor) {
   }
 }
 
+/**
+ * Dispara (fire-and-forget) el workflow n8n de BIENVENIDA EMPRESARIAL. n8n
+ * resuelve el afiliado por afiliadoId, trae el correo matriculado en la empresa
+ * (JOIN empresas) y envía el correo de bienvenida al afiliado con copia (cc) a
+ * la empresa. Reemplaza al certificado para el canal empresarial.
+ *
+ * @param {number} afiliadoId
+ */
+async function notificarBienvenidaEmpresarial(afiliadoId) {
+  try {
+    const res = await axios.post(
+      N8N_BIENVENIDA_EMPRESARIAL_URL,
+      { afiliadoId },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 8000 }
+    );
+    return res.data;
+  } catch (err) {
+    console.error(
+      `[n8nService] Error disparando bienvenida empresarial (afiliado ${afiliadoId}):`,
+      err.message
+    );
+    return null;
+  }
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
@@ -312,4 +340,5 @@ module.exports = {
   notificarInvitacionEmail,
   archivarDocumentosEnDrive,
   notificarBienvenidaProveedor,
+  notificarBienvenidaEmpresarial,
 };

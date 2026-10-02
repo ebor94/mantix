@@ -7,7 +7,7 @@ const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
-const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion, notificarBienvenidaEmpresarial } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
@@ -697,16 +697,26 @@ async function aprobar(req, res, next) {
     // y si falla solo queda en logs (la aprobación ya persistió).
     const aprobadoPor = [req.usuario?.nombre, req.usuario?.apellido]
       .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
-    // Genera el carné (WhatsApp al afiliado) y dispara el certificado n8n
-    // (correo + Drive) incluyendo la URL del carné. Fire-and-forget.
-    emitirCarnetYCertificado(afiliado.id, aprobadoPor).catch((err) => {
-      logger.warn(`[Afiliado.aprobar] Carné/certificado falló: ${err?.message || err}`);
-    });
 
-    // Afiliaciones públicas (Veolia/Convenio): disparar de inmediato el workflow
-    // n8n de correo de aprobación en vez de esperar su polling de 5 min.
-    if (afiliado.origen === 'VEOLIA' || afiliado.origen === 'CONVENIO') {
-      notificarAprobacionPublica(afiliado.id).catch(() => {});
+    if (afiliado.canal === 'EMPRESARIAL') {
+      // Canal empresarial: NO lleva certificado ni carné por WhatsApp. En su
+      // lugar se dispara el workflow de bienvenida (correo al afiliado + copia
+      // al correo matriculado en la empresa). Fire-and-forget.
+      notificarBienvenidaEmpresarial(afiliado.id).catch((err) => {
+        logger.warn(`[Afiliado.aprobar] Bienvenida empresarial falló: ${err?.message || err}`);
+      });
+    } else {
+      // Resto de canales: genera el carné (WhatsApp al afiliado) y dispara el
+      // certificado n8n (correo + Drive) incluyendo la URL del carné.
+      emitirCarnetYCertificado(afiliado.id, aprobadoPor).catch((err) => {
+        logger.warn(`[Afiliado.aprobar] Carné/certificado falló: ${err?.message || err}`);
+      });
+
+      // Afiliaciones públicas (Veolia/Convenio): disparar de inmediato el workflow
+      // n8n de correo de aprobación en vez de esperar su polling de 5 min.
+      if (afiliado.origen === 'VEOLIA' || afiliado.origen === 'CONVENIO') {
+        notificarAprobacionPublica(afiliado.id).catch(() => {});
+      }
     }
 
     res.json({ success: true, message: 'Registro aprobado exitosamente', data: afiliado });
