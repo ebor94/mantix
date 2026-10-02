@@ -71,6 +71,7 @@ const db = {
   PrimaSeguro: require('./PrimaSeguro')(sequelize, Sequelize.DataTypes),
   EmpresaPlan: require('./EmpresaPlan')(sequelize, Sequelize.DataTypes),
   EmpresarialParametro: require('./EmpresarialParametro')(sequelize, Sequelize.DataTypes),
+  EmpresaNomina: require('./EmpresaNomina')(sequelize, Sequelize.DataTypes),
 
   // Ahora sí los modelos que dependen de Empresa
   Afiliado: require('./Afiliado')(sequelize, Sequelize.DataTypes),

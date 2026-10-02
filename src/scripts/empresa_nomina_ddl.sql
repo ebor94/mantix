@@ -1,0 +1,20 @@
+CREATE TABLE empresa_nomina (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  empresa_id INT UNSIGNED NOT NULL,
+  numero_documento VARCHAR(20) NOT NULL,
+  primer_nombre VARCHAR(80) NULL,
+  segundo_nombre VARCHAR(80) NULL,
+  primer_apellido VARCHAR(80) NULL,
+  segundo_apellido VARCHAR(80) NULL,
+  estado_civil ENUM('SOLTERO','CASADO','UNION_LIBRE','DIVORCIADO','VIUDO','SEPARADO') NULL,
+  fecha_nacimiento DATE NULL,
+  direccion VARCHAR(255) NULL,
+  celular VARCHAR(20) NULL,
+  email VARCHAR(150) NULL,
+  plan_tipo ENUM('UNIPERSONAL','BASICO','UNIFAMILIAR') NULL,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_empresa_doc (empresa_id, numero_documento),
+  CONSTRAINT fk_empresa_nomina_empresa FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE CASCADE
+);
