@@ -25,6 +25,32 @@ async function buscarEmpresaConPlanes(nit) {
   return empresa;
 }
 
+/**
+ * Autocompletar: empresas del canal empresarial cuyo nombre coincide, SOLO las
+ * configuradas (con vigencia y al menos un plan activo), para que al elegir una
+ * la carga por NIT no falle. Devuelve id/nit/nombre (máx 10).
+ */
+async function buscarEmpresasPorNombre(q) {
+  const { Op } = require('sequelize');
+  const { Empresa, EmpresaPlan } = require('../models');
+  const texto = String(q || '').trim();
+  if (texto.length < 2) return [];
+  const empresas = await Empresa.findAll({
+    where: {
+      nombre: { [Op.like]: `%${texto}%` },
+      vigenciaInicio: { [Op.ne]: null },
+      vigenciaCierre: { [Op.ne]: null }
+    },
+    attributes: ['id', 'nit', 'nombre'],
+    include: [{ model: EmpresaPlan, as: 'planes', required: true, where: { activo: 1 }, attributes: [] }],
+    order: [['nombre', 'ASC']],
+    limit: 10,
+    subQuery: false,
+    group: ['Empresa.id']
+  });
+  return empresas.map(e => ({ id: e.id, nit: e.nit, nombre: e.nombre }));
+}
+
 async function buscarEmpresaPublicaPorSlug(slug) {
   const { Empresa, EmpresaPlan } = require('../models');
   const empresa = await Empresa.findOne({
@@ -117,6 +143,6 @@ function assertReglasPlan(plan, afiliadoData, beneficiarios = []) {
 }
 
 module.exports = {
-  buscarEmpresaConPlanes, buscarEmpresaPublicaPorSlug, resolverPlan, valorSegurosMensual, contarAdicionales,
-  construirContratoEmpresarial, cotizar, assertReglasPlan
+  buscarEmpresaConPlanes, buscarEmpresaPublicaPorSlug, buscarEmpresasPorNombre, resolverPlan,
+  valorSegurosMensual, contarAdicionales, construirContratoEmpresarial, cotizar, assertReglasPlan
 };

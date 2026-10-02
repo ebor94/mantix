@@ -216,6 +216,14 @@ router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 // ── GET /afiliados/dashboard — indicadores agregados (auth; scope en servicio) ─
 router.get('/dashboard', auth, dashboardAfiliacionesController.dashboard);
 
+// ── GET /afiliados/empresas-canal?q= — autocompletar empresas por nombre ────
+//    Debe ir ANTES de /empresa-canal/:nit y de /:id.
+router.get('/empresas-canal',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  empresarialCtrl.buscarPorNombre
+);
+
 // ── GET /afiliados/empresa-canal/:nit — canal empresarial: empresa + planes ─
 //    Debe ir ANTES de /:id para no colisionar con el catch-all genérico.
 router.get('/empresa-canal/:nit',

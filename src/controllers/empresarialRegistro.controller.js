@@ -13,9 +13,14 @@ async function buscarEmpresa(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function buscarPorNombre(req, res, next) {
+  try { res.json({ success: true, data: await svc.buscarEmpresasPorNombre(req.query.q) }); }
+  catch (err) { next(err); }
+}
+
 async function cotizar(req, res, next) {
   try { res.json({ success: true, data: await svc.cotizar(req.body) }); }
   catch (err) { next(err); }
 }
 
-module.exports = { buscarEmpresa, cotizar };
+module.exports = { buscarEmpresa, buscarPorNombre, cotizar };
