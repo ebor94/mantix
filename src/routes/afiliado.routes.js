@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const controller = require('../controllers/afiliado.controller');
 const dashboardAfiliacionesController = require('../controllers/dashboardAfiliaciones.controller');
 const empresarialCtrl = require('../controllers/empresarialRegistro.controller');
+const nominaCtrl = require('../controllers/empresaNomina.controller');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { auth, requirePermiso, softAuth } = require('../middleware/auth');
@@ -228,6 +229,14 @@ router.post('/cotizar-empresarial',
   auth,
   requirePermiso('afiliaciones', 'crear'),
   empresarialCtrl.cotizar
+);
+
+// ── GET /afiliados/nomina-empresa/:empresaId/:cedula — precarga por cédula ─
+//    Debe ir ANTES de /:id para no colisionar con el catch-all genérico.
+router.get('/nomina-empresa/:empresaId/:cedula',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  nominaCtrl.buscar
 );
 
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
