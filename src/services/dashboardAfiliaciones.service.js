@@ -1,8 +1,9 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Afiliado, Convenio, Usuario } = require('../models');
+const { Afiliado, Convenio, Usuario, ReciboCaja } = require('../models');
 const {
   resolverScope, normalizarRango, elegirGranularidad, construirWhere,
-  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking
+  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
+  ensamblarPorDimension, CANAL_LABEL, PRODUCTO_LABEL, ASISTENCIA_LABEL
 } = require('./dashboardAfiliaciones.helpers');
 
 const TOP_RANKING = 15;
@@ -122,13 +123,49 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
   });
   const porNovedad = ensamblarPorNovedad(novedadRows);
 
+  // ── Cortes por canal / producto / asistencia, con $ (recibos de caja) ──
+  // Visible para todos (el where ya scopea al asesor cuando no es global).
+  // El monto suma ReciboCaja.valor (efectivo recibido) vía LEFT JOIN; el canal
+  // empresarial no genera recibo, por lo que su monto queda en 0.
+  async function cortePorDimension(campo) {
+    return Afiliado.findAll({
+      where,
+      attributes: [
+        campo,
+        [fn('COUNT', col('Afiliado.id')), 'registradas'],
+        [SUM_APROBADAS, 'aprobadas'],
+        [fn('COALESCE', fn('SUM', col('recibo.valor')), 0), 'monto']
+      ],
+      include: [{ model: ReciboCaja, as: 'recibo', attributes: [] }],
+      group: [col('Afiliado.' + campo)],
+      raw: true
+    });
+  }
+
+  const [canalRows, productoRows, asistenciaRows] = await Promise.all([
+    cortePorDimension('canal'),
+    cortePorDimension('producto'),
+    cortePorDimension('asistenciaFueraDeCasa')
+  ]);
+
+  const porCanal      = ensamblarPorDimension(canalRows, 'canal', CANAL_LABEL, 'Sin canal');
+  const porProducto   = ensamblarPorDimension(productoRows, 'producto', PRODUCTO_LABEL, 'Sin producto');
+  const porAsistencia = ensamblarPorDimension(asistenciaRows, 'asistenciaFueraDeCasa', ASISTENCIA_LABEL, 'Sin dato');
+
+  // Ingresos del rango = suma de recibos (mismo universo que los cortes).
+  const ingresos = porCanal.reduce((s, c) => s + (c.monto || 0), 0);
+
   return {
     rango: { desde: rango.desde, hasta: rango.hasta, granularidad },
     esGlobal: scope.esGlobal,
     kpis,
+    ingresos,
     serie,
     porOrigen,
     porNovedad,
+    porCanal,
+    porProducto,
+    porAsistencia,
     ranking
   };
 }

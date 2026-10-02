@@ -129,6 +129,36 @@ function ensamblarPorNovedad(rows) {
     .sort((a, b) => b.registradas - a.registradas);
 }
 
+// Etiquetas legibles por dimensión (canal / producto / asistencia).
+const CANAL_LABEL      = { EMPRESARIAL: 'Empresarial', INDIVIDUAL: 'Individual', CENS: 'CENS' };
+const PRODUCTO_LABEL   = { VERDE: 'Verde', INTEGRAL: 'Integral', CENS: 'CENS' };
+const ASISTENCIA_LABEL = { SI: 'Con asistencia', NO: 'Sin asistencia' };
+
+/**
+ * Ensamblador genérico de un corte por dimensión del afiliado (canal, producto,
+ * asistencia). Cada fila trae `registradas`, `aprobadas` y `monto` (suma de
+ * recibos de caja — efectivo recibido). Ordena por registradas desc.
+ *
+ * @param {object[]} rows      Filas crudas (raw) de la agregación
+ * @param {string}   campo     Nombre del campo agrupado en la fila (p.ej. 'canal')
+ * @param {object}   labelMap  Mapa valor→etiqueta legible
+ * @param {string}   sinLabel  Etiqueta para el valor null/vacío
+ */
+function ensamblarPorDimension(rows, campo, labelMap = {}, sinLabel = 'Sin dato') {
+  return (rows || [])
+    .map(r => {
+      const valor = r[campo] ?? null;
+      return {
+        valor,
+        label: valor == null ? sinLabel : (labelMap[valor] || valor),
+        registradas: Number(r.registradas || 0),
+        aprobadas: Number(r.aprobadas || 0),
+        monto: Number(r.monto || 0)
+      };
+    })
+    .sort((a, b) => b.registradas - a.registradas);
+}
+
 /** Arma el ranking de asesores (nombre, tasa), ordena desc y corta a topN. */
 function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
   return (rows || [])
@@ -149,5 +179,6 @@ function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
 
 module.exports = {
   getPermisos, resolverScope, normalizarRango, elegirGranularidad, construirWhere,
-  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking
+  ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
+  ensamblarPorDimension, CANAL_LABEL, PRODUCTO_LABEL, ASISTENCIA_LABEL
 };
