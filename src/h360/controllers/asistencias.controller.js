@@ -16,6 +16,11 @@ const certificadoValido = v => RE_CERTIFICADO.test(String(v ?? '').trim())
 // servidor para que la regla no dependa de la pantalla desde la que se guarde.
 const normalizarNombre = v => String(v ?? '').trim().toUpperCase()
 
+// Tipo de traslado: define la tarifa y a quién se le avisa la orden de
+// servicio. Local y medicina legal tienen precio fijo; el intermunicipal se
+// acuerda con el proveedor.
+const TIPOS_TRASLADO = ['MEDICINA_LEGAL', 'LOCAL', 'INTERMUNICIPAL']
+
 // Contrato: conviven dos formatos, cinco dígitos (42226) y prefijado
 // (SCR-3937), así que no sirve exigir solo números. Longitud mínima y al menos
 // un dígito deja fuera los rellenos tipo "0", "PTE" o "N/A".
@@ -427,7 +432,7 @@ async function crear(req, res, next) {
       causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
-      traslado_otra_ciudad,
+      traslado_otra_ciudad, tipo_traslado,
     } = req.body
 
     // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
@@ -446,16 +451,17 @@ async function crear(req, res, next) {
             peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
-            lugar_asistencia, traslado_otra_ciudad,
+            lugar_asistencia, traslado_otra_ciudad, tipo_traslado,
             condiciones_logisticas, conductor, conductor_id, conductor_rol,
             fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
+            TIPOS_TRASLADO.includes(tipo_traslado) ? tipo_traslado : null,
             JSON.stringify(condiciones_logisticas || []),
             conductor, conductor_id || null, conductorRol,
             fecha_contacto || null, usuario,
@@ -660,6 +666,7 @@ async function guardarEtapa(req, res, next) {
         ['vehiculo_placa', 'la placa del vehículo'],
         ['frecuencia',     'la frecuencia de limpieza y desinfección'],
         ['observaciones',  'las observaciones'],
+        ['foto',           'la foto del vehículo'],
       ].filter(([campo]) => !String(datos?.[campo] ?? '').trim()).map(([, texto]) => texto)
 
       if (faltan.length)
