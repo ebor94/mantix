@@ -433,12 +433,19 @@ async function crear(req, res, next) {
       causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
-      traslado_otra_ciudad, tipo_traslado,
+      traslado_otra_ciudad, ciudad_destino, tipo_traslado,
     } = req.body
 
     // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
     // asistencia se exige la desinfección.
     const conductorRol = await rolDelConductor(conductor_id)
+
+    // Si no se vela aquí, el destino es parte del servicio: hay que saberlo.
+    if (traslado_otra_ciudad && !String(ciudad_destino ?? '').trim())
+      return res.status(400).json({
+        mensaje: 'Indica la ciudad de destino del traslado.',
+        campo: 'ciudad_destino',
+      })
 
     // Obligatorio: define la tarifa y a quién se le manda la orden de
     // servicio. Sin él, la orden no sale y nadie se entera.
@@ -460,16 +467,17 @@ async function crear(req, res, next) {
             peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
-            lugar_asistencia, traslado_otra_ciudad, tipo_traslado,
+            lugar_asistencia, traslado_otra_ciudad, ciudad_destino, tipo_traslado,
             condiciones_logisticas, conductor, conductor_id, conductor_rol,
             fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
+            traslado_otra_ciudad ? String(ciudad_destino).trim() : null,
             tipo_traslado,
             JSON.stringify(condiciones_logisticas || []),
             conductor, conductor_id || null, conductorRol,

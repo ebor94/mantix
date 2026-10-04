@@ -162,7 +162,7 @@ const CAMPOS_F01 = [
   'nombre_ser_querido', 'identificacion', 'contrato', 'certificado_defuncion',
   'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
   'causa_fallecimiento', 'categoria_sanitaria',
-  'lugar_asistencia', 'traslado_otra_ciudad', 'tipo_traslado',
+  'lugar_asistencia', 'traslado_otra_ciudad', 'ciudad_destino', 'tipo_traslado',
   'nombre_contacto', 'telefono_contacto',
   'conductor', 'conductor_id', 'fecha_contacto',
 ]
@@ -204,6 +204,22 @@ async function actualizarF01(req, res, next) {
     // Checkbox: llega como booleano y la columna es TINYINT.
     if (updates.traslado_otra_ciudad !== undefined)
       updates.traslado_otra_ciudad = updates.traslado_otra_ciudad ? 1 : 0
+
+    // La ciudad solo tiene sentido si va a otra ciudad; y si va, hace falta.
+    // Puede venir en este guardado o estar ya registrada.
+    if (updates.traslado_otra_ciudad === 1) {
+      const [[actual]] = await db.query(
+        'SELECT ciudad_destino FROM asistencias WHERE id = ?', [id])
+      const ciudad = String(updates.ciudad_destino ?? actual?.ciudad_destino ?? '').trim()
+      if (!ciudad)
+        return res.status(400).json({
+          mensaje: 'Indica la ciudad de destino del traslado.',
+          campo: 'ciudad_destino',
+        })
+      updates.ciudad_destino = ciudad
+    } else if (updates.traslado_otra_ciudad === 0) {
+      updates.ciudad_destino = null
+    }
 
     // Cambiar de conductor cambia quién queda a cargo del caso, así que se
     // vuelve a resolver su rol: de él depende si se exige la desinfección.
