@@ -154,7 +154,7 @@ async function listarMiembrosGrupo(groupName) {
     const escapedDN = escapeFilter(groupDN)
     const filter = `(&${USER_FILTER}(memberOf=${escapedDN}))`
     entries = await searchAsync(svcClient, searchBase, filter,
-      ['sAMAccountName', 'displayName', 'mobile', 'telephoneNumber'])
+      ['sAMAccountName', 'displayName', 'mail', 'mobile', 'telephoneNumber'])
   } catch (err) {
     throw new Error('Error al consultar miembros del grupo: ' + err.message)
   } finally {
@@ -163,7 +163,8 @@ async function listarMiembrosGrupo(groupName) {
 
   const miembros = entries.map(e => {
     const a = extraerAtributos(e)
-    return { usuario: a.sam, nombre: a.displayName || a.sam, telefono: a.telefono || '' }
+    return { usuario: a.sam, nombre: a.displayName || a.sam,
+             mail: a.mail || '', telefono: a.telefono || '' }
   }).filter(m => m.usuario)
 
   miembros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))

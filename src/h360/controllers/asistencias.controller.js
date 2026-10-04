@@ -3,6 +3,7 @@ const glpi  = require('../services/glpi.service')
 const gchat = require('../services/googleChat.service')
 const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 const { buscarUsuarioPorSam } = require('../services/ldap.service')
+const { notificarAsignacion } = require('../services/asignacionExterna.service')
 
 // El certificado de defunción se estaba llenando con "0" o "PTE" mientras no
 // se tenía el número real, y eso lo daba por resuelto. Los reales son
@@ -497,8 +498,12 @@ async function crear(req, res, next) {
       })
       .catch(err => console.warn('[GLPI] crearTicket:', err.message))
 
+    // Si queda a cargo de un asistente externo, se le avisa y sale la orden
+    // de servicio. No bloquea la creación: lo principal ya quedó guardado.
+    const notificacion = await notificarAsignacion(result.insertId, conductor_id)
+
     const [nueva] = await db.query('SELECT * FROM asistencias WHERE id = ?', [result.insertId])
-    res.status(201).json(nueva[0])
+    res.status(201).json({ ...nueva[0], notificacion })
   } catch (err) { next(err) }
 }
 
@@ -523,14 +528,16 @@ async function asignarActores(req, res, next) {
     if (asistente_id)  updates.asistente_id  = asistente_id
     if (tanatologo_id) updates.tanatologo_id = tanatologo_id
     const conductorNuevo = String(conductor ?? '').trim()
+    const samNuevo = String(conductor_id ?? '').trim()
     if (conductorNuevo) {
       updates.conductor = conductorNuevo
-      const sam = String(conductor_id ?? '').trim()
-      if (sam) {
-        updates.conductor_id  = sam
-        updates.conductor_rol = await rolDelConductor(sam)
+      if (samNuevo) {
+        updates.conductor_id  = samNuevo
+        updates.conductor_rol = await rolDelConductor(samNuevo)
       }
     }
+    // Solo cuando cambia de persona: reasignar al mismo no vuelve a avisar.
+    const cambioDeConductor = samNuevo && samNuevo !== rows[0].conductor_id
     updates.estado = 'ASISTENCIA'
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
@@ -539,8 +546,13 @@ async function asignarActores(req, res, next) {
       : `Avanzado a ASISTENCIA por ${nombre || usuario}${conductorNuevo ? ` · Conductor: ${conductorNuevo}` : ''}`
     await insertarHistorial(id, 'NUEVO', 'ASISTENCIA', usuario, nombre, motivo)
 
+    // Igual que al crear: si queda a cargo de un externo, aviso y orden.
+    const notificacion = cambioDeConductor
+      ? await notificarAsignacion(id, samNuevo)
+      : null
+
     const [actualizada] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
-    res.json(actualizada[0])
+    res.json({ ...actualizada[0], notificacion })
   } catch (err) { next(err) }
 }
 
