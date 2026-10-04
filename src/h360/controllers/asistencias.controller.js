@@ -440,6 +440,14 @@ async function crear(req, res, next) {
     // asistencia se exige la desinfección.
     const conductorRol = await rolDelConductor(conductor_id)
 
+    // Obligatorio: define la tarifa y a quién se le manda la orden de
+    // servicio. Sin él, la orden no sale y nadie se entera.
+    if (!TIPOS_TRASLADO.includes(tipo_traslado))
+      return res.status(400).json({
+        mensaje: 'Indica el tipo de traslado: medicina legal, local o intermunicipal.',
+        campo: 'tipo_traslado',
+      })
+
     // Reintenta hasta 3 veces si el codigo generado colisiona (race condition
     // entre asesores creando simultaneamente).
     let result, codigo
@@ -462,7 +470,7 @@ async function crear(req, res, next) {
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
-            TIPOS_TRASLADO.includes(tipo_traslado) ? tipo_traslado : null,
+            tipo_traslado,
             JSON.stringify(condiciones_logisticas || []),
             conductor, conductor_id || null, conductorRol,
             fecha_contacto || null, usuario,

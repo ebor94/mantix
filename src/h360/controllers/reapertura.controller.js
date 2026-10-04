@@ -192,8 +192,14 @@ async function actualizarF01(req, res, next) {
     if (updates.nombre_ser_querido !== undefined)
       updates.nombre_ser_querido = String(updates.nombre_ser_querido ?? '').trim().toUpperCase()
 
-    // '' no es un valor del ENUM.
-    if (updates.tipo_traslado === '') updates.tipo_traslado = null
+    // Una vez puesto no se puede dejar en blanco: de él dependen la tarifa y
+    // el destinatario de la orden de servicio.
+    if (updates.tipo_traslado !== undefined &&
+        !['MEDICINA_LEGAL', 'LOCAL', 'INTERMUNICIPAL'].includes(updates.tipo_traslado))
+      return res.status(400).json({
+        mensaje: 'Indica el tipo de traslado: medicina legal, local o intermunicipal.',
+        campo: 'tipo_traslado',
+      })
 
     // Checkbox: llega como booleano y la columna es TINYINT.
     if (updates.traslado_otra_ciudad !== undefined)
