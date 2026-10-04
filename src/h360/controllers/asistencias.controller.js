@@ -185,6 +185,30 @@ const TRANSICIONES = {
   APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
+/**
+ * Transición que le toca a una asistencia, que no siempre es la del mapa.
+ *
+ * Cuando el ser querido se traslada a otra ciudad no hay velación aquí: el
+ * caso va del encuentro directo a aprobación.
+ */
+function transicionDe(asistencia) {
+  const base = TRANSICIONES[asistencia?.estado]
+  if (!base) return null
+  if (asistencia.estado === 'ENCUENTRO' && asistencia.traslado_otra_ciudad)
+    return { ...base, siguiente: 'APROBACION' }
+  return base
+}
+
+/** ¿La asistencia tiene velación registrada, en sala o en residencia? */
+async function tieneVelacion(asistenciaId) {
+  const [[r]] = await db.query(
+    `SELECT EXISTS(SELECT 1 FROM homenajes_sala      WHERE asistencia_id = ?)
+         OR EXISTS(SELECT 1 FROM homenajes_residencia WHERE asistencia_id = ?) AS hay`,
+    [asistenciaId, asistenciaId]
+  )
+  return !!r.hay
+}
+
 // Helper: insertar registro en historial con nombre completo del usuario
 async function insertarHistorial(asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario = null) {
   await db.query(
@@ -403,6 +427,7 @@ async function crear(req, res, next) {
       causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
+      traslado_otra_ciudad,
     } = req.body
 
     // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
@@ -421,15 +446,17 @@ async function crear(req, res, next) {
             peso_aproximado, edad, fecha_fallecimiento, hora_fallecimiento,
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
-            lugar_asistencia, condiciones_logisticas, conductor, conductor_id, conductor_rol,
+            lugar_asistencia, traslado_otra_ciudad,
+            condiciones_logisticas, conductor, conductor_id, conductor_rol,
             fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
             causa_fallecimiento, categoria_sanitaria || null,
             nombre_contacto, telefono_contacto,
-            lugar_asistencia, JSON.stringify(condiciones_logisticas || []),
+            lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
+            JSON.stringify(condiciones_logisticas || []),
             conductor, conductor_id || null, conductorRol,
             fecha_contacto || null, usuario,
           ]
@@ -522,7 +549,7 @@ async function cambiarEstado(req, res, next) {
     if (!rows.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
     const asistencia = rows[0]
-    const transicion = TRANSICIONES[asistencia.estado]
+    const transicion = transicionDe(asistencia)
 
     if (!transicion)
       return res.status(400).json({ mensaje: `El estado ${asistencia.estado} no permite avanzar` })
@@ -535,6 +562,14 @@ async function cambiarEstado(req, res, next) {
     // esto se podía saltar un formulario obligatorio —p. ej. pasar de
     // PRESERVACION a ENCOFRADO con la tanatopraxia en borrador— y el caso
     // seguía adelante sin que nada lo advirtiera.
+    // Pasar a velación sin tener dónde velar deja el caso en un estado que no
+    // corresponde a nada. No aplica al traslado a otra ciudad, que no vela aquí.
+    if (nuevoEstado === 'SALA' && !(await tieneVelacion(id)))
+      return res.status(409).json({
+        mensaje: 'Primero registra la velación: un homenaje en sala o en residencia.',
+        falta_velacion: true,
+      })
+
     const pendientes = await etapasPendientesPara(id, asistencia.estado)
     if (pendientes.length) {
       const nombres = pendientes.map(e => ETIQUETA_ETAPA[e] || e).join(', ')
@@ -604,7 +639,8 @@ async function guardarEtapa(req, res, next) {
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
     const [asist] = await db.query(
-      'SELECT estado, certificado_defuncion, contrato, conductor_rol FROM asistencias WHERE id = ?', [id])
+      `SELECT estado, certificado_defuncion, contrato, conductor_rol, traslado_otra_ciudad
+         FROM asistencias WHERE id = ?`, [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
     // El certificado de defunción es obligatorio para cerrar F-02: si no vino
@@ -733,7 +769,7 @@ async function guardarEtapa(req, res, next) {
     // Avance de estado: solo si TODAS las etapas requeridas del estado actual están completas
     if (completar) {
       const estadoActual  = asist[0].estado
-      const transicion    = TRANSICIONES[estadoActual]
+      const transicion    = transicionDe(asist[0])
       const estadosPorRol = ESTADOS_POR_ROL[rol] || []
       const requeridas    = requisitosEfectivos(
         (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || [], estadoActual, asist[0].conductor_rol)
@@ -754,6 +790,10 @@ async function guardarEtapa(req, res, next) {
       // PRESERVACION) no debe empujar el estado: esa etapa no pertenece a los
       // requisitos del estado actual y avanzar dejaría fuera otras pendientes.
       const esDelEstadoActual = requeridas.length === 0 || requeridas.includes(etapa)
+
+      // Cerrar el encuentro empuja a velación; sin velación registrada, no.
+      // El mismo criterio que el avance manual, para que no se salte por aquí.
+      if (transicion?.siguiente === 'SALA' && !(await tieneVelacion(id))) puedeAvanzar = false
 
       if (esDelEstadoActual && puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
         if (estadoActual === 'ASISTENCIA')
@@ -919,4 +959,4 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { listar, resumen, obtener, rolDelConductor, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
+module.exports = { listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }

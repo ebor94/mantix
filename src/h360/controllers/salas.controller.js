@@ -17,7 +17,17 @@ async function listar(req, res, next) {
 
     const [rows] = await db.query(
       `SELECT sv.id, sv.sede_id, sv.codigo, sv.nombre, sv.capacidad, sv.activo,
-              s.codigo AS sede_codigo, s.nombre AS sede_nombre
+              s.codigo AS sede_codigo, s.nombre AS sede_nombre,
+              -- Quién la está ocupando ahora mismo, para advertirlo al asignar.
+              -- Subconsulta y no JOIN: dos homenajes abiertos duplicarían la sala.
+              (SELECT a.nombre_ser_querido
+                 FROM homenajes_sala h
+                 JOIN asistencias a ON a.id = h.asistencia_id
+                WHERE h.sala_id = sv.id AND h.estado <> 'FINALIZADO'
+                ORDER BY h.id DESC LIMIT 1)            AS ocupada_por,
+              (SELECT h.id FROM homenajes_sala h
+                WHERE h.sala_id = sv.id AND h.estado <> 'FINALIZADO'
+                ORDER BY h.id DESC LIMIT 1)            AS ocupada_homenaje_id
        FROM salas_velacion sv
        LEFT JOIN sedes s ON s.id = sv.sede_id
        ${where}

@@ -153,6 +153,19 @@ async function crear(req, res, next) {
     const [[sala]] = await db.query('SELECT id FROM salas_velacion WHERE id = ?', [sala_id])
     if (!sala) return res.status(404).json({ mensaje: 'Sala no encontrada' })
 
+    // Una asistencia vela una sola vez. Faltaba esta comprobación —solo se
+    // miraba contra residencia— y por eso hay un caso con dos homenajes.
+    const [enSala] = await db.query(
+      'SELECT id FROM homenajes_sala WHERE asistencia_id = ? LIMIT 1',
+      [asistencia_id]
+    )
+    if (enSala.length) {
+      return res.status(409).json({
+        mensaje: 'Esta asistencia ya tiene un homenaje en sala registrado.',
+        homenaje_id: enSala[0].id,
+      })
+    }
+
     // Exclusividad con homenaje en residencia
     const [enRes] = await db.query(
       'SELECT id FROM homenajes_residencia WHERE asistencia_id = ? LIMIT 1',
@@ -169,7 +182,14 @@ async function crear(req, res, next) {
       [asistencia_id, sala_id, observaciones_generales || null, usuario]
     )
     const [nueva] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [r.insertId])
-    res.status(201).json(nueva[0])
+
+    // Registrar la velación es lo que pone el caso en estado de velación. Si
+    // todavía no está en encuentro, no se fuerza: se informa y ya.
+    const asistencia = await avanzarPorEvento(asistencia_id, 'SALA', {
+      usuario, nombre: req.user.nombre, comentario: 'Homenaje en sala registrado',
+    })
+
+    res.status(201).json({ ...nueva[0], asistencia })
   } catch (err) { next(err) }
 }
 

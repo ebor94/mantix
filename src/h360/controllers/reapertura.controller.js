@@ -162,7 +162,7 @@ const CAMPOS_F01 = [
   'nombre_ser_querido', 'identificacion', 'contrato', 'certificado_defuncion',
   'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
   'causa_fallecimiento', 'categoria_sanitaria',
-  'lugar_asistencia', 'nombre_contacto', 'telefono_contacto',
+  'lugar_asistencia', 'traslado_otra_ciudad', 'nombre_contacto', 'telefono_contacto',
   'conductor', 'conductor_id', 'fecha_contacto',
 ]
 async function actualizarF01(req, res, next) {
@@ -190,6 +190,10 @@ async function actualizarF01(req, res, next) {
     // Mismo criterio que al crear: el nombre del ser querido va en mayúsculas.
     if (updates.nombre_ser_querido !== undefined)
       updates.nombre_ser_querido = String(updates.nombre_ser_querido ?? '').trim().toUpperCase()
+
+    // Checkbox: llega como booleano y la columna es TINYINT.
+    if (updates.traslado_otra_ciudad !== undefined)
+      updates.traslado_otra_ciudad = updates.traslado_otra_ciudad ? 1 : 0
 
     // Cambiar de conductor cambia quién queda a cargo del caso, así que se
     // vuelve a resolver su rol: de él depende si se exige la desinfección.

@@ -166,7 +166,14 @@ async function crear(req, res, next) {
       [asistencia_id, observaciones_generales || null, usuario]
     )
     const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [r.insertId])
-    res.status(201).json(rows[0])
+
+    // Registrar la velación es lo que pone el caso en estado de velación. Si
+    // todavía no está en encuentro, no se fuerza: se informa y ya.
+    const asistencia = await avanzarPorEvento(asistencia_id, 'SALA', {
+      usuario, nombre: req.user.nombre, comentario: 'Homenaje en residencia registrado',
+    })
+
+    res.status(201).json({ ...rows[0], asistencia })
   } catch (err) { next(err) }
 }
 
