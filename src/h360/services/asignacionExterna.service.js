@@ -24,8 +24,14 @@ const TRASLADOS = {
   INTERMUNICIPAL: { etiqueta: 'Intermunicipal', tarifa: null  },
 }
 
-/** Quiénes acuerdan el precio de un traslado intermunicipal con el proveedor. */
-const CORREOS_INTERMUNICIPAL = () => String(
+/**
+ * El equipo de operaciones. Son los destinatarios cuando hay que acordar el
+ * precio, y van en copia cuando la orden sale derecho al proveedor, para que
+ * sepan que se envió.
+ */
+const CORREOS_OPERACIONES = () => String(
+  // El nombre viejo se sigue aceptando por si ya quedó puesto en el servidor.
+  process.env.H360_CORREOS_OPERACIONES ||
   process.env.H360_CORREOS_INTERMUNICIPAL ||
   'homenajesoperativocucuta@losolivos.co,coordhomenajescucuta@losolivos.co,auxhomenajesoperativocucuta@losolivos.co'
 ).split(',').map(c => c.trim()).filter(Boolean)
@@ -95,7 +101,10 @@ async function enviarOrdenServicio(a, conductor) {
   if (!traslado) return { ok: false, motivo: 'La asistencia no tiene tipo de traslado' }
 
   const acuerdaPrecio = a.tipo_traslado === 'INTERMUNICIPAL'
-  const destinatarios = acuerdaPrecio ? CORREOS_INTERMUNICIPAL() : (conductor.mail ? [conductor.mail] : [])
+  const operaciones   = CORREOS_OPERACIONES()
+  const destinatarios = acuerdaPrecio ? operaciones : (conductor.mail ? [conductor.mail] : [])
+  // En copia solo cuando no son ya los destinatarios.
+  const copia = acuerdaPrecio ? [] : operaciones
   if (!destinatarios.length)
     return { ok: false, motivo: `${conductor.nombre} no tiene correo registrado en el directorio activo` }
 
@@ -104,6 +113,7 @@ async function enviarOrdenServicio(a, conductor) {
     // Con precio acordado la orden la envía operaciones, no el sistema.
     requiere_acuerdo_precio: acuerdaPrecio,
     destinatarios,
+    copia,
     traslado: { tipo: a.tipo_traslado, etiqueta: traslado.etiqueta, tarifa: traslado.tarifa },
     proveedor: { usuario: conductor.usuario, nombre: conductor.nombre, correo: conductor.mail || null },
     asistencia: {
@@ -116,7 +126,7 @@ async function enviarOrdenServicio(a, conductor) {
   }
 
   const r = await axios.post(url, payload, { timeout: 15000 })
-  return { ok: true, destinatarios, acuerda_precio: acuerdaPrecio, respuesta: r.data }
+  return { ok: true, destinatarios, copia, acuerda_precio: acuerdaPrecio, respuesta: r.data }
 }
 
 /**
