@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Afiliado, Convenio, Usuario, ReciboCaja } = require('../models');
+const { Afiliado, Convenio, Usuario, ReciboCaja, ContratoValor } = require('../models');
 const {
   resolverScope, normalizarRango, elegirGranularidad, construirWhere,
   ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
@@ -155,11 +155,31 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
   // Ingresos del rango = suma de recibos (mismo universo que los cortes).
   const ingresos = porCanal.reduce((s, c) => s + (c.monto || 0), 0);
 
+  // ── Desglose de valores contratados (como la cotización/liquidación) ──
+  // Suma los componentes del contrato en el rango: plan exequial, beneficiarios
+  // adicionales y seguros (ContratoValor via LEFT JOIN). Mismo scope/where.
+  const [desgloseRow] = await Afiliado.findAll({
+    where,
+    attributes: [
+      [fn('COALESCE', fn('SUM', col('contrato.valorPlanExequial')), 0), 'planExequial'],
+      [fn('COALESCE', fn('SUM', col('contrato.valorAdicionales')), 0), 'adicionales'],
+      [fn('COALESCE', fn('SUM', col('contrato.valorSeguros')), 0), 'seguros']
+    ],
+    include: [{ model: ContratoValor, as: 'contrato', attributes: [] }],
+    raw: true
+  });
+  const desgloseContrato = [
+    { clave: 'planExequial', label: 'Plan exequial', monto: Number(desgloseRow?.planExequial || 0) },
+    { clave: 'adicionales', label: 'Beneficiarios adicionales', monto: Number(desgloseRow?.adicionales || 0) },
+    { clave: 'seguros', label: 'Seguros', monto: Number(desgloseRow?.seguros || 0) }
+  ];
+
   return {
     rango: { desde: rango.desde, hasta: rango.hasta, granularidad },
     esGlobal: scope.esGlobal,
     kpis,
     ingresos,
+    desgloseContrato,
     serie,
     porOrigen,
     porNovedad,
