@@ -3,7 +3,7 @@ const { Afiliado, Convenio, Usuario, ReciboCaja } = require('../models');
 const {
   resolverScope, normalizarRango, elegirGranularidad, construirWhere,
   ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
-  ensamblarPorDimension, CANAL_LABEL, PRODUCTO_LABEL, ASISTENCIA_LABEL
+  ensamblarPorDimension, CANAL_LABEL, GRUPO_LABEL, ASISTENCIA_LABEL
 } = require('./dashboardAfiliaciones.helpers');
 
 const TOP_RANKING = 15;
@@ -142,14 +142,14 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
     });
   }
 
-  const [canalRows, productoRows, asistenciaRows] = await Promise.all([
+  const [canalRows, grupoRows, asistenciaRows] = await Promise.all([
     cortePorDimension('canal'),
-    cortePorDimension('producto'),
+    cortePorDimension('grupo'),
     cortePorDimension('asistenciaFueraDeCasa')
   ]);
 
   const porCanal      = ensamblarPorDimension(canalRows, 'canal', CANAL_LABEL, 'Sin canal');
-  const porProducto   = ensamblarPorDimension(productoRows, 'producto', PRODUCTO_LABEL, 'Sin producto');
+  const porGrupo      = ensamblarPorDimension(grupoRows, 'grupo', GRUPO_LABEL, 'Sin grupo');
   const porAsistencia = ensamblarPorDimension(asistenciaRows, 'asistenciaFueraDeCasa', ASISTENCIA_LABEL, 'Sin dato');
 
   // Ingresos del rango = suma de recibos (mismo universo que los cortes).
@@ -164,7 +164,7 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
     porOrigen,
     porNovedad,
     porCanal,
-    porProducto,
+    porGrupo,
     porAsistencia,
     ranking
   };

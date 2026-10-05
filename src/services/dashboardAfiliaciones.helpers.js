@@ -133,6 +133,16 @@ function ensamblarPorNovedad(rows) {
 const CANAL_LABEL      = { EMPRESARIAL: 'Empresarial', INDIVIDUAL: 'Individual', CENS: 'CENS' };
 const PRODUCTO_LABEL   = { VERDE: 'Verde', INTEGRAL: 'Integral', CENS: 'CENS' };
 const ASISTENCIA_LABEL = { SI: 'Con asistencia', NO: 'Sin asistencia' };
+const GRUPO_LABEL      = {
+  UNIPERSONAL: 'Unipersonal',
+  UNIFAMILIAR: 'Unifamiliar',
+  BASICO: 'Básico',
+  CENS_II: 'CENS II',
+  INDIVIDUAL: 'Individual',
+  TRADICIONAL: 'Tradicional',
+  UNIFAMILIAR_INDIV_II: 'Unifamiliar Indiv. II',
+  BASICO_INDIV_II: 'Básico Indiv. II'
+};
 
 /**
  * Ensamblador genérico de un corte por dimensión del afiliado (canal, producto,
@@ -180,5 +190,5 @@ function ensamblarRanking(rows, usuarioById = {}, topN = 15) {
 module.exports = {
   getPermisos, resolverScope, normalizarRango, elegirGranularidad, construirWhere,
   ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
-  ensamblarPorDimension, CANAL_LABEL, PRODUCTO_LABEL, ASISTENCIA_LABEL
+  ensamblarPorDimension, CANAL_LABEL, PRODUCTO_LABEL, ASISTENCIA_LABEL, GRUPO_LABEL
 };
