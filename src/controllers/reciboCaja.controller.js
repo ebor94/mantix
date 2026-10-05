@@ -48,14 +48,15 @@ async function getMisRecibos(req, res, next) {
  */
 async function getCuadre(req, res, next) {
   try {
-    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = req.query;
+    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo, sedeId } = req.query;
     const data = await reciboService.listarRecibosParaCuadre(req.usuario, {
       fecha,
       fechaDesde,
       fechaHasta,
       asesorId: asesorId ? parseInt(asesorId, 10) : undefined,
       estado,
-      tipo
+      tipo,
+      sedeId: sedeId ? parseInt(sedeId, 10) : undefined
     });
     // Incluye los permisos resueltos para que el frontend pinte la UI según el rol
     const permisos = reciboService.permisosCaja(req.usuario);
@@ -68,14 +69,15 @@ async function getCuadre(req, res, next) {
  */
 async function exportarCuadre(req, res, next) {
   try {
-    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = req.query;
+    const { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo, sedeId } = req.query;
     const buffer = await reciboService.exportarCuadreExcel(req.usuario, {
       fecha,
       fechaDesde,
       fechaHasta,
       asesorId: asesorId ? parseInt(asesorId, 10) : undefined,
       estado,
-      tipo
+      tipo,
+      sedeId: sedeId ? parseInt(sedeId, 10) : undefined
     });
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -320,7 +320,7 @@ async function listarRecibosAsesor(asesorId, params = {}) {
  * @param {Usuario} usuario
  * @param {object} params { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo }
  */
-async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo } = {}) {
+async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta, asesorId, estado, tipo, sedeId } = {}) {
   const where = { ...buildWhereFechaEmision({ fecha, fechaDesde, fechaHasta }) };
   if (asesorId) where.asesorId = asesorId;
   if (estado)   where.estadoCuadre = estado;
@@ -355,11 +355,17 @@ async function listarRecibosParaCuadre(usuario, { fecha, fechaDesde, fechaHasta,
   if (formasVisibles.length === 0) return [];
   where.formaPago = { [Op.in]: formasVisibles };
 
-  // Si es cajero acotado por sede, forzar que el asesor del recibo sea de su sede.
-  const include = esCajeroScoped
+  // Filtro por sede del asesor:
+  //  - Cajero acotado: SIEMPRE forzado a su propia sede (ignora el filtro UI).
+  //  - Resto (admin/cartera): si se pide `sedeId`, filtra por esa sede del asesor.
+  let asesorWhere = null;
+  if (esCajeroScoped) asesorWhere = { sede_id: usuario.sede_id };
+  else if (sedeId) asesorWhere = { sede_id: Number(sedeId) };
+
+  const include = asesorWhere
     ? INCLUDE_RECIBO_COMPLETO.map(inc =>
         inc.as === 'asesor'
-          ? { ...inc, where: { sede_id: usuario.sede_id }, required: true }
+          ? { ...inc, where: asesorWhere, required: true }
           : inc
       )
     : INCLUDE_RECIBO_COMPLETO;
