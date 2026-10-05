@@ -157,9 +157,15 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
 
   // ── Desglose de valores contratados (como la cotización/liquidación) ──
   // Suma los componentes del contrato en el rango: plan exequial, beneficiarios
-  // adicionales y seguros (ContratoValor via LEFT JOIN). Mismo scope/where.
+  // adicionales y seguros (ContratoValor via LEFT JOIN). Mismo scope/where, pero
+  // EXCLUYE el canal empresarial (su valorPlanExequial es mensual, no anual, y
+  // distorsionaría el "valor año"). Se conservan los registros con canal NULL.
+  const whereDesglose = {
+    ...where,
+    [Op.or]: [{ canal: { [Op.ne]: 'EMPRESARIAL' } }, { canal: null }]
+  };
   const [desgloseRow] = await Afiliado.findAll({
-    where,
+    where: whereDesglose,
     attributes: [
       [fn('COALESCE', fn('SUM', col('contrato.valorPlanExequial')), 0), 'planExequial'],
       [fn('COALESCE', fn('SUM', col('contrato.valorAdicionales')), 0), 'adicionales'],
