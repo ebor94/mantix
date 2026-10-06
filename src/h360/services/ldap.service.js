@@ -2,17 +2,31 @@ const ldap = require('ldapjs')
 
 const LDAP_TIMEOUT = 8000 // ms máximo por operación
 
-const ROLE_MAP = () => ({
-  [process.env.LDAP_GROUP_ADMIN]:            'admin',                // full access
-  [process.env.LDAP_GROUP_ASESOR]:           'asesor',
-  [process.env.LDAP_GROUP_ASISTENTE]:        'asistente',
-  [process.env.LDAP_GROUP_TANATOLOGO]:       'tanatologo',
-  [process.env.LDAP_GROUP_ASIST_TANATOLOGO]: 'asistente_tanatologo', // rol combinado
-  [process.env.LDAP_GROUP_SUPERVISORA]:      'supervisora',
-  [process.env.LDAP_GROUP_COORDINADOR]:      'coordinador',
-  [process.env.LDAP_GROUP_CONTABILIDAD]:     'contabilidad',
-  [process.env.LDAP_GROUP_RECEPCION]:        'recepcion',            // atiende exequias/ceremonias
-})
+/**
+ * Grupo del directorio → rol, EN ORDEN DE PRIORIDAD: quien pertenezca a varios
+ * se queda con el primero que coincida. Por eso admin va arriba — hay personal
+ * que administra y además conduce.
+ *
+ * Es una lista y no un objeto a propósito: con un objeto, dos variables de
+ * entorno sin definir colapsaban en la misma clave "undefined" y una se comía
+ * a la otra, dejando roles fuera del mapa sin que nada avisara.
+ */
+const ROLES_POR_GRUPO = [
+  ['LDAP_GROUP_ADMIN',            'admin'],                 // full access
+  ['LDAP_GROUP_ASESOR',           'asesor'],
+  ['LDAP_GROUP_ASISTENTE',        'asistente'],
+  ['LDAP_GROUP_TANATOLOGO',       'tanatologo'],
+  ['LDAP_GROUP_ASIST_TANATOLOGO', 'asistente_tanatologo'],  // rol combinado
+  ['LDAP_GROUP_SUPERVISORA',      'supervisora'],
+  ['LDAP_GROUP_COORDINADOR',      'coordinador'],
+  ['LDAP_GROUP_CONTABILIDAD',     'contabilidad'],
+  ['LDAP_GROUP_RECEPCION',        'recepcion'],             // atiende exequias/ceremonias
+]
+
+/** Pares [nombreDeGrupo, rol] de las variables que sí están definidas. */
+const ROLE_MAP = () => ROLES_POR_GRUPO
+  .map(([envVar, rol]) => [String(process.env[envVar] ?? '').trim(), rol])
+  .filter(([grupo]) => grupo)
 
 // Filtro de conexión estándar AD: usuarios activos de tipo persona
 const USER_FILTER = '(&(objectClass=user)(objectCategory=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'
@@ -250,12 +264,18 @@ async function autenticarLDAP(usuarioRaw, password) {
   }
 }
 
+/**
+ * Rol de un usuario a partir de sus grupos.
+ *
+ * Quien está en varios grupos se queda con el de más alcance: el recorrido va
+ * por ROLE_MAP, que está en orden de prioridad, y no por los grupos que
+ * devuelve el directorio. Antes era al revés, así que el rol dependía del
+ * orden en que el AD listara la membresía —arbitrario— y alguien que condujera
+ * además de administrar podía entrar con el rol equivocado.
+ */
 function detectarRol(memberOf) {
-  const map = ROLE_MAP()
-  for (const dn of memberOf) {
-    for (const [groupName, rol] of Object.entries(map)) {
-      if (groupName && dn.includes(groupName)) return rol
-    }
+  for (const [groupName, rol] of ROLE_MAP()) {
+    if (memberOf.some(dn => dn.includes(groupName))) return rol
   }
   // Fallback temporal: admins de dominio → rol admin en H360
   const esAdminDominio = memberOf.some(dn =>
