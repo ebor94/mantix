@@ -6,6 +6,7 @@ router.get('/',                       ctrl.listar)
 // Antes de /:id, que si no captura "pendientes" como identificador
 router.get('/pendientes',             ctrl.pendientes)
 router.get('/:id',                    ctrl.obtener)
+router.get('/:id/formato-r13',        ctrl.formatoR13)
 router.post('/',                      requireRol('asesor', 'coordinador', 'admin'),               ctrl.crear)
 // Recepción confirma, y al confirmar suele tener que completar lo que faltaba
 // —la hora, sobre todo, que es obligatoria para asignar vehículo—.

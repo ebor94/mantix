@@ -2,6 +2,7 @@ const db = require('../config/db')
 const { buscarUsuarioPorSam } = require('../services/ldap.service')
 const { sendTextoSimple }     = require('../../services/whatsappService')
 const gchat                   = require('../services/googleChat.service')
+const karingsoft              = require('../services/karingsoft.service')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -32,6 +33,45 @@ const SELECT_FULL = `
 // Estados en que una asistencia ya debería tener exequia programada. NUEVO
 // queda fuera —apenas se está recibiendo— y los terminales también.
 const ESTADOS_VIVOS = ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO', 'ENCUENTRO', 'SALA', 'APROBACION']
+
+/**
+ * GET /exequias/:id/formato-r13
+ *
+ * Datos del formato "Exequias / Bóvedas" que se diligencia al confirmar. No se
+ * guardan en H360: se leen del ERP cada vez, porque allá es donde se corrigen.
+ * El vínculo es el número de contrato de la asistencia.
+ */
+async function formatoR13(req, res, next) {
+  try {
+    const { id } = req.params
+    const [[ex]] = await db.query(
+      `SELECT e.id, e.estado, a.codigo AS asistencia_codigo, a.contrato,
+              a.nombre_ser_querido
+         FROM exequias e JOIN asistencias a ON a.id = e.asistencia_id
+        WHERE e.id = ?`, [id])
+    if (!ex) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
+
+    const contrato = String(ex.contrato ?? '').trim()
+    if (!contrato)
+      return res.status(409).json({
+        mensaje: 'La asistencia no tiene número de contrato, que es con lo que se consulta el ERP.',
+        falta_contrato: true,
+      })
+
+    const datos = await karingsoft.formatoR13(contrato)
+    if (!datos)
+      return res.status(404).json({
+        mensaje: `El ERP no tiene una orden de servicio con el contrato ${contrato}.`,
+        contrato,
+      })
+
+    res.json({ ...datos, h360: { exequia_id: ex.id, asistencia: ex.asistencia_codigo } })
+  } catch (err) {
+    // Que el ERP no responda no es un error de H360: se dice qué pasó.
+    console.warn('[exequias] formatoR13:', err.message)
+    res.status(502).json({ mensaje: `No se pudo consultar el ERP: ${err.message}` })
+  }
+}
 
 // GET /exequias/pendientes — asistencias vivas que todavía no tienen exequia.
 // Una cancelada no cuenta: el caso vuelve a quedar sin programar.
@@ -502,7 +542,7 @@ async function programacionPublica(req, res, next) {
 }
 
 module.exports = {
-  listar, pendientes, obtener, crear, actualizar, eliminar,
+  listar, pendientes, obtener, crear, actualizar, eliminar, formatoR13,
   confirmar, asignarVehiculo, marcarRealizada, cancelar,
   programacionPublica,
 }

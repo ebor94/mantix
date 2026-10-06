@@ -205,6 +205,21 @@
       ]
     },
     {
+      "clave": "accion.exequias.formato_r13",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo"
+      ]
+    },
+    {
       "clave": "accion.exequias.marcar_realizada",
       "modulo": "exequias",
       "roles": [
