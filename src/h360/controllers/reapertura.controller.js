@@ -5,6 +5,7 @@
  */
 const db = require('../config/db')
 const { rolDelConductor } = require('./asistencias.controller')
+const { notificarAsignacion } = require('../services/asignacionExterna.service')
 const gchat = require('../services/googleChat.service')
 
 const ETAPAS_VALIDAS = ['F01','F02','F03','F04','F05','F06','F07']
@@ -186,6 +187,10 @@ async function actualizarF01(req, res, next) {
         return res.status(403).json({ mensaje: 'Token de reapertura inválido o expirado.' })
     }
 
+    // Cómo estaba antes: hace falta para saber qué cambió de verdad.
+    const [[previa]] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
+    if (!previa) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
     const updates = {}
     for (const k of CAMPOS_F01) if (cambios[k] !== undefined) updates[k] = cambios[k]
     // Mismo criterio que al crear: el nombre del ser querido va en mayúsculas.
@@ -208,9 +213,7 @@ async function actualizarF01(req, res, next) {
     // La ciudad solo tiene sentido si va a otra ciudad; y si va, hace falta.
     // Puede venir en este guardado o estar ya registrada.
     if (updates.traslado_otra_ciudad === 1) {
-      const [[actual]] = await db.query(
-        'SELECT ciudad_destino FROM asistencias WHERE id = ?', [id])
-      const ciudad = String(updates.ciudad_destino ?? actual?.ciudad_destino ?? '').trim()
+      const ciudad = String(updates.ciudad_destino ?? previa.ciudad_destino ?? '').trim()
       if (!ciudad)
         return res.status(400).json({
           mensaje: 'Indica la ciudad de destino del traslado.',
@@ -233,7 +236,23 @@ async function actualizarF01(req, res, next) {
 
     await db.query('UPDATE asistencias SET ? WHERE id = ?', [updates, id])
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
-    res.json({ ok: true, asistencia: rows[0] })
+    const ahora = rows[0]
+
+    // Cambiar de conductor es asignar el caso a otra persona: le llega el
+    // aviso y su orden de servicio, igual que al crear o al despachar.
+    const cambioConductor = !!ahora.conductor_id && ahora.conductor_id !== previa.conductor_id
+    const notificacion = cambioConductor
+      ? await notificarAsignacion(id, ahora.conductor_id)
+      : null
+
+    // El mismo externo con otro tipo de traslado ya recibió una orden con la
+    // tarifa anterior. No se reenvía sola: un segundo correo igual, sin decir
+    // que corrige al primero, confunde más de lo que ayuda.
+    const ordenDesactualizada = !cambioConductor &&
+      ahora.conductor_rol === 'asistente' &&
+      ahora.tipo_traslado !== previa.tipo_traslado
+
+    res.json({ ok: true, asistencia: ahora, notificacion, orden_desactualizada: ordenDesactualizada })
   } catch (err) { next(err) }
 }
 
