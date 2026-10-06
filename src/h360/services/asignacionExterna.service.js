@@ -82,8 +82,8 @@ async function avisarPorWhatsApp(a, conductor) {
     'Responde este mensaje con un OK',
   ].filter(Boolean).join(' · ')
 
-  await sendTextoSimple(conductor.telefono, texto)
-  return { ok: true, texto, telefono: conductor.telefono }
+  const envio = await sendTextoSimple(conductor.telefono, texto)
+  return { ok: true, telefono: conductor.telefono, texto, provider: envio?.data ?? envio }
 }
 
 /**
@@ -133,6 +133,24 @@ async function enviarOrdenServicio(a, conductor) {
  * Punto de entrada: se llama cuando una asistencia queda asignada a alguien.
  * Si no es externo no hace nada, para no avisar al personal propio por esta vía.
  */
+/**
+ * Deja constancia del intento en la propia asistencia. Sin esto no había forma
+ * de responder "¿le llegó el aviso?" semanas después: el envío se hacía y no
+ * quedaba rastro en ningún lado.
+ */
+async function registrarIntento(asistenciaId, resultado) {
+  try {
+    await db.query(
+      `UPDATE asistencias
+          SET aviso_externo_at = NOW(), aviso_externo_telefono = ?, aviso_externo_resultado = ?
+        WHERE id = ?`,
+      [resultado.whatsapp?.telefono || null, JSON.stringify(resultado), asistenciaId]
+    )
+  } catch (err) {
+    console.warn('[asignacionExterna] registrarIntento:', err.message)
+  }
+}
+
 async function notificarAsignacion(asistenciaId, conductorId) {
   const resultado = { whatsapp: null, correo: null }
   try {
@@ -150,6 +168,7 @@ async function notificarAsignacion(asistenciaId, conductorId) {
       .catch(e => ({ ok: false, motivo: e.message }))
     resultado.correo = await enviarOrdenServicio(a, conductor)
       .catch(e => ({ ok: false, motivo: e.message }))
+    await registrarIntento(asistenciaId, resultado)
   } catch (err) {
     console.warn('[asignacionExterna] notificarAsignacion:', err.message)
     resultado.motivo = err.message
