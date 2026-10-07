@@ -264,6 +264,9 @@ async function eliminar(req, res, next) {
 }
 
 // POST /exequias/:id/confirmar
+// En pantalla este paso se llama "coordinar": saca la exequia de Coordinación
+// de exequias y la deja esperando vehículo. En el código y en la API sigue
+// siendo confirmar, que es como nació.
 async function confirmar(req, res, next) {
   try {
     const { id } = req.params
@@ -272,7 +275,7 @@ async function confirmar(req, res, next) {
     const [rows] = await db.query('SELECT estado FROM exequias WHERE id = ?', [id])
     if (!rows.length) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
     if (rows[0].estado !== 'PENDIENTE_CONFIRMAR')
-      return res.status(409).json({ mensaje: `Solo se confirman exequias en estado PENDIENTE_CONFIRMAR (actual: ${rows[0].estado})` })
+      return res.status(409).json({ mensaje: `Solo se coordinan exequias que estén en Coordinación de exequias (esta está en ${rows[0].estado})` })
 
     await db.query(
       `UPDATE exequias
@@ -280,17 +283,17 @@ async function confirmar(req, res, next) {
        WHERE id=?`,
       [usuario, nota || null, id]
     )
-    await insertarHistorial(id, 'PENDIENTE_CONFIRMAR', 'PENDIENTE_VEHICULO', usuario, nota || 'Confirmada')
+    await insertarHistorial(id, 'PENDIENTE_CONFIRMAR', 'PENDIENTE_VEHICULO', usuario, nota || 'Coordinada')
     const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
 
     const ex = nueva[0]
     gchat.enviarOperaciones([
-      `✅ *${ex.tipo === 'CEREMONIA' ? 'Ceremonia' : 'Exequia'} confirmada* — ${ex.asistencia_codigo}`,
+      `✅ *${ex.tipo === 'CEREMONIA' ? 'Ceremonia' : 'Exequia'} coordinada* — ${ex.asistencia_codigo}`,
       `Ser querido: ${ex.ser_querido || 's/n'}`,
       `📅 ${fechaHoraLarga(ex.fecha, ex.hora)}${ex.hora ? '' : '  🕐 hora por definir'}`,
       `📍 ${[ex.lugar, ex.barrio, ex.parroquia].filter(Boolean).join(', ')}`,
       ex.direccion ? `Dirección: ${ex.direccion}` : null,
-      `Confirmó: ${usuario}`,
+      `Coordinó: ${usuario}`,
       nota ? `Nota: ${nota}` : null,
       '',
       '_Pendiente asignar vehículo y conductor._',

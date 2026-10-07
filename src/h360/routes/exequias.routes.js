@@ -32,7 +32,7 @@ router.get('/:id/pago/foto',             requireRol(...ROLES_SEGUIMIENTO, 'trami
 router.post('/:id/pago/confirmar',       requireRol(...ROLES_PAGO),          seg.confirmarPago)
 router.delete('/:id/pago',               requireRol('coordinador', 'admin'), seg.anularPago)
 router.post('/',                      requireRol('asesor', 'coordinador', 'admin'),               ctrl.crear)
-// Recepción confirma, y al confirmar suele tener que completar lo que faltaba
+// Recepción coordina, y al coordinar suele tener que completar lo que faltaba
 // —la hora, sobre todo, que es obligatoria para asignar vehículo—.
 router.patch('/:id',                  requireRol('asesor', 'recepcion', 'coordinador', 'admin'),  ctrl.actualizar)
 router.post('/:id/confirmar',         requireRol('recepcion', 'asesor', 'admin'),                 ctrl.confirmar)
