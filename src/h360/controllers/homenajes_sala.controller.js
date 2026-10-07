@@ -22,6 +22,9 @@ function estaFirmado(dataJson) {
   return !!(d && typeof d.firma_familiar === 'string' && d.firma_familiar.trim().length > 20)
 }
 
+// Las novedades con el ser querido son iguales aquí y en residencia.
+const novedadesSvc = require('../services/novedades.service')
+
 async function insertarAuditoria(homenaje_sala_id, seccion, accion, snapshot, motivo, req, visita_id = null) {
   const { usuario, nombre } = req.user || {}
   await db.query(
@@ -133,6 +136,8 @@ async function obtener(req, res, next) {
       [homenaje.asistencia_id]
     )
     homenaje.novenario_registrado = novenario
+
+    homenaje.novedades = await novedadesSvc.listarDe('SALA', id)
 
     res.json(homenaje)
   } catch (err) { next(err) }
@@ -422,13 +427,38 @@ async function actualizarVisita(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// POST /api/h360/homenajes-sala/:id/novedades
+// Se registra y se asigna a un asistente_tanatologo. La resolución —actividad
+// y firmas— la hace el asistente vía /novedades-externas, igual que en
+// residencia: es el mismo trabajo, solo cambia dónde está el ser querido.
+async function agregarNovedad(req, res, next) {
+  try {
+    const novedad = await novedadesSvc.agregar('SALA', req.params.id, req.body, req.user.usuario)
+    res.status(201).json(novedad)
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ mensaje: err.message })
+    next(err)
+  }
+}
+
+// PATCH /api/h360/homenajes-sala/:id/novedades/:novedadId
+async function actualizarNovedad(req, res, next) {
+  try {
+    const r = await novedadesSvc.actualizar('SALA', req.params.id, req.params.novedadId, req.body, req.user)
+    res.json({ ok: true, ...r })
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ mensaje: err.message })
+    next(err)
+  }
+}
+
 // GET /api/h360/homenajes-sala/:id/auditoria
 async function obtenerAuditoria(req, res, next) {
   try {
     const { id } = req.params
     const [rows] = await db.query(
       `SELECT id, seccion, accion, snapshot_anterior, motivo, usuario_id, nombre_usuario,
-              visita_id, created_at
+              visita_id, novedad_id, created_at
        FROM homenaje_sala_auditoria
        WHERE homenaje_sala_id = ?
        ORDER BY created_at DESC`,
@@ -438,4 +468,5 @@ async function obtenerAuditoria(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listar, obtener, crear, guardarIngreso, guardarSalida, agregarVisita, listarVisitas, actualizarVisita, obtenerAuditoria }
+module.exports = { listar, obtener, crear, guardarIngreso, guardarSalida, agregarVisita,
+                   listarVisitas, actualizarVisita, agregarNovedad, actualizarNovedad, obtenerAuditoria }

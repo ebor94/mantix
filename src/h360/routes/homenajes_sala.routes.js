@@ -14,4 +14,9 @@ router.patch('/:id/salida',                requireRol('asesor', 'supervisora', '
 router.post('/:id/visitas',                requireRol('asesor', 'supervisora', 'admin'),                ctrl.agregarVisita)
 router.patch('/:id/visitas/:visitaId',     requireRol('asesor', 'supervisora', 'admin'),                ctrl.actualizarVisita)
 
+// Novedades con el ser querido. Mismos roles que escriben el resto del
+// homenaje, más coordinador, que es quien las registra en residencia.
+router.post('/:id/novedades',              requireRol('asesor', 'supervisora', 'coordinador', 'admin'), ctrl.agregarNovedad)
+router.patch('/:id/novedades/:novedadId',  requireRol('asesor', 'supervisora', 'coordinador', 'admin'), ctrl.actualizarNovedad)
+
 module.exports = router

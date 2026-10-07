@@ -10,6 +10,8 @@
 const db = require('../config/db')
 const { sendOTP } = require('../../services/whatsappService')
 const { avanzarPorEvento } = require('./asistencias.controller')
+// Las novedades son iguales en residencia y en sala de velación: viven en el servicio.
+const novedadesSvc = require('../services/novedades.service')
 
 // TTL del token en minutos
 const TOKEN_TTL_MIN = 10
@@ -22,12 +24,6 @@ function parseJson(v) {
   if (!v) return null
   if (typeof v === 'string') { try { return JSON.parse(v) } catch { return null } }
   return v
-}
-
-function novedadFirmada(row) {
-  const fc = row?.firma_cliente
-  const fa = row?.firma_asistente
-  return !!((fc && String(fc).length > 20) || (fa && String(fa).length > 20))
 }
 
 async function insertarAuditoria(homenaje_residencia_id, seccion, accion, snapshot, motivo, req, novedad_id = null) {
@@ -87,10 +83,7 @@ async function obtener(req, res, next) {
     )
     if (!rows.length) return res.status(404).json({ mensaje: 'Homenaje en residencia no encontrado' })
 
-    const [novedades] = await db.query(
-      'SELECT * FROM homenaje_residencia_novedades WHERE homenaje_residencia_id = ? ORDER BY fecha_reporte DESC, hora_reporte DESC',
-      [id]
-    )
+    const novedades = await novedadesSvc.listarDe('RESIDENCIA', id)
     // Tokens de las 3 secciones (sin exponer el código, solo estado y metadatos)
     const [tokens] = await db.query(
       `SELECT id, seccion, telefono, estado, verificado_at, expira_at, omitido_motivo,
@@ -456,67 +449,28 @@ async function guardarEquipoVelacion(req, res, next) {
 }
 
 // POST /api/h360/homenajes-residencia/:id/novedades
-// Supervisora registra la novedad y la asigna a un asistente_tanatologo.
-// La resolución (actividad + firmas) la hace el asistente vía /novedades-externas.
+// Se registra y se asigna a un asistente_tanatologo. La resolución —actividad
+// y firmas— la hace el asistente vía /novedades-externas.
 async function agregarNovedad(req, res, next) {
   try {
-    const { id } = req.params
-    const { usuario } = req.user
-    const { fecha_reporte, hora_reporte, descripcion_novedad, asignado_a, asignado_a_nombre } = req.body
-    if (!fecha_reporte) return res.status(400).json({ mensaje: 'fecha_reporte requerido' })
-    if (!descripcion_novedad?.trim()) return res.status(400).json({ mensaje: 'descripcion_novedad requerida' })
-    if (!asignado_a?.trim()) return res.status(400).json({ mensaje: 'Debes asignar la novedad a un asistente.' })
-
-    const [ok] = await db.query('SELECT id FROM homenajes_residencia WHERE id = ?', [id])
-    if (!ok.length) return res.status(404).json({ mensaje: 'Homenaje no encontrado' })
-
-    const [r] = await db.query(
-      `INSERT INTO homenaje_residencia_novedades
-       (homenaje_residencia_id, fecha_reporte, hora_reporte,
-        descripcion_novedad, asignado_a, asignado_a_nombre, estado, created_by)
-       VALUES (?,?,?,?,?,?, 'PENDIENTE', ?)`,
-      [id, fecha_reporte, hora_reporte || null,
-       descripcion_novedad.trim(), asignado_a.trim(), asignado_a_nombre || null, usuario]
-    )
-    const [rows] = await db.query('SELECT * FROM homenaje_residencia_novedades WHERE id = ?', [r.insertId])
-    res.status(201).json(rows[0])
-  } catch (err) { next(err) }
+    const novedad = await novedadesSvc.agregar('RESIDENCIA', req.params.id, req.body, req.user.usuario)
+    res.status(201).json(novedad)
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ mensaje: err.message })
+    next(err)
+  }
 }
 
 // PATCH /api/h360/homenajes-residencia/:id/novedades/:novedadId
 async function actualizarNovedad(req, res, next) {
   try {
-    const { id, novedadId } = req.params
-    const { rol } = req.user
-    const { motivo, ...cambios } = req.body
-
-    const [prev] = await db.query(
-      'SELECT * FROM homenaje_residencia_novedades WHERE id = ? AND homenaje_residencia_id = ?',
-      [novedadId, id]
-    )
-    if (!prev.length) return res.status(404).json({ mensaje: 'Novedad no encontrada' })
-
-    const yaFirmada = novedadFirmada(prev[0])
-    if (yaFirmada) {
-      if (rol !== 'admin') {
-        return res.status(423).json({ mensaje: 'La novedad está firmada y bloqueada. Solo admin puede modificarla.' })
-      }
-      if (!motivo?.trim()) {
-        return res.status(400).json({ mensaje: 'Debes indicar el motivo para modificar una novedad firmada.' })
-      }
-      await insertarAuditoria(id, 'NOVEDAD', 'UPDATE', prev[0], motivo.trim(), req, novedadId)
-    }
-
-    const campos = {}
-    for (const k of ['fecha_reporte','hora_reporte','asistente_homenajes','hora_llegada','hora_retiro',
-                     'actividad_realizada','firma_cliente','firma_asistente']) {
-      if (cambios[k] !== undefined) campos[k] = cambios[k]
-    }
-    if (!Object.keys(campos).length) return res.status(400).json({ mensaje: 'Nada que actualizar' })
-    await db.query('UPDATE homenaje_residencia_novedades SET ? WHERE id = ?', [campos, novedadId])
-    const [rows] = await db.query('SELECT * FROM homenaje_residencia_novedades WHERE id = ?', [novedadId])
-    res.json({ ok: true, novedad: rows[0], desbloqueado: yaFirmada })
-  } catch (err) { next(err) }
+    const r = await novedadesSvc.actualizar(
+      'RESIDENCIA', req.params.id, req.params.novedadId, req.body, req.user)
+    res.json({ ok: true, ...r })
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ mensaje: err.message })
+    next(err)
+  }
 }
 
 // GET /api/h360/homenajes-residencia/:id/auditoria
