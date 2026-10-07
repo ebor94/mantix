@@ -216,6 +216,9 @@ const createAfiliadoSchema = Joi.object({
   cedulaFrontal:       Joi.string().max(500).allow('', null).optional(),
   cedulaReverso:       Joi.string().max(500).allow('', null).optional(),
   contratoCompetencia: Joi.string().max(500).allow('', null).optional(),
+  // Contratos de la competencia conservados (ya subidos). Los archivos nuevos
+  // llegan por multipart y el controller los fusiona en este array.
+  contratosCompetencia: Joi.array().items(Joi.string().max(500)).allow(null).optional(),
 
   // ── Afiliado diferente al contratante ───────────────────────
   diferenteAlContratante: Joi.number().integer().valid(0, 1).allow(null).default(0),

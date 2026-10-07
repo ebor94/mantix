@@ -172,7 +172,16 @@ function extractFiles(req, body) {
   if (req.files?.soporte?.[0])             body.soportePago          = req.files.soporte[0].filename;
   if (req.files?.cedulaFrontal?.[0])       body.cedulaFrontal        = req.files.cedulaFrontal[0].filename;
   if (req.files?.cedulaReverso?.[0])       body.cedulaReverso        = req.files.cedulaReverso[0].filename;
-  if (req.files?.contratoCompetencia?.[0]) body.contratoCompetencia  = req.files.contratoCompetencia[0].filename;
+
+  // Contratos de la competencia: varios archivos. El body puede traer los ya
+  // guardados que el usuario conservó (contratosCompetencia = [url, ...]); se
+  // fusionan con los archivos nuevos subidos en esta petición (máx 10).
+  const contratosExistentes = Array.isArray(body.contratosCompetencia)
+    ? body.contratosCompetencia.filter(Boolean)
+    : (body.contratosCompetencia ? [body.contratosCompetencia] : []);
+  const contratosNuevos = (req.files?.contratoCompetencia || []).map(f => f.filename);
+  const contratosCompetencia = [...contratosExistentes, ...contratosNuevos].slice(0, 10);
+  body.contratosCompetencia = contratosCompetencia.length ? contratosCompetencia : null;
 
   if (Array.isArray(body.beneficiarios)) {
     body.beneficiarios = body.beneficiarios.map((b, i) => {

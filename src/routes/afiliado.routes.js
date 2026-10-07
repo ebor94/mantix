@@ -46,7 +46,7 @@ const uploadFields = upload.fields([
   { name: 'soporte',              maxCount: 1 },
   { name: 'cedulaFrontal',        maxCount: 1 },
   { name: 'cedulaReverso',        maxCount: 1 },
-  { name: 'contratoCompetencia',  maxCount: 1 },
+  { name: 'contratoCompetencia',  maxCount: 10 },
   ...beneficiariosDocFields,
   ...beneficiariosDocReversoFields
 ]);

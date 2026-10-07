@@ -267,7 +267,13 @@ module.exports = (sequelize, DataTypes) => {
     contratoCompetencia: {
       type: DataTypes.STRING(500),
       allowNull: true,
-      comment: 'Archivo contrato de la competencia (novedad TRASLADO_COMPETENCIA)'
+      comment: 'Archivo contrato de la competencia (legacy, 1 solo archivo)'
+    },
+    contratosCompetencia: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      field: 'contratos_competencia',
+      comment: 'Lista de archivos del contrato de la competencia (TRASLADO_COMPETENCIA, hasta 10)'
     },
 
     // ── Afiliado diferente al contratante + cédula ─────────────
