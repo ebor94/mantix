@@ -21,6 +21,9 @@ const ROLES_POR_GRUPO = [
   ['LDAP_GROUP_COORDINADOR',      'coordinador'],
   ['LDAP_GROUP_CONTABILIDAD',     'contabilidad'],
   ['LDAP_GROUP_RECEPCION',        'recepcion'],             // atiende exequias/ceremonias
+  // Último a propósito: el tramitador solo paga exequias, así que si alguien
+  // está además en otro grupo debe entrar con el rol de más alcance.
+  ['LDAP_GROUP_TRAMITADOR',       'tramitador'],
 ]
 
 /** Pares [nombreDeGrupo, rol] de las variables que sí están definidas. */

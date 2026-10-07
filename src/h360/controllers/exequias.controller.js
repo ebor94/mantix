@@ -22,12 +22,20 @@ const SELECT_FULL = `
   SELECT e.*,
          a.codigo             AS asistencia_codigo,
          a.nombre_ser_querido AS ser_querido,
+         a.contrato           AS contrato,
          v.placa              AS vehiculo_placa,
          v.marca              AS vehiculo_marca,
-         v.modelo             AS vehiculo_modelo
+         v.modelo             AS vehiculo_modelo,
+         sg.estado            AS seguimiento_estado,
+         sg.fecha             AS seguimiento_fecha,
+         pg.confirmado_at     AS pago_confirmado_at,
+         pg.confirmado_por    AS pago_confirmado_por,
+         pg.confirmado_nombre AS pago_confirmado_nombre
     FROM exequias e
     JOIN asistencias a ON a.id = e.asistencia_id
     LEFT JOIN vehiculos v ON v.id = e.vehiculo_id
+    LEFT JOIN h360_exequia_seguimiento sg ON sg.exequia_id = e.id
+    LEFT JOIN h360_exequia_pago        pg ON pg.exequia_id = e.id
 `
 
 // Estados en que una asistencia ya debería tener exequia programada. NUEVO
@@ -136,7 +144,7 @@ async function crear(req, res, next) {
     const {
       asistencia_id, tipo, fecha, hora,
       lugar, barrio, parroquia, direccion, observaciones,
-      destino_final, lugar_destino_final,
+      destino_final, lugar_destino_final, requiere_confirmacion_pago,
     } = req.body
 
     // La hora es opcional: al abrir el servicio la familia suele tener el día
@@ -153,14 +161,16 @@ async function crear(req, res, next) {
     const [r] = await db.query(
       `INSERT INTO exequias
        (asistencia_id, tipo, fecha, hora, lugar, barrio, parroquia, direccion, observaciones,
-        destino_final, lugar_destino_final, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        destino_final, lugar_destino_final, requiere_confirmacion_pago, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [asistencia_id, tipo, fecha, hora || null, lugar,
        barrio || null, parroquia || null, direccion || null,
        observaciones || null,
        // El tipo se propone desde el encofrado; ambos son opcionales.
        ['INHUMACION', 'CREMACION'].includes(destino_final) ? destino_final : null,
        String(lugar_destino_final ?? '').trim() || null,
+       // Lo marca quien registra la exequia; recepción lo corrige al confirmar.
+       requiere_confirmacion_pago ? 1 : 0,
        usuario]
     )
     await insertarHistorial(r.insertId, null, 'PENDIENTE_CONFIRMAR', usuario, 'Exequia creada')
@@ -172,7 +182,7 @@ async function crear(req, res, next) {
 
 // PATCH /exequias/:id — editable mientras no esté en un estado terminal
 const CAMPOS_EDITABLES = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones',
-                          'destino_final','lugar_destino_final']
+                          'destino_final','lugar_destino_final','requiere_confirmacion_pago']
 
 async function actualizar(req, res, next) {
   try {
@@ -196,6 +206,9 @@ async function actualizar(req, res, next) {
     if (updates.hora === '') updates.hora = null
     // Lo mismo con el destino: '' no es un valor del ENUM.
     if (updates.destino_final === '') updates.destino_final = null
+    // El check llega como booleano desde la pantalla; la columna es TINYINT.
+    if (updates.requiere_confirmacion_pago !== undefined)
+      updates.requiere_confirmacion_pago = updates.requiere_confirmacion_pago ? 1 : 0
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
 
@@ -543,6 +556,9 @@ async function programacionPublica(req, res, next) {
 
 module.exports = {
   listar, pendientes, obtener, crear, actualizar, eliminar, formatoR13,
+  // Lo usa exequias_seguimiento.controller: el seguimiento y el pago quedan en
+  // el mismo historial que el resto de la vida de la exequia.
+  insertarHistorial,
   confirmar, asignarVehiculo, marcarRealizada, cancelar,
   programacionPublica,
 }

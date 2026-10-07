@@ -27,7 +27,8 @@ const MODULO = {
 }
 
 const ROLES = ['asesor', 'asistente', 'tanatologo', 'asistente_tanatologo',
-               'supervisora', 'coordinador', 'contabilidad', 'recepcion', 'admin']
+               'supervisora', 'coordinador', 'contabilidad', 'recepcion',
+               'tramitador', 'admin']
 
 function derivarAccion(metodo, ruta) {
   const segs = ruta.replace(/:\w+/g, '').split('/').filter(Boolean)

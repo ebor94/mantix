@@ -61,7 +61,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -89,7 +90,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -140,7 +142,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -216,7 +219,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -225,6 +229,55 @@
       "roles": [
         "admin",
         "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.pago",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.pago_confirmar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador",
+        "recepcion",
+        "tramitador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.pago_foto",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "recepcion",
+        "tramitador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.pagos",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador",
+        "recepcion",
+        "tramitador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.pagos_pendientes",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador",
+        "recepcion",
+        "tramitador"
       ]
     },
     {
@@ -239,7 +292,47 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.seguimiento",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "recepcion",
+        "tramitador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.seguimiento_cerrar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "recepcion"
+      ]
+    },
+    {
+      "clave": "accion.exequias.seguimiento_guardar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
+        "recepcion"
+      ]
+    },
+    {
+      "clave": "accion.exequias.seguimiento_reabrir",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
       ]
     },
     {
@@ -619,7 +712,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -642,7 +736,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -687,7 +782,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -712,7 +808,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     },
     {
@@ -727,7 +824,8 @@
         "coordinador",
         "recepcion",
         "supervisora",
-        "tanatologo"
+        "tanatologo",
+        "tramitador"
       ]
     }
   ],

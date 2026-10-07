@@ -22,6 +22,7 @@ const ROLES = [
   { codigo: 'coordinador',          nombre: 'Coordinador Operativo', ldap_group: 'Coordinacion_Operativa' },
   { codigo: 'contabilidad',         nombre: 'Contabilidad',          ldap_group: 'Contabilidad_Homenajes' },
   { codigo: 'recepcion',            nombre: 'Recepción',             ldap_group: 'Recepcion_360' },
+  { codigo: 'tramitador',           nombre: 'Tramitador',            ldap_group: 'H360_Tramitadores' },
   { codigo: 'admin',                nombre: 'Administrador',         ldap_group: null },
 ]
 
