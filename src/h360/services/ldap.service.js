@@ -251,11 +251,11 @@ async function autenticarLDAP(usuarioRaw, password) {
     userClient.destroy()
   }
 
-  // --- Paso 4: determinar rol por membresía de grupos ---
-  const rol = detectarRol(memberOf)
-  console.log(`[LDAP] Paso 4 — rol: ${rol}, grupos: ${memberOf.length}`)
+  // --- Paso 4: determinar roles por membresía de grupos ---
+  const roles = detectarRoles(memberOf)
+  console.log(`[LDAP] Paso 4 — roles: ${roles.join(', ') || 'ninguno'}, grupos: ${memberOf.length}`)
 
-  if (!rol) {
+  if (!roles.length) {
     throw new Error('Tu usuario no tiene rol asignado en Homenajes360. Contacta a TI.')
   }
 
@@ -263,30 +263,42 @@ async function autenticarLDAP(usuarioRaw, password) {
     usuario: sam         || usuario,
     nombre:  displayName || usuario,
     email:   mail        || '',
-    rol,
+    // `rol` es el activo; `roles` son todos los que puede usar. Si hay más de
+    // uno, la pantalla de ingreso le pregunta con cuál entra.
+    rol:   roles[0],
+    roles,
   }
 }
 
 /**
- * Rol de un usuario a partir de sus grupos.
+ * Todos los roles que le dan sus grupos, en orden de prioridad.
  *
- * Quien está en varios grupos se queda con el de más alcance: el recorrido va
- * por ROLE_MAP, que está en orden de prioridad, y no por los grupos que
- * devuelve el directorio. Antes era al revés, así que el rol dependía del
- * orden en que el AD listara la membresía —arbitrario— y alguien que condujera
- * además de administrar podía entrar con el rol equivocado.
+ * El recorrido va por ROLE_MAP, que está ordenado, y no por los grupos que
+ * devuelve el directorio: ese orden es arbitrario y hacía que el rol de alguien
+ * dependiera de cómo el AD listara su membresía.
+ *
+ * Hay gente que hace dos oficios —un asistente de tanatólogo que además
+ * tramita los pagos de las exequias—, y por eso se devuelven todos: al iniciar
+ * sesión se le pregunta con cuál entra. El primero es el de más alcance y es el
+ * que se propone por defecto.
  */
-function detectarRol(memberOf) {
+function detectarRoles(memberOf) {
+  const roles = []
   for (const [groupName, rol] of ROLE_MAP()) {
-    if (memberOf.some(dn => dn.includes(groupName))) return rol
+    if (memberOf.some(dn => dn.includes(groupName))) roles.push(rol)
   }
+  if (roles.length) return roles
+
   // Fallback temporal: admins de dominio → rol admin en H360
   const esAdminDominio = memberOf.some(dn =>
     dn.includes('Admins. del dominio') || dn.includes('Domain Admins')
   )
-  if (esAdminDominio) return 'admin'
+  return esAdminDominio ? ['admin'] : []
+}
 
-  return null
+/** El de más alcance, para cuando solo hace falta uno. */
+function detectarRol(memberOf) {
+  return detectarRoles(memberOf)[0] || null
 }
 
 /**
@@ -330,4 +342,4 @@ async function buscarUsuarioPorSam(sam) {
   }
 }
 
-module.exports = { autenticarLDAP, listarMiembrosGrupo, buscarUsuarioPorSam }
+module.exports = { autenticarLDAP, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles }
