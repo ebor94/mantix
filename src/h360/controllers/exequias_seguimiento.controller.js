@@ -3,9 +3,12 @@
  *
  * Dos oficios sobre la misma exequia:
  *
- *   · Recepción hace el SEGUIMIENTO antes de que el homenaje salga hacia las
- *     exequias: con quién habló, qué gestionó, si quedó la cita y el obituario.
- *     No puede cerrarlo mientras el pago no esté confirmado.
+ *   · Recepción hace la CONFIRMACIÓN DE EXEQUIA antes de que el homenaje
+ *     salga: con quién habló, qué gestionó, si quedó la cita y el obituario.
+ *     No puede cerrarla mientras el pago no esté confirmado.
+ *
+ *     En el código se sigue llamando "seguimiento" —la tabla, el estado, las
+ *     rutas— porque así nació; de cara al usuario es "confirmación de exequia".
  *
  *   · El TRAMITADOR va a pagar la exequia y confirma el pago con la foto del
  *     comprobante. Ese es su único trabajo en el sistema.
@@ -115,16 +118,16 @@ async function guardar(req, res, next) {
     const [[ex]] = await db.query(SELECT_EXEQUIA, [id])
     if (!ex) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
     if (ex.estado === 'CANCELADA')
-      return res.status(409).json({ mensaje: 'La exequia está cancelada: no se le hace seguimiento.' })
+      return res.status(409).json({ mensaje: 'La exequia está cancelada: no se le hace confirmación.' })
     if (!ESTADOS_CON_SEGUIMIENTO.includes(ex.estado))
       return res.status(409).json({
-        mensaje: 'El seguimiento se hace sobre exequias ya confirmadas. Confirma la exequia primero.',
+        mensaje: 'La confirmación se hace sobre exequias que ya pasaron por coordinación.',
       })
 
     const previo = await traerSeguimiento(id)
     if (previo && previo.estado === 'CERRADO')
       return res.status(409).json({
-        mensaje: 'El seguimiento ya está cerrado. Pide reabrirlo para corregirlo.',
+        mensaje: 'La confirmación ya está cerrada. Pide reabrirla para corregirla.',
       })
 
     const fecha = texto(req.body.fecha, 10)
@@ -151,7 +154,7 @@ async function guardar(req, res, next) {
     }
 
     await insertarHistorial(id, ex.estado, ex.estado, usuario,
-      `Seguimiento ${previo ? 'actualizado' : 'registrado'} — con ${datos.con_quien}` +
+      `Confirmación ${previo ? 'actualizada' : 'registrada'} — con ${datos.con_quien}` +
       ` · cita: ${datos.gestiono_cita ? 'sí' : 'no'}` +
       ` · obituario: ${datos.gestiono_obituario ? 'sí' : 'no'}`)
 
@@ -176,9 +179,9 @@ async function cerrar(req, res, next) {
 
     const seguimiento = await traerSeguimiento(id)
     if (!seguimiento)
-      return res.status(409).json({ mensaje: 'Primero registra el seguimiento.' })
+      return res.status(409).json({ mensaje: 'Primero registra la confirmación de la exequia.' })
     if (seguimiento.estado === 'CERRADO')
-      return res.status(409).json({ mensaje: 'El seguimiento ya está cerrado.' })
+      return res.status(409).json({ mensaje: 'La confirmación ya está cerrada.' })
 
     // El candado del requerimiento: sin pago confirmado no se cierra. Aplica
     // siempre, incluso si la exequia no venía marcada como "requiere pago";
@@ -186,7 +189,7 @@ async function cerrar(req, res, next) {
     const pago = await traerPago(id)
     if (!pago)
       return res.status(409).json({
-        mensaje: 'No se puede cerrar el seguimiento sin el pago confirmado.',
+        mensaje: 'No se puede cerrar la confirmación sin el pago confirmado.',
         falta_pago: true,
       })
 
@@ -197,7 +200,7 @@ async function cerrar(req, res, next) {
       [usuario, texto(nombre, 150) || null, seguimiento.id])
 
     await insertarHistorial(id, ex.estado, ex.estado, usuario,
-      'Seguimiento cerrado — pago confirmado por ' + (pago.confirmado_nombre || pago.confirmado_por))
+      'Confirmación de exequia cerrada — pago confirmado por ' + (pago.confirmado_nombre || pago.confirmado_por))
 
     res.json({ seguimiento: await traerSeguimiento(id), pago })
   } catch (err) { next(err) }
@@ -214,9 +217,9 @@ async function reabrir(req, res, next) {
     if (!motivo) return res.status(400).json({ mensaje: 'El motivo de la reapertura es obligatorio' })
 
     const seguimiento = await traerSeguimiento(id)
-    if (!seguimiento) return res.status(404).json({ mensaje: 'Esta exequia no tiene seguimiento' })
+    if (!seguimiento) return res.status(404).json({ mensaje: 'Esta exequia no tiene confirmación registrada' })
     if (seguimiento.estado !== 'CERRADO')
-      return res.status(409).json({ mensaje: 'El seguimiento ya está abierto.' })
+      return res.status(409).json({ mensaje: 'La confirmación ya está abierta.' })
 
     await db.query(
       `UPDATE h360_exequia_seguimiento
@@ -224,7 +227,7 @@ async function reabrir(req, res, next) {
         WHERE id=?`, [seguimiento.id])
 
     const [[ex]] = await db.query('SELECT estado FROM exequias WHERE id = ?', [id])
-    await insertarHistorial(id, ex?.estado, ex?.estado, usuario, 'Seguimiento reabierto — ' + motivo)
+    await insertarHistorial(id, ex?.estado, ex?.estado, usuario, 'Confirmación de exequia reabierta — ' + motivo)
 
     res.json({ seguimiento: await traerSeguimiento(id) })
   } catch (err) { next(err) }
@@ -375,7 +378,7 @@ async function anularPago(req, res, next) {
     const seguimiento = await traerSeguimiento(id)
     if (seguimiento?.estado === 'CERRADO')
       return res.status(409).json({
-        mensaje: 'El seguimiento ya se cerró con este pago. Reabre el seguimiento primero.',
+        mensaje: 'La confirmación ya se cerró con este pago. Reábrela primero.',
       })
 
     await db.query('DELETE FROM h360_exequia_pago WHERE exequia_id = ?', [id])

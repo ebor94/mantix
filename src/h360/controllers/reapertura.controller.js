@@ -238,18 +238,21 @@ async function actualizarF01(req, res, next) {
     const [rows] = await db.query('SELECT * FROM asistencias WHERE id = ?', [id])
     const ahora = rows[0]
 
-    // Cambiar de conductor es asignar el caso a otra persona: le llega el
-    // aviso y su orden de servicio, igual que al crear o al despachar.
+    // Cambiar de conductor es asignar el caso a otra persona: le llega su
+    // aviso por WhatsApp, igual que al crear o al despachar.
     const cambioConductor = !!ahora.conductor_id && ahora.conductor_id !== previa.conductor_id
     const notificacion = cambioConductor
       ? await notificarAsignacion(id, ahora.conductor_id)
       : null
 
-    // El mismo externo con otro tipo de traslado ya recibió una orden con la
-    // tarifa anterior. No se reenvía sola: un segundo correo igual, sin decir
-    // que corrige al primero, confunde más de lo que ayuda.
-    const ordenDesactualizada = !cambioConductor &&
-      ahora.conductor_rol === 'asistente' &&
+    // Si la orden ya salió y ahora cambia el tipo de traslado, el proveedor
+    // tiene en el correo una tarifa que ya no es. No se reenvía sola: un
+    // segundo correo igual, sin decir que corrige al primero, confunde más de
+    // lo que ayuda. Se avisa para que le digan del cambio.
+    //
+    // Antes esto se adivinaba del rol del conductor, porque la orden salía al
+    // asignar; ahora hay fecha de envío y se pregunta por ella.
+    const ordenDesactualizada = !!ahora.orden_servicio_at &&
       ahora.tipo_traslado !== previa.tipo_traslado
 
     res.json({ ok: true, asistencia: ahora, notificacion, orden_desactualizada: ordenDesactualizada })

@@ -3,7 +3,7 @@ const glpi  = require('../services/glpi.service')
 const gchat = require('../services/googleChat.service')
 const { PERMISOS_ABIERTOS } = require('../middleware/auth')
 const { buscarUsuarioPorSam } = require('../services/ldap.service')
-const { notificarAsignacion } = require('../services/asignacionExterna.service')
+const { notificarAsignacion, enviarOrdenPorCierreF02 } = require('../services/asignacionExterna.service')
 
 // El certificado de defunción se estaba llenando con "0" o "PTE" mientras no
 // se tenía el número real, y eso lo daba por resuelto. Los reales son
@@ -514,8 +514,9 @@ async function crear(req, res, next) {
       })
       .catch(err => console.warn('[GLPI] crearTicket:', err.message))
 
-    // Si queda a cargo de un asistente externo, se le avisa y sale la orden
-    // de servicio. No bloquea la creación: lo principal ya quedó guardado.
+    // Si queda a cargo de un asistente externo se le avisa por WhatsApp. La
+    // orden de servicio no sale aquí: espera a que él cierre el F-02. No
+    // bloquea la creación: lo principal ya quedó guardado.
     const notificacion = await notificarAsignacion(result.insertId, conductor_id)
 
     const [nueva] = await db.query('SELECT * FROM asistencias WHERE id = ?', [result.insertId])
@@ -562,7 +563,7 @@ async function asignarActores(req, res, next) {
       : `Avanzado a ASISTENCIA por ${nombre || usuario}${conductorNuevo ? ` · Conductor: ${conductorNuevo}` : ''}`
     await insertarHistorial(id, 'NUEVO', 'ASISTENCIA', usuario, nombre, motivo)
 
-    // Igual que al crear: si queda a cargo de un externo, aviso y orden.
+    // Igual que al crear: si queda a cargo de un externo, se le avisa.
     const notificacion = cambioDeConductor
       ? await notificarAsignacion(id, samNuevo)
       : null
@@ -799,6 +800,16 @@ async function guardarEtapa(req, res, next) {
     // Registro de uso de cofre al completar F-06 (fire-and-forget)
     if (etapa === 'F06_ENCOFRADO' && completar) {
       registrarUsoCofre(datos, id, usuario).catch(e => console.warn('[cofres]', e.message))
+    }
+
+    // Orden de servicio: sale cuando el F-02 lo cierra un asistente externo,
+    // que es cuando consta quién hizo el traslado. Va sin esperar respuesta a
+    // propósito: el externo cierra la etapa desde la calle y no debe quedarse
+    // mirando una pantalla porque el webhook del correo tarde. El resultado
+    // queda en orden_servicio_* y se ve en el panel del F-01.
+    if (etapa === 'F02_INVENTARIO_CUERPO' && completar) {
+      enviarOrdenPorCierreF02(id, req.user)
+        .catch(e => console.warn('[orden servicio]', e.message))
     }
 
     // Avance de estado: solo si TODAS las etapas requeridas del estado actual están completas

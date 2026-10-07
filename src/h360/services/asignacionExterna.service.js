@@ -1,16 +1,23 @@
 /**
  * asignacionExterna.service.js
  *
- * Lo que ocurre cuando una asistencia queda a cargo de un asistente externo:
- * se le avisa por WhatsApp y se dispara la orden de servicio por correo.
+ * Lo que ocurre alrededor de un asistente externo, en dos momentos distintos:
+ *
+ *   · Al ASIGNARLE la asistencia se le avisa por WhatsApp. Tiene que saber que
+ *     el caso es suyo, y eso no puede esperar.
+ *
+ *   · Al CERRAR ÉL el F-02 sale la orden de servicio por correo. Antes salía
+ *     también en la asignación, pero el conductor se puede cambiar después a
+ *     uno interno y el proveedor quedaba con una orden de un traslado que no
+ *     hizo. Quien cierra el F-02 es quien recibió el cuerpo: ahí consta.
  *
  * El correo sale por n8n, no por SMTP: el backend arma los datos y allá se
  * monta la plantilla y se envía. Es el camino que ya usan otros módulos y
  * evita que un cambio de plantilla exija un despliegue.
  *
- * Nada de esto lanza: la asignación ya quedó guardada y no debe deshacerse
- * porque falle un aviso. Cada función devuelve { ok, motivo } para que la
- * pantalla pueda informar qué pasó.
+ * Nada de esto lanza: lo que se estaba guardando ya quedó guardado y no debe
+ * deshacerse porque falle un aviso. Cada función devuelve { ok, motivo } para
+ * que la pantalla pueda informar qué pasó.
  */
 const axios = require('axios')
 const db = require('../config/db')
@@ -55,7 +62,8 @@ async function traerAsistencia(asistenciaId) {
   const [[a]] = await db.query(
     `SELECT id, codigo, nombre_ser_querido, identificacion, lugar_asistencia,
             nombre_contacto, telefono_contacto, fecha_contacto, created_at,
-            tipo_traslado, conductor, conductor_id
+            tipo_traslado, conductor, conductor_id,
+            orden_servicio_at, orden_servicio_resultado
        FROM asistencias WHERE id = ?`,
     [asistenciaId]
   )
@@ -93,7 +101,12 @@ async function avisarPorWhatsApp(a, conductor) {
  * proveedor. El intermunicipal no: va al equipo de operaciones para que
  * acuerden el precio y la envíen ellos.
  */
-async function enviarOrdenServicio(a, conductor) {
+/**
+ * `proveedor` es quien hizo el traslado: el usuario que cerró el F-02, no el
+ * conductor que figura en el F-01. Pueden ser distintos, y el que cuenta para
+ * la orden es el que estuvo.
+ */
+async function enviarOrdenServicio(a, proveedor) {
   const url = process.env.N8N_ORDEN_SERVICIO_WEBHOOK_URL
   if (!url) return { ok: false, motivo: 'N8N_ORDEN_SERVICIO_WEBHOOK_URL no está configurada' }
 
@@ -102,11 +115,11 @@ async function enviarOrdenServicio(a, conductor) {
 
   const acuerdaPrecio = a.tipo_traslado === 'INTERMUNICIPAL'
   const operaciones   = CORREOS_OPERACIONES()
-  const destinatarios = acuerdaPrecio ? operaciones : (conductor.mail ? [conductor.mail] : [])
+  const destinatarios = acuerdaPrecio ? operaciones : (proveedor.mail ? [proveedor.mail] : [])
   // En copia solo cuando no son ya los destinatarios.
   const copia = acuerdaPrecio ? [] : operaciones
   if (!destinatarios.length)
-    return { ok: false, motivo: `${conductor.nombre} no tiene correo registrado en el directorio activo` }
+    return { ok: false, motivo: `${proveedor.nombre} no tiene correo registrado en el directorio activo` }
 
   const payload = {
     evento: 'orden_servicio',
@@ -115,7 +128,7 @@ async function enviarOrdenServicio(a, conductor) {
     destinatarios,
     copia,
     traslado: { tipo: a.tipo_traslado, etiqueta: traslado.etiqueta, tarifa: traslado.tarifa },
-    proveedor: { usuario: conductor.usuario, nombre: conductor.nombre, correo: conductor.mail || null },
+    proveedor: { usuario: proveedor.usuario, nombre: proveedor.nombre, correo: proveedor.mail || null },
     asistencia: {
       id: a.id, codigo: a.codigo,
       ser_querido: a.nombre_ser_querido, identificacion: a.identificacion,
@@ -130,8 +143,8 @@ async function enviarOrdenServicio(a, conductor) {
 }
 
 /**
- * Punto de entrada: se llama cuando una asistencia queda asignada a alguien.
- * Si no es externo no hace nada, para no avisar al personal propio por esta vía.
+ * Se llama cuando una asistencia queda asignada a alguien. Si no es externo no
+ * hace nada, para no avisar al personal propio por esta vía.
  */
 /**
  * Deja constancia del intento en la propia asistencia. Sin esto no había forma
@@ -152,7 +165,7 @@ async function registrarIntento(asistenciaId, resultado) {
 }
 
 async function notificarAsignacion(asistenciaId, conductorId) {
-  const resultado = { whatsapp: null, correo: null }
+  const resultado = { whatsapp: null }
   try {
     const sam = String(conductorId ?? '').trim()
     if (!sam) return resultado
@@ -164,9 +177,9 @@ async function notificarAsignacion(asistenciaId, conductorId) {
     const a = await traerAsistencia(asistenciaId)
     if (!a) return { ...resultado, motivo: 'Asistencia no encontrada' }
 
+    // Solo el WhatsApp. La orden de servicio espera al cierre del F-02: aquí
+    // todavía no se sabe quién va a hacer el traslado de verdad.
     resultado.whatsapp = await avisarPorWhatsApp(a, conductor)
-      .catch(e => ({ ok: false, motivo: e.message }))
-    resultado.correo = await enviarOrdenServicio(a, conductor)
       .catch(e => ({ ok: false, motivo: e.message }))
     await registrarIntento(asistenciaId, resultado)
   } catch (err) {
@@ -176,4 +189,79 @@ async function notificarAsignacion(asistenciaId, conductorId) {
   return resultado
 }
 
-module.exports = { notificarAsignacion, TRASLADOS }
+/**
+ * Orden de servicio al cerrarse el F-02, cuando lo cierra un externo.
+ *
+ * `quienCierra` es el req.user del que guardó la etapa. Solo el rol decide:
+ * `asistente` es el grupo Asistentes_Funerarios del directorio, que son los
+ * externos. Un cierre del personal propio no genera orden porque no hay a
+ * quién pagarle.
+ *
+ * Se envía una sola vez. Un F-02 reabierto y vuelto a cerrar no manda otra
+ * orden: un segundo correo idéntico, sin decir que corrige al primero,
+ * confunde más de lo que ayuda. Lo que sí se reintenta es un envío que falló
+ * —el externo sin correo en el directorio, por ejemplo—: ahí no hay nada que
+ * duplicar, y bloquearlo dejaría la orden sin salir para siempre.
+ */
+async function enviarOrdenPorCierreF02(asistenciaId, quienCierra = {}) {
+  const resultado = { correo: null }
+  try {
+    if (quienCierra.rol !== 'asistente') return { ...resultado, motivo: 'no es asistente externo' }
+
+    const a = await traerAsistencia(asistenciaId)
+    if (!a) return { ...resultado, motivo: 'Asistencia no encontrada' }
+    if (ordenYaEnviada(a))
+      return { ...resultado, motivo: 'la orden de servicio ya se había enviado' }
+
+    // El correo y el nombre salen del directorio, no del token: el token se
+    // emitió al iniciar sesión y el correo pudo haberse cargado después.
+    const enDirectorio = await buscarUsuarioPorSam(quienCierra.usuario)
+    const proveedor = {
+      usuario: quienCierra.usuario,
+      nombre:  enDirectorio?.nombre || quienCierra.nombre || quienCierra.usuario,
+      mail:    enDirectorio?.mail || '',
+    }
+
+    resultado.correo = await enviarOrdenServicio(a, proveedor)
+      .catch(e => ({ ok: false, motivo: e.message }))
+
+    await registrarOrden(asistenciaId, proveedor, resultado)
+  } catch (err) {
+    console.warn('[asignacionExterna] enviarOrdenPorCierreF02:', err.message)
+    resultado.motivo = err.message
+  }
+  return resultado
+}
+
+/**
+ * ¿Ya salió de verdad? Un intento fallido deja fecha igual —para que se vea
+ * qué pasó— pero no cuenta como enviada.
+ */
+function ordenYaEnviada(a) {
+  if (!a.orden_servicio_at) return false
+  const r = typeof a.orden_servicio_resultado === 'string'
+    ? (() => { try { return JSON.parse(a.orden_servicio_resultado) } catch { return null } })()
+    : a.orden_servicio_resultado
+  // Sin resultado legible se asume enviada: es más seguro no mandar un
+  // duplicado que arriesgarse a mandarlo.
+  return r ? !!r.correo?.ok : true
+}
+
+/**
+ * Queda el intento, salga o no. Si el correo falló hay que poder verlo en la
+ * asistencia y reenviarlo a mano; si salió, esto es lo que evita el duplicado.
+ */
+async function registrarOrden(asistenciaId, proveedor, resultado) {
+  try {
+    await db.query(
+      `UPDATE asistencias
+          SET orden_servicio_at = NOW(), orden_servicio_correo = ?, orden_servicio_resultado = ?
+        WHERE id = ?`,
+      [proveedor.mail || null, JSON.stringify({ ...resultado, proveedor: proveedor.usuario }), asistenciaId]
+    )
+  } catch (err) {
+    console.warn('[asignacionExterna] registrarOrden:', err.message)
+  }
+}
+
+module.exports = { notificarAsignacion, enviarOrdenPorCierreF02, TRASLADOS }
