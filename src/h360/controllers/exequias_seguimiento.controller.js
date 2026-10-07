@@ -184,7 +184,7 @@ async function cerrar(req, res, next) {
       return res.status(409).json({ mensaje: 'La confirmación ya está cerrada.' })
 
     // El candado del requerimiento: sin pago confirmado no se cierra. Aplica
-    // siempre, incluso si la exequia no venía marcada como "requiere pago";
+    // siempre, incluso si la exequia no venía marcada como "requiere legalización";
     // en ese caso lo registra recepción misma.
     const pago = await traerPago(id)
     if (!pago)
@@ -238,10 +238,10 @@ async function reabrir(req, res, next) {
 // ─────────────────────────────────────────────────────────────
 /**
  * Lo que le toca pagar: exequias confirmadas, marcadas como que requieren
- * confirmación de pago, y que todavía no tienen pago registrado.
+ * legalización, y que todavía no tienen pago registrado.
  *
  * ?todas=1 abre la búsqueda a las que no están marcadas, para cuando hay que
- * pagar una que nadie marcó. Ahí sí se acota por fecha: quedan 118 exequias
+ * pagar una que nadie marcó como que requiere legalización. Ahí sí se acota por fecha: quedan 118 exequias
  * programadas de meses atrás que nunca se pasaron a realizadas, y volcarlas
  * todas en la bandeja no ayuda a nadie.
  * ?q= filtra por contrato, código de asistencia o nombre del ser querido.
