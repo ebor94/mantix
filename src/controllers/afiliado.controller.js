@@ -707,7 +707,10 @@ async function aprobar(req, res, next) {
     const aprobadoPor = [req.usuario?.nombre, req.usuario?.apellido]
       .filter(Boolean).join(' ').trim() || `user:${req.usuario?.id || 'desconocido'}`;
 
-    if (afiliado.canal === 'EMPRESARIAL') {
+    // OJO: Veolia usa canal='EMPRESARIAL' de forma histórica pero NO es el canal
+    // empresarial real (ese es origen ASESOR/CONVENIO_PUBLICO). Veolia debe
+    // seguir el flujo normal (certificado + aprobación pública), no la bienvenida.
+    if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA') {
       // Canal empresarial: NO lleva certificado ni carné por WhatsApp. En su
       // lugar se dispara el workflow de bienvenida (correo al afiliado + copia
       // al correo matriculado en la empresa). Fire-and-forget.

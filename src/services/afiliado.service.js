@@ -138,9 +138,14 @@ async function createAfiliadoWithBeneficiarios(data) {
   );
 
   // ── Canal EMPRESARIAL: empresa exigida, reglas del plan, contrato recalculado ──
+  // OJO: `canal === 'EMPRESARIAL'` está sobrecargado — Veolia (origen VEOLIA)
+  // usa esa etiqueta de forma histórica y NO es el canal empresarial real (que
+  // exige empresa configurada). El canal empresarial real es siempre origen
+  // ASESOR o CONVENIO_PUBLICO, nunca VEOLIA. Por eso se excluye VEOLIA.
+  const esCanalEmpresarial = afiliadoData.canal === 'EMPRESARIAL' && afiliadoData.origen !== 'VEOLIA';
   let contratoEmpresarialOverride = null;
   let empresaEmpresarial = null;
-  if (afiliadoData.canal === 'EMPRESARIAL') {
+  if (esCanalEmpresarial) {
     empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoData.nit); // 404 si no configurada
     const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoData.grupo);   // grupo = planTipo
     empresarialRegistro.assertReglasPlan(plan, afiliadoData, beneficiarios);                 // 400 si no cumple
@@ -160,11 +165,11 @@ async function createAfiliadoWithBeneficiarios(data) {
   try {
     // ── 1. Resolver empresa por NIT ──────────────────────────
     if (afiliadoData.nit) {
-      let empresa = afiliadoData.canal === 'EMPRESARIAL'
+      let empresa = esCanalEmpresarial
         ? empresaEmpresarial
         : await buscarPorNit(afiliadoData.nit);
       if (!empresa) {
-        if (afiliadoData.canal === 'EMPRESARIAL') {
+        if (esCanalEmpresarial) {
           throw new AppError('Empresa no configurada para el canal empresarial', 400);
         }
         // Si no existe, la creamos con los datos que vienen del formulario
@@ -196,7 +201,7 @@ async function createAfiliadoWithBeneficiarios(data) {
     }
 
     // ── 5. Guardar contrato/valor ────────────────────────────
-    const contratoFinal = afiliadoData.canal === 'EMPRESARIAL' ? contratoEmpresarialOverride : contrato;
+    const contratoFinal = esCanalEmpresarial ? contratoEmpresarialOverride : contrato;
     if (contratoFinal && Object.keys(contratoFinal).length > 0) {
       await ContratoValor.create(
         { ...contratoFinal, afiliadoId: afiliado.id },
@@ -638,7 +643,7 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
   // createAfiliadoWithBeneficiarios, para no escribir nada si el nuevo grupo
   // familiar no cumple las reglas del plan.
   let contratoEmpresarialOverride = null;
-  if (afiliado.canal === 'EMPRESARIAL') {
+  if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA') {
     const afiliadoPlain = afiliado.get({ plain: true });
     const empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoPlain.nit); // 404 si no configurada
     const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoPlain.grupo);         // grupo = planTipo
@@ -786,7 +791,7 @@ async function reenviarAfiliacion(id, data, usuario) {
   // intacto. Se valida ANTES de abrir la transacción, igual que
   // createAfiliadoWithBeneficiarios / actualizarBeneficiariosConsulta.
   let contratoEmpresarialOverride = null;
-  if (afiliado.canal === 'EMPRESARIAL') {
+  if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA') {
     const afiliadoPlain = { ...afiliado.get({ plain: true }), ...afiliadoData };
     const empresaEmpresarial = await empresarialRegistro.buscarEmpresaConPlanes(afiliadoPlain.nit); // 404 si no configurada
     const plan = empresarialRegistro.resolverPlan(empresaEmpresarial, afiliadoPlain.grupo);         // grupo = planTipo
@@ -864,7 +869,7 @@ async function reenviarAfiliacion(id, data, usuario) {
     // servidor (contratoEmpresarialOverride), ignorando el contrato que haya
     // mandado el cliente; el resto de canales mantiene el comportamiento
     // original (persiste el contrato del payload tal cual).
-    const contratoFinal = afiliado.canal === 'EMPRESARIAL' ? contratoEmpresarialOverride : contrato;
+    const contratoFinal = (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA') ? contratoEmpresarialOverride : contrato;
     if (contratoFinal && Object.keys(contratoFinal).length > 0) {
       await ContratoValor.destroy({ where: { afiliadoId: id }, transaction });
       await ContratoValor.create({ ...contratoFinal, afiliadoId: id }, { transaction });
