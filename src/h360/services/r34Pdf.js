@@ -16,10 +16,15 @@ const PDFDocument = require('pdfkit')
 const LOGO = require('../assets/logo-olivos.base64')
 
 // ── Geometría y paleta ─────────────────────────────────────────────────────
-const CARTA_W = 612      // 8.5" a 72 dpi
-const CARTA_H = 792      // 11"
-const M       = 34       // margen
-const CW      = CARTA_W - M * 2
+//
+// Media carta: la hoja carta partida por la mitad, 8.5" de ancho por 5.5" de
+// alto. Cada cuadro va en su propia página —la orden que se le manda al
+// proveedor y el bloque de verificación que se llena a mano— para que se
+// puedan separar sin cortar nada.
+const HOJA_W = 612       // 8.5" a 72 dpi
+const HOJA_H = 396       // 5.5"
+const M      = 22        // margen
+const CW     = HOJA_W - M * 2
 
 const VERDE  = '#1a4a2e'
 const TINTA  = '#1b1b1b'
@@ -75,7 +80,7 @@ function fechaLarga(v) {
 
 function generarR34Pdf(r34) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: [CARTA_W, CARTA_H], margin: M })
+    const doc = new PDFDocument({ size: [HOJA_W, HOJA_H], margin: M, autoFirstPage: true })
     const trozos = []
     doc.on('data', t => trozos.push(t))
     doc.on('end', () => resolve(Buffer.concat(trozos)))
@@ -86,28 +91,28 @@ function generarR34Pdf(r34) {
     // ── Encabezado ─────────────────────────────────────────────────────────
     // El logo va sobre un recuadro blanco: el original es un PNG con fondo
     // claro y sobre el verde de la banda se vería un parche sucio.
-    const ALTO_BANDA = 38
+    const ALTO_BANDA = 32
     const encabezado = (titulo) => {
       doc.save()
       doc.rect(M, y, CW, ALTO_BANDA).fill(VERDE)
 
-      doc.rect(M + 6, y + 5, 52, ALTO_BANDA - 10).fill('#ffffff')
+      doc.rect(M + 5, y + 4, 44, ALTO_BANDA - 8).fill('#ffffff')
       try {
-        doc.image(LOGO, M + 9, y + 7, { fit: [46, ALTO_BANDA - 14], align: 'center', valign: 'center' })
+        doc.image(LOGO, M + 7, y + 6, { fit: [40, ALTO_BANDA - 12], align: 'center', valign: 'center' })
       } catch { /* sin logo el formato sigue siendo válido */ }
 
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(13)
-         .text(titulo, M + 68, y + 9, { width: CW - 230 })
-      doc.font('Helvetica').fontSize(7.5)
-         .text('Código: R-34   Versión: 08', M + CW - 158, y + 8, { width: 146, align: 'right' })
-         .font('Helvetica-Bold').fontSize(9)
-         .text(texto(r34.consecutivo), M + CW - 158, y + 20, { width: 146, align: 'right' })
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11.5)
+         .text(titulo, M + 56, y + 7, { width: CW - 210 })
+      doc.font('Helvetica').fontSize(7)
+         .text('Código: R-34   Versión: 08', M + CW - 150, y + 6, { width: 140, align: 'right' })
+         .font('Helvetica-Bold').fontSize(8.5)
+         .text(texto(r34.consecutivo), M + CW - 150, y + 17, { width: 140, align: 'right' })
       doc.restore()
       y += ALTO_BANDA
     }
 
     // Un par etiqueta/valor dentro de una rejilla de columnas.
-    const campo = (x, ancho, etiqueta, valor, alto = 26) => {
+    const campo = (x, ancho, etiqueta, valor, alto = 23) => {
       doc.save()
       doc.rect(x, y, ancho, alto).lineWidth(0.6).strokeColor(BORDE).stroke()
       doc.fillColor(GRIS).font('Helvetica').fontSize(6.5)
@@ -117,7 +122,21 @@ function generarR34Pdf(r34) {
       doc.restore()
     }
 
-    const fila = (campos, alto = 26) => {
+    /**
+     * El pie va pegado al borde inferior, por fuera del margen. Hay que
+     * soltar el margen mientras se dibuja: si no, pdfkit considera que el
+     * texto no cabe y abre una página nueva solo para ponerlo ahí.
+     */
+    const pie = () => {
+      const margenAbajo = doc.page.margins.bottom
+      doc.page.margins.bottom = 0
+      doc.fillColor('#999999').font('Helvetica').fontSize(6.5)
+         .text(`Homenajes360 · ${texto(r34.consecutivo)} · Serfunorte Los Olivos · Cúcuta`,
+               M, HOJA_H - M - 4, { width: CW, align: 'center', lineBreak: false })
+      doc.page.margins.bottom = margenAbajo
+    }
+
+    const fila = (campos, alto = 23) => {
       const total = campos.reduce((s, c) => s + c[2], 0)
       let x = M
       for (const [etiqueta, valor, peso] of campos) {
@@ -140,7 +159,7 @@ function generarR34Pdf(r34) {
 
     // ── Servicio: la rejilla de casillas ───────────────────────────────────
     doc.save()
-    const altoRejilla = 56
+    const altoRejilla = 50
     doc.rect(M, y, CW, altoRejilla).lineWidth(0.6).strokeColor(BORDE).stroke()
     doc.fillColor(GRIS).font('Helvetica').fontSize(6.5).text('SERVICIO', M + 5, y + 3.5)
 
@@ -148,7 +167,7 @@ function generarR34Pdf(r34) {
     const anchoCol = (CW - 10) / COLS
     SERVICIOS.forEach(([clave, etiqueta], i) => {
       const cx = M + 5 + (i % COLS) * anchoCol
-      const cy = y + 14 + Math.floor(i / COLS) * 14
+      const cy = y + 13 + Math.floor(i / COLS) * 12.5
       const marcado = clave === r34.grupo
       doc.rect(cx, cy, 7.5, 7.5).lineWidth(0.7).strokeColor(marcado ? VERDE : BORDE).stroke()
       if (marcado) {
@@ -172,13 +191,13 @@ function generarR34Pdf(r34) {
 
     // Observaciones: es el campo que más texto lleva, así que va más alto.
     doc.save()
-    const altoObs = 46
+    const altoObs = 40
     doc.rect(M, y, CW, altoObs).lineWidth(0.6).strokeColor(BORDE).stroke()
     doc.fillColor(GRIS).font('Helvetica').fontSize(6.5).text('OBSERVACIONES', M + 5, y + 3.5)
     doc.fillColor(TINTA).font('Helvetica-Bold').fontSize(9)
        .text(texto(r34.observaciones), M + 5, y + 14, { width: CW - 10, height: altoObs - 18 })
     doc.restore()
-    y += altoObs + 16
+    y += altoObs + 12
 
     // ── Firmas ─────────────────────────────────────────────────────────────
     const firma = (x, ancho, valor, pie) => {
@@ -195,11 +214,11 @@ function generarR34Pdf(r34) {
     firma(M + anchoFirma + 40, anchoFirma, BLANCO, 'Firma del proveedor')
     y += 44
 
-    // ── Bloque de verificación, en blanco ──────────────────────────────────
-    doc.save()
-    doc.moveTo(M, y).lineTo(M + CW, y).dash(3, { space: 3 }).lineWidth(0.7).strokeColor(BORDE).stroke()
-    doc.undash().restore()
-    y += 12
+    pie()
+
+    // ── Segunda hoja: el bloque de verificación, en blanco ─────────────────
+    doc.addPage({ size: [HOJA_W, HOJA_H], margin: M })
+    y = M
 
     encabezado('CONTRATACIÓN DE SERVICIOS · VERIFICACIÓN')
 
@@ -214,13 +233,13 @@ function generarR34Pdf(r34) {
           ['Funcionario que verifica', BLANCO, 2]])
 
     doc.save()
-    const altoNov = 54
+    const altoNov = 88
     doc.rect(M, y, CW, altoNov).lineWidth(0.6).strokeColor(BORDE).stroke()
     doc.fillColor(GRIS).font('Helvetica').fontSize(6.5)
        .text('NOVEDADES DURANTE EL CORTEJO Y DESTINO FINAL', M + 5, y + 3.5)
-    // Renglones para escribir
-    for (let i = 1; i <= 3; i++) {
-      const ly = y + 12 + i * 12
+    // En esta hoja sobra espacio, así que van renglones de verdad para escribir.
+    for (let i = 1; i <= 5; i++) {
+      const ly = y + 10 + i * 14
       doc.moveTo(M + 5, ly).lineTo(M + CW - 5, ly).lineWidth(0.4).strokeColor('#dddddd').stroke()
     }
     doc.restore()
@@ -229,14 +248,11 @@ function generarR34Pdf(r34) {
     fila([['Hora de ingreso al destino final', BLANCO, 1],
           ['Hora de retiro del destino final', BLANCO, 1]])
 
-    y += 14
+    y += 16
     firma(M, anchoFirma, BLANCO, 'Conductor — nombre y firma')
     firma(M + anchoFirma + 40, anchoFirma, BLANCO, 'Contratante / familiar autorizado')
 
-    // ── Pie ────────────────────────────────────────────────────────────────
-    doc.fillColor('#999999').font('Helvetica').fontSize(6.5)
-       .text(`Homenajes360 · ${texto(r34.consecutivo)} · Serfunorte Los Olivos · Cúcuta`,
-             M, CARTA_H - M - 8, { width: CW, align: 'center' })
+    pie()
 
     doc.end()
   })
