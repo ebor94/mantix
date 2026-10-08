@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
         'COBRO_POSFECHADO',
         'LEGALIZACION',
         'ANULACION',
+        'DESISTIMIENTO',
         'REGENERACION_CERTIFICADO',
         'PAGO_EN_CAJA_RECIBIDO',
         'LIQUIDACION'

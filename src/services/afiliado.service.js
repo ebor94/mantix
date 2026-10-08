@@ -400,7 +400,7 @@ async function getAfiliadoById(id, usuario) {
  * Si es aprobador o admin, retorna todas.
  */
 async function getPendientes(usuario) {
-  const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 }, rechazadoParcial: 0 };
+  const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 }, rechazadoParcial: 0, desistido: { [Op.not]: true } };
   const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
 
   return Afiliado.findAll({
@@ -427,7 +427,9 @@ async function getPendientes(usuario) {
  * @param {object} [params] { desde: 'YYYY-MM-DD', hasta: 'YYYY-MM-DD' }
  */
 async function getAprobados(usuario, params = {}) {
-  const baseWhere = { estadoRegistro: 1 };
+  // Procesados = aprobadas (estadoRegistro=1) y también las desistidas (quedan
+  // pendientes en estadoRegistro=0 pero salen aquí con badge "Desistido").
+  const baseWhere = { [Op.or]: [{ estadoRegistro: 1 }, { desistido: true }] };
 
   // Filtro por rango de fecha de registro (createdAt)
   if (params.desde || params.hasta) {
@@ -526,6 +528,41 @@ async function anularAfiliado(id, motivo, usuarioId) {
 
     return { afiliado };
   });
+}
+
+/**
+ * Desistimiento: el CLIENTE desiste de una afiliación aún PENDIENTE (antes de
+ * aprobar). Marca los campos de desistimiento y deja trazabilidad. NO toca el
+ * recibo de caja (caja lo gestiona aparte) ni notifica al cliente (él desistió).
+ * La afiliación sale de la lista de pendientes y aparece en /aprobados con badge.
+ *
+ * @returns {{ afiliado }}
+ */
+async function desistirAfiliado(id, motivo, usuarioId) {
+  const afiliado = await Afiliado.findByPk(id);
+  if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+  if (afiliado.desistido) {
+    throw new AppError('La afiliación ya está desistida', 400);
+  }
+  if (Number(afiliado.estadoRegistro) === 1) {
+    throw new AppError('No se puede desistir una afiliación ya aprobada (use anular)', 400);
+  }
+  if (Number(afiliado.rechazado) === 1) {
+    throw new AppError('La afiliación ya está rechazada', 400);
+  }
+  await afiliado.update({
+    desistido: true,
+    fechaDesistimiento: new Date(),
+    motivoDesistimiento: motivo || null,
+    desistidoPor: usuarioId || null
+  });
+  Trazabilidad.create({
+    afiliadoId: id,
+    tipo: 'DESISTIMIENTO',
+    descripcion: motivo || null,
+    usuarioId: usuarioId || null
+  }).catch(() => {});
+  return { afiliado };
 }
 
 /**
@@ -1266,6 +1303,7 @@ module.exports = {
   aprobarAfiliado,
   rechazarAfiliado,
   anularAfiliado,
+  desistirAfiliado,
   rechazarBeneficiarios,
   getRechazados,
   reenviarAfiliacion,

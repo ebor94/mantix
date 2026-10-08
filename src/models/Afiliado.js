@@ -358,6 +358,25 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Usuario que anuló la afiliación'
     },
+    desistido: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Afiliación desistida por el cliente antes de aprobar (1 = desistida)'
+    },
+    fechaDesistimiento: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    motivoDesistimiento: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    desistidoPor: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Usuario que registró el desistimiento'
+    },
     notificacionAprobacion: {
       type: DataTypes.INTEGER(1).UNSIGNED,
       allowNull: true,

@@ -774,6 +774,25 @@ async function anular(req, res, next) {
   }
 }
 
+/**
+ * POST /:id/desistir — el cliente desiste de una afiliación PENDIENTE. Requiere
+ * motivo. No notifica al cliente ni toca el recibo.
+ */
+async function desistir(req, res, next) {
+  try {
+    const { motivo } = req.body || {};
+    if (!motivo || String(motivo).trim() === '') {
+      throw new AppError('El motivo del desistimiento es obligatorio', 400);
+    }
+    const { afiliado } = await afiliadoService.desistirAfiliado(
+      req.params.id, String(motivo).trim(), req.usuario.id
+    );
+    res.json({ success: true, message: 'Desistimiento registrado', data: afiliado });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function rechazarParcial(req, res, next) {
   try {
     const { motivo, beneficiarioIds } = req.body;
@@ -1169,6 +1188,7 @@ module.exports = {
   rechazar,
   rechazarParcial,
   anular,
+  desistir,
   regenerarCertificado,
   getRechazados,
   reenviar,

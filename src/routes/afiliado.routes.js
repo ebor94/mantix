@@ -278,6 +278,13 @@ router.post('/:id/anular',
   controller.anular
 );
 
+// ── POST /:id/desistir — el cliente desiste de una afiliación pendiente ──────
+router.post('/:id/desistir',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.desistir
+);
+
 // ── POST /:id/regenerar-certificado — re-emite el certificado (aprobador/admin) ─
 router.post('/:id/regenerar-certificado',
   auth,
