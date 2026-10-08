@@ -60,7 +60,7 @@ function cuando(fechaHora) {
 
 async function traerAsistencia(asistenciaId) {
   const [[a]] = await db.query(
-    `SELECT id, codigo, nombre_ser_querido, identificacion, lugar_asistencia,
+    `SELECT id, codigo, contrato, nombre_ser_querido, identificacion, lugar_asistencia,
             nombre_contacto, telefono_contacto, fecha_contacto, created_at,
             tipo_traslado, conductor, conductor_id,
             orden_servicio_at, orden_servicio_resultado
@@ -131,6 +131,10 @@ async function enviarOrdenServicio(a, proveedor) {
     proveedor: { usuario: proveedor.usuario, nombre: proveedor.nombre, correo: proveedor.mail || null },
     asistencia: {
       id: a.id, codigo: a.codigo,
+      // El contrato es la referencia con la que trabaja el proveedor y con la
+      // que se factura; el código es interno. Puede no estar todavía: se
+      // registra en el F-01 o en el encuentro, y la orden sale en el F-02.
+      contrato: a.contrato || null,
       ser_querido: a.nombre_ser_querido, identificacion: a.identificacion,
       lugar: a.lugar_asistencia,
       contacto: a.nombre_contacto, telefono_contacto: a.telefono_contacto,
