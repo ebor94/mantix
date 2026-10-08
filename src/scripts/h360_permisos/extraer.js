@@ -16,6 +16,7 @@ const BASE = path.join(__dirname, '../../h360')
 const MODULO = {
   'asistencias.routes.js':          'asistencias',
   'exequias.routes.js':             'exequias',
+  'r34.routes.js':                  'r34',
   'vehiculos.routes.js':            'vehiculos',
   'homenajes_sala.routes.js':       'salas_velacion',
   'homenajes_residencia.routes.js': 'residencia',

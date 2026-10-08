@@ -165,4 +165,144 @@ async function formatoR13(ordenServicio) {
   }
 }
 
-module.exports = { formatoR13, normalizarHora, configurado }
+/**
+ * ═══ R-34 · Contratación de servicios ═══════════════════════════════════
+ *
+ * Los servicios que se le contratan a un proveedor dentro de una orden: coro,
+ * carroza, transporte de acompañantes, ramos y transporte de flores.
+ *
+ * No hay una categoría propia para ellos en el ERP —casi todos están en
+ * 'Basicos', salvo la carroza que está en 'Traslados'— así que se agrupan por
+ * código de servicio. La lista de códigos es la que usa operaciones.
+ */
+const GRUPOS_R34 = `
+    SELECT 'CORO', v FROM (VALUES ('120'),('132'),('133'),('134'),('300'),('137'),('138'),('139'),('141')) x(v)
+    UNION ALL SELECT 'CARROZA', v FROM (VALUES ('60'),('P60'),('136'),('198')) x(v)
+    UNION ALL SELECT 'TRANSPORTE DE ACOMPAÑANTES', v FROM (VALUES
+        ('331'),('329'),('332'),('325'),('324'),('316'),('333'),('315'),('527'),('526'),('360'),
+        ('321'),('323'),('313'),('318'),('319'),('320'),('322'),('365'),('377')) x(v)
+    UNION ALL SELECT 'RAMOS', v FROM (VALUES ('15'),('12'),('13'),('10'),('5'),('524')) x(v)
+    UNION ALL SELECT 'TRANSPORTE DE FLORES', v FROM (VALUES ('317')) x(v)`
+
+const CONSULTA_R34_ITEMS = `
+DECLARE @orden varchar(20) = @p_orden;
+
+WITH grupos (grupo, servicio) AS (${GRUPOS_R34})
+SELECT g.grupo,
+       d.orden_servicio,
+       d.contador         AS item,
+       d.servicio         AS codigo,
+       RTRIM(s.descripcion)   AS servicio,
+       RTRIM(c.descripcion)   AS categoria,
+       d.tercero          AS nit_proveedor,
+       RTRIM(t.nombre)    AS proveedor,
+       RTRIM(ISNULL(t.email, ''))   AS proveedor_email,
+       RTRIM(ISNULL(t.celular, '')) AS proveedor_celular,
+       LTRIM(RTRIM(ISNULL(d.observacion, ''))) AS observacion,
+       d.cantidad, d.costo, d.valor_convenio, d.valor_excedente,
+       CASE WHEN s.requiere_tercero = 'S' AND d.tercero IS NULL THEN 'FALTA PROVEEDOR' END AS alerta_proveedor,
+       CASE WHEN s.requiere_costo   = 'S' AND ISNULL(d.costo, 0) = 0 THEN 'FALTA COSTO' END AS alerta_costo
+FROM salas_ordenes_detalle d
+JOIN grupos g                          ON g.servicio = d.servicio
+JOIN salas_servicios s                 ON CAST(s.servicio AS varchar(30)) = d.servicio
+LEFT JOIN salas_servicios_categorias c ON c.servicio_categoria = s.servicio_categoria
+LEFT JOIN terceros t                   ON t.compania = 1 AND CAST(t.tercero AS varchar(30)) = d.tercero
+WHERE d.orden_servicio = @orden
+ORDER BY g.grupo, d.contador;`
+
+/**
+ * Lo que el formato necesita de la orden y no está en la línea del servicio.
+ *
+ * El "contratante" del R-34 es el cotizante del ERP: comprobado contra el
+ * formato del contrato 42303, donde la hoja dice "JAIRO ALIRIO YAÑEZ" y el
+ * cotizante es "JAIRO ALIRIO YAÑEZ ROZO".
+ *
+ * La parroquia y el cementerio salen del detalle, con el mismo criterio que el
+ * R-13: TOP 1 con ORDER BY, porque sin orden el motor devuelve cualquier fila
+ * y el dato podía cambiar entre dos consultas del mismo contrato.
+ */
+const CONSULTA_R34_CABECERA = `
+DECLARE @orden varchar(20) = @p_orden;
+
+SELECT o.orden_servicio,
+       CONVERT(varchar(10), o.fecha, 103) AS fecha,
+       LTRIM(RTRIM(
+         LTRIM(RTRIM(o.primer_apellido_fallecido)) + ' ' +
+         LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido, ''))) + ' ' +
+         LTRIM(RTRIM(o.nombres_fallecido))))      AS ser_querido,
+       LTRIM(RTRIM(
+         LTRIM(RTRIM(ISNULL(o.nombres_cotizante, ''))) + ' ' +
+         LTRIM(RTRIM(ISNULL(o.primer_apellido_cotizante, ''))) + ' ' +
+         LTRIM(RTRIM(ISNULL(o.segundo_apellido_cotizante, ''))))) AS contratante,
+       LTRIM(RTRIM(COALESCE(NULLIF(RTRIM(o.telefonos_cotizante), ''),
+                            NULLIF(RTRIM(o.telefono_servicio), ''),
+                            NULLIF(RTRIM(o.telefonos_reclama), ''), ''))) AS telefono_cliente,
+       RTRIM(ISNULL(o.direccion_fallecido, '')) AS direccion_fallecido,
+       RTRIM(ISNULL(o.barrio_fallecido, ''))    AS barrio,
+       RTRIM(ex.tercero_nombre)                 AS lugar_exequias,
+       CONVERT(varchar(10), ex.fecha, 103)      AS fecha_exequias,
+       LTRIM(RTRIM(CASE WHEN CHARINDEX('-', ex.observacion) > 0
+                        THEN LEFT(ex.observacion, CHARINDEX('-', ex.observacion) - 1)
+                        ELSE ex.observacion END))  AS hora_exequias_cruda,
+       RTRIM(ISNULL(df.tercero_nombre, df.servicio_desc)) AS cementerio
+FROM salas_ordenes o
+OUTER APPLY (SELECT TOP 1 d.servicio, d.fecha, d.observacion, RTRIM(t.nombre) AS tercero_nombre
+               FROM salas_ordenes_detalle d
+               LEFT JOIN terceros t ON t.compania = 1 AND CAST(t.tercero AS varchar(30)) = d.tercero
+              WHERE d.orden_servicio = o.orden_servicio AND d.servicio = '170'
+              ORDER BY d.fecha, d.servicio) ex
+OUTER APPLY (SELECT TOP 1 RTRIM(t.nombre) AS tercero_nombre, RTRIM(s.descripcion) AS servicio_desc
+               FROM salas_ordenes_detalle d
+               JOIN salas_servicios s ON CAST(s.servicio AS varchar(30)) = d.servicio
+               LEFT JOIN terceros t ON t.compania = 1 AND CAST(t.tercero AS varchar(30)) = d.tercero
+              WHERE d.orden_servicio = o.orden_servicio
+                AND s.servicio_categoria = 4 AND d.servicio <> '104' AND d.tercero IS NOT NULL
+              ORDER BY d.servicio) df
+WHERE o.orden_servicio = @orden;`
+
+/** Grupo del ERP → clave interna, que es la que marca la X del formato. */
+const CLAVE_GRUPO = {
+  'CORO':                       'CORO',
+  'CARROZA':                    'CARROZA',
+  'TRANSPORTE DE ACOMPAÑANTES': 'TRANSPORTE_ACOMPANANTES',
+  'RAMOS':                      'RAMOS',
+  'TRANSPORTE DE FLORES':       'TRANSPORTE_FLORES',
+}
+
+/**
+ * Cabecera e ítems del R-34 para un contrato. Devuelve null si el ERP no
+ * conoce ese número, para distinguir "no existe" de "falló la consulta".
+ */
+async function itemsR34(ordenServicio) {
+  const orden = String(ordenServicio ?? '').trim()
+  if (!orden) return null
+
+  const pool = await obtenerPool()
+  const d = driver()
+
+  const [cab, det] = await Promise.all([
+    pool.request().input('p_orden', d.VarChar(20), orden).query(CONSULTA_R34_CABECERA),
+    pool.request().input('p_orden', d.VarChar(20), orden).query(CONSULTA_R34_ITEMS),
+  ])
+
+  const c = cab.recordset[0]
+  if (!c) return null
+
+  const { hora_exequias_cruda, ...resto } = c
+  return {
+    cabecera: {
+      ...resto,
+      // Sin segundo apellido quedan dos espacios en medio del nombre.
+      ser_querido: String(resto.ser_querido ?? '').replace(/\s+/g, ' ').trim(),
+      contratante: String(resto.contratante ?? '').replace(/\s+/g, ' ').trim(),
+      hora_exequias: normalizarHora(hora_exequias_cruda),
+    },
+    items: det.recordset.map(f => ({
+      ...f,
+      grupo_clave: CLAVE_GRUPO[f.grupo] || 'OTRO',
+      observacion: String(f.observacion ?? '').trim(),
+    })),
+  }
+}
+
+module.exports = { formatoR13, itemsR34, normalizarHora, configurado, CLAVE_GRUPO }

@@ -352,6 +352,38 @@
       ]
     },
     {
+      "clave": "accion.r34.contrato",
+      "modulo": "r34",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.r34.crear",
+      "modulo": "r34",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.r34.enviar",
+      "modulo": "r34",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.r34.pdf",
+      "modulo": "r34",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.residencia.auditoria",
       "modulo": "residencia",
       "roles": [
@@ -470,6 +502,16 @@
       "roles": [
         "admin",
         "asesor",
+        "supervisora"
+      ]
+    },
+    {
+      "clave": "accion.salas_velacion.novedades",
+      "modulo": "salas_velacion",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador",
         "supervisora"
       ]
     },
@@ -758,6 +800,14 @@
         "admin",
         "asistente_tanatologo",
         "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.r34.ver",
+      "modulo": "r34",
+      "roles": [
+        "admin",
+        "coordinador"
       ]
     },
     {
