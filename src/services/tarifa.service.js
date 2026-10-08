@@ -2,15 +2,21 @@ const { Tarifa, PrimaSeguro } = require('../models');
 const AppError = require('../utils/AppError');
 
 async function buscarTarifa({ canal, producto, grupo, asistenciaFueraDeCasa }) {
-  const tarifa = await Tarifa.findOne({
-    where: {
-      canal,
-      producto,
-      grupo,
-      asistenciaFueraDeCasa: asistenciaFueraDeCasa ? 1 : 0,
-      activo: 1
-    }
-  });
+  const where = {
+    canal,
+    producto,
+    grupo,
+    asistenciaFueraDeCasa: asistenciaFueraDeCasa ? 1 : 0,
+    activo: 1
+  };
+  let tarifa = await Tarifa.findOne({ where });
+  // UNIPERSONAL_II es el mismo plan "unipersonal 50-65" que antes se guardaba
+  // como INDIVIDUAL. Si no hay una tarifa propia para UNIPERSONAL_II, se reutiliza
+  // la de INDIVIDUAL (mismo precio). Si luego se crea una tarifa específica para
+  // UNIPERSONAL_II, esa tiene prioridad y este fallback no aplica.
+  if (!tarifa && grupo === 'UNIPERSONAL_II') {
+    tarifa = await Tarifa.findOne({ where: { ...where, grupo: 'INDIVIDUAL' } });
+  }
   return tarifa;
 }
 

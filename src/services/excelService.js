@@ -161,7 +161,7 @@ SELECT * FROM (
                 THEN '1'
             -- UNIPERSONAL / INDIVIDUAL
             WHEN a.grupo = 'UNIPERSONAL' THEN '10'
-            WHEN a.grupo = 'INDIVIDUAL'  THEN '27'
+            WHEN a.grupo IN ('INDIVIDUAL','UNIPERSONAL_II')  THEN '27'
             -- BASICO
             WHEN a.grupo = 'BASICO'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId = a.id AND s.nombre LIKE '%SINERGIA OP 1%')
@@ -394,7 +394,7 @@ SELECT * FROM (
                 THEN '19'
             -- ======== UNIPERSONAL / INDIVIDUAL ========
             WHEN a.grupo = 'UNIPERSONAL' THEN '10'
-            WHEN a.grupo = 'INDIVIDUAL'  THEN '27'
+            WHEN a.grupo IN ('INDIVIDUAL','UNIPERSONAL_II')  THEN '27'
             -- ======== BASICO DE_LEY ========
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'DE_LEY'
                  AND EXISTS (SELECT 1 FROM seguros s WHERE s.afiliadoId=a.id AND s.nombre LIKE '%SINERGIA OP 1%')
