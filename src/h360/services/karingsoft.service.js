@@ -168,21 +168,34 @@ async function formatoR13(ordenServicio) {
 /**
  * ═══ R-34 · Contratación de servicios ═══════════════════════════════════
  *
- * Los servicios que se le contratan a un proveedor dentro de una orden: coro,
- * carroza, transporte de acompañantes, ramos y transporte de flores.
+ * Los servicios de la orden que se le contratan a un proveedor.
  *
- * No hay una categoría propia para ellos en el ERP —casi todos están en
- * 'Basicos', salvo la carroza que está en 'Traslados'— así que se agrupan por
- * código de servicio. La lista de códigos es la que usa operaciones.
+ * No sirve ninguna bandera del ERP para identificarlos: en el contrato 42322,
+ * requiere_tercero='S' deja fuera dos de los que operaciones espera, y "tiene
+ * NIT asignado" mete dos que no van. Es una lista curada de códigos, y el
+ * grupo que sale de aquí es el que marca la casilla del formato impreso.
+ *
+ * Queda fuera a propósito el 340 "Traslado local del cuerpo": ese es el
+ * traslado del F-01, que ya tiene su propia orden de servicio cuando lo hace
+ * un externo, y meterlo aquí duplicaría el documento.
  */
 const GRUPOS_R34 = `
     SELECT 'CORO', v FROM (VALUES ('120'),('132'),('133'),('134'),('300'),('137'),('138'),('139'),('141')) x(v)
     UNION ALL SELECT 'CARROZA', v FROM (VALUES ('60'),('P60'),('136'),('198')) x(v)
-    UNION ALL SELECT 'TRANSPORTE DE ACOMPAÑANTES', v FROM (VALUES
+    UNION ALL SELECT 'TRANSPORTE_ACOMPANANTES', v FROM (VALUES
         ('331'),('329'),('332'),('325'),('324'),('316'),('333'),('315'),('527'),('526'),('360'),
         ('321'),('323'),('313'),('318'),('319'),('320'),('322'),('365'),('377')) x(v)
     UNION ALL SELECT 'RAMOS', v FROM (VALUES ('15'),('12'),('13'),('10'),('5'),('524')) x(v)
-    UNION ALL SELECT 'TRANSPORTE DE FLORES', v FROM (VALUES ('317')) x(v)`
+    UNION ALL SELECT 'TRANSPORTE_FLORES', v FROM (VALUES ('317')) x(v)
+    -- Equipos de velación. El 326 "Equipo velacion Olivos-propio" no entra:
+    -- es propio y no hay a quién contratarle.
+    UNION ALL SELECT 'EQ_VELACION', v FROM (VALUES ('165'),('350')) x(v)
+    UNION ALL SELECT 'EQ_VELACION_NOVENARIO', v FROM (VALUES ('166')) x(v)
+    UNION ALL SELECT 'EQ_NOVENARIO', v FROM (VALUES ('155')) x(v)
+    UNION ALL SELECT 'EQ_ULTIMA_NOCHE', v FROM (VALUES ('160'),('161')) x(v)
+    -- El 147 "Traslado" va en la casilla "Otro", que lleva una línea al lado
+    -- para escribir de qué se trata: así no se confunde con la carroza.
+    UNION ALL SELECT 'OTRO', v FROM (VALUES ('147')) x(v)`
 
 const CONSULTA_R34_ITEMS = `
 DECLARE @orden varchar(20) = @p_orden;
@@ -260,13 +273,19 @@ OUTER APPLY (SELECT TOP 1 RTRIM(t.nombre) AS tercero_nombre, RTRIM(s.descripcion
               ORDER BY d.servicio) df
 WHERE o.orden_servicio = @orden;`
 
-/** Grupo del ERP → clave interna, que es la que marca la X del formato. */
-const CLAVE_GRUPO = {
-  'CORO':                       'CORO',
-  'CARROZA':                    'CARROZA',
-  'TRANSPORTE DE ACOMPAÑANTES': 'TRANSPORTE_ACOMPANANTES',
-  'RAMOS':                      'RAMOS',
-  'TRANSPORTE DE FLORES':       'TRANSPORTE_FLORES',
+/** Cómo se llama cada casilla en el formato impreso. */
+const ETIQUETA_GRUPO = {
+  CORO:                    'Coro',
+  CARROZA:                 'Carroza',
+  SALA_HOMENAJE:           'Sala de Homenaje',
+  EQ_NOVENARIO:            'Eq. de novenario',
+  EQ_ULTIMA_NOCHE:         'Eq. Última noche',
+  EQ_VELACION_NOVENARIO:   'Eq. Velación y novenario',
+  EQ_VELACION:             'Eq. Velación',
+  RAMOS:                   'Arreglo floral',
+  TRANSPORTE_ACOMPANANTES: 'Transporte de acompañantes',
+  TRANSPORTE_FLORES:       'Transporte de flores',
+  OTRO:                    'Otro',
 }
 
 /**
@@ -299,10 +318,11 @@ async function itemsR34(ordenServicio) {
     },
     items: det.recordset.map(f => ({
       ...f,
-      grupo_clave: CLAVE_GRUPO[f.grupo] || 'OTRO',
+      grupo_clave: f.grupo,
+      grupo_etiqueta: ETIQUETA_GRUPO[f.grupo] || f.grupo,
       observacion: String(f.observacion ?? '').trim(),
     })),
   }
 }
 
-module.exports = { formatoR13, itemsR34, normalizarHora, configurado, CLAVE_GRUPO }
+module.exports = { formatoR13, itemsR34, normalizarHora, configurado, ETIQUETA_GRUPO }

@@ -57,7 +57,7 @@ function agrupar(items) {
       grupos.set(clave, {
         clave,
         grupo: i.grupo_clave,
-        grupo_etiqueta: i.grupo,
+        grupo_etiqueta: i.grupo_etiqueta,
         codigo_servicio: i.codigo,
         servicio_desc: i.servicio,
         proveedor_nit: i.nit_proveedor || null,

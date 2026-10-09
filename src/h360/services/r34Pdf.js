@@ -173,9 +173,14 @@ function generarR34Pdf(r34) {
       if (marcado) {
         doc.font('Helvetica-Bold').fontSize(7.5).fillColor(VERDE).text('X', cx + 1.4, cy + 0.9)
       }
+      // "Otro" lleva al lado de qué se trata, como la línea del formato en papel.
+      const leyenda = (marcado && clave === 'OTRO' && r34.servicio_desc)
+        ? `Otro: ${r34.servicio_desc}`
+        : etiqueta
       doc.font(marcado ? 'Helvetica-Bold' : 'Helvetica').fontSize(7.5)
          .fillColor(marcado ? VERDE : TINTA)
-         .text(etiqueta, cx + 11, cy + 0.6, { width: anchoCol - 16, ellipsis: true })
+         .text(leyenda, cx + 11, cy + 0.6,
+               { width: (marcado && clave === 'OTRO' ? anchoCol * 2 : anchoCol) - 16, ellipsis: true })
     })
     doc.restore()
     y += altoRejilla
