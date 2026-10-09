@@ -43,15 +43,24 @@ function observacionSugerida(lineas) {
   return propias.length ? `${base} · ${propias.join(' · ')}` : base
 }
 
-/** Agrupa las líneas del ERP por proveedor + servicio, que es un R-34. */
+/**
+ * Agrupa las líneas del ERP: un R-34 es un proveedor y un servicio.
+ *
+ * La clave incluye el código del servicio, no solo la casilla del formato.
+ * "Otro" es un cajón donde caben cosas distintas —el traslado local y el
+ * traslado contratado— y si se agrupara solo por casilla, dos servicios
+ * distintos del mismo proveedor saldrían en un R-34 que dice "2 TRASLADO
+ * LOCAL DEL CUERPO". Con el código, los tres ramos del mismo proveedor
+ * siguen juntos, que es lo que se quería, y esos dos quedan separados.
+ */
 function agrupar(items) {
   const grupos = new Map()
   for (const i of items) {
     // Sin proveedor no se puede agrupar por NIT: cada línea va suelta, para
     // que quien la trabaje decida si contrata afuera o es servicio propio.
     const clave = i.nit_proveedor
-      ? `${i.grupo_clave}|${i.nit_proveedor}`
-      : `${i.grupo_clave}|sin-proveedor|${i.item}`
+      ? `${i.grupo_clave}|${i.codigo}|${i.nit_proveedor}`
+      : `${i.grupo_clave}|${i.codigo}|sin-proveedor|${i.item}`
 
     if (!grupos.has(clave)) {
       grupos.set(clave, {

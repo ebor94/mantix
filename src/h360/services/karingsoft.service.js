@@ -175,9 +175,12 @@ async function formatoR13(ordenServicio) {
  * NIT asignado" mete dos que no van. Es una lista curada de códigos, y el
  * grupo que sale de aquí es el que marca la casilla del formato impreso.
  *
- * Queda fuera a propósito el 340 "Traslado local del cuerpo": ese es el
- * traslado del F-01, que ya tiene su propia orden de servicio cuando lo hace
- * un externo, y meterlo aquí duplicaría el documento.
+ * El 340 "Traslado local del cuerpo" también entra, por pedido de
+ * operaciones. Ojo: solo el 17% de sus líneas trae proveedor, así que en la
+ * mayoría de los contratos va a aparecer sin tercero y habrá que escribirlo a
+ * mano o dejarlo quieto. Y cuando el traslado lo hace un asistente externo,
+ * ese ya recibe la orden de servicio del F-01: son dos documentos distintos
+ * para dos arreglos distintos, pero conviene saberlo.
  */
 const GRUPOS_R34 = `
     SELECT 'CORO', v FROM (VALUES ('120'),('132'),('133'),('134'),('300'),('137'),('138'),('139'),('141')) x(v)
@@ -193,9 +196,10 @@ const GRUPOS_R34 = `
     UNION ALL SELECT 'EQ_VELACION_NOVENARIO', v FROM (VALUES ('166')) x(v)
     UNION ALL SELECT 'EQ_NOVENARIO', v FROM (VALUES ('155')) x(v)
     UNION ALL SELECT 'EQ_ULTIMA_NOCHE', v FROM (VALUES ('160'),('161')) x(v)
-    -- El 147 "Traslado" va en la casilla "Otro", que lleva una línea al lado
-    -- para escribir de qué se trata: así no se confunde con la carroza.
-    UNION ALL SELECT 'OTRO', v FROM (VALUES ('147')) x(v)`
+    -- Los traslados van en la casilla "Otro", que lleva una línea al lado para
+    -- escribir de qué se trata: así no se confunden con la carroza, y el
+    -- formato distingue el traslado local del contratado.
+    UNION ALL SELECT 'OTRO', v FROM (VALUES ('147'),('340')) x(v)`
 
 const CONSULTA_R34_ITEMS = `
 DECLARE @orden varchar(20) = @p_orden;
