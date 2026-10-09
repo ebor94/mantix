@@ -316,9 +316,11 @@ async function listar(req, res, next) {
       }
     } else if (rol === 'asistente_tanatologo') {
       if (!estado) { conditions.push("estado IN ('ASISTENCIA','PRESERVACION','ENCOFRADO')") }
-    } else if (rol === 'supervisora') {
-      if (!estado) { conditions.push("estado IN ('ENCOFRADO','ENCUENTRO','SALA')") }
     }
+    // La supervisora no lleva filtro por defecto: necesita encontrar cualquier
+    // caso para hacerle el encuentro, y el que tenía dejaba "Todos los estados"
+    // mostrando solo tres. Su vista enfocada sigue siendo Mis asistencias, que
+    // pide los estados explícitamente.
 
     if (estado) {
       // Soporta un solo estado ('PRESERVACION') o varios separados por coma ('PRESERVACION,ENCOFRADO')
