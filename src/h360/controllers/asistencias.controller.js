@@ -44,7 +44,10 @@ const ETAPAS_POR_ROL = {
   asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
   asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
-  supervisora:          ['F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
+  // La supervisora no encofra: eso lo hace el asistente de tanatólogo. Pero
+  // sí saca el caso de ENCOFRADO hacia ENCUENTRO, y para eso no necesita poder
+  // guardar el F-06 — la transición exige que esté cerrado, no quién lo cerró.
+  supervisora:          ['F05_ENTREGA', 'F07_SALIDA_NO_CONFORME'],
   asesor:               ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F05_ENTREGA', 'F08_DESINFECCION'],
   coordinador:          ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F08_DESINFECCION'],
   admin:                ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
@@ -61,6 +64,8 @@ const ETAPAS_PARA_CERRAR = {
   asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F08_DESINFECCION'],
                           PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
                           ENCOFRADO:    ['F06_ENCOFRADO'] },
+  // ENCOFRADO con F06 se queda a propósito aunque ella no pueda diligenciarlo:
+  // es lo que le exige el encofrado cerrado para poder avanzar a ENCUENTRO.
   supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
                           ENCUENTRO:    ['F05_ENTREGA'],
                           SALA:         [] },

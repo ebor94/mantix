@@ -718,8 +718,7 @@
       "modulo": "etapas",
       "roles": [
         "admin",
-        "asistente_tanatologo",
-        "supervisora"
+        "asistente_tanatologo"
       ]
     },
     {
