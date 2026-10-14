@@ -292,11 +292,11 @@ const r44RevisionController = {
    * financiero, referencias, SARLAFT) para validar/actualizar información.
    * Escribe en todas las tablas sin importar el estado. Rol: revisores/admin.
    * Body (nombres de columna directos): { proveedor, representante_legal,
-   *   financiero, sarlaft, referencias_bancarias[], referencias_comerciales[] }
+   *   financiero, sarlaft, accionistas[], referencias_bancarias[], referencias_comerciales[] }
    */
   async editarProveedor(req, res, next) {
     const { sequelize, R44RepresentanteLegal, R44InfoFinanciera,
-            R44RefBancaria, R44RefComercial, R44SarlaftDatos } = require('../models');
+            R44RefBancaria, R44RefComercial, R44SarlaftDatos, R44Accionista } = require('../models');
     const t = await sequelize.transaction();
     try {
       const proveedor = await R44Proveedor.findByPk(req.params.id, { transaction: t });
@@ -343,6 +343,7 @@ const r44RevisionController = {
       };
       await reemplazarRefs(R44RefBancaria, body.referencias_bancarias, 'entidad');
       await reemplazarRefs(R44RefComercial, body.referencias_comerciales, 'empresa');
+      await reemplazarRefs(R44Accionista, body.accionistas, 'razon_social_nombre');
 
       await t.commit();
       return res.json({ ok: true, message: 'Datos actualizados' });
