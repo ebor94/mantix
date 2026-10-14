@@ -632,6 +632,57 @@ async getCumplimiento(req, res){
       error: error.message
     });
   }
+},
+
+// Cumplimiento por trimestre del año: (ejecutados / programados) * 100
+async getCumplimientoTrimestres(req, res, next) {
+  try {
+    const anio = parseInt(req.query.anio) || new Date().getFullYear();
+
+    const trimestres = [
+      { trimestre: 'Q1', mesInicio: 1,  mesFin: 3  },
+      { trimestre: 'Q2', mesInicio: 4,  mesFin: 6  },
+      { trimestre: 'Q3', mesInicio: 7,  mesFin: 9  },
+      { trimestre: 'Q4', mesInicio: 10, mesFin: 12 }
+    ];
+
+    const data = await Promise.all(trimestres.map(async (t) => {
+      const inicio = `${anio}-${String(t.mesInicio).padStart(2, '0')}-01`;
+      const finDate = new Date(anio, t.mesFin, 0);
+      const fin = `${anio}-${String(t.mesFin).padStart(2, '0')}-${String(finDate.getDate()).padStart(2, '0')}`;
+
+      const [programados, ejecutados] = await Promise.all([
+        MantenimientoProgramado.count({
+          where: { fecha_programada: { [Op.between]: [inicio, fin] } }
+        }),
+        MantenimientoEjecutado.count({
+          where: { fecha_ejecucion: { [Op.between]: [inicio, fin] } }
+        })
+      ]);
+
+      const porcentaje = programados > 0
+        ? Math.round((ejecutados / programados) * 1000) / 10
+        : 0;
+
+      return {
+        trimestre: t.trimestre,
+        fecha_inicio: inicio,
+        fecha_fin: fin,
+        programados,
+        ejecutados,
+        porcentaje_cumplimiento: porcentaje
+      };
+    }));
+
+    res.json({
+      success: true,
+      anio,
+      data
+    });
+  } catch (error) {
+    console.error('Error al obtener cumplimiento por trimestres:', error);
+    next(error);
+  }
 }
 };
 

@@ -630,4 +630,29 @@ router.get('/cumplimiento', dashboardController.getCumplimiento);
  */
 router.get('/cumplimiento/multiple', dashboardController.getCumplimientoMultiple);
 
+/**
+ * @swagger
+ * /api/dashboard/cumplimiento-trimestres:
+ *   get:
+ *     summary: Cumplimiento por los 4 trimestres de un año
+ *     description: >
+ *       Devuelve Q1-Q4 con el número de mantenimientos programados (por fecha_programada),
+ *       ejecutados (por fecha_ejecucion) y el % de cumplimiento = (ejecutados / programados) * 100.
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: anio
+ *         schema:
+ *           type: integer
+ *         description: Año a consultar (default año actual).
+ *     responses:
+ *       200:
+ *         description: Lista de 4 trimestres con sus métricas.
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/cumplimiento-trimestres', dashboardController.getCumplimientoTrimestres);
+
 module.exports = router;
