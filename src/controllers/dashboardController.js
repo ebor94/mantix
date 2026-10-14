@@ -683,6 +683,94 @@ async getCumplimientoTrimestres(req, res, next) {
     console.error('Error al obtener cumplimiento por trimestres:', error);
     next(error);
   }
+},
+
+// Desglose por categoría de un trimestre específico
+async getDesgloseTrimestreCategorias(req, res, next) {
+  try {
+    const anio = parseInt(req.query.anio) || new Date().getFullYear();
+    const trimestreParam = (req.query.trimestre || 'Q1').toUpperCase();
+
+    const map = {
+      Q1: { mesInicio: 1,  mesFin: 3  },
+      Q2: { mesInicio: 4,  mesFin: 6  },
+      Q3: { mesInicio: 7,  mesFin: 9  },
+      Q4: { mesInicio: 10, mesFin: 12 }
+    };
+    const t = map[trimestreParam];
+    if (!t) {
+      return res.status(400).json({ success: false, message: 'Trimestre inválido. Use Q1, Q2, Q3 o Q4.' });
+    }
+
+    const inicio = `${anio}-${String(t.mesInicio).padStart(2, '0')}-01`;
+    const finDate = new Date(anio, t.mesFin, 0);
+    const fin = `${anio}-${String(t.mesFin).padStart(2, '0')}-${String(finDate.getDate()).padStart(2, '0')}`;
+
+    // Programados por categoría (vía PlanActividad)
+    const programadosRaw = await sequelize.query(`
+      SELECT cm.id AS categoria_id, cm.nombre AS nombre_categoria,
+             COUNT(mp.id) AS total
+      FROM mantenimientos_programados mp
+      INNER JOIN plan_actividades pa ON mp.plan_actividad_id = pa.id
+      INNER JOIN categorias_mantenimiento cm ON pa.categoria_id = cm.id
+      WHERE mp.fecha_programada BETWEEN :inicio AND :fin
+      GROUP BY cm.id, cm.nombre
+    `, { replacements: { inicio, fin }, type: QueryTypes.SELECT });
+
+    // Ejecutados por categoría
+    const ejecutadosRaw = await sequelize.query(`
+      SELECT cm.id AS categoria_id, cm.nombre AS nombre_categoria,
+             COUNT(me.id) AS total
+      FROM mantenimientos_ejecutados me
+      INNER JOIN mantenimientos_programados mp ON me.mantenimiento_programado_id = mp.id
+      INNER JOIN plan_actividades pa ON mp.plan_actividad_id = pa.id
+      INNER JOIN categorias_mantenimiento cm ON pa.categoria_id = cm.id
+      WHERE me.fecha_ejecucion BETWEEN :inicio AND :fin
+      GROUP BY cm.id, cm.nombre
+    `, { replacements: { inicio, fin }, type: QueryTypes.SELECT });
+
+    const mapaEjecutados = {};
+    for (const e of ejecutadosRaw) mapaEjecutados[e.categoria_id] = parseInt(e.total) || 0;
+
+    const mapaProgramados = {};
+    for (const p of programadosRaw) mapaProgramados[p.categoria_id] = parseInt(p.total) || 0;
+
+    const idsCategoria = Array.from(new Set([
+      ...programadosRaw.map(r => r.categoria_id),
+      ...ejecutadosRaw.map(r => r.categoria_id)
+    ]));
+
+    const nombres = {};
+    for (const r of programadosRaw) nombres[r.categoria_id] = r.nombre_categoria;
+    for (const r of ejecutadosRaw) nombres[r.categoria_id] = r.nombre_categoria;
+
+    const data = idsCategoria.map(id => {
+      const programados = mapaProgramados[id] || 0;
+      const ejecutados = mapaEjecutados[id] || 0;
+      const porcentaje = programados > 0
+        ? Math.round((ejecutados / programados) * 1000) / 10
+        : 0;
+      return {
+        categoria_id: id,
+        nombre_categoria: nombres[id],
+        programados,
+        ejecutados,
+        porcentaje_cumplimiento: porcentaje
+      };
+    }).sort((a, b) => b.programados - a.programados);
+
+    res.json({
+      success: true,
+      anio,
+      trimestre: trimestreParam,
+      fecha_inicio: inicio,
+      fecha_fin: fin,
+      data
+    });
+  } catch (error) {
+    console.error('Error al obtener desglose por categoría del trimestre:', error);
+    next(error);
+  }
 }
 };
 

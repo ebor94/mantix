@@ -655,4 +655,29 @@ router.get('/cumplimiento/multiple', dashboardController.getCumplimientoMultiple
  */
 router.get('/cumplimiento-trimestres', dashboardController.getCumplimientoTrimestres);
 
+/**
+ * @swagger
+ * /api/dashboard/cumplimiento-trimestres/categorias:
+ *   get:
+ *     summary: Desglose por categoría del trimestre indicado
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: anio
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: trimestre
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [Q1, Q2, Q3, Q4]
+ *     responses:
+ *       200:
+ *         description: Programados, ejecutados y % por categoría del trimestre.
+ */
+router.get('/cumplimiento-trimestres/categorias', dashboardController.getDesgloseTrimestreCategorias);
+
 module.exports = router;
