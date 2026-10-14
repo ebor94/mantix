@@ -8,7 +8,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro } = require('../models');
+const { Afiliado, Beneficiario, Usuario, ContratoValor, Tarifa, Seguro, Trazabilidad } = require('../models');
 const AppError = require('../utils/AppError');
 
 const LOGO_PATH = path.join(__dirname, '../../assets/logoConv.png');
@@ -122,6 +122,17 @@ async function generar(req, res, next) {
       where: { afiliadoId },
       order: [['nombre', 'ASC']]
     });
+
+    // Motivo de la última regeneración de certificado (si la hubo): se imprime
+    // en Observaciones para dejar constancia de por qué se re-emitió. En la
+    // emisión original no existe este registro, así que no muestra nada.
+    const ultimaRegeneracion = await Trazabilidad.findOne({
+      where: { afiliadoId, tipo: 'REGENERACION_CERTIFICADO' },
+      order: [['createdAt', 'DESC']]
+    });
+    const motivoRegeneracion = ultimaRegeneracion?.descripcion
+      ? String(ultimaRegeneracion.descripcion).trim()
+      : null;
 
     let nombreAsesor = '';
     if (afiliado.asesorId) {
@@ -465,6 +476,15 @@ async function generar(req, res, next) {
       doc.fontSize(8).font('Helvetica-Bold').fillColor('black').text('Observaciones:', 40, y);
       y = doc.y + 3;
       doc.font('Helvetica').text(afiliado.observaciones, 40, y, { width: 515, align: 'justify' });
+      y = doc.y + 12;
+    }
+
+    // ── MOTIVO DE REGENERACIÓN ─────────────────────────────────────────────
+    if (motivoRegeneracion) {
+      if (y > 660) { doc.addPage(); y = 120; }
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('black').text('Motivo de regeneración:', 40, y);
+      y = doc.y + 3;
+      doc.font('Helvetica').text(motivoRegeneracion, 40, y, { width: 515, align: 'justify' });
       y = doc.y + 12;
     }
 
