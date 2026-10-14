@@ -214,6 +214,7 @@ router.get('/:id/carnet',
 router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 
 // ── GET /afiliados/dashboard — indicadores agregados (auth; scope en servicio) ─
+router.get('/dashboard/empresas', auth, dashboardAfiliacionesController.empresas);
 router.get('/dashboard', auth, dashboardAfiliacionesController.dashboard);
 
 // ── GET /afiliados/empresas-canal?q= — autocompletar empresas por nombre ────

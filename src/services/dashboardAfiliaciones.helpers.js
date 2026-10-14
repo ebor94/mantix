@@ -49,8 +49,8 @@ function elegirGranularidad(desde, hasta) {
   return dias <= 31 ? 'dia' : 'mes';
 }
 
-/** Construye el WHERE de Sequelize aplicando rango, scope y filtro de origen. */
-function construirWhere({ rango, scope, origen, convenioId }) {
+/** Construye el WHERE de Sequelize aplicando rango, scope, origen y empresa. */
+function construirWhere({ rango, scope, origen, convenioId, empresaId }) {
   const where = {
     createdAt: {
       [Op.between]: [
@@ -59,6 +59,10 @@ function construirWhere({ rango, scope, origen, convenioId }) {
       ]
     }
   };
+  // Filtro por empresa (aplica a cualquier scope): solo las afiliaciones de esa
+  // empresa. Útil para ver los indicadores de una empresa concreta (empresarial
+  // o empleador por NIT).
+  if (empresaId) where.empresaId = Number(empresaId);
   if (!scope.esGlobal) {
     where.asesorId = scope.asesorId;
     return where;

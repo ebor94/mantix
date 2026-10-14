@@ -25,11 +25,11 @@ function fmtPeriodo(p) {
   return String(p);
 }
 
-async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) {
+async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, empresaId }) {
   const scope = resolverScope(usuario);
   const rango = normalizarRango(desde, hasta);
   const granularidad = elegirGranularidad(rango.desde, rango.hasta);
-  const where = construirWhere({ rango, scope, origen, convenioId });
+  const where = construirWhere({ rango, scope, origen, convenioId, empresaId });
 
   // ── KPIs (una sola fila agregada) ─────────────────────────────
   const kpiRows = await Afiliado.findAll({
@@ -196,4 +196,21 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId }) 
   };
 }
 
-module.exports = { calcularDashboard };
+/**
+ * Empresas que tienen al menos una afiliación (para el selector del dashboard).
+ * Devuelve [{ id, nombre }] ordenadas por nombre.
+ */
+async function listarEmpresasConAfiliaciones() {
+  const { Empresa } = require('../models');
+  const empresas = await Empresa.findAll({
+    attributes: ['id', 'nombre'],
+    where: {
+      id: { [Op.in]: literal('(SELECT DISTINCT empresaId FROM afiliados WHERE empresaId IS NOT NULL)') }
+    },
+    order: [['nombre', 'ASC']],
+    raw: true
+  });
+  return empresas;
+}
+
+module.exports = { calcularDashboard, listarEmpresasConAfiliaciones };
