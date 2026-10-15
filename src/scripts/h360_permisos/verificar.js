@@ -40,6 +40,7 @@ const MODULO = {
   'asistencias.routes.js':          'asistencias',
   'exequias.routes.js':             'exequias',
   'r34.routes.js':                  'r34',
+  'licencias.routes.js':            'licencias',
   'vehiculos.routes.js':            'vehiculos',
   'homenajes_sala.routes.js':       'salas_velacion',
   'homenajes_residencia.routes.js': 'residencia',

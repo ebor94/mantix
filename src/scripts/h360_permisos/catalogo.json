@@ -352,6 +352,24 @@
       ]
     },
     {
+      "clave": "accion.licencias.contrato",
+      "modulo": "licencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.licencias.crear",
+      "modulo": "licencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.novedades.resolver",
       "modulo": "novedades",
       "roles": [
@@ -798,6 +816,15 @@
         "contabilidad",
         "coordinador",
         "supervisora"
+      ]
+    },
+    {
+      "clave": "ruta.licencias.ver",
+      "modulo": "licencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
       ]
     },
     {

@@ -329,4 +329,105 @@ async function itemsR34(ordenServicio) {
   }
 }
 
-module.exports = { formatoR13, itemsR34, normalizarHora, configurado, ETIQUETA_GRUPO }
+/**
+ * ═══ Licencia de inhumación DANE (forma D631) ═══════════════════════════
+ *
+ * Todo lo que lleva el formato, buscado por número de contrato. Las casillas
+ * que el formato marca con una X salen ya resueltas en número —sexo, manera
+ * de muerte, tipo de documento, unidad de la edad— para que la pantalla no
+ * tenga que repetir esas reglas.
+ *
+ * El tipo de documento no está en la orden: se busca en el asegurado del plan
+ * o en el tercero, y si no aparece se deduce por la edad. Por eso la pantalla
+ * deja corregirlo antes de imprimir, como todo lo demás.
+ */
+const CONSULTA_LICENCIA = `
+DECLARE @orden varchar(20) = @p_orden;
+
+WITH det AS (
+    SELECT d.servicio, d.observacion, s.descripcion AS servicio_desc, s.servicio_categoria,
+           RTRIM(t.nombre) AS tercero_nombre, d.contador
+    FROM salas_ordenes_detalle d
+    JOIN salas_servicios s ON CAST(s.servicio AS varchar(30)) = d.servicio
+    LEFT JOIN terceros t ON t.compania = 1 AND CAST(t.tercero AS varchar(30)) = d.tercero
+    WHERE d.orden_servicio = @orden
+),
+base AS (
+    SELECT o.*,
+           DATEDIFF(YEAR, o.fecha_nacimiento, o.fecha_fallecimiento)
+             - CASE WHEN DATEADD(YEAR, DATEDIFF(YEAR, o.fecha_nacimiento, o.fecha_fallecimiento), o.fecha_nacimiento)
+                         > o.fecha_fallecimiento THEN 1 ELSE 0 END AS anos_cumplidos,
+           DATEDIFF(MONTH, o.fecha_nacimiento, o.fecha_fallecimiento)
+             - CASE WHEN DATEADD(MONTH, DATEDIFF(MONTH, o.fecha_nacimiento, o.fecha_fallecimiento), o.fecha_nacimiento)
+                         > o.fecha_fallecimiento THEN 1 ELSE 0 END AS meses_cumplidos,
+           DATEDIFF(DAY,  o.fecha_nacimiento, o.fecha_fallecimiento) AS dias,
+           DATEDIFF(HOUR, o.fecha_nacimiento, o.fecha_fallecimiento) AS horas
+    FROM salas_ordenes o WHERE o.orden_servicio = @orden
+)
+SELECT
+    YEAR(b.fecha) AS exp_anio,
+    RIGHT('0' + CAST(MONTH(b.fecha) AS varchar), 2) AS exp_mes,
+    RIGHT('0' + CAST(DAY(b.fecha)   AS varchar), 2) AS exp_dia,
+    UPPER(mcc.departamento) AS departamento,
+    UPPER(mcc.descripcion)  AS municipio,
+    'SERFUNORTE LOS OLIVOS' AS solicitante,
+    'NIT: ' + cia.nit       AS solicitante_nit,
+    UPPER(LTRIM(RTRIM(b.primer_apellido_fallecido)))             AS primer_apellido,
+    UPPER(LTRIM(RTRIM(ISNULL(b.segundo_apellido_fallecido,'')))) AS segundo_apellido,
+    UPPER(LTRIM(RTRIM(b.nombres_fallecido)))                     AS nombres,
+    CASE b.sexo_fallecido WHEN 'M' THEN 1 WHEN 'F' THEN 2 ELSE 3 END AS sexo_casilla,
+    CASE b.sexo_fallecido WHEN 'M' THEN 'Masculino' WHEN 'F' THEN 'Femenino' ELSE 'Ignorado' END AS sexo,
+    YEAR(b.fecha_fallecimiento) AS fall_anio,
+    RIGHT('0' + CAST(MONTH(b.fecha_fallecimiento) AS varchar), 2) AS fall_mes,
+    RIGHT('0' + CAST(DAY(b.fecha_fallecimiento)   AS varchar), 2) AS fall_dia,
+    CASE WHEN cd.violenta = 'S' THEN 2 WHEN cd.descripcion LIKE '%ESTUDIO%' THEN 3 ELSE 1 END AS manera_muerte_casilla,
+    CASE WHEN cd.violenta = 'S' THEN 'Violenta (Med. Leg.)' WHEN cd.descripcion LIKE '%ESTUDIO%' THEN 'En estudio (Medicina Legal)' ELSE 'Natural' END AS manera_muerte,
+    b.certificado_defuncion AS certificado_defuncion_no,
+    CASE COALESCE(cpa.tipo_identificacion, ter.tipo_identificacion,
+                  CASE WHEN b.id_fallecido IS NULL OR b.id_fallecido = 0 THEN NULL
+                       WHEN b.anos_cumplidos >= 18 THEN '13'
+                       WHEN b.anos_cumplidos >= 7  THEN '12'
+                       ELSE '11' END)
+         WHEN '12' THEN 1 WHEN '13' THEN 2 WHEN '22' THEN 3 WHEN '41' THEN 4 WHEN '11' THEN 5
+         ELSE 9 END AS documento_casilla,
+    CAST(CAST(b.id_fallecido AS bigint) AS varchar(20)) AS documento_no,
+    CASE WHEN b.dias < 1 THEN 1 WHEN b.meses_cumplidos < 1 THEN 2 WHEN b.anos_cumplidos < 2 THEN 3 ELSE 4 END AS edad_casilla,
+    RIGHT('0' + CAST(CASE WHEN b.dias < 1 THEN b.horas WHEN b.meses_cumplidos < 1 THEN b.dias
+                          WHEN b.anos_cumplidos < 2 THEN b.meses_cumplidos ELSE b.anos_cumplidos END AS varchar), 2) AS edad_valor,
+    CAST(b.edad_fallecimiento AS int) AS edad_registrada_en_orden,
+    UPPER(CASE WHEN df.servicio_desc LIKE '%Olivos%'    THEN 'JARDINES LOS OLIVOS'
+               WHEN df.servicio_desc LIKE '%Esperanza%' THEN 'JARDINES LA ESPERANZA'
+               WHEN df.servicio_desc LIKE '%Pamplona%'  THEN 'JARDINES DE PAMPLONA'
+               ELSE ISNULL(df.tercero_nombre, df.servicio_desc) END)
+      + ' / ' +
+    CASE b.inhumacion WHEN 'I' THEN 'INHUMACION' WHEN 'C' THEN 'CREMACION' WHEN 'T' THEN 'TRASLADO' ELSE '' END AS permiso_inhumar_en,
+    df.servicio_desc  AS servicio_destino_final,
+    df.tercero_nombre AS proveedor_destino_final
+FROM base b
+JOIN companias cia         ON cia.compania = b.compania
+LEFT JOIN centro_costos cc ON cc.compania = b.compania AND cc.centro_costo = b.centro_costo
+LEFT JOIN municipios mcc   ON mcc.municipio = cc.municipio
+LEFT JOIN causas_deceso cd ON cd.causa_deceso = b.causa_deceso
+LEFT JOIN terceros ter     ON ter.compania = b.compania AND CAST(ter.tercero AS varchar(30)) = CAST(CAST(b.id_fallecido AS bigint) AS varchar(30))
+OUTER APPLY (SELECT TOP 1 a.tipo_identificacion FROM contratos_prevision_asegurados a
+             WHERE a.compania = b.compania AND CAST(a.identificacion AS varchar(30)) = CAST(CAST(b.id_fallecido AS bigint) AS varchar(30))) cpa
+OUTER APPLY (SELECT TOP 1 * FROM det WHERE det.servicio_categoria = 4 AND det.servicio <> '104'
+             ORDER BY CASE WHEN det.tercero_nombre IS NOT NULL THEN 0 ELSE 1 END, det.contador) df;`
+
+/**
+ * Datos de la licencia para un contrato. Devuelve null si el ERP no conoce
+ * ese número, para distinguir "no existe" de "falló la consulta".
+ */
+async function licenciaInhumacion(ordenServicio) {
+  const orden = String(ordenServicio ?? '').trim()
+  if (!orden) return null
+
+  const pool = await obtenerPool()
+  const r = await pool.request()
+    .input('p_orden', driver().VarChar(20), orden)
+    .query(CONSULTA_LICENCIA)
+
+  return r.recordset[0] || null
+}
+
+module.exports = { formatoR13, itemsR34, licenciaInhumacion, normalizarHora, configurado, ETIQUETA_GRUPO }
