@@ -4,8 +4,12 @@
  * Dos oficios sobre la misma exequia:
  *
  *   · Recepción hace la CONFIRMACIÓN DE EXEQUIA antes de que el homenaje
- *     salga: con quién habló, qué gestionó, si quedó la cinta y el obituario.
+ *     salga: con quién habló, qué gestionó y si quedó la cinta.
  *     (El campo se llama gestiono_cita por una errata de origen.)
+ *
+ *     El obituario se pregunta antes, al coordinar la exequia, y vive en
+ *     exequias.gestiono_obituario. La columna de aquí se conserva con lo que
+ *     se respondió en su momento, pero ya no se pide ni se usa.
  *     No puede cerrarla mientras el pago no esté confirmado.
  *
  *     En el código se sigue llamando "seguimiento" —la tabla, el estado, las
@@ -141,7 +145,6 @@ async function guardar(req, res, next) {
       con_quien:          texto(req.body.con_quien, 150),
       gestion_realizada:  texto(req.body.gestion_realizada, 4000),
       gestiono_cita:      siNo(req.body.gestiono_cita, 'gestionó cinta'),
-      gestiono_obituario: siNo(req.body.gestiono_obituario, 'gestionó obituario'),
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fecha)) throw malaPeticion('La fecha del seguimiento es obligatoria')
     if (!/^\d{2}:\d{2}$/.test(datos.hora))        throw malaPeticion('La hora del seguimiento es obligatoria')
@@ -156,8 +159,7 @@ async function guardar(req, res, next) {
 
     await insertarHistorial(id, ex.estado, ex.estado, usuario,
       `Confirmación ${previo ? 'actualizada' : 'registrada'} — con ${datos.con_quien}` +
-      ` · cinta: ${datos.gestiono_cita ? 'sí' : 'no'}` +
-      ` · obituario: ${datos.gestiono_obituario ? 'sí' : 'no'}`)
+      ` · cinta: ${datos.gestiono_cita ? 'sí' : 'no'}`)
 
     const [seguimiento, pago] = await Promise.all([traerSeguimiento(id), traerPago(id)])
     res.json({ seguimiento, pago, puede_cerrar: !!pago })

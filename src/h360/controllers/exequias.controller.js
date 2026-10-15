@@ -145,6 +145,7 @@ async function crear(req, res, next) {
       asistencia_id, tipo, fecha, hora,
       lugar, barrio, parroquia, direccion, observaciones,
       destino_final, lugar_destino_final, requiere_confirmacion_pago,
+      gestiono_obituario,
     } = req.body
 
     // La hora es opcional: al abrir el servicio la familia suele tener el día
@@ -161,16 +162,19 @@ async function crear(req, res, next) {
     const [r] = await db.query(
       `INSERT INTO exequias
        (asistencia_id, tipo, fecha, hora, lugar, barrio, parroquia, direccion, observaciones,
-        destino_final, lugar_destino_final, requiere_confirmacion_pago, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        destino_final, lugar_destino_final, requiere_confirmacion_pago,
+        gestiono_obituario, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [asistencia_id, tipo, fecha, hora || null, lugar,
        barrio || null, parroquia || null, direccion || null,
        observaciones || null,
        // El tipo se propone desde el encofrado; ambos son opcionales.
        ['INHUMACION', 'CREMACION'].includes(destino_final) ? destino_final : null,
        String(lugar_destino_final ?? '').trim() || null,
-       // Lo marca quien registra la exequia; recepción lo corrige al confirmar.
+       // Lo marca quien registra la exequia; recepción lo corrige al coordinar.
        requiere_confirmacion_pago ? 1 : 0,
+       // Sin responder es NULL, que no es lo mismo que "no se gestionó".
+       gestiono_obituario == null ? null : (gestiono_obituario ? 1 : 0),
        usuario]
     )
     await insertarHistorial(r.insertId, null, 'PENDIENTE_CONFIRMAR', usuario, 'Exequia creada')
@@ -182,7 +186,8 @@ async function crear(req, res, next) {
 
 // PATCH /exequias/:id — editable mientras no esté en un estado terminal
 const CAMPOS_EDITABLES = ['tipo','fecha','hora','lugar','barrio','parroquia','direccion','observaciones',
-                          'destino_final','lugar_destino_final','requiere_confirmacion_pago']
+                          'destino_final','lugar_destino_final','requiere_confirmacion_pago',
+                          'gestiono_obituario']
 
 async function actualizar(req, res, next) {
   try {
@@ -209,6 +214,10 @@ async function actualizar(req, res, next) {
     // El check llega como booleano desde la pantalla; la columna es TINYINT.
     if (updates.requiere_confirmacion_pago !== undefined)
       updates.requiere_confirmacion_pago = updates.requiere_confirmacion_pago ? 1 : 0
+    // El obituario admite tres estados: sí, no y sin responder.
+    if (updates.gestiono_obituario !== undefined)
+      updates.gestiono_obituario = updates.gestiono_obituario == null
+        ? null : (updates.gestiono_obituario ? 1 : 0)
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
 
