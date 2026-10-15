@@ -25,11 +25,7 @@ const TIPOS_TRASLADO = ['MEDICINA_LEGAL', 'LOCAL', 'INTERMUNICIPAL']
 // Contrato: conviven dos formatos, cinco dígitos (42226) y prefijado
 // (SCR-3937), así que no sirve exigir solo números. Longitud mínima y al menos
 // un dígito deja fuera los rellenos tipo "0", "PTE" o "N/A".
-const MIN_LARGO_CONTRATO = 4
-const contratoValido = v => {
-  const s = String(v ?? '').trim()
-  return s.length >= MIN_LARGO_CONTRATO && /\d/.test(s)
-}
+const { MIN_LARGO_CONTRATO, contratoValido } = require('../utils/contrato')
 
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {

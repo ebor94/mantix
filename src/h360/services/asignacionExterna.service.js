@@ -23,6 +23,7 @@ const axios = require('axios')
 const db = require('../config/db')
 const { buscarUsuarioPorSam } = require('./ldap.service')
 const { sendTextoSimple } = require('../../services/whatsappService')
+const { contratoONada }   = require('../utils/contrato')
 
 // Tarifas fijas. El intermunicipal no tiene: se acuerda con el proveedor.
 const TRASLADOS = {
@@ -42,23 +43,6 @@ const CORREOS_OPERACIONES = () => String(
   process.env.H360_CORREOS_INTERMUNICIPAL ||
   'homenajesoperativocucuta@losolivos.co,coordhomenajescucuta@losolivos.co,auxhomenajesoperativocucuta@losolivos.co'
 ).split(',').map(c => c.trim()).filter(Boolean)
-
-/**
- * Un contrato de verdad, no un relleno.
- *
- * Al cerrar el F-02 el contrato suele estar en "PEND": el número real llega
- * después, en el encuentro. Si se manda tal cual, el proveedor recibe un
- * asunto que dice "Contrato PEND" y nadie encuentra ese correo buscando por el
- * número que al final le quedó al caso. Mejor que vaya el código de la
- * asistencia, que sí es estable.
- *
- * Misma regla que contratoValido en asistencias.controller; se repite aquí
- * porque ese módulo importa a este y no al revés.
- */
-const contratoUtil = v => {
-  const s = String(v ?? '').trim()
-  return s.length >= 4 && /\d/.test(s) ? s : null
-}
 
 const DIAS  = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO']
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -152,7 +136,7 @@ async function enviarOrdenServicio(a, proveedor) {
       // que se factura; el código es interno. Puede no estar todavía —al
       // cerrar el F-02 suele decir "PEND"— y en ese caso no se manda: el
       // asunto se queda con el código de la asistencia.
-      contrato: contratoUtil(a.contrato),
+      contrato: contratoONada(a.contrato),
       ser_querido: a.nombre_ser_querido, identificacion: a.identificacion,
       lugar: a.lugar_asistencia,
       contacto: a.nombre_contacto, telefono_contacto: a.telefono_contacto,

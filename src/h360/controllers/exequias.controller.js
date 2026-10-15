@@ -3,6 +3,7 @@ const { buscarUsuarioPorSam } = require('../services/ldap.service')
 const { sendTextoSimple }     = require('../../services/whatsappService')
 const gchat                   = require('../services/googleChat.service')
 const karingsoft              = require('../services/karingsoft.service')
+const { referenciaServicio }  = require('../utils/contrato')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -472,6 +473,9 @@ async function notificarConductor(exequiaId, conductorId) {
 
     const texto = [
       `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} asignada`,
+      // Con qué identificarlo: el contrato, y mientras no exista el código de
+      // la asistencia. Sin esto el conductor no tiene cómo referirse al caso.
+      referenciaServicio(ex.contrato, ex.asistencia_codigo),
       fechaHoraLarga(ex.fecha, ex.hora),
       lugarLargo(ex),
       `Carroza ${ex.vehiculo_placa || 's/n'}`,
