@@ -39,6 +39,9 @@ router.post('/:id/confirmar',         requireRol('recepcion', 'asesor', 'admin')
 router.post('/:id/asignar-vehiculo',  requireRol('coordinador', 'admin'),                         ctrl.asignarVehiculo)
 router.post('/:id/marcar-realizada',  requireRol('coordinador', 'admin'),                         ctrl.marcarRealizada)
 router.post('/:id/cancelar',          requireRol('asesor', 'coordinador', 'admin'),               ctrl.cancelar)
+// Deshacer la coordinación borra la asignación y avisa al conductor: queda en
+// menos manos que coordinar.
+router.post('/:id/devolver-coordinacion', requireRol('coordinador', 'admin'),                     ctrl.devolverACoordinacion)
 router.delete('/:id',                 requireRol('coordinador', 'admin'),                         ctrl.eliminar)
 
 module.exports = router

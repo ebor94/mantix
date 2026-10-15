@@ -190,6 +190,14 @@
       ]
     },
     {
+      "clave": "accion.exequias.devolver_coordinacion",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.exequias.editar",
       "modulo": "exequias",
       "roles": [

@@ -423,7 +423,13 @@ function lugarLargo(ex) {
  * No lanza ni registra en las columnas wa_*: esas guardan el envío al conductor
  * vigente, y pisarlas con este aviso perdería ese rastro.
  */
-async function avisarConductorRelevado(exequiaId, conductorId) {
+/**
+ * Le dice al conductor que ya no va. `porque` cambia el remate según lo que
+ * pasó: no es lo mismo que el servicio pasara a otro conductor a que la
+ * exequia se haya devuelto a coordinación, y decirle lo que no es lo deja
+ * esperando una llamada que no llega.
+ */
+async function avisarConductorRelevado(exequiaId, conductorId, porque = 'reasignada') {
   try {
     const [[ex]] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [exequiaId])
     if (!ex) return { ok: false, motivo: 'Exequia no encontrada' }
@@ -432,11 +438,16 @@ async function avisarConductorRelevado(exequiaId, conductorId) {
     if (!conductor?.telefono)
       return { ok: false, motivo: `${conductorId} no tiene celular en el directorio activo` }
 
+    const REMATE = {
+      reasignada:  'Este servicio quedo a cargo de otro conductor. Usted YA NO debe presentarse.',
+      coordinacion:'Este servicio se devolvio a coordinacion y por ahora no tiene conductor. Usted YA NO debe presentarse; le avisaremos si vuelve a asignarsele.',
+    }
     const texto = [
-      `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} reasignada`,
+      `${ex.tipo === 'CEREMONIA' ? 'CEREMONIA' : 'EXEQUIA'} ${porque === 'coordinacion' ? 'sin asignar' : 'reasignada'}`,
+      referenciaServicio(ex.contrato, ex.asistencia_codigo),
       fechaHoraLarga(ex.fecha, ex.hora),
       lugarLargo(ex),
-      'Este servicio quedo a cargo de otro conductor. Usted YA NO debe presentarse.',
+      REMATE[porque] || REMATE.reasignada,
     ].filter(Boolean).join(' · ')
 
     await sendTextoSimple(conductor.telefono, texto)
@@ -511,6 +522,61 @@ async function marcarRealizada(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /exequias/:id/devolver-coordinacion
+ *
+ * Deshace la coordinación: la exequia vuelve a la primera columna como si
+ * nunca hubiera salido. Hacía falta porque no había vuelta atrás —una exequia
+ * coordinada por error se quedaba así— y tocaba corregirla en la base.
+ *
+ * Cancelar no sirve para esto: cancelar da de baja el servicio, y aquí el
+ * servicio sigue en pie y lo que se deshace es un paso del trámite.
+ *
+ * Si ya había conductor avisado se le dice que no se presente, igual que
+ * cuando lo relevan: el aviso ya salió y no se puede dejar colgado.
+ */
+async function devolverACoordinacion(req, res, next) {
+  try {
+    const { id } = req.params
+    const { usuario } = req.user
+    const motivo = String(req.body?.motivo ?? '').trim()
+    if (!motivo)
+      return res.status(400).json({ mensaje: 'El motivo es obligatorio: queda en el historial de la exequia.' })
+
+    const [[ex]] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
+    if (!ex) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
+
+    if (ex.estado === 'PENDIENTE_CONFIRMAR')
+      return res.status(409).json({ mensaje: 'Esta exequia ya está en Coordinación de exequias.' })
+    if (['REALIZADA', 'CANCELADA'].includes(ex.estado))
+      return res.status(409).json({
+        mensaje: `No se puede devolver una exequia ${ex.estado.toLowerCase()}.`,
+      })
+
+    const conductorPrevio = ex.wa_enviado_at ? ex.conductor_id : null
+
+    await db.query(
+      `UPDATE exequias
+          SET estado = 'PENDIENTE_CONFIRMAR',
+              confirmada_por = NULL, confirmada_at = NULL, confirmacion_nota = NULL,
+              vehiculo_id = NULL, conductor_id = NULL, asignada_por = NULL, asignada_at = NULL,
+              wa_enviado_at = NULL, wa_telefono = NULL, wa_respuesta = NULL
+        WHERE id = ?`, [id])
+
+    await insertarHistorial(id, ex.estado, 'PENDIENTE_CONFIRMAR', usuario,
+      'Devuelta a coordinación — ' + motivo)
+
+    // El aviso al conductor va después de guardar: que falle el WhatsApp no
+    // debe dejar la exequia a medio devolver.
+    const avisoRelevo = conductorPrevio
+      ? await avisarConductorRelevado(id, conductorPrevio, 'coordinacion')
+      : null
+
+    const [nueva] = await db.query(`${SELECT_FULL} WHERE e.id = ?`, [id])
+    res.json({ ...nueva[0], aviso_relevo: avisoRelevo })
+  } catch (err) { next(err) }
+}
+
 // POST /exequias/:id/cancelar
 async function cancelar(req, res, next) {
   try {
@@ -575,6 +641,6 @@ module.exports = {
   // Lo usa exequias_seguimiento.controller: el seguimiento y el pago quedan en
   // el mismo historial que el resto de la vida de la exequia.
   insertarHistorial,
-  confirmar, asignarVehiculo, marcarRealizada, cancelar,
+  confirmar, asignarVehiculo, marcarRealizada, cancelar, devolverACoordinacion,
   programacionPublica,
 }
