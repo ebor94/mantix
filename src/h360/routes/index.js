@@ -19,6 +19,7 @@ const vehiculosRoutes           = require('./vehiculos.routes')
 const exequiasRoutes            = require('./exequias.routes')
 const r34Routes                 = require('./r34.routes')
 const licenciasRoutes           = require('./licencias.routes')
+const reportesRoutes            = require('./reportes.routes')
 const exequiasCtrl              = require('../controllers/exequias.controller')
 
 // Auth H360 (login con LDAP — público)
@@ -41,6 +42,7 @@ router.use('/vehiculos',             verifyToken, vehiculosRoutes)
 router.use('/exequias',              verifyToken, exequiasRoutes)
 router.use('/r34',                   verifyToken, r34Routes)
 router.use('/licencias',             verifyToken, licenciasRoutes)
+router.use('/reportes',              verifyToken, reportesRoutes)
 
 // Health H360
 router.get('/health', (_, res) => res.json({ ok: true, modulo: 'Homenajes360', version: '1.0.0' }))

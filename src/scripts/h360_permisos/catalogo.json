@@ -410,6 +410,14 @@
       ]
     },
     {
+      "clave": "accion.reportes.salas_velacion",
+      "modulo": "reportes",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.residencia.auditoria",
       "modulo": "residencia",
       "roles": [
