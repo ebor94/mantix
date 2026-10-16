@@ -225,9 +225,13 @@ async function create(req, res, next) {
     body.asesorId = req.usuario.id;
     body.origen = 'ASESOR';
     const result = await afiliadoService.createAfiliadoWithBeneficiarios(body);
-    Afiliado.count({ where: { celular: body.celular } })
-      .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
-      .catch(() => {});
+    // Canal empresarial: NO se envía el WhatsApp de aceptación de tratamiento de
+    // datos (la empresa gestiona el consentimiento). Resto de canales sí.
+    if (body.canal !== 'EMPRESARIAL') {
+      Afiliado.count({ where: { celular: body.celular } })
+        .then(count => { if (count <= 1) sendAceptacion(body.celular).catch(() => {}); })
+        .catch(() => {});
+    }
     // Fire-and-forget: generar PDF del recibo (si se emitió) y enviarlo por WhatsApp
     emitirPdfYEnviarWhatsapp(result.id).catch(() => {});
 
