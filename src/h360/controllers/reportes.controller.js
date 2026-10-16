@@ -60,7 +60,11 @@ SELECT h.id                              AS homenaje_id,
                               ORDER BY e.orden, e.numero, e.momento),
          e.momento)                                                 AS desde_anterior_min,
        e.firmado = 1                     AS firmado,
-       e.funcionario, e.familiar, e.observaciones
+       e.funcionario, e.familiar, e.observaciones,
+       /* Todas las visitas del homenaje, no solo las que caen en el rango:
+          si no, un homenaje que arranca a fin de mes se ve sin visitar. */
+       (SELECT COUNT(*) FROM homenaje_sala_visitas v2
+         WHERE v2.homenaje_sala_id = h.id) AS total_visitas
 FROM eventos e
 JOIN homenajes_sala h       ON h.id  = e.homenaje_id
 LEFT JOIN asistencias a     ON a.id  = h.asistencia_id
@@ -92,35 +96,19 @@ async function salasVelacion(req, res, next) {
        ORDER BY e.momento DESC, e.homenaje_id DESC, e.orden, e.numero`,
       params)
 
-    // El resumen se calcula sobre lo mismo que se muestra, no aparte,
-    // para que gerencia no vea dos números que no cuadran.
-    const porTipo = {}
-    for (const f of filas) {
-      const t = porTipo[f.evento] ||= { eventos: 0, firmados: 0, desfases: [] }
-      t.eventos++
-      if (f.firmado) t.firmados++
-      if (f.desfase_min !== null) t.desfases.push(f.desfase_min)
+    // Lo que mira gerencia es cuántos homenajes quedaron por debajo de las
+    // dos visitas de protocolo, así que el resumen se agrupa por homenaje.
+    const visitasPorHomenaje = new Map()
+    for (const f of filas) visitasPorHomenaje.set(f.homenaje_id, f.total_visitas)
+    const visitas = [...visitasPorHomenaje.values()]
+    const resumen = {
+      homenajes:      visitas.length,
+      menos_de_dos:   visitas.filter(v => v < 2).length,
+      dos:            visitas.filter(v => v === 2).length,
+      mas_de_dos:     visitas.filter(v => v > 2).length,
     }
-    const mediana = xs => {
-      if (!xs.length) return null
-      const s = [...xs].sort((a, b) => a - b), m = s.length >> 1
-      return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2)
-    }
-    const resumen = Object.entries(porTipo).map(([evento, t]) => ({
-      evento,
-      eventos: t.eventos,
-      firmados: t.firmados,
-      sin_firma: t.eventos - t.firmados,
-      desfase_mediano_min: mediana(t.desfases),
-    })).sort((a, b) => ['INGRESO', 'VISITA', 'SALIDA'].indexOf(a.evento)
-                     - ['INGRESO', 'VISITA', 'SALIDA'].indexOf(b.evento))
 
-    res.json({
-      desde, hasta,
-      homenajes: new Set(filas.map(f => f.homenaje_id)).size,
-      resumen,
-      data: filas,
-    })
+    res.json({ desde, hasta, resumen, data: filas })
   } catch (err) { next(err) }
 }
 
