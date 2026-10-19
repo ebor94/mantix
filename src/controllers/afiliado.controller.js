@@ -819,20 +819,18 @@ async function reenviar(req, res, next) {
   try {
     const body = { ...req.body };
 
-    // Cargar el origen y el canal del afiliado para decidir el flujo
+    // Cargar el origen del afiliado para decidir el flujo
     const afiliadoActual = await Afiliado.findByPk(req.params.id, {
-      attributes: ['id', 'origen', 'canal']
+      attributes: ['id', 'origen']
     });
     if (!afiliadoActual) throw new AppError('Afiliado no encontrado', 404);
 
-    // OTP obligatorio para TODO origen público (Veolia y convenios): son
-    // clientes externos sin JWT, y el hash de la URL por sí solo no alcanza
-    // como control de acceso. El canal ASESOR se controla por sesión (req.usuario).
-    //
-    // Excepción: canal EMPRESARIAL. La corrección la gestiona la empresa/asesor
-    // (no el afiliado por autoservicio), así que NO se exige OTP aunque el
-    // origen figure como público (CONVENIO_PUBLICO o, por datos antiguos, CONVENIO).
-    const esPublico = esOrigenPublico(afiliadoActual) && afiliadoActual.canal !== 'EMPRESARIAL';
+    // OTP obligatorio solo para correcciones de origen público (Veolia,
+    // convenios, empresarial público) hechas SIN sesión: son clientes externos
+    // sin JWT y el hash por sí solo no alcanza como control de acceso. Si hay un
+    // usuario autenticado (p.ej. el asesor diligenciando la corrección), la
+    // sesión es el control y NO se exige OTP, cualquiera sea el origen/canal.
+    const esPublico = esOrigenPublico(afiliadoActual) && !req.usuario;
 
     if (esPublico) {
       const { otp } = body;
