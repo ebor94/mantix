@@ -819,9 +819,9 @@ async function reenviar(req, res, next) {
   try {
     const body = { ...req.body };
 
-    // Cargar el origen del afiliado para decidir el flujo
+    // Cargar el origen y el canal del afiliado para decidir el flujo
     const afiliadoActual = await Afiliado.findByPk(req.params.id, {
-      attributes: ['id', 'origen']
+      attributes: ['id', 'origen', 'canal']
     });
     if (!afiliadoActual) throw new AppError('Afiliado no encontrado', 404);
 
@@ -829,10 +829,10 @@ async function reenviar(req, res, next) {
     // clientes externos sin JWT, y el hash de la URL por sí solo no alcanza
     // como control de acceso. El canal ASESOR se controla por sesión (req.usuario).
     //
-    // Antes esto comparaba `origen === 'VEOLIA'`. Con los datos previos el
-    // resultado es idéntico fila por fila, pero de haberlo dejado así los
-    // convenios habrían podido reenviar correcciones sin OTP.
-    const esPublico = esOrigenPublico(afiliadoActual);
+    // Excepción: canal EMPRESARIAL. La corrección la gestiona la empresa/asesor
+    // (no el afiliado por autoservicio), así que NO se exige OTP aunque el
+    // origen figure como público (CONVENIO_PUBLICO o, por datos antiguos, CONVENIO).
+    const esPublico = esOrigenPublico(afiliadoActual) && afiliadoActual.canal !== 'EMPRESARIAL';
 
     if (esPublico) {
       const { otp } = body;
