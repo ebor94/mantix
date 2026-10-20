@@ -15,4 +15,6 @@ module.exports = {
   'TRK-IMP-001': { metodo: 'POST', ruta: '/import/preview', descripcion: 'Vista previa del CSV con advertencias (no guarda)' },
   'TRK-IMP-002': { metodo: 'POST', ruta: '/import/confirm', descripcion: 'Confirma la importación con decisiones del admin' },
   'TRK-CAT-005': { metodo: 'GET', ruta: '/categorias', descripcion: 'Lista categorías con estado y rúbrica' },
+  'TRK-PAR-001': { metodo: 'GET', ruta: '/participantes', descripcion: 'Listado filtrado; campos según rol' },
+  'TRK-PAR-002': { metodo: 'GET', ruta: '/participantes/:id', descripcion: 'Detalle; campos según rol' },
 };

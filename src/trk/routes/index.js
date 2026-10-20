@@ -11,6 +11,7 @@ const modulos = [
   require('./usuarios.routes'),
   require('./import.routes'),
   require('./categorias.routes'),
+  require('./participantes.routes'),
 ];
 
 const router = express.Router();
