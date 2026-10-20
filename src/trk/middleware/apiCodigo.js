@@ -35,7 +35,8 @@ function apiCodigo(codigo) {
     res.on('finish', () => {
       req.trkLog.info('trk request', {
         metodo: req.method,
-        ruta: req.originalUrl,
+        // sin query string: la búsqueda (?q=) puede llevar el documento del responsable
+        ruta: req.originalUrl.split('?')[0],
         status: res.statusCode,
         ms: Date.now() - inicio,
         usuario_id: req.usuario ? req.usuario.id : null
