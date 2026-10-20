@@ -6,6 +6,7 @@ const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearOperativo, crearParticipante } = require('../../testing/fabricas');
+const db = require('../../../models');
 const { dirFotos } = require('../../services/fotos.service');
 
 const app = crearAppTrk({ estaticos: true });
@@ -69,4 +70,33 @@ test('sin archivo → 400', async () => {
   const p = await crearParticipante();
   const r = await request(app).post(`/api/trk/v1/participantes/${p.id}/foto`).set('Authorization', `Bearer ${cabina.token}`);
   expect(r.status).toBe(400);
+});
+
+test('participante inexistente → 404 sin dejar archivos huérfanos', async () => {
+  fs.mkdirSync(dirFotos(), { recursive: true });
+  const antes = fs.readdirSync(dirFotos()).length;
+  const r = await subir('00000000-0000-4000-8000-000000000000', await imagen(800, 1000));
+  expect(r.status).toBe(404);
+  expect(fs.readdirSync(dirFotos()).length).toBe(antes);
+});
+
+test('fotos concurrentes en la misma categoría reciben órdenes de pasarela distintos', async () => {
+  const ps = [];
+  for (let i = 0; i < 4; i += 1) ps.push(await crearParticipante({ estado: 'INSCRITO' }));
+  const buf = await imagen(600, 800);
+  const rs = await Promise.all(ps.map((p) => subir(p.id, buf)));
+  rs.forEach((r) => expect(r.status).toBe(200));
+  const ordenes = rs.map((r) => r.body.data.orden_pasarela);
+  expect(new Set(ordenes).size).toBe(4);
+  ordenes.forEach((o) => expect(Number.isInteger(o)).toBe(true));
+});
+
+test('la auditoría FOTO_OFICIAL guarda el estado y la foto previos', async () => {
+  const p = await crearParticipante({ estado: 'INSCRITO' });
+  const r1 = await subir(p.id, await imagen(600, 800));
+  const primera = path.basename(r1.body.data.foto_url);
+  await subir(p.id, await imagen(600, 800));
+  const fila = await db.TrkAuditoria.findOne({ where: { accion: 'FOTO_OFICIAL', entidad_id: String(p.id) }, order: [['id', 'DESC']] });
+  expect(fila.antes.foto_oficial_path).toBe(primera);
+  expect(fila.antes.estado).toBe('PRESENTE');
 });

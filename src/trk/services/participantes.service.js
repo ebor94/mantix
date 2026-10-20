@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { Op } = require('sequelize');
 const db = require('../../models');
 const TrkError = require('../utils/TrkError');
@@ -8,7 +10,7 @@ const { ESTADOS_VISIBLES_PUBLICO } = require('../config/constantes');
 const { tienePermiso } = require('../utils/permisos');
 const { registrarAuditoria } = require('./auditoria.service');
 const { emitir } = require('../sockets/bus');
-const { procesarYGuardarFoto } = require('./fotos.service');
+const { procesarYGuardarFoto, dirFotos } = require('./fotos.service');
 
 const INCLUIR_CATEGORIA = [{ model: db.TrkCategoria, as: 'categoria' }];
 const ORDEN_COLA = [
@@ -175,22 +177,32 @@ async function cambiarEstado(id, estado, ctx) {
 }
 
 async function guardarFotoOficial(id, buffer, ctx) {
+  await buscarModelo(id); // 404 antes de gastar CPU o tocar disco
   const nombre = await procesarYGuardarFoto(buffer);
-  const p = await db.sequelize.transaction(async (transaction) => {
-    const participante = await buscarModelo(id, { transaction, lock: true });
-    const cambios = { foto_oficial_path: nombre, foto_oficial_at: new Date() };
-    if (['INSCRITO', 'AUSENTE'].includes(participante.estado)) {
-      cambios.estado = 'PRESENTE';
-      if (!participante.llegada_at) cambios.llegada_at = new Date();
-      if (participante.orden_pasarela == null) {
-        const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: participante.categoria_id }, transaction });
-        cambios.orden_pasarela = (maximo || 0) + 1;
+  let p;
+  try {
+    p = await db.sequelize.transaction(async (transaction) => {
+      const participante = await buscarModelo(id, { transaction, lock: true });
+      const previo = { foto_oficial_path: participante.foto_oficial_path, estado: participante.estado };
+      const cambios = { foto_oficial_path: nombre, foto_oficial_at: new Date() };
+      if (['INSCRITO', 'AUSENTE'].includes(participante.estado)) {
+        cambios.estado = 'PRESENTE';
+        if (!participante.llegada_at) cambios.llegada_at = new Date();
+        if (participante.orden_pasarela == null) {
+          // Serializa el cálculo de MAX+1 entre participantes de la misma categoría.
+          await db.TrkCategoria.findByPk(participante.categoria_id, { transaction, lock: transaction.LOCK.UPDATE });
+          const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: participante.categoria_id }, transaction });
+          cambios.orden_pasarela = (maximo || 0) + 1;
+        }
       }
-    }
-    await participante.update(cambios, { transaction });
-    await registrarAuditoria(ctx, { entidad: 'participante', entidadId: participante.id, accion: 'FOTO_OFICIAL', despues: { foto_oficial_path: nombre, estado: participante.estado } }, { transaction });
-    return participante;
-  });
+      await participante.update(cambios, { transaction });
+      await registrarAuditoria(ctx, { entidad: 'participante', entidadId: participante.id, accion: 'FOTO_OFICIAL', antes: previo, despues: { foto_oficial_path: nombre, estado: participante.estado } }, { transaction });
+      return participante;
+    });
+  } catch (e) {
+    await fs.promises.unlink(path.join(dirFotos(), nombre)).catch((err) => { if (err.code !== 'ENOENT') throw err; });
+    throw e;
+  }
   const plano = p.get({ plain: true });
   emitir('foto:nueva', { participante: plano });
   emitir('participante:actualizado', { participante: plano });
