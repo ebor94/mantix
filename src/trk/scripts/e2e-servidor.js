@@ -13,6 +13,7 @@ const http = require('http');
   const { crearAppTrk } = require('../testing/app');
   await semillaE2E();
   const server = http.createServer(crearAppTrk({ estaticos: true }));
+  require('../sockets').attach(server);
   const puerto = Number(process.env.TRK_E2E_PORT || 3021);
   server.listen(puerto, () => console.log(`TRK E2E escuchando en ${puerto}`));
 })().catch((e) => {

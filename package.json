@@ -15,7 +15,10 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testPathIgnorePatterns": ["/node_modules/", "\\.int\\.test\\.js$"]
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "\\.int\\.test\\.js$"
+    ]
   },
   "keywords": [
     "mantenimiento",
@@ -50,6 +53,7 @@
     "pdfkit": "^0.13.0",
     "sequelize": "^6.37.7",
     "sharp": "^0.34.4",
+    "socket.io": "^4.8.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.18.3"
@@ -57,6 +61,7 @@
   "devDependencies": {
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
+    "socket.io-client": "^4.8.4",
     "supertest": "^6.3.4"
   }
 }
