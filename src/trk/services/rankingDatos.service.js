@@ -72,6 +72,8 @@ async function rankingPublicado(categoriaId) {
 
 async function fijarDesempate(categoriaId, orden, ctx) {
   await db.sequelize.transaction(async (transaction) => {
+    // Orden de bloqueo del módulo: evento → participantes → categoría (evita deadlocks con la pasarela).
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
     const filas = await db.TrkParticipante.findAll({ where: { id: orden, categoria_id: categoriaId, fusionado_en_id: null }, transaction, lock: transaction.LOCK.UPDATE });
     if (filas.length !== orden.length) throw new TrkError(400, 'VALIDACION', 'Todos los participantes deben pertenecer a la categoría');
     const antes = Object.fromEntries(filas.map((f) => [f.id, f.desempate_manual]));

@@ -122,3 +122,26 @@ test('sin permisos: jurado no publica ni cierra', async () => {
   expect((await request(app).post(`/api/trk/v1/categorias/${cat.id}/publicar`).set('Authorization', `Bearer ${jurados[0].token}`)).status).toBe(403);
   expect((await request(app).post(`/api/trk/v1/categorias/${cat.id}/cerrar`).set('Authorization', `Bearer ${jurados[0].token}`)).status).toBe(403);
 });
+
+test('M1: TRK-RNK-002 bloquea trk_evento_estado (id=1) antes que los participantes (orden evento → participantes)', async () => {
+  const a = await calificadoPorTodos('A', puntos(30, 25, 15, 10));
+  const b = await calificadoPorTodos('B', puntos(30, 25, 10, 15));
+  const bloqueos = [];
+  const origEstado = db.TrkEventoEstado.findByPk;
+  const origPart = db.TrkParticipante.findAll;
+  const sEstado = jest.spyOn(db.TrkEventoEstado, 'findByPk').mockImplementation(function (...args) {
+    if (args[1] && args[1].lock) bloqueos.push(`evento:${args[0]}`);
+    return origEstado.apply(this, args);
+  });
+  const sPart = jest.spyOn(db.TrkParticipante, 'findAll').mockImplementation(function (...args) {
+    if (args[0] && args[0].lock) bloqueos.push('participantes');
+    return origPart.apply(this, args);
+  });
+  try {
+    await comoAdmin(request(app).put(`/api/trk/v1/ranking/${cat.id}/desempate`)).send({ orden: [b.id, a.id] }).expect(200);
+  } finally {
+    sEstado.mockRestore();
+    sPart.mockRestore();
+  }
+  expect(bloqueos.slice(0, 2)).toEqual(['evento:1', 'participantes']);
+});
