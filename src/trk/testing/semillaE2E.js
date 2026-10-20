@@ -9,6 +9,8 @@ async function semillaE2E() {
   await crearParticipante({ mascota_nombre: 'Canela', estado: 'INSCRITO', responsable_nombre: 'Laura Gómez', responsable_documento: '1001' });
   await crearParticipante({ mascota_nombre: 'Rocky', estado: 'INSCRITO', responsable_nombre: 'Pedro Alba', responsable_documento: '1002' });
   await crearParticipante({ mascota_nombre: 'Misifú', estado: 'INSCRITO', categoriaCodigo: 'FELINOS', especie: 'GATO', responsable_nombre: 'Sofía Mar', responsable_documento: '1003' });
+  await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTE', orden_pasarela: 1, responsable_nombre: 'Julián Sol', responsable_documento: '1004', disfraz_nombre: 'Superhéroe' });
+  await crearParticipante({ mascota_nombre: 'Kira', estado: 'PRESENTE', orden_pasarela: 2, responsable_nombre: 'Marta Luna', responsable_documento: '1005', disfraz_nombre: 'Abejita' });
   return { participantes: await db.TrkParticipante.count() };
 }
 
