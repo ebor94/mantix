@@ -40,9 +40,24 @@ test('TRK-PAS-001 pone en pasarela, la anterior pasa a PRESENTADO y se emite el 
 
 test('§13.14 llamadas concurrentes → exactamente una mascota EN_PASARELA', async () => {
   const ps = await Promise.all([1, 2, 3, 4].map((n) => crearParticipante({ mascota_nombre: `P${n}` })));
-  await Promise.all(ps.map((p) => llamar(p.id)));
+  const rs = await Promise.all(ps.map((p) => llamar(p.id)));
+  rs.forEach((r) => expect(r.status).toBe(200));
   expect(await db.TrkParticipante.count({ where: { estado: 'EN_PASARELA' } })).toBe(1);
   expect(await db.TrkParticipante.count({ where: { estado: 'PRESENTADO' } })).toBe(3);
+});
+
+test('llamadas y reordenamientos concurrentes de una categoría no provocan deadlock (3 + 3 → 200, una EN_PASARELA)', async () => {
+  const cat = await categoria('PEQ_MED');
+  const ps = await Promise.all([1, 2, 3].map((n) => crearParticipante({ mascota_nombre: `D${n}`, orden_pasarela: n })));
+  const orden = ps.map((p) => p.id);
+  const reordenar = () => request(app).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
+    .send({ categoria_id: cat.id, orden: [...orden].reverse() });
+  const rs = await Promise.all([
+    ...ps.map((p) => llamar(p.id)),
+    reordenar(), reordenar(), reordenar()
+  ]);
+  rs.forEach((r) => expect(r.status).toBe(200));
+  expect(await db.TrkParticipante.count({ where: { estado: 'EN_PASARELA' } })).toBe(1);
 });
 
 test('una mascota INSCRITA (sin pasar por cabina) no puede salir → 409 ESTADO_INVALIDO', async () => {

@@ -35,6 +35,8 @@ async function llamarAPasarela(id, ctx) {
 
 async function reordenarCola({ categoria_id: categoriaId, orden }, ctx) {
   await db.sequelize.transaction(async (transaction) => {
+    // Mismo orden de bloqueo que llamarAPasarela (estado del evento primero) para evitar deadlocks.
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
     const filas = await db.TrkParticipante.findAll({ where: { id: orden, fusionado_en_id: null }, transaction, lock: transaction.LOCK.UPDATE });
     if (filas.length !== orden.length || filas.some((f) => f.categoria_id !== Number(categoriaId))) {
       throw new TrkError(400, 'VALIDACION', 'Todos los participantes deben existir y pertenecer a la categoría');
