@@ -56,6 +56,46 @@ describe('TRK-AUTH-001 POST /auth/pin', () => {
   });
 });
 
+describe('TRK-AUTH-001 limitadores (I2)', () => {
+  const pinDesde = (ip, cuerpo) => request(app).post('/api/trk/v1/auth/pin').set('X-Forwarded-For', ip).send(cuerpo);
+
+  test('variantes del mismo id ("01", " 1", "1.0", "1e0"…) comparten el límite IP+usuario', async () => {
+    const { usuario } = await crearOperativo('TRK_JURADO', { pin: '555555' });
+    const id = usuario.id;
+    const variantes = [`0${id}`, `00${id}`, `${id}.0`, `+${id}`, ` ${id}`, `${id}e0`];
+    const estados = [];
+    for (const v of variantes) estados.push((await pinDesde('10.0.0.1', { usuario_id: v, pin: '000000' })).status);
+    expect(estados.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    expect(estados[5]).toBe(429);
+  });
+
+  test('límite por usuario (solo fallos) aunque el atacante rote IPs: 10 fallos en 15 min → 429 incluso con el PIN correcto', async () => {
+    const { usuario } = await crearOperativo('TRK_CABINA', { pin: '424242' });
+    for (let i = 1; i <= 10; i++) {
+      const r = await pinDesde(`10.1.0.${i}`, { usuario_id: usuario.id, pin: '000000' });
+      expect(r.status).toBe(401);
+    }
+    const r = await pinDesde('10.1.0.99', { usuario_id: usuario.id, pin: '424242' });
+    expect(r.status).toBe(429);
+    expect(r.body).toMatchObject({ success: false, error: 'TRK-AUTH-001', motivo: 'DEMASIADOS_INTENTOS' });
+  });
+
+  test('los ingresos correctos no cuentan para el límite por usuario', async () => {
+    const { usuario } = await crearOperativo('TRK_JURADO', { pin: '135791' });
+    for (let i = 1; i <= 12; i++) {
+      const r = await pinDesde(`10.3.0.${i}`, { usuario_id: usuario.id, pin: '135791' });
+      expect(r.status).toBe(200);
+    }
+  });
+
+  test('tope grueso por IP: 100 intentos en 15 min → 429 aunque cambie el usuario', async () => {
+    const estados = [];
+    for (let i = 0; i < 101; i++) estados.push((await pinDesde('10.2.0.1', { usuario_id: 900000 + i, pin: '000000' })).status);
+    expect(estados.slice(0, 100).every((s) => s === 401)).toBe(true);
+    expect(estados[100]).toBe(429);
+  });
+});
+
 describe('TRK-AUTH-002 GET /auth/usuarios-pin', () => {
   test('lista solo operativos activos, sin correo', async () => {
     await crearAdmin();

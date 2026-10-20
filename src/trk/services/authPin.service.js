@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../../models');
 const TrkError = require('../utils/TrkError');
+const logger = require('../../utils/logger');
 const { permisosTrk } = require('../utils/permisos');
 const { ROLES_OPERATIVOS } = require('../config/constantes');
 
@@ -34,7 +35,11 @@ async function loginConPin(usuarioId, pin) {
   const acceso = usuario ? await db.TrkAcceso.findByPk(usuario.id) : null;
   const esOperativo = usuario && usuario.rol && ROLES_OPERATIVOS.includes(usuario.rol.nombre);
   const valido = Boolean(usuario && usuario.activo && esOperativo && acceso && (await bcrypt.compare(pin, acceso.pin_hash)));
-  if (!valido) throw new TrkError(401, 'NO_AUTENTICADO', 'Usuario o PIN incorrecto');
+  if (!valido) {
+    // Solo el id: permite ver un ataque de fuerza bruta sin registrar el PIN ni datos personales.
+    logger.child({ modulo: 'trk', api_codigo: 'TRK-AUTH-001' }).warn('trk pin fallido', { usuario_id: usuarioId });
+    throw new TrkError(401, 'NO_AUTENTICADO', 'Usuario o PIN incorrecto');
+  }
   return { token: emitirTokenPin(usuario.id, acceso.token_version), usuario: perfilDe(usuario) };
 }
 
