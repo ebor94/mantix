@@ -12,4 +12,7 @@ module.exports = {
   'TRK-USR-002': { metodo: 'POST', ruta: '/usuarios', descripcion: 'Crea usuario operativo y devuelve su PIN una vez' },
   'TRK-USR-003': { metodo: 'PATCH', ruta: '/usuarios/:id', descripcion: 'Edita nombre/activo de un usuario operativo' },
   'TRK-USR-004': { metodo: 'POST', ruta: '/usuarios/:id/pin', descripcion: 'Regenera PIN e invalida sesiones' },
+  'TRK-IMP-001': { metodo: 'POST', ruta: '/import/preview', descripcion: 'Vista previa del CSV con advertencias (no guarda)' },
+  'TRK-IMP-002': { metodo: 'POST', ruta: '/import/confirm', descripcion: 'Confirma la importación con decisiones del admin' },
+  'TRK-CAT-005': { metodo: 'GET', ruta: '/categorias', descripcion: 'Lista categorías con estado y rúbrica' },
 };

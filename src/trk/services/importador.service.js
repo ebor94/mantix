@@ -3,6 +3,9 @@
 // ============================================
 const { parse } = require('csv-parse/sync');
 const TrkError = require('../utils/TrkError');
+const db = require('../../models');
+const previewCache = require('./previewCache');
+const { registrarAuditoria } = require('./auditoria.service');
 const {
   normalizarTexto, soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, telefonoValido,
   parsearFechaInscripcion, parsearAutorizacion, campoDeEncabezado, esRazaPequena, esRazaGrande
@@ -148,4 +151,95 @@ function analizarCsv(buffer) {
   };
 }
 
-module.exports = { analizarCsv };
+// Campos que una reimportación puede llenar si están vacíos (CA3). Nunca foto oficial, estado ni categoría.
+const CAMPOS_RELLENABLES = [
+  'responsable_nombre', 'responsable_documento', 'responsable_telefono', 'responsable_correo', 'especie', 'raza',
+  'edad_texto', 'sexo', 'disfraz_nombre', 'foto_inscripcion_url', 'fecha_inscripcion', 'notas_importacion'
+];
+const vacio = (v) => v === null || v === undefined || v === '';
+
+function buscarExistente(datos, transaction) {
+  const where = datos.responsable_documento
+    ? { responsable_documento: datos.responsable_documento, mascota_nombre_norm: datos.mascota_nombre_norm }
+    : { responsable_documento: null, mascota_nombre_norm: datos.mascota_nombre_norm, responsable_nombre: datos.responsable_nombre };
+  return db.TrkParticipante.findOne({ where, transaction, lock: transaction.LOCK.UPDATE });
+}
+
+function cambiosParaVacios(existente, datos, advertencias) {
+  const cambios = {};
+  for (const campo of CAMPOS_RELLENABLES) {
+    if (vacio(existente[campo]) && !vacio(datos[campo])) cambios[campo] = datos[campo];
+  }
+  if (vacio(existente.advertencias_importacion) && advertencias.length) cambios.advertencias_importacion = advertencias;
+  return cambios;
+}
+
+async function confirmarImportacion({ token, decisiones = {} }, ctx) {
+  const entrada = previewCache.obtener(token);
+  if (!entrada) throw new TrkError(409, 'PREVIEW_VENCIDO', 'La vista previa venció; vuelve a cargar el archivo');
+
+  const omitir = new Set(decisiones.omitir || []);
+  const conservar = decisiones.conservar || {};
+  const categoriaDecidida = decisiones.categoria || {};
+
+  const categorias = await db.TrkCategoria.findAll();
+  const idPorCodigo = Object.fromEntries(categorias.map((c) => [c.codigo, c.id]));
+  for (const codigo of Object.values(categoriaDecidida)) {
+    if (!idPorCodigo[codigo]) throw new TrkError(400, 'VALIDACION', `Categoría desconocida: ${codigo}`);
+  }
+
+  const { filas, resumen } = entrada.analisis;
+  const primeraDelGrupo = {};
+  for (const f of filas) if (f.grupo_duplicado && f.conservar_por_defecto) primeraDelGrupo[f.grupo_duplicado] = f.indice;
+
+  const resultado = { creados: 0, actualizados: 0, omitidos: 0 };
+  await db.sequelize.transaction(async (transaction) => {
+    for (const fila of filas) {
+      const codigo = categoriaDecidida[String(fila.indice)] || fila.datos.categoria_codigo;
+      const elegidaDelGrupo = fila.grupo_duplicado
+        ? Number(conservar[fila.grupo_duplicado] ?? primeraDelGrupo[fila.grupo_duplicado])
+        : fila.indice;
+      const importable = !omitir.has(fila.indice) && idPorCodigo[codigo] && fila.datos.mascota_nombre
+        && fila.datos.responsable_nombre && elegidaDelGrupo === fila.indice;
+      if (!importable) {
+        resultado.omitidos += 1;
+        continue;
+      }
+
+      const { categoria_codigo: _ignorada, ...datos } = fila.datos;
+      const existente = await buscarExistente(datos, transaction);
+      if (existente) {
+        const cambios = cambiosParaVacios(existente, datos, fila.advertencias);
+        if (Object.keys(cambios).length) await existente.update(cambios, { transaction });
+        resultado.actualizados += 1;
+      } else {
+        await db.TrkParticipante.create({
+          ...datos,
+          categoria_id: idPorCodigo[codigo],
+          advertencias_importacion: fila.advertencias.length ? fila.advertencias : null,
+          estado: 'INSCRITO',
+          origen: 'IMPORTACION'
+        }, { transaction });
+        resultado.creados += 1;
+      }
+    }
+
+    await db.TrkImportacion.create({
+      usuario_id: ctx.usuarioId,
+      archivo_nombre: entrada.meta.archivoNombre,
+      archivo_sha256: token,
+      filas_total: resumen.total,
+      filas_ok: resultado.creados + resultado.actualizados,
+      filas_advertencia: resumen.con_advertencias
+    }, { transaction });
+    await registrarAuditoria(ctx, {
+      entidad: 'importacion', entidadId: token.slice(0, 36), accion: 'IMPORTAR',
+      despues: { archivo: entrada.meta.archivoNombre, ...resultado }
+    }, { transaction });
+  });
+
+  previewCache.borrar(token);
+  return resultado;
+}
+
+module.exports = { analizarCsv, confirmarImportacion };
