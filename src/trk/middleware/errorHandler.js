@@ -1,5 +1,6 @@
 const logger = require('../../utils/logger');
 const TrkError = require('../utils/TrkError');
+const { errorParaLog } = require('../utils/errorSeguro');
 
 const SIN_CODIGO = 'TRK-SIN-CODIGO';
 
@@ -27,7 +28,7 @@ function trkErrorHandler(err, req, res, next) {
     message = 'JSON inválido';
   }
 
-  if (status >= 500) log.error('trk error no controlado', { message: err && err.message, stack: err && err.stack });
+  if (status >= 500) log.error('trk error no controlado', errorParaLog(err));
   else log.warn('trk error', { status, motivo, message });
 
   const cuerpo = { success: false, error: codigo, motivo, message };

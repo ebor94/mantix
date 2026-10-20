@@ -1,6 +1,7 @@
 const { QueryTypes } = require('sequelize');
 const db = require('../../models');
 const TrkError = require('../utils/TrkError');
+const { errorParaLog } = require('../utils/errorSeguro');
 const logger = require('../../utils/logger');
 const { registrarAuditoria } = require('./auditoria.service');
 const { emitir } = require('../sockets/bus');
@@ -26,7 +27,7 @@ async function estadoPublico() {
     } catch (e) {
       // Solo "aún no publicado" es esperado; cualquier otro fallo se registra y la pantalla sigue sin ranking.
       if (!(e instanceof TrkError && e.motivo === 'RANKING_NO_PUBLICADO')) {
-        logger.child({ modulo: 'trk' }).error('estadoPublico: fallo al cargar ranking publicado', { message: e.message, stack: e.stack });
+        logger.child({ modulo: 'trk' }).error('estadoPublico: fallo al cargar ranking publicado', errorParaLog(e));
       }
     }
   }

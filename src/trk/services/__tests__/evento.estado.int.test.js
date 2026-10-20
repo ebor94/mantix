@@ -41,8 +41,10 @@ test('error inesperado al cargar el ranking: 200 con ranking null y se registra 
   expect(logger.child).toHaveBeenCalledWith(expect.objectContaining({ modulo: 'trk' }));
   expect(errorHijo).toHaveBeenCalledWith(
     'estadoPublico: fallo al cargar ranking publicado',
-    expect.objectContaining({ message: 'db caida', stack: expect.any(String) })
+    expect.objectContaining({ name: 'Error', stack: expect.any(String) })
   );
+  // El mensaje del error puede traer datos personales: nunca se registra.
+  expect(JSON.stringify(errorHijo.mock.calls)).not.toContain('db caida');
 });
 
 test('RANKING_NO_PUBLICADO: 200 con ranking null y NO se registra como error', async () => {

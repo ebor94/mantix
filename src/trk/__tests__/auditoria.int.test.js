@@ -16,7 +16,7 @@ test('RNF-6: crear, desbloquear y reenviar calificación, cambiar categoría y f
   const p = await crearParticipante({ estado: 'EN_PASARELA' });
   const ps = (await criteriosDe(p)).map((c) => ({ criterio_id: c.id, puntaje: 1 }));
 
-  const cal = (await request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps })).body.data;
+  const cal = (await request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps }).expect(200)).body.data;
   await comoAdmin(request(app).post(`/api/trk/v1/calificaciones/${cal.id}/desbloquear`)).expect(200);
   await request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps.map((x) => ({ ...x, puntaje: 2 })) }).expect(200);
 
@@ -38,6 +38,12 @@ test('RNF-6: crear, desbloquear y reenviar calificación, cambiar categoría y f
     expect(a.usuario_id).toEqual(expect.any(Number));
     expect(a.created_at).toBeInstanceOf(Date);
   }
+  const porAccion = (accion) => filas.filter((a) => a.accion === accion);
+  const idsDe = (accion) => porAccion(accion).map((a) => a.usuario_id);
+  expect(idsDe('CREAR')).toEqual([jurado.usuario.id]);
+  expect(idsDe('REENVIAR')).toEqual([jurado.usuario.id]);
+  for (const accion of ['DESBLOQUEAR', 'CAMBIAR_CATEGORIA', 'FUSIONAR']) { expect(idsDe(accion).length).toBeGreaterThan(0); expect(new Set(idsDe(accion))).toEqual(new Set([admin.usuario.id])); }
+  expect(idsDe('PROPONER_CATEGORIA')).toEqual([cabina.usuario.id]);
   const reenvio = filas.find((a) => a.accion === 'REENVIAR');
   expect(reenvio.antes.total).not.toBe(reenvio.despues.total);
 });
