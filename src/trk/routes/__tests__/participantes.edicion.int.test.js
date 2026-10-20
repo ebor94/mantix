@@ -42,7 +42,7 @@ test('alta duplicada (mismo documento y mascota) → 409 DUPLICADO', async () =>
   const cat = await categoria('PEQ_MED');
   await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '55555' });
   const r = await como(cabina, request(app).post(base)).send({
-    responsable_nombre: 'X', responsable_telefono: '3000000000', responsable_documento: '55555', mascota_nombre: 'KIRA', especie: 'PERRO', categoria_id: cat.id
+    responsable_nombre: 'Xavier', responsable_telefono: '3000000000', responsable_documento: '55555', mascota_nombre: 'KIRA', especie: 'PERRO', categoria_id: cat.id
   });
   expect(r.status).toBe(409);
   expect(r.body.motivo).toBe('DUPLICADO');
@@ -76,11 +76,11 @@ test('con calificaciones, el cambio de categoría queda como propuesta (HU-5 CA4
 
 test('cabina no puede editar documento; admin sí', async () => {
   const p = await crearParticipante();
-  const r = await como(cabina, request(app).patch(`${base}/${p.id}`)).send({ responsable_documento: '999' });
+  const r = await como(cabina, request(app).patch(`${base}/${p.id}`)).send({ responsable_documento: '99999' });
   expect(r.status).toBe(403);
-  const rA = await como(admin, request(app).patch(`${base}/${p.id}`)).send({ responsable_documento: '999' });
+  const rA = await como(admin, request(app).patch(`${base}/${p.id}`)).send({ responsable_documento: '99999' });
   expect(rA.status).toBe(200);
-  expect(rA.body.data.participante.responsable_documento).toBe('999');
+  expect(rA.body.data.participante.responsable_documento).toBe('99999');
 });
 
 test('renombrar la mascota actualiza el nombre normalizado', async () => {

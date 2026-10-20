@@ -20,9 +20,9 @@ router.get('/:id', apiCodigo('TRK-PAR-002'), trkAuth, validar(esquemaId, 'params
 
 const telefono = Joi.string().pattern(/^\d{7,10}$/);
 const esquemaAlta = Joi.object({
-  responsable_nombre: Joi.string().trim().min(1).max(150).required(),
+  responsable_nombre: Joi.string().trim().min(2).max(150).required(),
   responsable_telefono: telefono.required(),
-  responsable_documento: Joi.string().pattern(/^\d{3,20}$/).allow(null, ''),
+  responsable_documento: Joi.string().pattern(/^\d{4,20}$/).allow(null, ''),
   responsable_correo: Joi.string().email().allow(null, ''),
   mascota_nombre: Joi.string().trim().min(1).max(100).required(),
   especie: Joi.string().valid('PERRO', 'GATO').required(),
@@ -42,8 +42,8 @@ const esquemaEdicion = Joi.object({
   categoria_id: Joi.number().integer().positive(),
   responsable_telefono: telefono.allow(null, ''),
   responsable_correo: Joi.string().email().allow(null, ''),
-  responsable_nombre: Joi.string().trim().min(1).max(150),
-  responsable_documento: Joi.string().pattern(/^\d{3,20}$/).allow(null),
+  responsable_nombre: Joi.string().trim().min(2).max(150),
+  responsable_documento: Joi.string().pattern(/^\d{4,20}$/).allow(null),
   autoriza_datos: Joi.boolean(),
   autoriza_reglamento: Joi.boolean(),
   foto_inscripcion_url: Joi.string().uri().max(500).allow(null, '')
