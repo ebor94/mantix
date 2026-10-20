@@ -399,6 +399,7 @@ const softAuth = async (req, res, next) => {
 };
 
 module.exports = {
+  resolverUsuarioDesdeToken,
   auth,
   authorize,
   requireSuperAdmin,

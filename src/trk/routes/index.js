@@ -7,6 +7,7 @@ const TrkError = require('../utils/TrkError');
 const { trkErrorHandler } = require('../middleware/errorHandler');
 
 const modulos = [
+  require('./auth.routes'),
 ];
 
 const router = express.Router();
