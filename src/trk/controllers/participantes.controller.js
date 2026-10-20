@@ -15,3 +15,6 @@ exports.subirFoto = async (req, res) => {
   if (!req.file) throw new TrkError(400, 'VALIDACION', 'Adjunta la foto en el campo "foto"');
   ok(res, await svc.guardarFotoOficial(req.params.id, req.file.buffer, ctxDe(req)));
 };
+
+exports.fusionar = async (req, res) => ok(res, await svc.fusionar(req.params.id, req.body.destino_id, ctxDe(req)));
+exports.confirmarCategoria = async (req, res) => ok(res, await svc.confirmarCategoria(req.params.id, req.body, ctxDe(req)));

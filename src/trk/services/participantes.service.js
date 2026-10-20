@@ -209,6 +209,87 @@ async function guardarFotoOficial(id, buffer, ctx) {
   return recargarCompleto(p);
 }
 
+// Orden de avance para decidir el estado del destino tras fusionar.
+const AVANCE = ['AUSENTE', 'INSCRITO', 'PRESENTE', 'PRESENTADO', 'EN_PASARELA'];
+
+async function fusionar(origenId, destinoId, ctx) {
+  if (origenId === destinoId) throw new TrkError(400, 'VALIDACION', 'No se puede fusionar un registro consigo mismo');
+  const destino = await db.sequelize.transaction(async (transaction) => {
+    // Convención de locks: trk_evento_estado primero, luego participantes.
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
+    const origen = await buscarModelo(origenId, { transaction, lock: true });
+    const dest = await buscarModelo(destinoId, { transaction, lock: true });
+    const [calsOrigen, calsDestino] = await Promise.all([
+      db.TrkCalificacion.findAll({ where: { participante_id: origen.id }, transaction, lock: transaction.LOCK.UPDATE }),
+      db.TrkCalificacion.findAll({ where: { participante_id: dest.id }, transaction })
+    ]);
+    const choques = calsOrigen.filter((c) => calsDestino.some((d) => d.jurado_id === c.jurado_id));
+    if (choques.length) {
+      throw new TrkError(409, 'FUSION_CON_CHOQUE', 'Un mismo jurado calificó ambos registros; desbloquea o elimina una de las calificaciones antes de fusionar',
+        choques.map((c) => ({ campo: 'jurado_id', mensaje: `Jurado ${c.jurado_id} calificó ambos` })));
+    }
+    if (calsOrigen.length && origen.categoria_id !== dest.categoria_id) {
+      throw new TrkError(409, 'CATEGORIAS_DISTINTAS', 'El origen tiene calificaciones de otra categoría; cambia primero su categoría o la del destino');
+    }
+
+    const antesDestino = dest.get({ plain: true });
+    for (const c of calsOrigen) await c.update({ participante_id: dest.id }, { transaction });
+
+    const cambios = {};
+    if (origen.foto_oficial_at && (!dest.foto_oficial_at || origen.foto_oficial_at > dest.foto_oficial_at)) {
+      cambios.foto_oficial_path = origen.foto_oficial_path;
+      cambios.foto_oficial_at = origen.foto_oficial_at;
+    }
+    if (AVANCE.indexOf(origen.estado) > AVANCE.indexOf(dest.estado)) cambios.estado = origen.estado;
+    if (!dest.llegada_at && origen.llegada_at) cambios.llegada_at = origen.llegada_at;
+    if (Object.keys(cambios).length) await dest.update(cambios, { transaction });
+
+    if (origen.estado === 'EN_PASARELA') {
+      await db.TrkEventoEstado.update({ participante_en_pasarela_id: dest.id }, { where: { id: 1, participante_en_pasarela_id: origen.id }, transaction });
+    }
+    await origen.update({ fusionado_en_id: dest.id, estado: origen.estado === 'EN_PASARELA' ? 'PRESENTADO' : origen.estado }, { transaction });
+
+    await registrarAuditoria(ctx, { entidad: 'participante', entidadId: origen.id, accion: 'FUSIONAR', despues: { fusionado_en_id: dest.id } }, { transaction });
+    await registrarAuditoria(ctx, {
+      entidad: 'participante', entidadId: dest.id, accion: 'FUSIONAR',
+      antes: { foto_oficial_path: antesDestino.foto_oficial_path, estado: antesDestino.estado },
+      despues: { origen_id: origen.id, calificaciones_movidas: calsOrigen.length, ...cambios }
+    }, { transaction });
+    return dest;
+  });
+  emitir('participante:actualizado', { participante: destino.get({ plain: true }) });
+  return recargarCompleto(destino);
+}
+
+async function confirmarCategoria(id, { confirmar }, ctx) {
+  const p = await db.sequelize.transaction(async (transaction) => {
+    const participante = await buscarModelo(id, { transaction, lock: true });
+    if (!participante.categoria_propuesta_id) throw new TrkError(400, 'VALIDACION', 'No hay un cambio de categoría propuesto');
+    const calificaciones = await db.TrkCalificacion.findAll({ where: { participante_id: participante.id }, transaction, lock: transaction.LOCK.UPDATE });
+    if (calificaciones.length && confirmar !== true) {
+      throw new TrkError(409, 'CONFIRMACION_REQUERIDA', `Confirmar borrará ${calificaciones.length} calificación(es) porque la rúbrica cambia`);
+    }
+    const antes = {
+      categoria_id: participante.categoria_id,
+      calificaciones: calificaciones.map((c) => ({ id: c.id, jurado_id: c.jurado_id, total: c.total }))
+    };
+    await db.TrkCalificacion.destroy({ where: { participante_id: participante.id }, transaction });
+    const nueva = participante.categoria_propuesta_id;
+    const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: nueva }, transaction });
+    await participante.update({
+      categoria_id: nueva, categoria_propuesta_id: null, desempate_manual: null,
+      orden_pasarela: participante.orden_pasarela == null ? null : (maximo || 0) + 1
+    }, { transaction });
+    await registrarAuditoria(ctx, {
+      entidad: 'participante', entidadId: participante.id, accion: 'CAMBIAR_CATEGORIA',
+      antes, despues: { categoria_id: nueva, calificaciones_borradas: calificaciones.length }
+    }, { transaction });
+    return participante;
+  });
+  emitir('participante:actualizado', { participante: p.get({ plain: true }) });
+  return recargarCompleto(p);
+}
+
 module.exports = {
-  guardarFotoOficial, listar, obtener, buscarModelo, INCLUIR_CATEGORIA, crearAltaRapida, editar, cambiarEstado, CAMPOS_CABINA, CAMPOS_ADMIN
+  fusionar, confirmarCategoria, guardarFotoOficial, listar, obtener, buscarModelo, INCLUIR_CATEGORIA, crearAltaRapida, editar, cambiarEstado, CAMPOS_CABINA, CAMPOS_ADMIN
 };

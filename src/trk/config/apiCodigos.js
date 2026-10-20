@@ -20,6 +20,8 @@ module.exports = {
   'TRK-PAR-003': { metodo: 'POST', ruta: '/participantes', descripcion: 'Alta de último minuto (cabina/admin)' },
   'TRK-PAR-004': { metodo: 'PATCH', ruta: '/participantes/:id', descripcion: 'Edición; categoría directa o propuesta' },
   'TRK-PAR-005': { metodo: 'POST', ruta: '/participantes/:id/foto', descripcion: 'Sube foto oficial y marca PRESENTE' },
+  'TRK-PAR-006': { metodo: 'POST', ruta: '/participantes/:id/fusionar', descripcion: 'Fusiona el registro (origen) en destino_id' },
+  'TRK-PAR-007': { metodo: 'POST', ruta: '/participantes/:id/categoria/confirmar', descripcion: 'Confirma categoría propuesta; borra calificaciones' },
   'TRK-PAR-008': { metodo: 'PATCH', ruta: '/participantes/:id/estado', descripcion: 'Marca o desmarca AUSENTE' },
   'TRK-PAS-001': { metodo: 'POST', ruta: '/pasarela/:id', descripcion: 'Pone una mascota en pasarela' },
   'TRK-PAS-002': { metodo: 'PUT', ruta: '/pasarela/orden', descripcion: 'Reordena la cola de una categoría' },

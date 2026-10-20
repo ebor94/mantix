@@ -67,4 +67,10 @@ const subidaFoto = multer({
 
 router.post('/:id/foto', apiCodigo('TRK-PAR-005'), trkAuth, trkPermiso('cabina'), validar(esquemaId, 'params'), subidaFoto.single('foto'), aw(ctrl.subirFoto));
 
+const esquemaFusion = Joi.object({ destino_id: Joi.string().guid({ version: 'uuidv4' }).required() });
+const esquemaConfirmar = Joi.object({ confirmar: Joi.boolean().default(false) });
+
+router.post('/:id/fusionar', apiCodigo('TRK-PAR-006'), trkAuth, trkPermiso('editar'), validar(esquemaId, 'params'), validar(esquemaFusion), aw(ctrl.fusionar));
+router.post('/:id/categoria/confirmar', apiCodigo('TRK-PAR-007'), trkAuth, trkPermiso('editar'), validar(esquemaId, 'params'), validar(esquemaConfirmar), aw(ctrl.confirmarCategoria));
+
 module.exports = { prefijo: '/participantes', router, esquemaId };
