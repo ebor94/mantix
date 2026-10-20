@@ -1,0 +1,16 @@
+services:
+  mysql-trk-test:
+    image: mysql:8.0
+    container_name: mysql-trk-test
+    environment:
+      MYSQL_ROOT_PASSWORD: trk_test
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=-05:00"]
+    ports:
+      - "127.0.0.1:3307:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ptrk_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

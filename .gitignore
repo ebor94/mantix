@@ -19,3 +19,5 @@ uploads/
 # Excepciones: migraciones versionadas
 !src/sv/migrations/*.sql
 !src/scripts/*.sql
+!src/trk/migrations/*.sql
+!src/trk/testing/sql/*.sql
