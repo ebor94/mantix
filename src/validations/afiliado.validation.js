@@ -2,8 +2,8 @@ const Joi = require('joi');
 
 // ── Esquema de beneficiario ───────────────────────────────────
 const beneficiarioSchema = Joi.object({
-  tipoBeneficiario: Joi.string().valid('DE_LEY', 'ADICIONAL').required()
-    .messages({ 'any.only': 'Tipo de beneficiario debe ser DE_LEY o ADICIONAL' }),
+  tipoBeneficiario: Joi.string().valid('DE_LEY', 'ADICIONAL', 'MASCOTA').required()
+    .messages({ 'any.only': 'Tipo de beneficiario debe ser DE_LEY, ADICIONAL o MASCOTA' }),
 
   parentesco: Joi.string().valid(
     'ABUELASTRO (A)', 'ABUELO (A)', 'AHIJADO (A)', 'ASEGURADO PRINCIPAL',
@@ -13,7 +13,9 @@ const beneficiarioSchema = Joi.object({
     'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
     'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
     'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
-    'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
+    'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA',
+    // Mascotas: el parentesco es la especie.
+    'PERRO', 'GATO', 'HAMSTER', 'CONEJO', 'PEZ'
   ).required()
     .messages({ 'any.only': 'Parentesco no válido' }),
 
@@ -24,8 +26,14 @@ const beneficiarioSchema = Joi.object({
   tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT', 'RC').required()
     .messages({ 'any.only': 'Tipo de documento no válido' }),
 
-  numeroDocumento: Joi.string().pattern(/^\d{5,20}$/).required().trim()
-    .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 20 dígitos' }),
+  // Mascota (tipoBeneficiario MASCOTA): el documento es la figura ADT, así que
+  // no exige el patrón de 5-20 dígitos (puede venir '0' o vacío). Resto: 5-20 díg.
+  numeroDocumento: Joi.when('tipoBeneficiario', {
+    is: 'MASCOTA',
+    then: Joi.string().allow('', null).trim(),
+    otherwise: Joi.string().pattern(/^\d{5,20}$/).required().trim()
+      .messages({ 'string.pattern.base': 'Número de documento debe tener entre 5 y 20 dígitos' })
+  }),
 
   primerApellido: Joi.string().max(80).required().trim()
     .messages({ 'string.empty': 'Primer apellido es obligatorio' }),

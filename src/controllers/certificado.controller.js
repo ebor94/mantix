@@ -109,9 +109,12 @@ async function generar(req, res, next) {
     // (son datos del plan, no de la persona).
     const aseguradoPrincipal = beneficiarios.find(b => b.parentesco === 'ASEGURADO PRINCIPAL');
     const titular = aseguradoPrincipal || afiliado;
-    const beneficiariosLista = aseguradoPrincipal
-      ? beneficiarios.filter(b => b !== aseguradoPrincipal)
-      : beneficiarios;
+    // Las mascotas (tipoBeneficiario MASCOTA) van en su propia sección, no en la
+    // tabla de beneficiarios.
+    const mascotas = beneficiarios.filter(b => b.tipoBeneficiario === 'MASCOTA');
+    const beneficiariosLista = beneficiarios.filter(b =>
+      b !== aseguradoPrincipal && b.tipoBeneficiario !== 'MASCOTA'
+    );
 
     const contrato = await ContratoValor.findOne({
       where: { afiliadoId },
@@ -332,6 +335,40 @@ async function generar(req, res, next) {
 
     y += 10;
 
+    // ── INFORMACIÓN DE MASCOTAS ────────────────────────────────────────────
+    if (mascotas.length > 0) {
+      if (y > 680) { doc.addPage(); y = 120; }
+      doc.rect(40, y, 515, 16).fill('#cbcfd2');
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('black')
+        .text('INFORMACIÓN DE MASCOTAS', 0, y + 3, { align: 'center' });
+      y += 20;
+
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('black');
+      doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
+      doc.fillColor('black');
+      doc.text('Nombre', 44, y + 4);
+      doc.text('Raza', 180, y + 4);
+      doc.text('Especie', 300, y + 4);
+      doc.text('Género', 380, y + 4);
+      doc.text('F. Nac.', 440, y + 4);
+      doc.text('Valor', 500, y + 4);
+      y += 15;
+
+      doc.font('Helvetica').fontSize(8);
+      for (const m of mascotas) {
+        if (y + 16 > 730) { doc.addPage(); y = 120; }
+        const genero = m.genero === 'M' ? 'Macho' : (m.genero === 'F' ? 'Hembra' : '');
+        doc.text((m.primerApellido || '').toUpperCase(), 44, y, { width: 130 });
+        doc.text((m.primerNombre || '').toUpperCase(), 180, y, { width: 115 });
+        doc.text(m.parentesco || '', 300, y, { width: 75 });
+        doc.text(genero, 380, y, { width: 55 });
+        doc.text(formatFecha(m.fechaNacimiento), 440, y, { width: 55 });
+        doc.text(formatMoneda(m.valorPorPersona), 500, y, { width: 55 });
+        y += 14;
+      }
+      y += 10;
+    }
+
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
     if (y > 700) { doc.addPage(); y = 120; }
 
@@ -387,6 +424,7 @@ async function generar(req, res, next) {
     const tarifa = contrato && contrato.tarifa ? contrato.tarifa : null;
     const valorPlan = Number((contrato && contrato.valorPlanExequial) || (tarifa && tarifa.valorBase) || 0);
     const valorAdicionales = Number((contrato && contrato.valorAdicionales) || 0);
+    const valorMascotas = Number((contrato && contrato.valorMascotas) || 0);
     const valorAsistencia = afiliado.asistenciaFueraDeCasa === 'SI' && tarifa ? Number(tarifa.valorAsistencia || 0) : 0;
     // La prima viene ANUAL; se distribuye en `nCuotas` para el cobro por cuota.
     const totalSegurosAnual = seguros.reduce((acc, s) => acc + Number(s.prima || 0), 0);
@@ -395,6 +433,7 @@ async function generar(req, res, next) {
     // + texto legal), de modo que no se solape con la imagen del pie (y=740).
     let filasDetalle = 1;
     if (valorAdicionales > 0)  filasDetalle++;
+    if (valorMascotas > 0)     filasDetalle++;
     if (valorAsistencia > 0)   filasDetalle++;
     if (totalSegurosAnual > 0) filasDetalle++;
     const altoDetalle = 20 + filasDetalle * 15 + 13 + 25 + 75; // + texto legal (~4 líneas)
@@ -415,6 +454,13 @@ async function generar(req, res, next) {
       const numAdic = beneficiarios.filter(b => b.tipoBeneficiario === 'ADICIONAL').length;
       doc.font('Helvetica-Bold').text(`BENEFICIARIOS ADICIONALES${numAdic > 0 ? ' (' + numAdic + ')' : ''}`, 40, y);
       doc.font('Helvetica').text(formatMoneda(valorAdicionales), 450, y);
+      y += 15;
+    }
+
+    if (valorMascotas > 0) {
+      const numMasc = mascotas.length;
+      doc.font('Helvetica-Bold').text(`MASCOTAS${numMasc > 0 ? ' (' + numMasc + ')' : ''}`, 40, y);
+      doc.font('Helvetica').text(formatMoneda(valorMascotas), 450, y);
       y += 15;
     }
 
@@ -440,7 +486,7 @@ async function generar(req, res, next) {
     // Total Anual = suma de los conceptos mostrados. Si contrato.valorTotal ya
     // incluye los seguros, usar ese; de lo contrario, sumar manualmente.
     const valorContratoTotal = Number((contrato && contrato.valorTotal) || 0);
-    const sumaConceptos = valorPlan + valorAdicionales + valorAsistencia + totalSegurosAnual;
+    const sumaConceptos = valorPlan + valorAdicionales + valorMascotas + valorAsistencia + totalSegurosAnual;
     const valorTotal = valorContratoTotal >= sumaConceptos ? valorContratoTotal : sumaConceptos;
     const valorCuota = Number((contrato && contrato.valorCuota) || (valorTotal / nCuotas) || 0);
 

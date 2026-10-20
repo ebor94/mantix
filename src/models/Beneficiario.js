@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     tipoBeneficiario: {
-      type: DataTypes.ENUM('DE_LEY', 'ADICIONAL'),
+      type: DataTypes.ENUM('DE_LEY', 'ADICIONAL', 'MASCOTA'),
       allowNull: false
     },
     parentesco: {
@@ -30,7 +30,9 @@ module.exports = (sequelize, DataTypes) => {
         'HIJO CON INCAPACIDAD', 'MADRASTRA', 'MADRE', 'MADRINA',
         'NIETO (A)', 'OTRO', 'PADRASTRO', 'PADRE', 'PADRINO',
         'PRIMO (A)', 'PROTEGIDO (A)', 'SERVICIO DOMESTICO (A)', 'SOBRINO (A)',
-        'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA'
+        'SUEGRASTRO', 'SUEGRO (A)', 'TIO (A)', 'YERNO/NUERA',
+        // Mascotas (afiliación de mascotas): el "parentesco" es la especie.
+        'PERRO', 'GATO', 'HAMSTER', 'CONEJO', 'PEZ'
       ),
       allowNull: false
     },

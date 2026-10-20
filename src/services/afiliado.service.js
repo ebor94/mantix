@@ -154,6 +154,7 @@ async function createAfiliadoWithBeneficiarios(data) {
     const segMensual = await empresarialRegistro.valorSegurosMensual(seguros);
     contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
       plan, parametros, beneficiariosAdicionales: adicionales,
+      mascotas: beneficiarios.filter(b => b.tipoBeneficiario === 'MASCOTA'),
       asistencia: afiliadoData.asistenciaFueraDeCasa === 'SI',
       valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
       fechaRegistro: afiliadoData.fechaPago || new Date()
@@ -692,6 +693,7 @@ async function actualizarBeneficiariosConsulta(afiliadoId, beneficiarios, usuari
     const segMensual = await empresarialRegistro.valorSegurosMensual(segurosActuales);
     contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
       plan, parametros, beneficiariosAdicionales: adicionales,
+      mascotas: beneficiarios.filter(b => b.tipoBeneficiario === 'MASCOTA'),
       asistencia: afiliadoPlain.asistenciaFueraDeCasa === 'SI',
       valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
       fechaRegistro: afiliadoPlain.fechaPago || afiliadoPlain.createdAt
@@ -844,6 +846,7 @@ async function reenviarAfiliacion(id, data, usuario) {
     const segMensual = await empresarialRegistro.valorSegurosMensual(segurosParaCalculo);
     contratoEmpresarialOverride = empresarialRegistro.construirContratoEmpresarial({
       plan, parametros, beneficiariosAdicionales: adicionales,
+      mascotas: beneficiarios.filter(b => b.tipoBeneficiario === 'MASCOTA'),
       asistencia: afiliadoPlain.asistenciaFueraDeCasa === 'SI',
       valorSegurosMensual: segMensual, empresa: empresaEmpresarial,
       fechaRegistro: afiliadoPlain.fechaPago || afiliadoPlain.createdAt

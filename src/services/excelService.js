@@ -531,6 +531,11 @@ SELECT * FROM (
             WHEN 'PROTEGIDO (A)'            THEN '24'
             WHEN 'SERVICIO DOMESTICO (A)'   THEN '23'
             WHEN 'ASEGURADO PRINCIPAL'      THEN '3'
+            WHEN 'PERRO'                    THEN '43'
+            WHEN 'GATO'                     THEN '44'
+            WHEN 'HAMSTER'                  THEN '49'
+            WHEN 'CONEJO'                   THEN '50'
+            WHEN 'PEZ'                      THEN '51'
             ELSE '29'
         END                                                       AS \`COD. PARIENTE\`,
         ''                                                        AS \`CALIDAD DEL BENEFICIARIO\`,

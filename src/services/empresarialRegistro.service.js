@@ -82,18 +82,23 @@ function contarAdicionales(beneficiarios = []) {
   return beneficiarios.filter(b => b.tipoBeneficiario === 'ADICIONAL');
 }
 
-function construirContratoEmpresarial({ plan, parametros, beneficiariosAdicionales = [], asistencia = false, valorSegurosMensual = 0, empresa, fechaRegistro }) {
+function construirContratoEmpresarial({ plan, parametros, beneficiariosAdicionales = [], mascotas = [], asistencia = false, valorSegurosMensual = 0, empresa, fechaRegistro }) {
   const valorAdicionales = beneficiariosAdicionales.reduce(
     (s, b) => s + pricing.valorAdicionalPorEdad(b.edad, parametros), 0
   );
+  // Mascotas: valor editado por el asesor (mensual en este canal). Suma al paquete.
+  const valorMascotas = (mascotas || []).reduce(
+    (s, b) => s + (Number(b.valorPorPersona) || 0), 0
+  );
   const asist = asistencia ? (Number(parametros.valorAsistencia) || 0) : 0;
-  const paqueteMensual = (Number(plan.valorMensual) || 0) + valorAdicionales + asist + (Number(valorSegurosMensual) || 0);
+  const paqueteMensual = (Number(plan.valorMensual) || 0) + valorAdicionales + valorMascotas + asist + (Number(valorSegurosMensual) || 0);
   const meses = pricing.mesesRestantes(toYMD(fechaRegistro), toYMD(empresa.vigenciaCierre));
   return {
     tarifaId: null,
     valorPlanExequial: +(Number(plan.valorMensual) || 0).toFixed(2),
     valorAdicionales: +valorAdicionales.toFixed(2),
     valorSeguros: +(Number(valorSegurosMensual) || 0).toFixed(2),
+    valorMascotas: +valorMascotas.toFixed(2),
     periodicidad: 'MENSUAL',
     nCuotas: meses,
     valorCuota: +paqueteMensual.toFixed(2),

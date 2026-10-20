@@ -41,6 +41,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0.00
     },
+    valorMascotas: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0.00
+    },
     valorTotal: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: false,
