@@ -76,3 +76,77 @@ test('calificacion:recibida solo llega a la room admin', async () => {
   await noJurado;
   await noPantalla;
 });
+
+// ---------- I3: reenvío fail-closed y filtrado por estado ----------
+const fila = (extra = {}) => ({
+  id: 'p-1', categoria_id: 1, mascota_nombre: 'Lola', estado: 'PRESENTE', fusionado_en_id: null,
+  responsable_nombre: 'Marta Gómez', responsable_documento: '1004123456', responsable_telefono: '3009998877',
+  responsable_correo: 'marta@x.co', categoria_propuesta_id: 2, notas_importacion: 'n', advertencias_importacion: ['a'],
+  ...extra
+});
+const SIN_PII = /1004123456|3009998877|marta@x\.co|Gómez/;
+
+test('I3: cualquier clave con una fila cruda llega a rooms PUBLICO sin responsable_* (a cualquier profundidad); admin la ve completa', async () => {
+  const [sP, sJ, sA] = await Promise.all([conectar(null), conectar(jurado.token), conectar(admin.token)]);
+  const llegan = Promise.all([sP, sJ, sA].map((s) => esperar(s, 'pasarela:cambio')));
+  emitir('pasarela:cambio', { participante: fila({ estado: 'EN_PASARELA' }), destino: fila(), lista: [{ anidado: fila() }] });
+  const [mP, mJ, mA] = await llegan;
+  for (const m of [mP, mJ]) {
+    expect(JSON.stringify(m)).not.toMatch(SIN_PII);
+    expect(m.destino).not.toHaveProperty('responsable_documento');
+    expect(m.destino).not.toHaveProperty('notas_importacion');
+    expect(m.destino).not.toHaveProperty('categoria_propuesta_id');
+    expect(m.lista[0].anidado).not.toHaveProperty('responsable_correo');
+  }
+  expect(mA.destino.responsable_documento).toBe('1004123456');
+});
+
+test('I3: participante no visible (INSCRITO/AUSENTE) → jurado y comentarista solo reciben {id, estado: OCULTO}; pantalla nada', async () => {
+  const [sJ, sC, sP, sA] = await Promise.all([conectar(jurado.token), conectar(comentarista.token), conectar(null), conectar(admin.token)]);
+  for (const estado of ['INSCRITO', 'AUSENTE']) {
+    const llegan = Promise.all([sJ, sC, sA].map((s) => esperar(s, 'participante:actualizado')));
+    const noPantalla = noRecibe(sP, 'participante:actualizado');
+    emitir('participante:actualizado', { participante: fila({ estado }) });
+    const [mJ, mC, mA] = await llegan;
+    expect(mJ).toEqual({ participante: { id: 'p-1', estado: 'OCULTO' } });
+    expect(mC).toEqual({ participante: { id: 'p-1', estado: 'OCULTO' } });
+    expect(mA.participante).toMatchObject({ id: 'p-1', estado, responsable_telefono: '3009998877' });
+    await noPantalla;
+  }
+});
+
+test('I3: foto:nueva de un participante no visible no llega a rooms PUBLICO', async () => {
+  const [sJ, sP, sA] = await Promise.all([conectar(jurado.token), conectar(null), conectar(admin.token)]);
+  const noJ = noRecibe(sJ, 'foto:nueva');
+  const noP = noRecibe(sP, 'foto:nueva');
+  const llegaA = esperar(sA, 'foto:nueva');
+  emitir('foto:nueva', { participante: fila({ estado: 'INSCRITO' }) });
+  await expect(llegaA).resolves.toHaveProperty('participante.id', 'p-1');
+  await noJ;
+  await noP;
+});
+
+test('I3: pantalla no recibe participante:actualizado aunque el participante sea visible', async () => {
+  const [sJ, sP] = await Promise.all([conectar(jurado.token), conectar(null)]);
+  const llegaJ = esperar(sJ, 'participante:actualizado');
+  const noP = noRecibe(sP, 'participante:actualizado');
+  emitir('participante:actualizado', { participante: fila() });
+  await expect(llegaJ).resolves.toHaveProperty('participante.mascota_nombre', 'Lola');
+  await noP;
+});
+
+test('I3 + HU-3 CA2: origen fusionado → admin y cabina ven fusionado_en_id; jurado lo recibe como OCULTO', async () => {
+  const cabina = await crearOperativo('TRK_CABINA');
+  const [sA, sCab, sJ] = await Promise.all([conectar(admin.token), conectar(cabina.token), conectar(jurado.token)]);
+  const llegan = Promise.all([sA, sCab, sJ].map((s) => esperar(s, 'participante:actualizado')));
+  emitir('participante:actualizado', { participante: fila({ estado: 'PRESENTADO', fusionado_en_id: 'p-2' }) });
+  const [mA, mCab, mJ] = await llegan;
+  expect(mA.participante.fusionado_en_id).toBe('p-2');
+  expect(mCab.participante).toMatchObject({ fusionado_en_id: 'p-2', responsable_documento: '1004123456' });
+  expect(mJ).toEqual({ participante: { id: 'p-1', estado: 'OCULTO' } });
+});
+
+test('M3: si serializar falla, emitir() no lanza al servicio (el error se registra)', () => {
+  const malo = { get: () => { throw new Error('fila rota'); } };
+  expect(() => emitir('participante:actualizado', { participante: malo })).not.toThrow();
+});

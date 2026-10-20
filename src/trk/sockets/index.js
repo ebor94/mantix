@@ -1,13 +1,18 @@
 // ============================================
 // Socket.IO de TRIKIPELUDOS: namespace /trk sobre el servidor HTTP de Mantix.
 // Rooms: admin | cabina | comentarista | jurado (con token) · pantalla (sin token).
-// Toda carga con participante se serializa por room (RNF-5).
+// Toda carga con participante se serializa por room (RNF-5). Para rooms PUBLICO el reenvío es
+// fail-closed: se eliminan datos del responsable a cualquier profundidad y los participantes no
+// visibles (spec §4: INSCRITO/AUSENTE o fusionados) no se envían (I3).
 // ============================================
 const { Server } = require('socket.io');
 const { bus } = require('./bus');
 const { resolverSesion } = require('../middleware/trkAuth');
 const { permisosTrk } = require('../utils/permisos');
 const { serializarParticipante } = require('../utils/serializar');
+const { ESTADOS_VISIBLES_PUBLICO } = require('../config/constantes');
+const { errorParaLog } = require('../utils/errorSeguro');
+const logger = require('../../utils/logger');
 
 const NIVEL_POR_ROOM = { admin: 'COMPLETO', cabina: 'COMPLETO', comentarista: 'PUBLICO', jurado: 'PUBLICO', pantalla: 'PUBLICO' };
 
@@ -21,9 +26,42 @@ function roomsDe(usuario) {
   return rooms.length ? rooms : ['pantalla'];
 }
 
+const nivelDe = (room) => NIVEL_POR_ROOM[room] || 'PUBLICO';
+const plano = (v) => (v && typeof v.get === 'function' ? v.get({ plain: true }) : v);
+const esObjetoPlano = (v) => v !== null && typeof v === 'object' && [Object.prototype, null].includes(Object.getPrototypeOf(v));
+
 function serializarPayload(payload, room) {
   if (!payload || !payload.participante) return payload;
-  return { ...payload, participante: serializarParticipante(payload.participante, NIVEL_POR_ROOM[room]) };
+  return { ...payload, participante: serializarParticipante(payload.participante, nivelDe(room)) };
+}
+
+// Claves que nunca salen a rooms PUBLICO, vengan donde vengan (fail-closed ante filas crudas).
+const CLAVES_SOLO_COMPLETO = new Set([
+  'categoria_propuesta_id', 'notas_importacion', 'advertencias_importacion', 'autoriza_datos', 'autoriza_reglamento', 'fecha_inscripcion'
+]);
+const claveVedada = (k) => (k.startsWith('responsable_') && k !== 'responsable_primer_nombre') || CLAVES_SOLO_COMPLETO.has(k);
+
+function despojar(valor) {
+  const v = plano(valor);
+  if (Array.isArray(v)) return v.map(despojar);
+  if (!esObjetoPlano(v)) return v;
+  const salida = {};
+  for (const [k, x] of Object.entries(v)) if (!claveVedada(k)) salida[k] = despojar(x);
+  return salida;
+}
+
+const visiblePublico = (p) => ESTADOS_VISIBLES_PUBLICO.includes(p.estado) && !p.fusionado_en_id;
+
+// Carga para una room, o null si esa room no debe recibir el evento.
+function cargaParaRoom(evento, payload, room) {
+  if (nivelDe(room) === 'COMPLETO') return serializarPayload(payload, room);
+  if (room === 'pantalla' && evento === 'participante:actualizado') return null; // la pantalla no lo usa
+  const participante = payload && payload.participante ? plano(payload.participante) : null;
+  if (participante && !visiblePublico(participante)) {
+    // Solo la baja (para quitarlo de listas ya cargadas); nada de datos.
+    return evento === 'participante:actualizado' ? { participante: { id: participante.id, estado: 'OCULTO' } } : null;
+  }
+  return despojar(serializarPayload(payload, room));
 }
 
 function attach(httpServer, opciones = {}) {
@@ -49,8 +87,16 @@ function attach(httpServer, opciones = {}) {
 
   nsp.on('connection', (socket) => socket.join(socket.data.rooms));
 
+  // Nunca lanza: el bus es síncrono y el servicio ya hizo commit (M3).
   const reenviar = ({ evento, payload, rooms }) => {
-    for (const room of rooms) nsp.to(room).emit(evento, serializarPayload(payload, room));
+    for (const room of rooms) {
+      try {
+        const carga = cargaParaRoom(evento, payload, room);
+        if (carga !== null) nsp.to(room).emit(evento, carga);
+      } catch (e) {
+        logger.child({ modulo: 'trk' }).error('trk socket: fallo al reenviar', { evento, room, ...errorParaLog(e) });
+      }
+    }
   };
   bus.on('trk', reenviar);
 
@@ -61,4 +107,4 @@ function attach(httpServer, opciones = {}) {
   return io;
 }
 
-module.exports = { attach, roomsDe, NIVEL_POR_ROOM };
+module.exports = { attach, roomsDe, cargaParaRoom, NIVEL_POR_ROOM };

@@ -8,7 +8,7 @@ const CAMPOS_PUBLICOS = [
 const CAMPOS_SOLO_COMPLETO = [
   'categoria_propuesta_id', 'responsable_nombre', 'responsable_documento', 'responsable_telefono', 'responsable_correo',
   'autoriza_datos', 'autoriza_reglamento', 'fecha_inscripcion', 'notas_importacion', 'advertencias_importacion',
-  'origen', 'desempate_manual', 'foto_oficial_at', 'created_at', 'updated_at'
+  'origen', 'fusionado_en_id', 'desempate_manual', 'foto_oficial_at', 'created_at', 'updated_at'
 ];
 
 function urlFoto(nombreArchivo) {
