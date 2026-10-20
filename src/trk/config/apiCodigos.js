@@ -17,4 +17,7 @@ module.exports = {
   'TRK-CAT-005': { metodo: 'GET', ruta: '/categorias', descripcion: 'Lista categorías con estado y rúbrica' },
   'TRK-PAR-001': { metodo: 'GET', ruta: '/participantes', descripcion: 'Listado filtrado; campos según rol' },
   'TRK-PAR-002': { metodo: 'GET', ruta: '/participantes/:id', descripcion: 'Detalle; campos según rol' },
+  'TRK-PAR-003': { metodo: 'POST', ruta: '/participantes', descripcion: 'Alta de último minuto (cabina/admin)' },
+  'TRK-PAR-004': { metodo: 'PATCH', ruta: '/participantes/:id', descripcion: 'Edición; categoría directa o propuesta' },
+  'TRK-PAR-008': { metodo: 'PATCH', ruta: '/participantes/:id/estado', descripcion: 'Marca o desmarca AUSENTE' },
 };
