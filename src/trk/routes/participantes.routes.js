@@ -1,5 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
+const multer = require('multer');
+const TrkError = require('../utils/TrkError');
 const apiCodigo = require('../middleware/apiCodigo');
 const validar = require('../middleware/validar');
 const { trkAuth, trkPermiso } = require('../middleware/trkAuth');
@@ -53,5 +55,16 @@ const esquemaEstado = Joi.object({ estado: Joi.string().valid('AUSENTE', 'INSCRI
 router.post('/', apiCodigo('TRK-PAR-003'), trkAuth, trkPermiso('cabina'), validar(esquemaAlta), aw(ctrl.crear));
 router.patch('/:id', apiCodigo('TRK-PAR-004'), trkAuth, trkPermiso('cabina'), validar(esquemaId, 'params'), validar(esquemaEdicion), aw(ctrl.editar));
 router.patch('/:id/estado', apiCodigo('TRK-PAR-008'), trkAuth, trkPermiso('cabina'), validar(esquemaId, 'params'), validar(esquemaEstado), aw(ctrl.cambiarEstado));
+
+const subidaFoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const valido = /^image\/(jpeg|png|webp|heic|heif)$/.test(file.mimetype);
+    cb(valido ? null : new TrkError(400, 'VALIDACION', 'Solo se permiten imágenes JPG, PNG, WEBP o HEIC'), valido);
+  }
+});
+
+router.post('/:id/foto', apiCodigo('TRK-PAR-005'), trkAuth, trkPermiso('cabina'), validar(esquemaId, 'params'), subidaFoto.single('foto'), aw(ctrl.subirFoto));
 
 module.exports = { prefijo: '/participantes', router, esquemaId };
