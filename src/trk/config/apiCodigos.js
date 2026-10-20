@@ -21,4 +21,7 @@ module.exports = {
   'TRK-PAR-004': { metodo: 'PATCH', ruta: '/participantes/:id', descripcion: 'Edición; categoría directa o propuesta' },
   'TRK-PAR-005': { metodo: 'POST', ruta: '/participantes/:id/foto', descripcion: 'Sube foto oficial y marca PRESENTE' },
   'TRK-PAR-008': { metodo: 'PATCH', ruta: '/participantes/:id/estado', descripcion: 'Marca o desmarca AUSENTE' },
+  'TRK-PAS-001': { metodo: 'POST', ruta: '/pasarela/:id', descripcion: 'Pone una mascota en pasarela' },
+  'TRK-PAS-002': { metodo: 'PUT', ruta: '/pasarela/orden', descripcion: 'Reordena la cola de una categoría' },
+  'TRK-EVT-001': { metodo: 'GET', ruta: '/evento/estado', descripcion: 'Estado público: en pasarela, modo de pantalla, ranking publicado' },
 };

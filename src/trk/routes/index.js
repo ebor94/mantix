@@ -12,6 +12,8 @@ const modulos = [
   require('./import.routes'),
   require('./categorias.routes'),
   require('./participantes.routes'),
+  require('./pasarela.routes'),
+  require('./evento.routes'),
 ];
 
 const router = express.Router();
