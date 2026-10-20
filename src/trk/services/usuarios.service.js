@@ -5,6 +5,7 @@ const { slug } = require('../utils/normalizar');
 const { ROLES_OPERATIVOS } = require('../config/constantes');
 const { generarPin, hashPin, nombreVisible } = require('./authPin.service');
 const { registrarAuditoria } = require('./auditoria.service');
+const { revocarSesiones } = require('../sockets/bus');
 
 const vista = (u) => ({ id: u.id, nombre: nombreVisible(u), rol: u.rol.nombre, activo: Boolean(u.activo) });
 
@@ -44,7 +45,7 @@ async function crearOperativo({ nombre, rol }, ctx) {
 }
 
 async function actualizarOperativo(id, cambios, ctx) {
-  return db.sequelize.transaction(async (transaction) => {
+  const resultado = await db.sequelize.transaction(async (transaction) => {
     const usuario = await obtenerOperativo(id, transaction);
     const antes = vista(usuario);
     if (cambios.nombre !== undefined) usuario.nombre = cambios.nombre;
@@ -57,6 +58,8 @@ async function actualizarOperativo(id, cambios, ctx) {
     await registrarAuditoria(ctx, { entidad: 'usuario', entidadId: usuario.id, accion: 'EDITAR', antes, despues }, { transaction });
     return despues;
   });
+  if (cambios.activo === false) revocarSesiones(resultado.id); // después del commit
+  return resultado;
 }
 
 async function regenerarPin(id, ctx) {
@@ -72,6 +75,7 @@ async function regenerarPin(id, ctx) {
     }
     await registrarAuditoria(ctx, { entidad: 'usuario', entidadId: usuario.id, accion: 'REGENERAR_PIN' }, { transaction });
   });
+  revocarSesiones(id); // después del commit
   return { pin };
 }
 

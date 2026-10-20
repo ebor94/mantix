@@ -5,6 +5,7 @@
 // fail-closed: se eliminan datos del responsable a cualquier profundidad y los participantes no
 // visibles (spec §4: INSCRITO/AUSENTE o fusionados) no se envían (I3).
 // ============================================
+const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { bus } = require('./bus');
 const { resolverSesion } = require('../middleware/trkAuth');
@@ -79,13 +80,35 @@ function attach(httpServer, opciones = {}) {
       if (!sesion) return next(new Error('NO_AUTENTICADO'));
       socket.data.rooms = roomsDe(sesion.usuario);
       socket.data.usuarioId = sesion.usuario.id;
+      const { exp } = jwt.decode(token) || {};
+      if (exp) socket.data.exp = exp;
       return next();
     } catch (e) {
       return next(new Error('NO_AUTENTICADO'));
     }
   });
 
-  nsp.on('connection', (socket) => socket.join(socket.data.rooms));
+  const MAX_TIMER = 2 ** 31 - 1;
+  nsp.on('connection', (socket) => {
+    socket.join(socket.data.rooms);
+    // I4 (respaldo): la sesión no sobrevive al vencimiento del token.
+    if (socket.data.exp) {
+      const ms = Math.min(Math.max(socket.data.exp * 1000 - Date.now(), 0), MAX_TIMER);
+      const t = setTimeout(() => socket.disconnect(true), ms);
+      socket.on('disconnect', () => clearTimeout(t));
+    }
+  });
+
+  // I4: PIN regenerado o usuario desactivado → cerrar sus sockets abiertos.
+  const revocar = async (usuarioId) => {
+    try {
+      const sockets = await nsp.fetchSockets();
+      for (const s of sockets) if (s.data.usuarioId === usuarioId) s.disconnect(true);
+    } catch (e) {
+      logger.child({ modulo: 'trk' }).error('trk socket: fallo al revocar sesiones', errorParaLog(e));
+    }
+  };
+  bus.on('trk:revocar', revocar);
 
   // Nunca lanza: el bus es síncrono y el servicio ya hizo commit (M3).
   const reenviar = ({ evento, payload, rooms }) => {
@@ -102,6 +125,7 @@ function attach(httpServer, opciones = {}) {
 
   io.trkCerrar = () => {
     bus.off('trk', reenviar);
+    bus.off('trk:revocar', revocar);
     io.close();
   };
   return io;

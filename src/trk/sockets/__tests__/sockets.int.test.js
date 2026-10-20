@@ -150,3 +150,33 @@ test('M3: si serializar falla, emitir() no lanza al servicio (el error se regist
   const malo = { get: () => { throw new Error('fila rota'); } };
   expect(() => emitir('participante:actualizado', { participante: malo })).not.toThrow();
 });
+
+// ---------- I4: revocación de sesiones de socket ----------
+const desconecta = (s, ms = 2000) => new Promise((resolve, reject) => {
+  if (s.disconnected) return resolve();
+  const t = setTimeout(() => reject(new Error('el socket sigue conectado')), ms);
+  s.once('disconnect', () => { clearTimeout(t); resolve(); });
+});
+
+test('I4: regenerar el PIN desconecta los sockets de ese usuario (no los de otros)', async () => {
+  const cabina = await crearOperativo('TRK_CABINA');
+  const [sCab, sJ] = await Promise.all([conectar(cabina.token), conectar(jurado.token)]);
+  const cae = desconecta(sCab);
+  await request(server).post(`/api/trk/v1/usuarios/${cabina.usuario.id}/pin`).set('Authorization', `Bearer ${admin.token}`).expect(200);
+  await cae;
+  expect(sJ.connected).toBe(true);
+});
+
+test('I4: desactivar al usuario desconecta sus sockets', async () => {
+  const [sJ] = await Promise.all([conectar(jurado.token)]);
+  const cae = desconecta(sJ);
+  await request(server).patch(`/api/trk/v1/usuarios/${jurado.usuario.id}`).set('Authorization', `Bearer ${admin.token}`).send({ activo: false }).expect(200);
+  await cae;
+});
+
+test('I4: el socket se cierra cuando vence el token', async () => {
+  const jwt = require('jsonwebtoken');
+  const corto = jwt.sign({ id: jurado.usuario.id, scope: 'trk', tv: 0 }, process.env.TRK_JWT_SECRET, { expiresIn: 1 });
+  const s = await conectar(corto);
+  await desconecta(s, 3000);
+});

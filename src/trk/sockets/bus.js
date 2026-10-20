@@ -10,4 +10,9 @@ function emitir(evento, payload, { rooms = ROOMS_TODAS } = {}) {
   bus.emit('trk', { evento, payload, rooms });
 }
 
-module.exports = { bus, emitir, ROOMS_TODAS };
+// I4: tras regenerar PIN o desactivar un usuario, sockets/index.js cierra sus conexiones abiertas.
+function revocarSesiones(usuarioId) {
+  bus.emit('trk:revocar', Number(usuarioId));
+}
+
+module.exports = { bus, emitir, revocarSesiones, ROOMS_TODAS };
