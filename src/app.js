@@ -99,12 +99,16 @@ if (process.env.NODE_ENV === 'development') {
 // ============================================
 // Archivos estáticos - ✅ SUBIR UN NIVEL ../uploads
 // ============================================
-app.use('/uploads', (req, res, next) => {
+const encabezadosEstaticos = (req, res, next) => {
   console.log('📁 Solicitud de archivo estático:', req.url);
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Access-Control-Allow-Origin', '*');
   next();
-}, express.static(path.join(__dirname, '../uploads'))); // ✅ ../uploads
+};
+// TRIKIPELUDOS: las fotos viven en TRK_FOTOS_PATH (puede estar fuera de ../uploads); nombres UUID inmutables
+app.use('/uploads/trk/fotos', encabezadosEstaticos,
+  express.static(require('./trk/services/fotos.service').dirFotos(), { maxAge: '7d', immutable: true }));
+app.use('/uploads', encabezadosEstaticos, express.static(path.join(__dirname, '../uploads'))); // ✅ ../uploads
 
 // ============================================
 // Documentación Swagger
