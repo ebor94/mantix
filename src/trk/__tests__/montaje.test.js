@@ -1,0 +1,21 @@
+// Carga la app real de Mantix: verifica montaje en /api/trk/v1 y exención del limitador global.
+process.env.RATE_LIMIT_MAX_REQUESTS = '2';
+const request = require('supertest');
+const app = require('../../app');
+
+test('rutas TRK desconocidas responden con el contrato TRK (montado en /api/trk/v1)', async () => {
+  const r = await request(app).get('/api/trk/v1/no-existe');
+  expect(r.status).toBe(404);
+  expect(r.body).toMatchObject({ success: false, motivo: 'NO_ENCONTRADO' });
+  expect(r.headers['x-trk-api']).toBe('TRK-SIN-CODIGO');
+});
+
+test('/api/trk/ está exento del limitador global; el resto de /api no', async () => {
+  for (let i = 0; i < 4; i++) {
+    const r = await request(app).get('/api/trk/v1/no-existe');
+    expect(r.status).toBe(404);
+  }
+  const estados = [];
+  for (let i = 0; i < 4; i++) estados.push((await request(app).get('/api/ruta-mantix-inexistente')).status);
+  expect(estados).toContain(429);
+});
