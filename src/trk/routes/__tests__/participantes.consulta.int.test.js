@@ -65,6 +65,45 @@ test('HU-5 CA1 búsqueda tolerante a tildes y mayúsculas por mascota, responsab
   expect(await nombres('3040')).toEqual(['Rocky']);
 });
 
+test('RNF-5 búsqueda pública solo por nombre de mascota (no es oráculo de documento ni responsable)', async () => {
+  await crearParticipante({ mascota_nombre: 'Misifú', responsable_nombre: 'Sofía Márquez', responsable_documento: '20304050', estado: 'PRESENTE' });
+  await crearParticipante({ mascota_nombre: 'Rocky', responsable_nombre: 'Pedro Alba', responsable_documento: '10203040', estado: 'PRESENTE' });
+  const nombres = async (q, quien) => (await get(`${base}?q=${encodeURIComponent(q)}`, quien)).body.data.map((x) => x.mascota_nombre);
+  for (const quien of [jurado, comentarista]) {
+    expect(await nombres('3040', quien)).toEqual([]);
+    expect(await nombres('marquez', quien)).toEqual([]);
+    expect(await nombres('misifu', quien)).toEqual(['Misifú']);
+  }
+  expect(await nombres('3040', cabina)).toEqual(['Rocky']);
+});
+
+test('jurado con estado no visible (INSCRITO) → lista vacía', async () => {
+  await crearParticipante({ mascota_nombre: 'Inscrita', estado: 'INSCRITO' });
+  await crearParticipante({ mascota_nombre: 'Presente', estado: 'PRESENTE' });
+  const r = await get(`${base}?estado=INSCRITO`, jurado);
+  expect(r.status).toBe(200);
+  expect(r.body.data).toEqual([]);
+});
+
+test('los comodines LIKE (% _ \\) se buscan literalmente', async () => {
+  await crearParticipante({ mascota_nombre: 'Rocky' });
+  await crearParticipante({ mascota_nombre: 'Misifú' });
+  for (const q of ['_', '%', '\\']) {
+    const r = await get(`${base}?q=${encodeURIComponent(q)}`, cabina);
+    expect(r.body.data).toEqual([]);
+  }
+});
+
+test('comentarista: lista sin datos sensibles y categoría reducida', async () => {
+  await crearParticipante({ mascota_nombre: 'Canela', estado: 'PRESENTE' });
+  const r = await get(base, comentarista);
+  expect(r.body.data).toHaveLength(1);
+  for (const x of r.body.data) {
+    for (const campo of SENSIBLES) expect(x).not.toHaveProperty(campo);
+    expect(Object.keys(x.categoria).sort()).toEqual(['codigo', 'id', 'nombre']);
+  }
+});
+
 test('filtros por categoría y estado; orden por orden de pasarela', async () => {
   const grandes = await categoria('GRANDES');
   await crearParticipante({ mascota_nombre: 'B', categoriaCodigo: 'GRANDES', orden_pasarela: 2 });

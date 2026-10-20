@@ -15,16 +15,19 @@ const ORDEN_COLA = [
   ['mascota_nombre', 'ASC']
 ];
 
-function filtroBusqueda(q) {
+const escaparLike = (t) => String(t).replace(/[\\%_]/g, '\\$&');
+
+// RNF-5: en nivel PUBLICO solo se busca por mascota; buscar por responsable/documento sería un oráculo de datos personales.
+function filtroBusqueda(q, nivel) {
   const texto = String(q || '').trim();
   if (!texto) return null;
-  const condiciones = [
-    { mascota_nombre_norm: { [Op.like]: `%${normalizarTexto(texto)}%` } },
-    { responsable_nombre: { [Op.like]: `%${texto}%` } } // collation utf8mb4_unicode_ci: ignora tildes y mayúsculas
-  ];
-  const digitos = soloDigitos(texto);
-  if (digitos.length >= 3 && digitos === texto.replace(/\s/g, '')) {
-    condiciones.push({ responsable_documento: { [Op.like]: `%${digitos}` } });
+  const condiciones = [{ mascota_nombre_norm: { [Op.like]: `%${escaparLike(normalizarTexto(texto))}%` } }];
+  if (nivel === 'COMPLETO') {
+    condiciones.push({ responsable_nombre: { [Op.like]: `%${escaparLike(texto)}%` } }); // collation utf8mb4_unicode_ci: ignora tildes y mayúsculas
+    const digitos = soloDigitos(texto);
+    if (digitos.length >= 3 && digitos === texto.replace(/\s/g, '')) {
+      condiciones.push({ responsable_documento: { [Op.like]: `%${digitos}` } });
+    }
   }
   return { [Op.or]: condiciones };
 }
@@ -34,8 +37,11 @@ async function listar({ categoria, estado, q } = {}, usuario) {
   const where = { fusionado_en_id: null };
   if (categoria) where.categoria_id = Number(categoria);
   if (estado) where.estado = estado;
-  if (nivel === 'PUBLICO') where.estado = estado && ESTADOS_VISIBLES_PUBLICO.includes(estado) ? estado : ESTADOS_VISIBLES_PUBLICO;
-  const busqueda = filtroBusqueda(q);
+  if (nivel === 'PUBLICO') {
+    if (estado && !ESTADOS_VISIBLES_PUBLICO.includes(estado)) return [];
+    where.estado = estado || ESTADOS_VISIBLES_PUBLICO;
+  }
+  const busqueda = filtroBusqueda(q, nivel);
   if (busqueda) Object.assign(where, busqueda);
   const filas = await db.TrkParticipante.findAll({ where, include: INCLUIR_CATEGORIA, order: ORDEN_COLA });
   return filas.map((p) => serializarParticipante(p, nivel));
