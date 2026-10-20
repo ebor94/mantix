@@ -38,4 +38,5 @@ module.exports = {
   'TRK-CAT-004': { metodo: 'PATCH', ruta: '/categorias/:id', descripcion: 'Edita puestos premiados' },
   'TRK-RNK-001': { metodo: 'GET', ruta: '/ranking/:categoriaId', descripcion: 'Ranking en vivo (admin) o publicado (resto)' },
   'TRK-RNK-002': { metodo: 'PUT', ruta: '/ranking/:categoriaId/desempate', descripcion: 'Fija desempate manual' },
+  'TRK-EXP-001': { metodo: 'GET', ruta: '/export/resultados.xlsx', descripcion: 'Exporta resultados a Excel con detalle por jurado y criterio' },
 };
