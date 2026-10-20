@@ -123,6 +123,11 @@ const db = {
   R44ExtraccionLlm:      require('./R44ExtraccionLlm')(sequelize, Sequelize.DataTypes),
   R44Firma:              require('./R44Firma')(sequelize, Sequelize.DataTypes),
   R44Revision:           require('./R44Revision')(sequelize, Sequelize.DataTypes),
+
+  // ============================================
+  // MÓDULO TRIKIPELUDOS — tablas trk_* (esquema por src/trk/migrations)
+  // ============================================
+  ...require('../trk/models')(sequelize, Sequelize.DataTypes),
 };
 
 // Definir asociaciones
