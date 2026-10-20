@@ -18,7 +18,8 @@ async function resolverUsuarioDesdeToken(token) {
   // Intento 1: token viejo (firmado con JWT_SECRET)
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded && !decoded.kind && decoded.id) {
+    // scope 'trk': token de PIN de TRIKIPELUDOS, solo válido en /api/trk/v1
+    if (decoded && !decoded.kind && decoded.scope !== 'trk' && decoded.id) {
       return Usuario.findByPk(decoded.id, { include: [{ model: Rol, as: 'rol' }] });
     }
   } catch (_) { /* fall through */ }
@@ -399,6 +400,7 @@ const softAuth = async (req, res, next) => {
 };
 
 module.exports = {
+  resolverUsuarioDesdeToken,
   auth,
   authorize,
   requireSuperAdmin,

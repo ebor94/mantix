@@ -44,6 +44,7 @@ const reciboCajaRoutes = require('./reciboCaja.routes');  // ← Módulo de reci
 const entregaEfectivoRoutes = require('./entregaEfectivo.routes'); // ← Recibido de efectivo (OTP)
 const svRoutes     = require('../sv/routes');             // ← Módulo SerVentas CRM
 const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (identidad compartida)
+const trkRoutes    = require('../trk/routes').router;   // ← Módulo TRIKIPELUDOS
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -88,5 +89,6 @@ router.use('/recibos', reciboCajaRoutes); // ← Recibos de caja y cuadre
 router.use('/entregas-efectivo', entregaEfectivoRoutes); // ← Recibido de efectivo con OTP
 router.use('/sv',     svRoutes);     // ← Módulo SerVentas CRM (Serfunorte)
 router.use('/identidad', identidadRoutes); // ← SSO compartido entre apps (afiliaciones, genflow, h360...)
+router.use('/trk/v1', trkRoutes);   // ← Módulo TRIKIPELUDOS (concurso de disfraces)
 
 module.exports = router;

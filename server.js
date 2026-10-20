@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const app = require('./src/app');
 const { sequelize } = require('./src/models');
 const logger = require('./src/utils/logger');
@@ -34,7 +35,15 @@ sequelize.authenticate()
     require('./src/sv/jobs/otpCleanup.job').start();
 
     // Iniciar servidor
-    app.listen(PORT, () => {
+    // Servidor HTTP explícito: Mantix + Socket.IO de TRIKIPELUDOS (namespace /trk)
+    const server = http.createServer(app);
+    try {
+      require('./src/trk/sockets').attach(server);
+    } catch (e) {
+      // Un fallo de TRIKIPELUDOS no debe impedir que Mantix arranque (queda sin tiempo real TRK).
+      logger.error('❌ TRIKIPELUDOS: no se pudo iniciar Socket.IO (/trk)', e);
+    }
+    server.listen(PORT, () => {
       logger.info(`🚀 Servidor Mantix corriendo en puerto ${PORT}`);
       logger.info(`📚 Documentación API: http://${process.env.DB_HOST}:${PORT}/api-docs`);
       logger.info(`🌍 Ambiente: ${process.env.NODE_ENV}`);
