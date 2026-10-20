@@ -55,4 +55,18 @@ async function crearParticipante(overrides = {}) {
   });
 }
 
-module.exports = { sufijo, crearAdmin, crearOperativo, categoria, crearParticipante };
+async function criteriosDe(participante) {
+  const cat = await db.TrkCategoria.findByPk(participante.categoria_id);
+  return db.TrkCriterio.findAll({ where: { rubrica_id: cat.rubrica_id }, order: [['orden', 'ASC']] });
+}
+
+// Inserta una calificación bloqueada directo en BD (para pruebas de ranking, fusión, etc.).
+async function calificar(participante, juradoUsuario, puntajesPorCodigo) {
+  const criterios = await criteriosDe(participante);
+  const total = criterios.reduce((s, c) => s + puntajesPorCodigo[c.codigo], 0);
+  const cal = await db.TrkCalificacion.create({ participante_id: participante.id, jurado_id: juradoUsuario.id, total, enviada_at: new Date(), bloqueada: true });
+  await db.TrkCalificacionDetalle.bulkCreate(criterios.map((c) => ({ calificacion_id: cal.id, criterio_id: c.id, puntaje: puntajesPorCodigo[c.codigo] })));
+  return cal;
+}
+
+module.exports = { sufijo, crearAdmin, crearOperativo, categoria, crearParticipante, criteriosDe, calificar };

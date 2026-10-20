@@ -14,6 +14,7 @@ const modulos = [
   require('./participantes.routes'),
   require('./pasarela.routes'),
   require('./evento.routes'),
+  require('./calificaciones.routes'),
 ];
 
 const router = express.Router();

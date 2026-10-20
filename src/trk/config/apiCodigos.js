@@ -26,4 +26,5 @@ module.exports = {
   'TRK-EVT-001': { metodo: 'GET', ruta: '/evento/estado', descripcion: 'Estado público: en pasarela, modo de pantalla, ranking publicado' },
   'TRK-EVT-002': { metodo: 'PUT', ruta: '/evento/pantalla', descripcion: 'Modo y categoría de la pantalla pública' },
   'TRK-EVT-003': { metodo: 'GET', ruta: '/evento/tablero', descripcion: 'Contadores y progreso por jurado' },
+  'TRK-CAL-002': { metodo: 'PUT', ruta: '/calificaciones/:participanteId', descripcion: 'Crea/envía calificación (idempotente, bloquea)' },
 };
