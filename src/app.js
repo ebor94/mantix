@@ -85,6 +85,8 @@ app.use('/api/', limiter);
 // ============================================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// TRIKIPELUDOS: errores del body parser en /api/trk/* con el contrato TRK (solo maneja errores)
+app.use('/api/trk', require('./trk/middleware/errorHandler').trkErrorHandler);
 app.use(compression());
 
 // ============================================

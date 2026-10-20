@@ -26,6 +26,10 @@ function trkErrorHandler(err, req, res, next) {
     status = 400;
     motivo = 'VALIDACION';
     message = 'JSON inválido';
+  } else if (err && err.type === 'entity.too.large') {
+    status = 413;
+    motivo = 'VALIDACION';
+    message = 'El cuerpo de la solicitud es demasiado grande';
   }
 
   if (status >= 500) log.error('trk error no controlado', errorParaLog(err));
