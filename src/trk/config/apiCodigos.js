@@ -27,4 +27,7 @@ module.exports = {
   'TRK-EVT-002': { metodo: 'PUT', ruta: '/evento/pantalla', descripcion: 'Modo y categoría de la pantalla pública' },
   'TRK-EVT-003': { metodo: 'GET', ruta: '/evento/tablero', descripcion: 'Contadores y progreso por jurado' },
   'TRK-CAL-002': { metodo: 'PUT', ruta: '/calificaciones/:participanteId', descripcion: 'Crea/envía calificación (idempotente, bloquea)' },
+  'TRK-RUB-001': { metodo: 'GET', ruta: '/rubricas/:categoriaId', descripcion: 'Criterios de la rúbrica de la categoría' },
+  'TRK-CAL-001': { metodo: 'GET', ruta: '/calificaciones/mias', descripcion: 'Calificaciones del jurado en sesión (insignias)' },
+  'TRK-CAL-003': { metodo: 'POST', ruta: '/calificaciones/:id/desbloquear', descripcion: 'Desbloquea una calificación (auditado)' },
 };

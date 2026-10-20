@@ -88,4 +88,36 @@ async function enviarCalificacion(participanteId, puntajes, ctx, intento = 0) {
   }
 }
 
-module.exports = { validarPuntajes, enviarCalificacion, vistaCalificacion, conDetalles };
+async function rubricaDeCategoria(categoriaId) {
+  const categoria = await db.TrkCategoria.findByPk(categoriaId, { include: [{ model: db.TrkRubrica, as: 'rubrica' }] });
+  if (!categoria) throw new TrkError(404, 'NO_ENCONTRADO', 'Categoría no encontrada');
+  const criterios = await db.TrkCriterio.findAll({ where: { rubrica_id: categoria.rubrica_id }, order: [['orden', 'ASC']] });
+  return {
+    categoria: { id: categoria.id, codigo: categoria.codigo, nombre: categoria.nombre, abierta: Boolean(categoria.abierta) },
+    rubrica: { codigo: categoria.rubrica.codigo, nombre: categoria.rubrica.nombre },
+    criterios: criterios.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, descripcion: c.descripcion, puntaje_max: c.puntaje_max, orden: c.orden })),
+    puntaje_total_max: criterios.reduce((s, c) => s + c.puntaje_max, 0)
+  };
+}
+
+async function misCalificaciones(juradoId) {
+  const filas = await db.TrkCalificacion.findAll({ where: { jurado_id: juradoId }, order: [['enviada_at', 'DESC']] });
+  return filas.map((c) => ({ id: c.id, participante_id: c.participante_id, total: c.total, bloqueada: Boolean(c.bloqueada) }));
+}
+
+async function desbloquear(calificacionId, ctx) {
+  const cal = await db.sequelize.transaction(async (transaction) => {
+    const c = await db.TrkCalificacion.findByPk(calificacionId, { ...conDetalles, transaction, lock: transaction.LOCK.UPDATE });
+    if (!c) throw new TrkError(404, 'NO_ENCONTRADO', 'Calificación no encontrada');
+    if (!c.bloqueada) throw new TrkError(409, 'NO_BLOQUEADA', 'La calificación ya está desbloqueada');
+    await c.update({ bloqueada: false, desbloqueada_at: new Date() }, { transaction });
+    await registrarAuditoria(ctx, {
+      entidad: 'calificacion', entidadId: c.id, accion: 'DESBLOQUEAR',
+      antes: { bloqueada: true, total: c.total }, despues: { bloqueada: false }
+    }, { transaction });
+    return c;
+  });
+  return vistaCalificacion(cal);
+}
+
+module.exports = { validarPuntajes, enviarCalificacion, vistaCalificacion, conDetalles, rubricaDeCategoria, misCalificaciones, desbloquear };

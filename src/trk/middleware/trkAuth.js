@@ -3,6 +3,7 @@ const db = require('../../models');
 const { resolverUsuarioDesdeToken, requirePermiso } = require('../../middleware/auth');
 const TrkError = require('../utils/TrkError');
 const aw = require('../utils/aw');
+const { tienePermiso } = require('../utils/permisos');
 
 const conRol = { include: [{ model: db.Rol, as: 'rol' }] };
 
@@ -52,4 +53,10 @@ const trkAuthOpcional = aw(async (req, res, next) => {
 // Reutiliza el RBAC de Mantix: roles.permisos.trk.<accion> (super admin pasa siempre).
 const trkPermiso = (accion) => requirePermiso('trk', accion);
 
-module.exports = { resolverSesion, trkAuth, trkAuthOpcional, trkPermiso, leerToken };
+// Pasa si el usuario tiene alguno de los permisos TRK indicados (misma fuente: roles.permisos.trk).
+const trkPermisoAlguno = (...acciones) => (req, res, next) => {
+  if (acciones.some((a) => tienePermiso(req.usuario, a))) return next();
+  return next(new TrkError(403, 'SIN_PERMISO', `Requiere uno de: ${acciones.join(', ')}`));
+};
+
+module.exports = { resolverSesion, trkAuth, trkAuthOpcional, trkPermiso, trkPermisoAlguno, leerToken };
