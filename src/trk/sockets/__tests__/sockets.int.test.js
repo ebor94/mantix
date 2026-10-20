@@ -147,8 +147,16 @@ test('I3 + HU-3 CA2: origen fusionado → admin y cabina ven fusionado_en_id; ju
 });
 
 test('M3: si serializar falla, emitir() no lanza al servicio (el error se registra)', () => {
+  const logger = require('../../../utils/logger');
+  const error = jest.fn();
+  const child = jest.spyOn(logger, 'child').mockReturnValue({ info: jest.fn(), warn: jest.fn(), error });
   const malo = { get: () => { throw new Error('fila rota'); } };
-  expect(() => emitir('participante:actualizado', { participante: malo })).not.toThrow();
+  try {
+    expect(() => emitir('participante:actualizado', { participante: malo })).not.toThrow();
+    expect(error).toHaveBeenCalled();
+  } finally {
+    child.mockRestore();
+  }
 });
 
 // ---------- I4: revocación de sesiones de socket ----------

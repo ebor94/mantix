@@ -1,3 +1,4 @@
+const http = require('http');
 const express = require('express');
 const request = require('supertest');
 const db = require('../../../models');
@@ -57,7 +58,11 @@ describe('TRK-AUTH-001 POST /auth/pin', () => {
 });
 
 describe('TRK-AUTH-001 limitadores (I2)', () => {
-  const pinDesde = (ip, cuerpo) => request(app).post('/api/trk/v1/auth/pin').set('X-Forwarded-For', ip).send(cuerpo);
+  // Un único servidor (no uno por request) para las ráfagas de ~100 requests.
+  let servidor;
+  beforeAll((done) => { servidor = http.createServer(app).listen(0, done); });
+  afterAll((done) => { servidor.close(done); });
+  const pinDesde = (ip, cuerpo) => request(servidor).post('/api/trk/v1/auth/pin').set('X-Forwarded-For', ip).send(cuerpo);
 
   test('variantes del mismo id ("01", " 1", "1.0", "1e0"…) comparten el límite IP+usuario', async () => {
     const { usuario } = await crearOperativo('TRK_JURADO', { pin: '555555' });
