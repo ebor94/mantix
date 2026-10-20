@@ -37,7 +37,12 @@ sequelize.authenticate()
     // Iniciar servidor
     // Servidor HTTP explícito: Mantix + Socket.IO de TRIKIPELUDOS (namespace /trk)
     const server = http.createServer(app);
-    require('./src/trk/sockets').attach(server);
+    try {
+      require('./src/trk/sockets').attach(server);
+    } catch (e) {
+      // Un fallo de TRIKIPELUDOS no debe impedir que Mantix arranque (queda sin tiempo real TRK).
+      logger.error('❌ TRIKIPELUDOS: no se pudo iniciar Socket.IO (/trk)', e);
+    }
     server.listen(PORT, () => {
       logger.info(`🚀 Servidor Mantix corriendo en puerto ${PORT}`);
       logger.info(`📚 Documentación API: http://${process.env.DB_HOST}:${PORT}/api-docs`);
