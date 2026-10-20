@@ -24,4 +24,6 @@ module.exports = {
   'TRK-PAS-001': { metodo: 'POST', ruta: '/pasarela/:id', descripcion: 'Pone una mascota en pasarela' },
   'TRK-PAS-002': { metodo: 'PUT', ruta: '/pasarela/orden', descripcion: 'Reordena la cola de una categoría' },
   'TRK-EVT-001': { metodo: 'GET', ruta: '/evento/estado', descripcion: 'Estado público: en pasarela, modo de pantalla, ranking publicado' },
+  'TRK-EVT-002': { metodo: 'PUT', ruta: '/evento/pantalla', descripcion: 'Modo y categoría de la pantalla pública' },
+  'TRK-EVT-003': { metodo: 'GET', ruta: '/evento/tablero', descripcion: 'Contadores y progreso por jurado' },
 };
