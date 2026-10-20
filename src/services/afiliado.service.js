@@ -445,7 +445,11 @@ async function getAprobados(usuario, params = {}) {
   return Afiliado.findAll({
     where,
     include: [
-      { model: Beneficiario, as: 'beneficiarios', attributes: ['id'] },
+      // Beneficiarios y seguros completos: el reporte arma el detalle
+      // (AfiliadoDetalle + Productos contratados) directo desde este objeto,
+      // así que necesita los campos, no solo el id.
+      { model: Beneficiario, as: 'beneficiarios' },
+      { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' },
       { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
