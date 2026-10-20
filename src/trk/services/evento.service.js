@@ -17,11 +17,16 @@ async function estadoPublico() {
       { model: db.TrkCategoria, as: 'categoriaPantalla' }
     ]
   });
+  let ranking = null;
+  if (estado.modo_pantalla === 'RANKING' && estado.categoria_pantalla_id) {
+    const { rankingPublicado } = require('./rankingDatos.service');
+    ranking = await rankingPublicado(estado.categoria_pantalla_id).catch(() => null);
+  }
   return {
     modo_pantalla: estado.modo_pantalla,
     categoria_pantalla: vistaCategoriaCorta(estado.categoriaPantalla),
     en_pasarela: estado.enPasarela ? serializarParticipante(estado.enPasarela, 'PUBLICO') : null,
-    ranking: null
+    ranking
   };
 }
 

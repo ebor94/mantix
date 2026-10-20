@@ -30,4 +30,10 @@ module.exports = {
   'TRK-RUB-001': { metodo: 'GET', ruta: '/rubricas/:categoriaId', descripcion: 'Criterios de la rúbrica de la categoría' },
   'TRK-CAL-001': { metodo: 'GET', ruta: '/calificaciones/mias', descripcion: 'Calificaciones del jurado en sesión (insignias)' },
   'TRK-CAL-003': { metodo: 'POST', ruta: '/calificaciones/:id/desbloquear', descripcion: 'Desbloquea una calificación (auditado)' },
+  'TRK-CAT-001': { metodo: 'POST', ruta: '/categorias/:id/abrir', descripcion: 'Abre la categoría para calificar' },
+  'TRK-CAT-002': { metodo: 'POST', ruta: '/categorias/:id/cerrar', descripcion: 'Cierra la categoría (no se califica más)' },
+  'TRK-CAT-003': { metodo: 'POST', ruta: '/categorias/:id/publicar', descripcion: 'Publica el ranking (snapshot)' },
+  'TRK-CAT-004': { metodo: 'PATCH', ruta: '/categorias/:id', descripcion: 'Edita puestos premiados' },
+  'TRK-RNK-001': { metodo: 'GET', ruta: '/ranking/:categoriaId', descripcion: 'Ranking en vivo (admin) o publicado (resto)' },
+  'TRK-RNK-002': { metodo: 'PUT', ruta: '/ranking/:categoriaId/desempate', descripcion: 'Fija desempate manual' },
 };
