@@ -28,6 +28,9 @@ test('especie normalizada y texto extra separado (§7.2 "Perro(cupo lleno)")', (
   expect(normalizarEspecie('Canino')).toEqual({ especie: 'PERRO', extra: null });
   expect(normalizarEspecie('Felino')).toEqual({ especie: 'GATO', extra: null });
   expect(normalizarEspecie('Conejo')).toEqual({ especie: null, extra: null });
+  expect(normalizarEspecie('Canario')).toEqual({ especie: null, extra: null });
+  expect(normalizarEspecie('Canguro')).toEqual({ especie: null, extra: null });
+  expect(normalizarEspecie('Canina')).toEqual({ especie: 'PERRO', extra: null });
 });
 
 test('sexo', () => {
@@ -58,6 +61,18 @@ test('fecha de inscripción', () => {
   expect(parsearFechaInscripcion('ayer')).toBeNull();
 });
 
+test('fecha de inscripción imposible en el calendario → null (MySQL DATE)', () => {
+  expect(parsearFechaInscripcion('5/13/2026')).toBeNull();
+  expect(parsearFechaInscripcion('31/02/2026')).toBeNull();
+  expect(parsearFechaInscripcion('octubre 45, 2026')).toBeNull();
+  expect(parsearFechaInscripcion('constructor 5, 2026')).toBeNull();
+});
+
+test('fecha de inscripción válida en año bisiesto', () => {
+  expect(parsearFechaInscripcion('29/02/2028')).toBe('2028-02-29');
+  expect(parsearFechaInscripcion('29/02/2026')).toBeNull();
+});
+
 test('autorizaciones', () => {
   expect(parsearAutorizacion('on')).toBe(true);
   expect(parsearAutorizacion('Sí')).toBe(true);
@@ -76,6 +91,8 @@ test('encabezados por nombre normalizado, incluido "Cateogoría" (sic)', () => {
   expect(campoDeEncabezado('Telefono')).toBe('responsable_telefono');
   expect(campoDeEncabezado('')).toBe('notas');
   expect(campoDeEncabezado('Columna rara')).toBeNull();
+  expect(campoDeEncabezado('constructor')).toBeNull();
+  expect(campoDeEncabezado('__proto__')).toBeNull();
 });
 
 test('razas pequeñas y grandes', () => {

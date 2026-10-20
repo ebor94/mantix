@@ -20,7 +20,7 @@ function normalizarEspecie(valor) {
   const original = String(valor ?? '').trim();
   const n = normalizarTexto(original);
   let especie = null;
-  if (/^(perr|can)/.test(n)) especie = 'PERRO';
+  if (/^(perr|canin)/.test(n)) especie = 'PERRO';
   else if (/^(gat|fel)/.test(n)) especie = 'GATO';
   const resto = original.replace(/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+/, '').trim();
   return { especie, extra: especie && resto ? resto : null };
@@ -50,12 +50,25 @@ const MESES = {
 };
 const dosDigitos = (n) => String(n).padStart(2, '0');
 
+// Solo acepta fechas que existen en el calendario (p. ej. no 31/02 ni 29/02 de año no bisiesto).
+function fechaExiste(anio, mes, dia) {
+  const f = new Date(Date.UTC(anio, mes - 1, dia));
+  return f.getUTCFullYear() === anio && f.getUTCMonth() === mes - 1 && f.getUTCDate() === dia;
+}
+
 function parsearFechaInscripcion(valor) {
   const n = normalizarTexto(valor);
   let m = n.match(/^([a-z]+) (\d{1,2}), (\d{4})/);
-  if (m && MESES[m[1]]) return `${m[3]}-${dosDigitos(MESES[m[1]])}-${dosDigitos(m[2])}`;
+  if (m && Object.hasOwn(MESES, m[1])) {
+    const mes = MESES[m[1]];
+    return fechaExiste(Number(m[3]), mes, Number(m[2]))
+      ? `${m[3]}-${dosDigitos(mes)}-${dosDigitos(m[2])}`
+      : null;
+  }
   m = n.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return `${m[3]}-${dosDigitos(m[2])}-${dosDigitos(m[1])}`;
+  if (m && fechaExiste(Number(m[3]), Number(m[2]), Number(m[1]))) {
+    return `${m[3]}-${dosDigitos(m[2])}-${dosDigitos(m[1])}`;
+  }
   return null;
 }
 
@@ -89,7 +102,7 @@ const ENCABEZADOS = {
 function campoDeEncabezado(encabezado) {
   const n = normalizarTexto(encabezado);
   if (!n) return 'notas';
-  return ENCABEZADOS[n] || null;
+  return Object.hasOwn(ENCABEZADOS, n) ? ENCABEZADOS[n] : null;
 }
 
 const contieneAlguna = (raza, lista) => {
