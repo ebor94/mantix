@@ -214,51 +214,63 @@ const AVANCE = ['AUSENTE', 'INSCRITO', 'PRESENTE', 'PRESENTADO', 'EN_PASARELA'];
 
 async function fusionar(origenId, destinoId, ctx) {
   if (origenId === destinoId) throw new TrkError(400, 'VALIDACION', 'No se puede fusionar un registro consigo mismo');
-  const destino = await db.sequelize.transaction(async (transaction) => {
+  const { dest, origen, repuntada } = await db.sequelize.transaction(async (transaction) => {
     // Convención de locks: trk_evento_estado primero, luego participantes.
     await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
-    const origen = await buscarModelo(origenId, { transaction, lock: true });
-    const dest = await buscarModelo(destinoId, { transaction, lock: true });
-    const [calsOrigen, calsDestino] = await Promise.all([
-      db.TrkCalificacion.findAll({ where: { participante_id: origen.id }, transaction, lock: transaction.LOCK.UPDATE }),
-      db.TrkCalificacion.findAll({ where: { participante_id: dest.id }, transaction })
-    ]);
-    const choques = calsOrigen.filter((c) => calsDestino.some((d) => d.jurado_id === c.jurado_id));
+    const o = await buscarModelo(origenId, { transaction, lock: true });
+    const d = await buscarModelo(destinoId, { transaction, lock: true });
+    const calsOrigen = await db.TrkCalificacion.findAll({ where: { participante_id: o.id }, transaction, lock: transaction.LOCK.UPDATE });
+    const calsDestino = await db.TrkCalificacion.findAll({ where: { participante_id: d.id }, transaction });
+    const choques = calsOrigen.filter((c) => calsDestino.some((x) => x.jurado_id === c.jurado_id));
     if (choques.length) {
       throw new TrkError(409, 'FUSION_CON_CHOQUE', 'Un mismo jurado calificó ambos registros; desbloquea o elimina una de las calificaciones antes de fusionar',
         choques.map((c) => ({ campo: 'jurado_id', mensaje: `Jurado ${c.jurado_id} calificó ambos` })));
     }
-    if (calsOrigen.length && origen.categoria_id !== dest.categoria_id) {
+    if (calsOrigen.length && o.categoria_id !== d.categoria_id) {
       throw new TrkError(409, 'CATEGORIAS_DISTINTAS', 'El origen tiene calificaciones de otra categoría; cambia primero su categoría o la del destino');
     }
 
-    const antesDestino = dest.get({ plain: true });
-    for (const c of calsOrigen) await c.update({ participante_id: dest.id }, { transaction });
+    const antesOrigen = { estado: o.estado, orden_pasarela: o.orden_pasarela, categoria_id: o.categoria_id };
+    const antesDestino = d.get({ plain: true });
+    const movidas = calsOrigen.map((c) => ({ id: c.id, jurado_id: c.jurado_id }));
+    for (const c of calsOrigen) await c.update({ participante_id: d.id }, { transaction });
 
     const cambios = {};
-    if (origen.foto_oficial_at && (!dest.foto_oficial_at || origen.foto_oficial_at > dest.foto_oficial_at)) {
-      cambios.foto_oficial_path = origen.foto_oficial_path;
-      cambios.foto_oficial_at = origen.foto_oficial_at;
+    if (o.foto_oficial_at && (!d.foto_oficial_at || o.foto_oficial_at > d.foto_oficial_at)) {
+      cambios.foto_oficial_path = o.foto_oficial_path;
+      cambios.foto_oficial_at = o.foto_oficial_at;
     }
-    if (AVANCE.indexOf(origen.estado) > AVANCE.indexOf(dest.estado)) cambios.estado = origen.estado;
-    if (!dest.llegada_at && origen.llegada_at) cambios.llegada_at = origen.llegada_at;
-    if (Object.keys(cambios).length) await dest.update(cambios, { transaction });
+    if (AVANCE.indexOf(o.estado) > AVANCE.indexOf(d.estado)) cambios.estado = o.estado;
+    if (!d.llegada_at && o.llegada_at) cambios.llegada_at = o.llegada_at;
+    if (d.orden_pasarela == null && o.orden_pasarela != null) cambios.orden_pasarela = o.orden_pasarela;
+    if (Object.keys(cambios).length) await d.update(cambios, { transaction });
 
-    if (origen.estado === 'EN_PASARELA') {
-      await db.TrkEventoEstado.update({ participante_en_pasarela_id: dest.id }, { where: { id: 1, participante_en_pasarela_id: origen.id }, transaction });
+    let apuntada = false;
+    if (o.estado === 'EN_PASARELA') {
+      const [filas] = await db.TrkEventoEstado.update({ participante_en_pasarela_id: d.id }, { where: { id: 1, participante_en_pasarela_id: o.id }, transaction });
+      apuntada = filas > 0;
     }
-    await origen.update({ fusionado_en_id: dest.id, estado: origen.estado === 'EN_PASARELA' ? 'PRESENTADO' : origen.estado }, { transaction });
+    const estadoOrigen = o.estado === 'EN_PASARELA' ? 'PRESENTADO' : o.estado;
+    await o.update({ fusionado_en_id: d.id, estado: estadoOrigen }, { transaction });
 
-    await registrarAuditoria(ctx, { entidad: 'participante', entidadId: origen.id, accion: 'FUSIONAR', despues: { fusionado_en_id: dest.id } }, { transaction });
     await registrarAuditoria(ctx, {
-      entidad: 'participante', entidadId: dest.id, accion: 'FUSIONAR',
-      antes: { foto_oficial_path: antesDestino.foto_oficial_path, estado: antesDestino.estado },
-      despues: { origen_id: origen.id, calificaciones_movidas: calsOrigen.length, ...cambios }
+      entidad: 'participante', entidadId: o.id, accion: 'FUSIONAR',
+      antes: antesOrigen, despues: { fusionado_en_id: d.id, estado: estadoOrigen }
     }, { transaction });
-    return dest;
+    const despuesDestino = { origen_id: o.id, calificaciones_movidas: movidas, ...cambios };
+    if (apuntada) despuesDestino.en_pasarela = { antes: o.id, despues: d.id };
+    await registrarAuditoria(ctx, {
+      entidad: 'participante', entidadId: d.id, accion: 'FUSIONAR',
+      antes: Object.fromEntries(Object.keys(cambios).map((k) => [k, antesDestino[k]])),
+      despues: despuesDestino
+    }, { transaction });
+    return { dest: d, origen: o, repuntada: apuntada };
   });
-  emitir('participante:actualizado', { participante: destino.get({ plain: true }) });
-  return recargarCompleto(destino);
+  const planoDestino = dest.get({ plain: true });
+  if (repuntada) emitir('pasarela:cambio', { participante: planoDestino, anteriores: [origen.id] });
+  emitir('participante:actualizado', { participante: origen.get({ plain: true }) });
+  emitir('participante:actualizado', { participante: planoDestino });
+  return recargarCompleto(dest);
 }
 
 async function confirmarCategoria(id, { confirmar }, ctx) {
@@ -275,6 +287,8 @@ async function confirmarCategoria(id, { confirmar }, ctx) {
     };
     await db.TrkCalificacion.destroy({ where: { participante_id: participante.id }, transaction });
     const nueva = participante.categoria_propuesta_id;
+    // Serializa el cálculo de MAX+1 entre participantes de la misma categoría.
+    await db.TrkCategoria.findByPk(nueva, { transaction, lock: transaction.LOCK.UPDATE });
     const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: nueva }, transaction });
     await participante.update({
       categoria_id: nueva, categoria_propuesta_id: null, desempate_manual: null,

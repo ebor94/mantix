@@ -1,5 +1,6 @@
 const request = require('supertest');
 const db = require('../../../models');
+const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, categoria, calificar } = require('../../testing/fabricas');
@@ -36,6 +37,33 @@ describe('TRK-PAR-007 confirmar cambio de categoría (§13.7)', () => {
     const aud = await db.TrkAuditoria.findOne({ where: { api_codigo: 'TRK-PAR-007', accion: 'CAMBIAR_CATEGORIA' } });
     expect(aud.antes.calificaciones).toHaveLength(2);
     expect(aud.despues).toMatchObject({ categoria_id: grandes.id, calificaciones_borradas: 2 });
+  });
+
+  test('confirmar asigna orden_pasarela = MAX+1 en la categoría nueva', async () => {
+    const grandes = await categoria('GRANDES');
+    await crearParticipante({ categoriaCodigo: 'GRANDES', orden_pasarela: 4 });
+    const p = await crearParticipante({ estado: 'PRESENTADO', orden_pasarela: 1, categoria_propuesta_id: grandes.id });
+    await calificar(p, j1.usuario, P);
+    const r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true });
+    expect(r.status).toBe(200);
+    await p.reload();
+    expect(p.categoria_id).toBe(grandes.id);
+    expect(p.orden_pasarela).toBe(5);
+  });
+
+  test('confirmaciones en paralelo a la misma categoría reciben órdenes distintos', async () => {
+    const grandes = await categoria('GRANDES');
+    const ps = [];
+    for (let i = 0; i < 3; i += 1) {
+      const p = await crearParticipante({ estado: 'PRESENTADO', orden_pasarela: i + 1, categoria_propuesta_id: grandes.id });
+      await calificar(p, j1.usuario, P);
+      ps.push(p);
+    }
+    const rs = await Promise.all(ps.map((p) => comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true })));
+    expect(rs.map((r) => r.status)).toEqual([200, 200, 200]);
+    const ordenes = [];
+    for (const p of ps) { await p.reload(); ordenes.push(p.orden_pasarela); }
+    expect(new Set(ordenes).size).toBe(3);
   });
 
   test('sin propuesta → 400', async () => {
@@ -79,6 +107,37 @@ describe('TRK-PAR-006 fusionar (§13.13)', () => {
     const lista = await comoAdmin(request(app).get('/api/trk/v1/participantes'));
     expect(lista.body.data.map((x) => x.id)).toEqual([destino.id]);
     expect(await db.TrkAuditoria.count({ where: { api_codigo: 'TRK-PAR-006', accion: 'FUSIONAR' } })).toBe(2);
+  });
+
+  test('origen EN_PASARELA: re-apunta el evento, emite pasarela:cambio y audita completo', async () => {
+    const origen = await crearParticipante({ mascota_nombre: 'Thor', estado: 'EN_PASARELA' });
+    const destino = await crearParticipante({ mascota_nombre: 'Thor 2', estado: 'INSCRITO' });
+    await db.TrkEventoEstado.update({ participante_en_pasarela_id: origen.id }, { where: { id: 1 } });
+    const cal = await calificar(origen, j1.usuario, P);
+    const eventos = [];
+    const oyente = (e) => eventos.push(e);
+    bus.on('trk', oyente);
+    let r;
+    try {
+      r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
+    } finally { bus.off('trk', oyente); }
+    expect(r.status).toBe(200);
+    expect((await db.TrkEventoEstado.findByPk(1)).participante_en_pasarela_id).toBe(destino.id);
+    await origen.reload();
+    expect(origen.estado).toBe('PRESENTADO');
+    expect(origen.fusionado_en_id).toBe(destino.id);
+    const cambio = eventos.find((e) => e.evento === 'pasarela:cambio');
+    expect(cambio.payload.participante.id).toBe(destino.id);
+    expect(cambio.payload.anteriores).toEqual([origen.id]);
+    expect(eventos.some((e) => e.evento === 'participante:actualizado' && e.payload.participante.id === origen.id)).toBe(true);
+
+    const audOrigen = await db.TrkAuditoria.findOne({ where: { api_codigo: 'TRK-PAR-006', accion: 'FUSIONAR', entidad_id: String(origen.id) } });
+    expect(audOrigen.antes.estado).toBe('EN_PASARELA');
+    expect(audOrigen.despues).toMatchObject({ fusionado_en_id: destino.id, estado: 'PRESENTADO' });
+    const audDestino = await db.TrkAuditoria.findOne({ where: { api_codigo: 'TRK-PAR-006', accion: 'FUSIONAR', entidad_id: String(destino.id) } });
+    expect(audDestino.despues.calificaciones_movidas).toEqual([{ id: cal.id, jurado_id: cal.jurado_id }]);
+    expect(audDestino.despues.en_pasarela).toEqual({ antes: origen.id, despues: destino.id });
+    expect(audDestino.antes.estado).toBe('INSCRITO');
   });
 
   test('origen con calificaciones en otra categoría → 409 CATEGORIAS_DISTINTAS', async () => {
