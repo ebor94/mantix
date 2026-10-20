@@ -351,10 +351,13 @@ async function listar(req, res, next) {
               conductor, asesor_id, asistente_id, tanatologo_id,
               motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
               created_at, updated_at,
+              sin_exequias_motivo, sin_exequias_por, sin_exequias_por_nombre, sin_exequias_at,
               -- Qué le falta al caso. Una exequia cancelada no cuenta: vuelve a
-              -- quedar sin programar.
-              NOT EXISTS (SELECT 1 FROM exequias e
-                           WHERE e.asistencia_id = asistencias.id AND e.estado <> 'CANCELADA')
+              -- quedar sin programar. Las marcadas "no requiere exequias" no
+              -- faltan: alguien ya decidió que no van a tenerla.
+              (sin_exequias_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM exequias e
+                                WHERE e.asistencia_id = asistencias.id AND e.estado <> 'CANCELADA'))
                 AS pendiente_exequia,
               NOT EXISTS (SELECT 1 FROM homenajes_sala hs WHERE hs.asistencia_id = asistencias.id)
                 AND NOT EXISTS (SELECT 1 FROM homenajes_residencia hr WHERE hr.asistencia_id = asistencias.id)

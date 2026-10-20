@@ -16,6 +16,14 @@ router.get('/pendientes',             ctrl.pendientes)
 // Igual que arriba: literales antes del comodín
 router.get('/pagos/pendientes',       requireRol(...ROLES_PAGO),         seg.pagosPendientes)
 router.get('/pagos',                  requireRol(...ROLES_PAGO),         seg.pagosConfirmados)
+// "No requiere exequias": la decide quien habla con la familia (asesor) o
+// quien coordina. Literales antes del comodín, y una acción por ruta para que
+// el catálogo de permisos les dé claves distintas.
+router.post('/sin-exequias/:asistenciaId/marcar',
+            requireRol('asesor', 'coordinador', 'admin'), ctrl.marcarSinExequias)
+router.post('/sin-exequias/:asistenciaId/quitar',
+            requireRol('asesor', 'coordinador', 'admin'), ctrl.quitarSinExequias)
+
 router.get('/:id',                    ctrl.obtener)
 router.get('/:id/formato-r13',        ctrl.formatoR13)
 

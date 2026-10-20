@@ -91,12 +91,73 @@ async function pendientes(req, res, next) {
          FROM asistencias a
     LEFT JOIN exequias e ON e.asistencia_id = a.id AND e.estado <> 'CANCELADA'
         WHERE e.id IS NULL
+          AND a.sin_exequias_at IS NULL
           AND a.estado IN (${ESTADOS_VIVOS.map(() => '?').join(',')})
         ORDER BY FIELD(a.estado, ${ESTADOS_VIVOS.map(() => '?').join(',')}) DESC,
                  a.created_at ASC`,
       [...ESTADOS_VIVOS, ...ESTADOS_VIVOS]
     )
     res.json(rows)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /exequias/sin-exequias/:asistenciaId/marcar   { motivo }
+ *
+ * Saca una asistencia del panel de pendientes porque nunca va a tener
+ * exequia. Queda el motivo y el autor: es una excepción, y dentro de un mes
+ * alguien va a preguntar por qué esa asistencia no aparece.
+ */
+async function marcarSinExequias(req, res, next) {
+  try {
+    const { asistenciaId } = req.params
+    const motivo = String(req.body?.motivo || '').trim()
+    if (!motivo) return res.status(400).json({ error: 'El motivo es obligatorio' })
+
+    const [[a]] = await db.query(
+      'SELECT id, codigo, estado, sin_exequias_at FROM asistencias WHERE id = ?', [asistenciaId])
+    if (!a) return res.status(404).json({ error: 'Asistencia no encontrada' })
+    if (a.sin_exequias_at)
+      return res.status(409).json({ error: 'La asistencia ya está marcada como sin exequias' })
+
+    // Marcarla teniendo una exequia viva dejaría el tablero contradiciéndose:
+    // la exequia seguiría programada y la asistencia diría que no la requiere.
+    const [[viva]] = await db.query(
+      `SELECT id FROM exequias WHERE asistencia_id = ? AND estado <> 'CANCELADA' LIMIT 1`,
+      [asistenciaId])
+    if (viva)
+      return res.status(409).json({
+        error: 'La asistencia tiene una exequia activa. Cancélala primero.' })
+
+    const { usuario, nombre } = req.user || {}
+    await db.query(
+      `UPDATE asistencias
+          SET sin_exequias_motivo = ?, sin_exequias_por = ?,
+              sin_exequias_por_nombre = ?, sin_exequias_at = NOW()
+        WHERE id = ?`,
+      [motivo, usuario, nombre || null, asistenciaId])
+
+    res.json({ ok: true, asistencia_id: Number(asistenciaId), codigo: a.codigo })
+  } catch (err) { next(err) }
+}
+
+/** POST /exequias/sin-exequias/:asistenciaId/quitar — vuelve al panel. */
+async function quitarSinExequias(req, res, next) {
+  try {
+    const { asistenciaId } = req.params
+    const [[a]] = await db.query(
+      'SELECT id, codigo, sin_exequias_at FROM asistencias WHERE id = ?', [asistenciaId])
+    if (!a) return res.status(404).json({ error: 'Asistencia no encontrada' })
+    if (!a.sin_exequias_at)
+      return res.status(409).json({ error: 'La asistencia no está marcada como sin exequias' })
+
+    await db.query(
+      `UPDATE asistencias
+          SET sin_exequias_motivo = NULL, sin_exequias_por = NULL,
+              sin_exequias_por_nombre = NULL, sin_exequias_at = NULL
+        WHERE id = ?`, [asistenciaId])
+
+    res.json({ ok: true, asistencia_id: Number(asistenciaId), codigo: a.codigo })
   } catch (err) { next(err) }
 }
 
@@ -637,6 +698,7 @@ async function programacionPublica(req, res, next) {
 }
 
 module.exports = {
+  marcarSinExequias, quitarSinExequias,
   listar, pendientes, obtener, crear, actualizar, eliminar, formatoR13,
   // Lo usa exequias_seguimiento.controller: el seguimiento y el pago quedan en
   // el mismo historial que el resto de la vida de la exequia.

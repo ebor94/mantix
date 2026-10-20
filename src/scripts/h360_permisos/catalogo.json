@@ -344,6 +344,24 @@
       ]
     },
     {
+      "clave": "accion.exequias.sin_exequias_marcar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
+      "clave": "accion.exequias.sin_exequias_quitar",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.gestion_servicios.editar",
       "modulo": "gestion_servicios",
       "roles": [
