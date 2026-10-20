@@ -1,5 +1,6 @@
 // Carga la app real de Mantix: verifica montaje en /api/trk/v1 y exención del limitador global.
 process.env.RATE_LIMIT_MAX_REQUESTS = '2';
+require('../testing/env'); // secretos JWT distintos (I1: sin ellos el router TRK responde 503)
 const request = require('supertest');
 const app = require('../../app');
 

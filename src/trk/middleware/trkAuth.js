@@ -4,6 +4,7 @@ const { resolverUsuarioDesdeToken, requirePermiso } = require('../../middleware/
 const TrkError = require('../utils/TrkError');
 const aw = require('../utils/aw');
 const { tienePermiso } = require('../utils/permisos');
+const { verificarEntorno } = require('../config/verificarEntorno');
 
 const conRol = { include: [{ model: db.Rol, as: 'rol' }] };
 
@@ -13,7 +14,7 @@ const conRol = { include: [{ model: db.Rol, as: 'rol' }] };
  *  - Mantix (JWT_SECRET o SSO), vía resolverUsuarioDesdeToken del repo.
  */
 async function resolverSesion(token) {
-  if (!token) return null;
+  if (!token || !verificarEntorno().ok) return null;
   try {
     const d = jwt.verify(token, process.env.TRK_JWT_SECRET);
     if (d && d.scope === 'trk') {
