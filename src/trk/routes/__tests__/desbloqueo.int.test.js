@@ -1,10 +1,14 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, criteriosDe } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let admin; let jurado;
 beforeEach(async () => {
   await limpiar();
@@ -14,8 +18,8 @@ beforeEach(async () => {
 afterAll(cerrar);
 
 const puntajes = async (p, k) => (await criteriosDe(p)).map((c) => ({ criterio_id: c.id, puntaje: Math.max(c.puntaje_max - k, 0) }));
-const enviar = (p, ps) => request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps });
-const desbloquear = (id, quien = admin) => request(app).post(`/api/trk/v1/calificaciones/${id}/desbloquear`).set('Authorization', `Bearer ${quien.token}`);
+const enviar = (p, ps) => request(servidor).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps });
+const desbloquear = (id, quien = admin) => request(servidor).post(`/api/trk/v1/calificaciones/${id}/desbloquear`).set('Authorization', `Bearer ${quien.token}`);
 
 test('§13.3 bloqueada → 409; tras desbloqueo del admin se permite modificar y queda auditado', async () => {
   const p = await crearParticipante({ estado: 'EN_PASARELA' });

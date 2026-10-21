@@ -14,7 +14,7 @@ let admin; let jurado; let comentarista;
 beforeAll((done) => {
   server = http.createServer(crearAppTrk());
   io = attach(server);
-  server.listen(0, () => { url = `http://localhost:${server.address().port}/trk`; done(); });
+  server.listen(0, '127.0.0.1', () => { url = `http://127.0.0.1:${server.address().port}/trk`; done(); });
 });
 afterAll(async () => {
   io.trkCerrar();

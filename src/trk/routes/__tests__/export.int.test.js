@@ -1,10 +1,14 @@
 const ExcelJS = require('exceljs');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, calificar, criteriosDe } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 beforeEach(limpiar);
 afterAll(cerrar);
 
@@ -20,7 +24,7 @@ test('TRK-EXP-001 genera Excel con hoja por categoría y detalle por jurado y cr
   const p = await crearParticipante({ mascota_nombre: 'Canela', estado: 'PRESENTADO', responsable_telefono: '3009990000' });
   await calificar(p, j.usuario, { CREATIVIDAD: 30, SEGURIDAD: 25, ELABORACION: 15, PASARELA: 10 });
 
-  const r = await request(app).get('/api/trk/v1/export/resultados.xlsx').set('Authorization', `Bearer ${admin.token}`).buffer(true).parse(binario);
+  const r = await request(servidor).get('/api/trk/v1/export/resultados.xlsx').set('Authorization', `Bearer ${admin.token}`).buffer(true).parse(binario);
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-EXP-001');
   expect(r.headers['content-type']).toContain('spreadsheetml');
@@ -43,6 +47,6 @@ test('TRK-EXP-001 genera Excel con hoja por categoría y detalle por jurado y cr
 
 test('solo con permiso exportar', async () => {
   const jurado = await crearOperativo('TRK_JURADO');
-  const r = await request(app).get('/api/trk/v1/export/resultados.xlsx').set('Authorization', `Bearer ${jurado.token}`);
+  const r = await request(servidor).get('/api/trk/v1/export/resultados.xlsx').set('Authorization', `Bearer ${jurado.token}`);
   expect(r.status).toBe(403);
 });

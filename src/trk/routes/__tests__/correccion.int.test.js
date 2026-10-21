@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
@@ -6,6 +7,9 @@ const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, categoria, calificar } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let admin; let j1; let j2;
 const P = { CREATIVIDAD: 10, SEGURIDAD: 10, ELABORACION: 10, PASARELA: 10 };
 beforeEach(async () => {
@@ -24,13 +28,13 @@ describe('TRK-PAR-007 confirmar cambio de categoría (§13.7)', () => {
     await calificar(p, j1.usuario, P);
     await calificar(p, j2.usuario, P);
 
-    const sin = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({});
+    const sin = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({});
     expect(sin.status).toBe(409);
     expect(sin.body).toMatchObject({ error: 'TRK-PAR-007', motivo: 'CONFIRMACION_REQUERIDA' });
     expect(sin.body.message).toContain('2');
     expect(await db.TrkCalificacion.count({ where: { participante_id: p.id } })).toBe(2);
 
-    const con = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true });
+    const con = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true });
     expect(con.status).toBe(200);
     expect(con.body.data).toMatchObject({ categoria_id: grandes.id, categoria_propuesta_id: null, desempate_manual: null });
     expect(await db.TrkCalificacion.count({ where: { participante_id: p.id } })).toBe(0);
@@ -44,7 +48,7 @@ describe('TRK-PAR-007 confirmar cambio de categoría (§13.7)', () => {
     await crearParticipante({ categoriaCodigo: 'GRANDES', orden_pasarela: 4 });
     const p = await crearParticipante({ estado: 'PRESENTADO', orden_pasarela: 1, categoria_propuesta_id: grandes.id });
     await calificar(p, j1.usuario, P);
-    const r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true });
+    const r = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true });
     expect(r.status).toBe(200);
     await p.reload();
     expect(p.categoria_id).toBe(grandes.id);
@@ -59,7 +63,7 @@ describe('TRK-PAR-007 confirmar cambio de categoría (§13.7)', () => {
       await calificar(p, j1.usuario, P);
       ps.push(p);
     }
-    const rs = await Promise.all(ps.map((p) => comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true })));
+    const rs = await Promise.all(ps.map((p) => comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true })));
     expect(rs.map((r) => r.status)).toEqual([200, 200, 200]);
     const ordenes = [];
     for (const p of ps) { await p.reload(); ordenes.push(p.orden_pasarela); }
@@ -68,13 +72,13 @@ describe('TRK-PAR-007 confirmar cambio de categoría (§13.7)', () => {
 
   test('sin propuesta → 400', async () => {
     const p = await crearParticipante();
-    expect((await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true })).status).toBe(400);
+    expect((await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true })).status).toBe(400);
   });
 
   test('solo admin (editar) confirma', async () => {
     const cabina = await crearOperativo('TRK_CABINA');
     const p = await crearParticipante();
-    expect((await request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`).set('Authorization', `Bearer ${cabina.token}`).send({ confirmar: true })).status).toBe(403);
+    expect((await request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`).set('Authorization', `Bearer ${cabina.token}`).send({ confirmar: true })).status).toBe(403);
   });
 });
 
@@ -84,7 +88,7 @@ describe('TRK-PAR-006 fusionar (§13.13)', () => {
     const destino = await crearParticipante({ mascota_nombre: 'THOR', estado: 'PRESENTADO' });
     await calificar(origen, j1.usuario, P);
     await calificar(destino, j1.usuario, P);
-    const r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
+    const r = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
     expect(r.status).toBe(409);
     expect(r.body).toMatchObject({ error: 'TRK-PAR-006', motivo: 'FUSION_CON_CHOQUE' });
     await origen.reload();
@@ -98,13 +102,13 @@ describe('TRK-PAR-006 fusionar (§13.13)', () => {
     const destino = await crearParticipante({ mascota_nombre: 'Thor 2', estado: 'INSCRITO', foto_oficial_path: 'vieja.jpg', foto_oficial_at: viejo });
     await calificar(origen, j1.usuario, P);
     await calificar(destino, j2.usuario, P);
-    const r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
+    const r = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
     expect(r.status).toBe(200);
     expect(r.body.data).toMatchObject({ id: destino.id, estado: 'PRESENTADO', foto_url: '/uploads/trk/fotos/nueva.jpg' });
     expect(await db.TrkCalificacion.count({ where: { participante_id: destino.id } })).toBe(2);
     await origen.reload();
     expect(origen.fusionado_en_id).toBe(destino.id);
-    const lista = await comoAdmin(request(app).get('/api/trk/v1/participantes'));
+    const lista = await comoAdmin(request(servidor).get('/api/trk/v1/participantes'));
     expect(lista.body.data.map((x) => x.id)).toEqual([destino.id]);
     expect(await db.TrkAuditoria.count({ where: { api_codigo: 'TRK-PAR-006', accion: 'FUSIONAR' } })).toBe(2);
   });
@@ -119,7 +123,7 @@ describe('TRK-PAR-006 fusionar (§13.13)', () => {
     bus.on('trk', oyente);
     let r;
     try {
-      r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
+      r = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
     } finally { bus.off('trk', oyente); }
     expect(r.status).toBe(200);
     expect((await db.TrkEventoEstado.findByPk(1)).participante_en_pasarela_id).toBe(destino.id);
@@ -144,13 +148,13 @@ describe('TRK-PAR-006 fusionar (§13.13)', () => {
     const origen = await crearParticipante({ estado: 'PRESENTADO', categoriaCodigo: 'GRANDES' });
     const destino = await crearParticipante({ estado: 'PRESENTADO', categoriaCodigo: 'FAMILIAR' });
     await calificar(origen, j1.usuario, P);
-    const r = await comoAdmin(request(app).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
+    const r = await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${origen.id}/fusionar`)).send({ destino_id: destino.id });
     expect(r.status).toBe(409);
     expect(r.body.motivo).toBe('CATEGORIAS_DISTINTAS');
   });
 
   test('fusionar consigo mismo → 400', async () => {
     const p = await crearParticipante();
-    expect((await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/fusionar`)).send({ destino_id: p.id })).status).toBe(400);
+    expect((await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/fusionar`)).send({ destino_id: p.id })).status).toBe(400);
   });
 });

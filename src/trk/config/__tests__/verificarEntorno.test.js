@@ -1,6 +1,8 @@
 // I1: TRK_JWT_SECRET obligatorio y distinto de los secretos de Mantix; si no, el módulo queda deshabilitado (503).
 const express = require('express');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
+afterEach(cerrarServidores);
 const jwt = require('jsonwebtoken');
 
 const ENV_ORIGINAL = { ...process.env };
@@ -38,7 +40,7 @@ describe('router TRK con entorno inválido', () => {
   test('TRK_JWT_SECRET igual a JWT_SECRET → 503 con contrato TRK', async () => {
     process.env.JWT_SECRET = 'mismo-secreto';
     process.env.TRK_JWT_SECRET = 'mismo-secreto';
-    const r = await request(app()).get('/api/trk/v1/auth/usuarios-pin');
+    const r = await request(await servir(app())).get('/api/trk/v1/auth/usuarios-pin');
     expect(r.status).toBe(503);
     expect(r.body).toMatchObject({ success: false, error: expect.stringMatching(/^TRK-/), motivo: 'TRK_DESHABILITADO', message: expect.any(String) });
   });
@@ -46,7 +48,7 @@ describe('router TRK con entorno inválido', () => {
   test('sin TRK_JWT_SECRET → 503', async () => {
     process.env.JWT_SECRET = 'x';
     delete process.env.TRK_JWT_SECRET;
-    const r = await request(app()).get('/api/trk/v1/no-existe');
+    const r = await request(await servir(app())).get('/api/trk/v1/no-existe');
     expect(r.status).toBe(503);
   });
 });

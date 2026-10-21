@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
@@ -10,6 +11,9 @@ const db = require('../../../models');
 const { dirFotos } = require('../../services/fotos.service');
 
 const app = crearAppTrk({ estaticos: true });
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let cabina; let eventos;
 const escuchar = (e) => eventos.push(e.evento);
 
@@ -27,7 +31,7 @@ const imagen = (w, h) => sharp({ create: { width: w, height: h, channels: 3, bac
   .jpeg()
   .toBuffer();
 
-const subir = (id, buffer, nombre = 'foto.jpg') => request(app)
+const subir = (id, buffer, nombre = 'foto.jpg') => request(servidor)
   .post(`/api/trk/v1/participantes/${id}/foto`)
   .set('Authorization', `Bearer ${cabina.token}`)
   .attach('foto', buffer, nombre);
@@ -48,7 +52,7 @@ test('TRK-PAR-005 guarda foto con UUID, ≤1600 px, sin EXIF, y marca PRESENTE c
   expect(meta.exif).toBeUndefined();
   expect(eventos).toEqual(expect.arrayContaining(['foto:nueva', 'participante:actualizado']));
 
-  const estatico = await request(app).get(r.body.data.foto_url);
+  const estatico = await request(servidor).get(r.body.data.foto_url);
   expect(estatico.status).toBe(200);
 });
 
@@ -68,7 +72,7 @@ test('archivo que no es imagen → 400', async () => {
 
 test('sin archivo → 400', async () => {
   const p = await crearParticipante();
-  const r = await request(app).post(`/api/trk/v1/participantes/${p.id}/foto`).set('Authorization', `Bearer ${cabina.token}`);
+  const r = await request(servidor).post(`/api/trk/v1/participantes/${p.id}/foto`).set('Authorization', `Bearer ${cabina.token}`);
   expect(r.status).toBe(400);
 });
 

@@ -1,5 +1,7 @@
 const express = require('express');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
+afterEach(cerrarServidores);
 const logger = require('../../../utils/logger');
 const { trkErrorHandler } = require('../errorHandler');
 
@@ -14,7 +16,7 @@ test('un error 5xx de base de datos no lleva datos personales al log y la respue
     next(e);
   });
   app.use(trkErrorHandler);
-  const res = await request(app).get('/x');
+  const res = await request(await servir(app)).get('/x');
   expect(res.status).toBe(500);
   expect(res.body).toEqual({ success: false, error: 'TRK-SIN-CODIGO', motivo: 'ERROR_INTERNO', message: 'Error interno del servidor' });
   expect(error).toHaveBeenCalled();
