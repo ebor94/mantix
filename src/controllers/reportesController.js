@@ -86,11 +86,12 @@ const reportesController = {
           plan_actividad_id: { [Op.in]: idsActividades },
           fecha_programada: { [Op.between]: [inicio, fin] }
         },
-        attributes: ['id', 'plan_actividad_id', 'fecha_programada'],
+        attributes: ['id', 'plan_actividad_id', 'fecha_programada', 'exigencias'],
         raw: true
       });
 
       const programadosPorActividad = new Map();
+      const exigenciasPorActividad = new Map(); // plan_actividad_id → Set(exigencia)
       const idsProgramados = [];
       for (const mp of programados) {
         const fp = toISODate(mp.fecha_programada);
@@ -98,7 +99,17 @@ const reportesController = {
         if (!programadosPorActividad.has(mp.plan_actividad_id)) {
           programadosPorActividad.set(mp.plan_actividad_id, []);
         }
-        programadosPorActividad.get(mp.plan_actividad_id).push({ id: mp.id, fecha: fp });
+        programadosPorActividad.get(mp.plan_actividad_id).push({
+          id: mp.id,
+          fecha: fp,
+          exigencia: mp.exigencias || ''
+        });
+        if (mp.exigencias) {
+          if (!exigenciasPorActividad.has(mp.plan_actividad_id)) {
+            exigenciasPorActividad.set(mp.plan_actividad_id, new Set());
+          }
+          exigenciasPorActividad.get(mp.plan_actividad_id).add(mp.exigencias);
+        }
         idsProgramados.push(mp.id);
       }
 
@@ -171,6 +182,9 @@ const reportesController = {
           responsable = nombreUsuario;
         }
 
+        const exigenciasSet = exigenciasPorActividad.get(act.id);
+        const exigencia = exigenciasSet ? Array.from(exigenciasSet).join(', ') : '';
+
         grupos.get(catId).actividades.push({
           id: act.id,
           trabajo_a_realizar: act.nombre,
@@ -181,6 +195,7 @@ const reportesController = {
           responsable,
           periodicidad: act.periodicidad?.nombre || '',
           tipo_mantenimiento: act.tipo_mantenimiento?.nombre || '',
+          exigencia,
           registro: act.id,
           meses
         });
