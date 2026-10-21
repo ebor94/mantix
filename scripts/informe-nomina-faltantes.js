@@ -40,7 +40,8 @@ function stamp() {
               AND NOT EXISTS (
                 SELECT 1 FROM afiliados a
                 WHERE a.empresaId = :empresaId
-                  AND a.numeroDocumento = n.numero_documento
+                  AND a.numeroDocumento COLLATE utf8mb4_unicode_ci
+                      = n.numero_documento COLLATE utf8mb4_unicode_ci
               )
          ) AS faltan`,
       { replacements: { empresaId }, type: QueryTypes.SELECT }
@@ -57,7 +58,8 @@ function stamp() {
           AND NOT EXISTS (
             SELECT 1 FROM afiliados a
             WHERE a.empresaId = :empresaId
-              AND a.numeroDocumento = n.numero_documento
+              AND a.numeroDocumento COLLATE utf8mb4_unicode_ci
+                  = n.numero_documento COLLATE utf8mb4_unicode_ci
           )
         ORDER BY n.primer_apellido, n.primer_nombre`,
       { replacements: { empresaId }, type: QueryTypes.SELECT }
