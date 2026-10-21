@@ -1,6 +1,10 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../testing/servidorPrueba');
 const { repoEnMemoria, crearAppPrueba } = require('../testing/ayudas');
 const { construirCsv, escaparCampo, ENCABEZADOS } = require('../services/csv');
+
+// Servidores ligados a 127.0.0.1 (ver testing/servidorPrueba.js): se cierran tras cada prueba.
+afterEach(cerrarServidores);
 
 const TOKEN = 'token-de-prueba-largo-y-aleatorio';
 const config = { hashSalt: 'sal', resultsToken: TOKEN };
@@ -24,10 +28,10 @@ function appConFilas(filas, cfg = config) {
 describe(`GET ${JSON_URL}`, () => {
   it('sin token o con token incorrecto responde 401 con el mismo mensaje', async () => {
     const app = appConFilas([fila()]);
-    const sin = await request(app).get(JSON_URL);
-    const mal = await request(app).get(JSON_URL).set(auth('otro-token'));
-    const malEsquema = await request(app).get(JSON_URL).set('Authorization', `Basic ${TOKEN}`);
-    const corto = await request(app).get(JSON_URL).set(auth('x'));
+    const sin = await request(await servir(app)).get(JSON_URL);
+    const mal = await request(await servir(app)).get(JSON_URL).set(auth('otro-token'));
+    const malEsquema = await request(await servir(app)).get(JSON_URL).set('Authorization', `Basic ${TOKEN}`);
+    const corto = await request(await servir(app)).get(JSON_URL).set(auth('x'));
     for (const r of [sin, mal, malEsquema, corto]) {
       expect(r.status).toBe(401);
       expect(r.body).toEqual({ error: 'No autorizado.' });
@@ -36,7 +40,7 @@ describe(`GET ${JSON_URL}`, () => {
 
   it('con token correcto devuelve total, distribucion, nps, matrizP2P3 y ultimasFrases', async () => {
     const filas = [fila({ p6: 10 }), fila({ p6: 8, p2: 'ambas', p3: 'otro', p3_otro: 'Un santuario' }), fila({ p6: 3 })];
-    const res = await request(appConFilas(filas)).get(JSON_URL).set(auth());
+    const res = await request(await servir(appConFilas(filas))).get(JSON_URL).set(auth());
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['distribucion', 'matrizP2P3', 'nps', 'total', 'ultimasFrases']);
     expect(res.body.total).toBe(3);
@@ -51,7 +55,7 @@ describe(`GET ${JSON_URL}`, () => {
 
   it('nunca expone hashes ni identificadores aunque el repositorio los devolviera', async () => {
     const sucia = fila({ ip_hash: 'a'.repeat(64), ua_hash: 'b'.repeat(64), uuid: 'uuid-secreto' });
-    const res = await request(appConFilas([sucia])).get(JSON_URL).set(auth());
+    const res = await request(await servir(appConFilas([sucia]))).get(JSON_URL).set(auth());
     const texto = JSON.stringify(res.body);
     expect(texto).not.toContain('a'.repeat(64));
     expect(texto).not.toContain('b'.repeat(64));
@@ -59,7 +63,7 @@ describe(`GET ${JSON_URL}`, () => {
   });
 
   it('sin respuestas devuelve ceros y nps null', async () => {
-    const res = await request(appConFilas([])).get(JSON_URL).set(auth());
+    const res = await request(await servir(appConFilas([]))).get(JSON_URL).set(auth());
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(0);
     expect(res.body.nps.nps).toBeNull();
@@ -70,7 +74,7 @@ describe(`GET ${JSON_URL}`, () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { repo } = repoEnMemoria();
     repo.listar = async () => { throw new Error('boom mysql'); };
-    const res = await request(crearAppPrueba({ repositorio: repo, config })).get(JSON_URL).set(auth());
+    const res = await request(await servir(crearAppPrueba({ repositorio: repo, config }))).get(JSON_URL).set(auth());
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'No se pudieron obtener los resultados.' });
     expect(spy).toHaveBeenCalledWith(expect.any(String), 'boom mysql');
@@ -82,7 +86,7 @@ describe('errores inesperados en los handlers', () => {
   it.each([JSON_URL, CSV_URL])('un fallo al procesar las filas en %s → 500 genérico, sin rechazo sin manejar', async (url) => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     // created_at inválido: las estadísticas / el CSV lanzan RangeError al formatear la fecha
-    const res = await request(appConFilas([fila({ created_at: 'no-es-fecha' })])).get(url).set(auth());
+    const res = await request(await servir(appConFilas([fila({ created_at: 'no-es-fecha' })]))).get(url).set(auth());
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'No se pudieron obtener los resultados.' });
     expect(spy).toHaveBeenCalledWith(expect.any(String), expect.any(String));
@@ -96,7 +100,7 @@ describe('token de resultados no configurado', () => {
     const app = appConFilas([fila()], { hashSalt: 'sal', resultsToken: valor });
     for (const url of [JSON_URL, CSV_URL]) {
       for (const cabecera of [{}, { Authorization: 'Bearer ' }, { Authorization: 'Bearer' }]) {
-        const res = await request(app).get(url).set(cabecera);
+        const res = await request(await servir(app)).get(url).set(cabecera);
         expect(res.status).toBe(503);
         expect(JSON.stringify(res.body)).not.toMatch(/BIGDAY|TOKEN/);
         expect(res.body.error).toMatch(/no están disponibles/i);
@@ -107,7 +111,7 @@ describe('token de resultados no configurado', () => {
   it('el POST y el health siguen funcionando sin token de resultados', async () => {
     const { repo } = repoEnMemoria();
     const app = crearAppPrueba({ repositorio: repo, config: { hashSalt: 'sal' } });
-    expect((await request(app).get('/api/bigday/v1/health')).status).toBe(200);
+    expect((await request(await servir(app)).get('/api/bigday/v1/health')).status).toBe(200);
   });
 });
 
@@ -115,41 +119,41 @@ describe('limitador de resultados', () => {
   it('30 peticiones por IP cada 10 min; la 31 responde 429 en español (también con token incorrecto)', async () => {
     const app = appConFilas([]);
     for (let i = 0; i < 30; i++) {
-      const r = await request(app).get(JSON_URL).set(auth('incorrecto')).set('X-Forwarded-For', '198.51.100.9');
+      const r = await request(await servir(app)).get(JSON_URL).set(auth('incorrecto')).set('X-Forwarded-For', '198.51.100.9');
       expect(r.status).toBe(401);
     }
-    const r = await request(app).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.9');
+    const r = await request(await servir(app)).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.9');
     expect(r.status).toBe(429);
     expect(r.body).toEqual({ error: 'Demasiadas solicitudes. Inténtalo de nuevo en unos minutos.' });
     // otra IP no se ve afectada
-    const otra = await request(app).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.10');
+    const otra = await request(await servir(app)).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.10');
     expect(otra.status).toBe(200);
   });
 
   it('el limitador es nuevo por cada fábrica (no comparte estado entre apps)', async () => {
     const a = appConFilas([]);
-    for (let i = 0; i < 30; i++) await request(a).get(JSON_URL).set(auth('x')).set('X-Forwarded-For', '198.51.100.20');
+    for (let i = 0; i < 30; i++) await request(await servir(a)).get(JSON_URL).set(auth('x')).set('X-Forwarded-For', '198.51.100.20');
     const b = appConFilas([]);
-    const r = await request(b).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.20');
+    const r = await request(await servir(b)).get(JSON_URL).set(auth()).set('X-Forwarded-For', '198.51.100.20');
     expect(r.status).toBe(200);
   });
 
   it('el límite es solo por IP: cambiar el user-agent no reinicia el cupo', async () => {
     const app = appConFilas([]);
     for (let i = 0; i < 30; i++) {
-      await request(app).get(JSON_URL).set(auth('x')).set('User-Agent', `ua-${i}`).set('X-Forwarded-For', '198.51.100.30');
+      await request(await servir(app)).get(JSON_URL).set(auth('x')).set('User-Agent', `ua-${i}`).set('X-Forwarded-For', '198.51.100.30');
     }
-    const r = await request(app).get(JSON_URL).set(auth()).set('User-Agent', 'otro-ua').set('X-Forwarded-For', '198.51.100.30');
+    const r = await request(await servir(app)).get(JSON_URL).set(auth()).set('User-Agent', 'otro-ua').set('X-Forwarded-For', '198.51.100.30');
     expect(r.status).toBe(429);
   });
 });
 
 describe(`GET ${CSV_URL}`, () => {
-  const get = (filas) => request(appConFilas(filas)).get(CSV_URL).set(auth()).buffer(true)
+  const get = async (filas) => request(await servir(appConFilas(filas))).get(CSV_URL).set(auth()).buffer(true)
     .parse((res, cb) => { const partes = []; res.on('data', (d) => partes.push(d)); res.on('end', () => cb(null, Buffer.concat(partes))); });
 
   it('exige token (401 igual que el JSON)', async () => {
-    const r = await request(appConFilas([fila()])).get(CSV_URL);
+    const r = await request(await servir(appConFilas([fila()]))).get(CSV_URL);
     expect(r.status).toBe(401);
     expect(r.body).toEqual({ error: 'No autorizado.' });
   });

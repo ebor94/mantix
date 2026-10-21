@@ -1,6 +1,10 @@
 const { createHash, randomUUID } = require('node:crypto');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../testing/servidorPrueba');
 const { repoEnMemoria, crearAppPrueba } = require('../testing/ayudas');
+
+// Servidores ligados a 127.0.0.1 (ver testing/servidorPrueba.js): se cierran tras cada prueba.
+afterEach(cerrarServidores);
 
 const SAL = 'sal-de-prueba';
 const IP = '203.0.113.7';
@@ -33,7 +37,7 @@ describe(`POST ${RUTA}`, () => {
     app = crearAppPrueba({ repositorio: m.repo, config });
   });
 
-  const enviar = (cuerpo) => request(app).post(RUTA).set('User-Agent', UA).send(cuerpo);
+  const enviar = async (cuerpo) => request(await servir(app)).post(RUTA).set('User-Agent', UA).send(cuerpo);
 
   it('responde 201 con una respuesta válida y guarda códigos', async () => {
     const res = await enviar(valida());
@@ -141,7 +145,7 @@ describe(`POST ${RUTA}`, () => {
 
   describe('privacidad', () => {
     it('guarda SHA-256(ip + sal) y nunca la IP ni el user-agent en claro', async () => {
-      await request(app).post(RUTA).set('User-Agent', UA).set('X-Forwarded-For', IP).send(valida());
+      await request(await servir(app)).post(RUTA).set('User-Agent', UA).set('X-Forwarded-For', IP).send(valida());
       const fila = filas.get(valida().uuid);
       expect(fila.ip_hash).toBe(sha(IP));
       expect(fila.ua_hash).toBe(sha(UA));
@@ -164,7 +168,8 @@ describe(`POST ${RUTA}`, () => {
     });
 
     it('la clave es IP + user-agent: cada UA distinto desde la misma IP tiene su propio cupo de 10', async () => {
-      const desde = (ua) => request(app).post(RUTA).set('User-Agent', ua).set('X-Forwarded-For', IP);
+      const srv = await servir(app);
+      const desde = (ua) => request(srv).post(RUTA).set('User-Agent', ua).set('X-Forwarded-For', IP);
       for (let i = 0; i < 10; i++) {
         expect((await desde('UA-uno').send({ ...valida(), uuid: randomUUID() })).status).toBe(201);
       }
@@ -177,7 +182,7 @@ describe(`POST ${RUTA}`, () => {
 
     it('cada router nuevo arranca con el contador en cero', async () => {
       const otra = crearAppPrueba({ repositorio: repoEnMemoria().repo, config });
-      const res = await request(otra).post(RUTA).set('User-Agent', UA).send(valida());
+      const res = await request(await servir(otra)).post(RUTA).set('User-Agent', UA).send(valida());
       expect(res.status).toBe(201);
     });
   });
@@ -190,13 +195,13 @@ describe(`POST ${RUTA}`, () => {
     });
 
     it('rechaza cuerpos urlencoded mayores de 10 KB con 413 sin llegar al parser global', async () => {
-      const res = await request(app).post(RUTA).type('form').send('p7=' + 'x'.repeat(11 * 1024));
+      const res = await request(await servir(app)).post(RUTA).type('form').send('p7=' + 'x'.repeat(11 * 1024));
       expect(res.status).toBe(413);
       expect(res.body).toEqual({ error: 'La solicitud es demasiado grande.' });
     });
 
     it('rechaza JSON mal formado con 400 en JSON', async () => {
-      const res = await request(app).post(RUTA).set('Content-Type', 'application/json').send('{"uuid": ');
+      const res = await request(await servir(app)).post(RUTA).set('Content-Type', 'application/json').send('{"uuid": ');
       expect(res.status).toBe(400);
       expect(res.body).toEqual({ error: 'JSON inválido.' });
     });
@@ -210,7 +215,7 @@ describe(`POST ${RUTA}`, () => {
         ping: async () => {},
       };
       const appRota = crearAppPrueba({ repositorio: repoRoto, config });
-      const res = await request(appRota).post(RUTA).set('User-Agent', UA).set('X-Forwarded-For', IP).send(valida());
+      const res = await request(await servir(appRota)).post(RUTA).set('User-Agent', UA).set('X-Forwarded-For', IP).send(valida());
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'No se pudo guardar la respuesta. Inténtalo de nuevo.' });
       const registrado = JSON.stringify(error.mock.calls);
@@ -227,7 +232,7 @@ describe('GET /api/bigday/v1/health', () => {
 
   it('responde 200 si la BD responde al ping', async () => {
     const app = crearAppPrueba({ repositorio: repoEnMemoria().repo, config });
-    const res = await request(app).get('/api/bigday/v1/health');
+    const res = await request(await servir(app)).get('/api/bigday/v1/health');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ estado: 'ok', bd: 'ok' });
   });
@@ -240,7 +245,7 @@ describe('GET /api/bigday/v1/health', () => {
         throw new Error('sin conexión');
       },
     };
-    const res = await request(crearAppPrueba({ repositorio: repo, config })).get('/api/bigday/v1/health');
+    const res = await request(await servir(crearAppPrueba({ repositorio: repo, config }))).get('/api/bigday/v1/health');
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ estado: 'error', bd: 'error' });
   });

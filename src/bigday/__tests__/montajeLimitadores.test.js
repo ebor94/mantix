@@ -8,7 +8,11 @@ const mockCrearPool = jest.fn();
 jest.mock('../db', () => ({ crearPool: (...args) => mockCrearPool(...args) }));
 
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../testing/servidorPrueba');
 const app = require('../../app');
+
+// Servidores ligados a 127.0.0.1 (ver testing/servidorPrueba.js): se cierran tras cada prueba.
+afterEach(cerrarServidores);
 
 const valida = () => ({
   uuid: '7d9f4c2e-3b1a-4c5d-8e6f-0a1b2c3d4e5f', p1: 'B', p2: 'ambas', p3: 'parque_vida', p4: 'diversidad',
@@ -36,12 +40,12 @@ test('con entorno válido no se crea ningún limitador dentro de un request (sin
   // el pool se crea de forma perezosa: nada al cargar la app
   expect(mockCrearPool).not.toHaveBeenCalled();
 
-  const h = await request(app).get('/api/bigday/v1/health');
+  const h = await request(await servir(app)).get('/api/bigday/v1/health');
   expect(h.status).toBe(200);
   expect(h.body).toEqual({ estado: 'ok', bd: 'ok' });
-  const p = await request(app).post('/api/bigday/v1/respuestas').send(valida());
+  const p = await request(await servir(app)).post('/api/bigday/v1/respuestas').send(valida());
   expect(p.status).toBe(201);
-  await request(app).get('/api/bigday/v1/resultados').set('Authorization', 'Bearer x');
+  await request(await servir(app)).get('/api/bigday/v1/resultados').set('Authorization', 'Bearer x');
 
   expect(mensajes(error)).not.toMatch(/ERR_ERL/);
   expect(mensajes(warn)).not.toMatch(/ERR_ERL/);
@@ -52,11 +56,11 @@ test('con entorno válido no se crea ningún limitador dentro de un request (sin
 
 test('sin entorno el módulo responde 503 genérico, no crea pool y Mantix sigue vivo', async () => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
-  const h = await request(app).get('/api/bigday/v1/health');
+  const h = await request(await servir(app)).get('/api/bigday/v1/health');
   expect(h.status).toBe(503);
   expect(JSON.stringify(h.body)).not.toMatch(/BIGDAY_|HOST|SALT/);
-  const p = await request(app).post('/api/bigday/v1/respuestas').send(valida());
+  const p = await request(await servir(app)).post('/api/bigday/v1/respuestas').send(valida());
   expect(p.status).toBe(503);
-  expect((await request(app).get('/api/ruta-mantix-inexistente-503')).status).toBe(404);
+  expect((await request(await servir(app)).get('/api/ruta-mantix-inexistente-503')).status).toBe(404);
   expect(mockCrearPool).not.toHaveBeenCalled();
 });
