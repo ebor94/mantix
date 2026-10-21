@@ -153,12 +153,22 @@ const reportesController = {
           }
         }
 
+        // Resolver responsable: prioriza el tipo declarado y cae al que exista si el tipo está nulo/raro
         let responsable = '';
-        if (act.responsable_tipo === 'proveedor' && act.responsable_proveedor) {
-          responsable = act.responsable_proveedor.nombre || '';
-        } else if (act.responsable_tipo === 'interno' && act.responsable_usuario) {
-          const u = act.responsable_usuario;
-          responsable = [u.nombre, u.apellido].filter(Boolean).join(' ');
+        const tipo = (act.responsable_tipo || '').toString().toLowerCase();
+        const nombreUsuario = act.responsable_usuario
+          ? [act.responsable_usuario.nombre, act.responsable_usuario.apellido].filter(Boolean).join(' ')
+          : '';
+        const nombreProveedor = act.responsable_proveedor?.nombre || '';
+
+        if (tipo === 'proveedor' && nombreProveedor) {
+          responsable = nombreProveedor;
+        } else if (tipo === 'interno' && nombreUsuario) {
+          responsable = nombreUsuario;
+        } else if (nombreProveedor) {
+          responsable = nombreProveedor;
+        } else if (nombreUsuario) {
+          responsable = nombreUsuario;
         }
 
         grupos.get(catId).actividades.push({
