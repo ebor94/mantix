@@ -38,7 +38,7 @@ function router(req, res, next) {
       console.error(`bigday deshabilitado: faltan variables ${entorno.faltantes.join(', ')}`);
     }
     return res.status(503).json({
-      error: `El módulo October Big Day no está disponible: configuración del servidor incompleta (faltan ${entorno.faltantes.join(', ')}).`,
+      error: 'El módulo October Big Day no está disponible: configuración del servidor incompleta.',
     });
   }
   if (!real) {

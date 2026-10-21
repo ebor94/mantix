@@ -22,6 +22,7 @@ function crearAppPrueba({ repositorio, config }) {
   const app = express();
   app.set('trust proxy', 1);
   app.use('/api/bigday', express.json({ limit: '10kb' }));
+  app.use('/api/bigday', express.urlencoded({ limit: '10kb', extended: false }));
   app.use('/api/bigday/v1', crearRouterBigday({ repositorio, config }));
   app.use('/api/bigday', bigdayErrorHandler);
   return app;

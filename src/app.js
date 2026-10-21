@@ -86,6 +86,7 @@ app.use('/api/', limiter);
 // ============================================
 // October Big Day: parser propio de 10 KB ANTES de los globales (body-parser no re-parsea un cuerpo ya leído)
 app.use('/api/bigday', express.json({ limit: '10kb' }));
+app.use('/api/bigday', express.urlencoded({ limit: '10kb', extended: false })); // tampoco urlencoded llega al límite de 10 MB
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // TRIKIPELUDOS: errores del body parser en /api/trk/* con el contrato TRK (solo maneja errores)

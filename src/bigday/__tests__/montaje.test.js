@@ -20,7 +20,7 @@ test('sin variables BIGDAY_* el módulo responde 503 claro y Mantix sigue vivo',
   const h = await request(app).get('/api/bigday/v1/health');
   expect(h.status).toBe(503);
   expect(h.body.error).toMatch(/no está disponible/i);
-  expect(h.body.error).toContain('BIGDAY_DB_HOST');
+  expect(JSON.stringify(h.body)).not.toMatch(/BIGDAY_|HOST|SALT/);
   const p = await request(app).post('/api/bigday/v1/respuestas').send(valida());
   expect(p.status).toBe(503);
   const otra = await request(app).get('/api/ruta-mantix-inexistente-503');
@@ -50,6 +50,12 @@ test('/api/bigday/ está exento del limitador global; el resto de /api no', asyn
 
 test('cuerpo de más de 10 KB en /api/bigday/* → 413 JSON en español', async () => {
   const r = await request(app).post('/api/bigday/v1/respuestas').send({ ...valida(), p7: 'x'.repeat(11 * 1024) });
+  expect(r.status).toBe(413);
+  expect(r.body).toEqual({ error: 'La solicitud es demasiado grande.' });
+});
+
+test('cuerpo urlencoded de más de 10 KB en /api/bigday/* → 413 (no llega al parser global de 10 MB)', async () => {
+  const r = await request(app).post('/api/bigday/v1/respuestas').type('form').send('p7=' + 'x'.repeat(11 * 1024));
   expect(r.status).toBe(413);
   expect(r.body).toEqual({ error: 'La solicitud es demasiado grande.' });
 });

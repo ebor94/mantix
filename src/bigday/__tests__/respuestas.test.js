@@ -125,6 +125,13 @@ describe(`POST ${RUTA}`, () => {
       expect(filas.size).toBe(0);
     });
 
+    it.each([[123], [{}], [['x']], [true], [0]])('rechaza honeypot con valor no vacío %j (cualquier tipo)', async (valor) => {
+      const res = await enviar({ ...valida(), website: valor });
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(generico);
+      expect(filas.size).toBe(0);
+    });
+
     it('acepta honeypot vacío y no lo guarda', async () => {
       const res = await enviar({ ...valida(), website: '' });
       expect(res.status).toBe(201);
@@ -156,6 +163,18 @@ describe(`POST ${RUTA}`, () => {
       expect(res.headers.ratelimit).toBeDefined();
     });
 
+    it('la clave es IP + user-agent: cada UA distinto desde la misma IP tiene su propio cupo de 10', async () => {
+      const desde = (ua) => request(app).post(RUTA).set('User-Agent', ua).set('X-Forwarded-For', IP);
+      for (let i = 0; i < 10; i++) {
+        expect((await desde('UA-uno').send({ ...valida(), uuid: randomUUID() })).status).toBe(201);
+      }
+      expect((await desde('UA-uno').send({ ...valida(), uuid: randomUUID() })).status).toBe(429);
+      for (let i = 0; i < 10; i++) {
+        expect((await desde('UA-dos').send({ ...valida(), uuid: randomUUID() })).status).toBe(201);
+      }
+      expect((await desde('UA-dos').send({ ...valida(), uuid: randomUUID() })).status).toBe(429);
+    });
+
     it('cada router nuevo arranca con el contador en cero', async () => {
       const otra = crearAppPrueba({ repositorio: repoEnMemoria().repo, config });
       const res = await request(otra).post(RUTA).set('User-Agent', UA).send(valida());
@@ -166,6 +185,12 @@ describe(`POST ${RUTA}`, () => {
   describe('límites y errores', () => {
     it('rechaza cuerpos mayores de 10 KB con 413 en JSON', async () => {
       const res = await enviar({ ...valida(), p7: 'x'.repeat(11 * 1024) });
+      expect(res.status).toBe(413);
+      expect(res.body).toEqual({ error: 'La solicitud es demasiado grande.' });
+    });
+
+    it('rechaza cuerpos urlencoded mayores de 10 KB con 413 sin llegar al parser global', async () => {
+      const res = await request(app).post(RUTA).type('form').send('p7=' + 'x'.repeat(11 * 1024));
       expect(res.status).toBe(413);
       expect(res.body).toEqual({ error: 'La solicitud es demasiado grande.' });
     });
