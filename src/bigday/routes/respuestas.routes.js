@@ -2,18 +2,25 @@ const { Router } = require('express');
 const rateLimit = require('express-rate-limit');
 const { respuestaSchema } = require('../shared/survey.config.cjs');
 const { createHash } = require('node:crypto');
-const { isIPv6 } = require('node:net');
+const { isIPv4, isIPv6 } = require('node:net');
 const { hashConSal } = require('../services/hash');
 
 const DURACION_MIN_SEG = 8;
 const MSG_GENERICO = 'No se pudo registrar la respuesta.';
 
-// IPv6: se agrupa por /56 para que un cliente no evada el límite rotando direcciones de su bloque
-// (express-rate-limit 7.5.1 no trae ipKeyGenerator). IPv4 y desconocidas se dejan tal cual.
+// IPv6: se agrupa por /56 para que un cliente no evada el límite rotando direcciones de su bloque.
+// IPv4-mapped (::ffff:a.b.c.d, como entrega Node en dual-stack) se normaliza a su IPv4.
+// TODO: reemplazar por ipKeyGenerator(req.ip, 56) si se actualiza express-rate-limit a 8.x.
 function claveIp(ip) {
-  if (!ip || !isIPv6(ip)) return ip || 'desconocida';
-  const grupos = ip.split('%')[0].toLowerCase();
-  const [izq, der = ''] = grupos.split('::');
+  if (!ip) return 'desconocida';
+  let v = String(ip).split('%')[0].toLowerCase();
+  const mapeada = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapeada && isIPv4(mapeada[1])) return mapeada[1];
+  if (!isIPv6(v)) return v;
+  // IPv4 incrustada al final (p. ej. 64:ff9b::1.2.3.4): pasarla a dos grupos hexadecimales.
+  v = v.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/, (_, p, q, r, t) =>
+    `${((p << 8) | q).toString(16)}:${((r << 8) | t).toString(16)}`);
+  const [izq, der = ''] = v.split('::');
   const a = izq ? izq.split(':') : [];
   const b = der ? der.split(':') : [];
   const completos = [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b].map((g) => g.padStart(4, '0'));
@@ -94,4 +101,4 @@ function crearRouterRespuestas({ repositorio, config }) {
   return router;
 }
 
-module.exports = { crearRouterRespuestas };
+module.exports = { crearRouterRespuestas, claveIp };
