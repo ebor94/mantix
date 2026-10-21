@@ -1267,7 +1267,8 @@ module.exports = {
   legalizarAfiliaciones,
   liquidacionPdf,
   planoExcel,
-  carnet
+  carnet,
+  carnetMascota
 };
 
 /**
@@ -1301,5 +1302,28 @@ async function carnet(req, res, next) {
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `inline; filename="carnet-${afiliado.numeroDocumento}.png"`);
     require('fs').createReadStream(carnetInfo.filePath).pipe(res);
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/afiliados/:id/carnet-mascota  (preview, NO envía WhatsApp)
+ * Devuelve el PNG del carné de la mascota en el índice ?i (default 0).
+ * Útil para validar el diseño antes/después de aprobar.
+ */
+async function carnetMascota(req, res, next) {
+  try {
+    const afiliado = await Afiliado.findByPk(Number(req.params.id));
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+    const mascotas = await Beneficiario.findAll({
+      where: { afiliadoId: afiliado.id, tipoBeneficiario: 'MASCOTA' },
+      order: [['id', 'ASC']]
+    });
+    if (!mascotas.length) throw new AppError('Esta afiliación no tiene mascotas', 404);
+    const i = Math.min(Math.max(parseInt(req.query.i, 10) || 0, 0), mascotas.length - 1);
+    const base = await obtenerCarnetMascotaBase();
+    const info = await pdfService.generarCarnetMascotaImagen(mascotas[i].toJSON(), afiliado.toJSON(), base);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `inline; filename="carnet-mascota-${mascotas[i].id}.png"`);
+    require('fs').createReadStream(info.filePath).pipe(res);
   } catch (err) { next(err); }
 }

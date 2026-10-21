@@ -210,6 +210,14 @@ router.get('/:id/carnet',
   controller.carnet
 );
 
+// ── GET /afiliados/:id/carnet-mascota — PNG del carné de mascota (preview) ────
+//     ?i=0 índice de la mascota. No envía WhatsApp.
+router.get('/:id/carnet-mascota',
+  auth,
+  requirePermiso('afiliaciones', 'aprobar'),
+  controller.carnetMascota
+);
+
 // ── GET /afiliados/:id/trazabilidad — historial de auditoría del afiliado ─────
 router.get('/:id/trazabilidad', auth, controller.getTrazabilidad);
 
