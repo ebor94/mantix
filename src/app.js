@@ -76,17 +76,23 @@ const limiter = rateLimit({
   max: process.env.RATE_LIMIT_MAX_REQUESTS || 1000,
   message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
   // TRIKIPELUDOS: todo el evento comparte IP pública; el módulo aplica sus propios límites.
-  skip: (req) => req.originalUrl.startsWith('/api/trk/')
+  // October Big Day: el evento también comparte Wi-Fi; el módulo aplica su propio límite en el POST.
+  skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
 });
 app.use('/api/', limiter);
 
 // ============================================
 // Body Parsers
 // ============================================
+// October Big Day: parser propio de 10 KB ANTES de los globales (body-parser no re-parsea un cuerpo ya leído)
+app.use('/api/bigday', express.json({ limit: '10kb' }));
+app.use('/api/bigday', express.urlencoded({ limit: '10kb', extended: false })); // tampoco urlencoded llega al límite de 10 MB
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // TRIKIPELUDOS: errores del body parser en /api/trk/* con el contrato TRK (solo maneja errores)
 app.use('/api/trk', require('./trk/middleware/errorHandler').trkErrorHandler);
+// October Big Day: errores del parser (413 / JSON inválido) en /api/bigday/* en JSON y español
+app.use('/api/bigday', require('./bigday/middleware/errorHandler').bigdayErrorHandler);
 app.use(compression());
 
 // ============================================
