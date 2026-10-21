@@ -171,14 +171,17 @@ async function crear(req, res, next) {
       })
     }
 
-    // Exclusividad con homenaje en residencia
+    // Simétrico a residencia: solo estorba la que sigue abierta. Una residencia
+    // ya completada no impide velar después en sala.
     const [enRes] = await db.query(
-      'SELECT id FROM homenajes_residencia WHERE asistencia_id = ? LIMIT 1',
+      `SELECT id, estado FROM homenajes_residencia
+        WHERE asistencia_id = ? AND estado <> 'COMPLETADO' LIMIT 1`,
       [asistencia_id]
     )
     if (enRes.length) {
       return res.status(409).json({
-        mensaje: 'Esta asistencia ya tiene un homenaje en residencia registrado. No puede tener también en sala.',
+        mensaje: 'Esta asistencia tiene un homenaje en residencia todavía abierto. Ciérralo antes de pasarla a sala.',
+        homenaje_id: enRes[0].id,
       })
     }
 

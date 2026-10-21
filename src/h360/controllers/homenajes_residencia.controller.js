@@ -126,6 +126,10 @@ async function obtener(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// La sala ya no retiene al ser querido en cuanto se registra su salida, se
+// haya finalizado el formato o no.
+const SALA_CERRADA = ['SALIDA_REGISTRADA', 'FINALIZADO']
+
 // POST /api/h360/homenajes-residencia
 async function crear(req, res, next) {
   try {
@@ -133,14 +137,19 @@ async function crear(req, res, next) {
     const { usuario } = req.user
     if (!asistencia_id) return res.status(400).json({ mensaje: 'asistencia_id requerido' })
 
-    // Exclusividad: no puede existir homenaje en sala para esta asistencia
+    // Una velación puede empezar en sala y terminar en residencia: pasa cuando
+    // la familia solo usa la sala unas horas. Lo que no puede es estar en los
+    // dos lados a la vez, así que solo bloquea la sala que sigue abierta.
     const [enSala] = await db.query(
-      'SELECT id FROM homenajes_sala WHERE asistencia_id = ? LIMIT 1',
-      [asistencia_id]
+      `SELECT id, estado FROM homenajes_sala
+        WHERE asistencia_id = ? AND estado NOT IN (${SALA_CERRADA.map(() => '?').join(',')})
+        LIMIT 1`,
+      [asistencia_id, ...SALA_CERRADA]
     )
     if (enSala.length) {
       return res.status(409).json({
-        mensaje: 'Esta asistencia ya tiene un homenaje en sala registrado. No puede tener también en residencia.',
+        mensaje: 'Esta asistencia tiene un homenaje en sala todavía abierto. Registra la salida antes de pasarla a residencia.',
+        homenaje_id: enSala[0].id,
       })
     }
     // Y tampoco puede existir otro en residencia
