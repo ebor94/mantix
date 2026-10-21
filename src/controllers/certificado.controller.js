@@ -369,6 +369,29 @@ async function generar(req, res, next) {
         y += 14;
       }
       y += 10;
+
+      // Fotos de las mascotas (se reutiliza documentoUrl como foto). Solo JPG/PNG.
+      const uploadsDir = process.env.UPLOAD_PATH
+        ? path.resolve(process.env.UPLOAD_PATH)
+        : path.join(__dirname, '../../uploads');
+      const conFoto = mascotas.filter(m => m.documentoUrl && /\.(jpe?g|png)$/i.test(m.documentoUrl));
+      if (conFoto.length > 0) {
+        if (y + 110 > 740) { doc.addPage(); y = 120; }
+        let x = 44;
+        for (const m of conFoto) {
+          const fp = path.join(uploadsDir, m.documentoUrl);
+          try {
+            if (!fs.existsSync(fp)) continue;
+            if (x + 90 > 555) { x = 44; y += 108; }
+            if (y + 100 > 760) { doc.addPage(); y = 120; x = 44; }
+            doc.image(fp, x, y, { fit: [80, 80], align: 'center' });
+            doc.fontSize(7).font('Helvetica').fillColor('black')
+              .text((m.primerApellido || '').toUpperCase(), x, y + 82, { width: 80, align: 'center' });
+            x += 95;
+          } catch (e) { /* imagen inválida: se omite */ }
+        }
+        y += 100;
+      }
     }
 
     // ── SERVICIOS ADICIONALES ──────────────────────────────────────────────
