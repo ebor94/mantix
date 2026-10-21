@@ -2,17 +2,44 @@
 // src/bigday/routes/index.js — Router del módulo October Big Day (/api/bigday/v1)
 // ============================================
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { leerEntorno } = require('../config/entorno');
 const { crearRepositorioPerezoso } = require('../repositorio');
 const { bigdayErrorHandler } = require('../middleware/errorHandler');
-const { crearRouterRespuestas } = require('./respuestas.routes');
+const { crearRouterRespuestas, claveIp } = require('./respuestas.routes');
 const { crearRouterResultados } = require('./resultados.routes');
+
+// Cabeceras de reintento que el front (en otro origen) necesita leer en un 429/503 para esperar lo justo.
+const CABECERAS_REINTENTO = ['Retry-After', 'RateLimit', 'RateLimit-Policy'];
+
+/** Si CORS ya expuso cabeceras, añade las de reintento (sin CORS —mismo origen, curl— no hace nada). */
+function exponerCabecerasReintento(req, res, next) {
+  const actual = res.getHeader('Access-Control-Expose-Headers');
+  if (actual) {
+    const lista = String(actual).split(',').map((c) => c.trim()).filter(Boolean);
+    for (const c of CABECERAS_REINTENTO) if (!lista.includes(c)) lista.push(c);
+    res.setHeader('Access-Control-Expose-Headers', lista.join(','));
+  }
+  next();
+}
 
 /** Fábrica inyectable (tests): `repositorio` y `config` = { hashSalt, resultsToken? }. */
 function crearRouterBigday({ repositorio, config }) {
   const router = express.Router();
+  router.use(exponerCabecerasReintento);
 
-  router.get('/health', async (req, res) => {
+  // 60 peticiones por IP y minuto (IPv6 agrupada por /56). Se crea con el router, que en producción se
+  // construye una sola vez al cargar el módulo: nunca dentro de un request (ERR_ERL_CREATED_IN_REQUEST_HANDLER).
+  const limitadorHealth = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req) => claveIp(req.ip),
+    message: { error: 'Demasiadas solicitudes. Inténtalo de nuevo en unos minutos.' },
+  });
+
+  router.get('/health', limitadorHealth, async (req, res) => {
     try {
       await repositorio.ping();
       res.json({ estado: 'ok', bd: 'ok' });

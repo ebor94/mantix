@@ -5,9 +5,13 @@
 -- Las contraseñas reales van SOLO en .env / gestor de contraseñas; nunca en el repo.
 -- Cambiar 'localhost' por el host desde el que se conectan la API / Superset.
 
--- Usuario de la API: solo INSERT y SELECT sobre su tabla.
+-- Usuario de la API: INSERT y SELECT sobre su tabla, más UPDATE solo de la columna `id`.
+-- El UPDATE (id) es imprescindible: la API guarda con `INSERT … ON DUPLICATE KEY UPDATE id = id`
+-- (idempotencia por uuid) y MySQL exige el privilegio UPDATE sobre las columnas de esa cláusula;
+-- sin él, todo INSERT falla con ER_COLUMNACCESS_DENIED_ERROR / ER_TABLEACCESS_DENIED_ERROR.
+-- `id = id` no modifica nada: el usuario no puede cambiar ningún dato de una respuesta guardada.
 -- CREATE USER IF NOT EXISTS 'bigday_api'@'localhost' IDENTIFIED BY '<CAMBIAR_CONTRASEÑA>';
--- GRANT INSERT, SELECT ON serfuweb.bigday_respuestas TO 'bigday_api'@'localhost';
+-- GRANT INSERT, SELECT, UPDATE (id) ON serfuweb.bigday_respuestas TO 'bigday_api'@'localhost';
 
 -- (Opcional) Usuario de Superset: solo lectura sobre la vista.
 -- CREATE USER IF NOT EXISTS 'bigday_superset'@'localhost' IDENTIFIED BY '<CAMBIAR_CONTRASEÑA>';
