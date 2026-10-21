@@ -13,6 +13,7 @@
     "trk:db:test": "docker compose -f src/trk/testing/docker-compose.yml up -d --wait",
     "trk:setup": "node src/trk/scripts/setup.js",
     "test:bigday": "jest src/bigday",
+    "bigday:migrate": "node src/bigday/scripts/migrar.js",
     "test:bigday:int": "jest -c jest.bigday-int.config.js --runInBand"
   },
   "jest": {

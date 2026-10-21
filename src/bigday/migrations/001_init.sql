@@ -4,6 +4,8 @@
 -- No crea base de datos ni usa USE; aplicar contra serfuweb, p. ej.:
 --   mysql --default-character-set=utf8mb4 -u <usuario> -p serfuweb < src/bigday/migrations/001_init.sql
 -- Idempotente: se puede ejecutar varias veces.
+-- Más simple: `npm run bigday:migrate` aplica 001 y 002 en orden usando BIGDAY_DB_* o, si faltan, las DB_* de Mantix
+-- (el usuario necesita CREATE y CREATE VIEW sobre serfuweb).
 
 CREATE TABLE IF NOT EXISTS bigday_respuestas (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
