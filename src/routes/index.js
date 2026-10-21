@@ -45,6 +45,7 @@ const entregaEfectivoRoutes = require('./entregaEfectivo.routes'); // ← Recibi
 const svRoutes     = require('../sv/routes');             // ← Módulo SerVentas CRM
 const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (identidad compartida)
 const trkRoutes    = require('../trk/routes').router;   // ← Módulo TRIKIPELUDOS
+const bigdayRoutes = require('../bigday/routes').router; // ← Módulo October Big Day
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -90,5 +91,6 @@ router.use('/entregas-efectivo', entregaEfectivoRoutes); // ← Recibido de efec
 router.use('/sv',     svRoutes);     // ← Módulo SerVentas CRM (Serfunorte)
 router.use('/identidad', identidadRoutes); // ← SSO compartido entre apps (afiliaciones, genflow, h360...)
 router.use('/trk/v1', trkRoutes);   // ← Módulo TRIKIPELUDOS (concurso de disfraces)
+router.use('/bigday/v1', bigdayRoutes); // ← Módulo October Big Day (encuesta)
 
 module.exports = router;

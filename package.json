@@ -11,10 +11,16 @@
     "test:trk": "jest src/trk",
     "test:trk:int": "jest -c jest.trk-int.config.js --runInBand",
     "trk:db:test": "docker compose -f src/trk/testing/docker-compose.yml up -d --wait",
-    "trk:setup": "node src/trk/scripts/setup.js"
+    "trk:setup": "node src/trk/scripts/setup.js",
+    "test:bigday": "jest src/bigday",
+    "test:bigday:int": "jest -c jest.bigday-int.config.js --runInBand"
   },
   "jest": {
     "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "/src/bigday/shared/"
+    ],
     "testPathIgnorePatterns": [
       "/node_modules/",
       "\\.int\\.test\\.js$"
