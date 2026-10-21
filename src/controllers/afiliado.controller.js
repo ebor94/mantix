@@ -11,7 +11,7 @@ const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
-const { Afiliado, ReciboCaja, Usuario, Trazabilidad } = require('../models');
+const { Afiliado, ReciboCaja, Usuario, Trazabilidad, Beneficiario } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
 const { encodeId, decodeId } = require('../utils/hashId');
@@ -61,6 +61,63 @@ async function obtenerCarnetBase() {
   return buf;
 }
 
+// ── Base del carné de MASCOTA (diseño "Plan Exequial para Mascotas") ──
+const CARNET_MASCOTA_BASE_LOCAL = path.join(__dirname, '../../assets/carnet-mascota-base.png');
+const CARNET_MASCOTA_BASE_URL = process.env.CARNET_MASCOTA_BASE_URL || null;
+let _carnetMascotaBaseCache = { buf: null, ts: 0 };
+
+async function obtenerCarnetMascotaBase() {
+  try {
+    if (fs.existsSync(CARNET_MASCOTA_BASE_LOCAL)) {
+      return fs.readFileSync(CARNET_MASCOTA_BASE_LOCAL);
+    }
+  } catch (_) { /* intenta remoto si está configurado */ }
+  if (!CARNET_MASCOTA_BASE_URL) {
+    throw new Error('No hay base del carné de mascota (assets/carnet-mascota-base.png o CARNET_MASCOTA_BASE_URL)');
+  }
+  if (_carnetMascotaBaseCache.buf && (Date.now() - _carnetMascotaBaseCache.ts) < CARNET_BASE_TTL_MS) {
+    return _carnetMascotaBaseCache.buf;
+  }
+  const res = await axios.get(CARNET_MASCOTA_BASE_URL, { responseType: 'arraybuffer', timeout: 10000 });
+  const buf = Buffer.from(res.data);
+  _carnetMascotaBaseCache = { buf, ts: Date.now() };
+  return buf;
+}
+
+function captionCarnetMascota(afiliado, mascota) {
+  const duenio = [afiliado.primerNombre, afiliado.primerApellido].filter(Boolean).join(' ');
+  const nombre = (mascota.primerApellido || 'tu mascota');
+  return `Carné de afiliación de ${nombre}${duenio ? ' (propietario: ' + duenio + ')' : ''} — Plan Exequial para Mascotas, Red Los Olivos.`;
+}
+
+/**
+ * Tras aprobar: si el afiliado tiene mascotas, genera y envía por WhatsApp
+ * un carné por cada mascota registrada (solo si el afiliado tiene WhatsApp).
+ * Fire-and-forget: cualquier fallo se registra pero no interrumpe la aprobación.
+ */
+async function emitirCarnetsMascotas(afiliado) {
+  try {
+    if (Number(afiliado.celularTieneWhatsapp) !== 1 || !afiliado.celular) return;
+    const mascotas = await Beneficiario.findAll({
+      where: { afiliadoId: afiliado.id, tipoBeneficiario: 'MASCOTA' }
+    });
+    if (!mascotas.length) return;
+
+    const base = await obtenerCarnetMascotaBase();
+    for (const m of mascotas) {
+      try {
+        const carnet = await pdfService.generarCarnetMascotaImagen(m.toJSON(), afiliado.toJSON ? afiliado.toJSON() : afiliado, base);
+        const url = buildPublicPdfUrl(carnet.url);
+        await sendTemplateImagenTexto(afiliado.celular, url, captionCarnetMascota(afiliado, m));
+      } catch (e) {
+        logger.warn(`[CarnetMascota] No se pudo generar/enviar el carné de la mascota ${m.id} (afiliado ${afiliado.id}): ${e.message || e}`);
+      }
+    }
+  } catch (e) {
+    logger.warn(`[CarnetMascota] Error emitiendo carnés de mascota del afiliado ${afiliado.id}: ${e.message || e}`);
+  }
+}
+
 function captionCarnet(afiliado) {
   const nombre = [afiliado.primerNombre, afiliado.primerApellido].filter(Boolean).join(' ');
   return `¡Bienvenido(a) a Los Olivos${nombre ? ', ' + nombre : ''}! Este es tu carné digital de afiliación. Guárdalo para futuras consultas.`;
@@ -84,6 +141,9 @@ async function emitirCarnetYCertificado(afiliadoId, aprobadoPor) {
       if (Number(afiliado.celularTieneWhatsapp) === 1 && afiliado.celular) {
         await sendTemplateImagenTexto(afiliado.celular, carnetUrl, captionCarnet(afiliado));
       }
+
+      // Si el afiliado tiene mascotas, enviar un carné por cada una al WhatsApp.
+      await emitirCarnetsMascotas(afiliado);
     }
   } catch (e) {
     logger.warn(`[Carnet] No se pudo generar/enviar el carné del afiliado ${afiliadoId}: ${e.message || e}`);

@@ -1223,6 +1223,106 @@ doc.fontSize(20)
   }
 
   /**
+   * Genera el carné digital de UNA mascota como PNG. Igual que el carné del
+   * afiliado: superpone los valores (y la foto de la mascota) sobre una imagen
+   * base plana del diseño "Carné de afiliación - Plan Exequial para Mascotas".
+   *
+   * Campos (6 pastillas + N° de afiliación), de arriba a abajo:
+   *   Nombre = primerApellido · Raza = primerNombre · Especie = parentesco ·
+   *   Sexo = genero (MACHO/HEMBRA) · Color = color · Fecha de nacimiento ·
+   *   N° de afiliación = afiliado.numeroContrato.
+   *
+   * La foto de la mascota (documentoUrl, reutilizada como foto) va en el área
+   * izquierda. Posiciones fraccionales respecto al tamaño real (calibrables).
+   *
+   * @param {object} mascota   beneficiario tipo MASCOTA (plain)
+   * @param {object} afiliado  afiliado dueño (plain) — para numeroContrato
+   * @param {Buffer} baseBuffer imagen base del carné de mascota
+   */
+  async generarCarnetMascotaImagen(mascota, afiliado, baseBuffer) {
+    const dir = path.join(__dirname, '../../uploads/carnets');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const fileName = `mascota-${mascota.id}.png`;
+    const filePath = path.join(dir, fileName);
+
+    const meta = await sharp(baseBuffer).metadata();
+    const W = meta.width  || 1800;
+    const H = meta.height || 1100;
+    const esc = this.escapeXml.bind(this);
+
+    // ── Datos ────────────────────────────────────────────────────
+    const nombre  = (mascota.primerApellido || '').toUpperCase();
+    const raza    = (mascota.primerNombre   || '').toUpperCase();
+    const especie = (mascota.parentesco     || '').toUpperCase();
+    const sexo    = mascota.genero === 'M' ? 'MACHO' : (mascota.genero === 'F' ? 'HEMBRA' : '');
+    const color   = (mascota.color || '').toUpperCase();
+    const fnac    = mascota.fechaNacimiento
+      ? new Date(mascota.fechaNacimiento).toLocaleDateString('es-CO')
+      : '';
+    const nAfil   = String(afiliado.numeroContrato || '');
+
+    // ── Posiciones fraccionales (calibrables sin tocar la lógica) ─
+    const px = (f) => Math.round(W * f);
+    const py = (f) => Math.round(H * f);
+    const xV = px(0.615);          // inicio del valor (zona blanca tras la etiqueta)
+    const fsV = px(0.030);
+    const yRow = {
+      nombre:  py(0.360),
+      raza:    py(0.440),
+      especie: py(0.512),
+      sexo:    py(0.592),
+      color:   py(0.670),
+      fnac:    py(0.750)
+    };
+    const xN = px(0.767), yN = py(0.850), fsN = px(0.0155);   // N° de afiliación (tras la etiqueta larga)
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .v { font-family:'DejaVu Sans','Liberation Sans','Arial',sans-serif; font-weight:700; fill:#373435; }
+  </style>
+  <text x="${xV}" y="${yRow.nombre}"  class="v" font-size="${fsV}">${esc(nombre)}</text>
+  <text x="${xV}" y="${yRow.raza}"    class="v" font-size="${fsV}">${esc(raza)}</text>
+  <text x="${xV}" y="${yRow.especie}" class="v" font-size="${fsV}">${esc(especie)}</text>
+  <text x="${xV}" y="${yRow.sexo}"    class="v" font-size="${fsV}">${esc(sexo)}</text>
+  <text x="${xV}" y="${yRow.color}"   class="v" font-size="${fsV}">${esc(color)}</text>
+  <text x="${xV}" y="${yRow.fnac}"    class="v" font-size="${fsV}">${esc(fnac)}</text>
+  <text x="${xN}" y="${yN}"           class="v" font-size="${fsN}">${esc(nAfil)}</text>
+</svg>`;
+
+    const composites = [{ input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 }];
+
+    // ── Foto de la mascota en el área izquierda ──────────────────
+    try {
+      if (mascota.documentoUrl && /\.(jpe?g|png)$/i.test(mascota.documentoUrl)) {
+        const uploadsDir = process.env.UPLOAD_PATH
+          ? path.resolve(process.env.UPLOAD_PATH)
+          : path.join(__dirname, '../../uploads');
+        const fp = path.join(uploadsDir, mascota.documentoUrl);
+        if (fs.existsSync(fp)) {
+          const pw = px(0.285), ph = py(0.500);
+          const photo = await sharp(fp)
+            .resize(pw, ph, { fit: 'cover', position: 'centre' })
+            .png()
+            .toBuffer();
+          composites.push({ input: photo, top: py(0.300), left: px(0.100) });
+        }
+      }
+    } catch (e) { /* foto inválida: se omite, el carné igual se genera */ }
+
+    await sharp(baseBuffer)
+      .composite(composites)
+      .png({ quality: 95, compressionLevel: 6 })
+      .toFile(filePath);
+
+    return {
+      fileName,
+      filePath,
+      url: `/uploads/carnets/${fileName}`
+    };
+  }
+
+  /**
    * Genera el PDF de "Liquidación de afiliaciones" en el stream provisto.
    * No escribe a disco — el controlador pipea PDFDocument directo al res.
    *
