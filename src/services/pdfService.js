@@ -1274,7 +1274,7 @@ doc.fontSize(20)
       color:   py(0.670),
       fnac:    py(0.750)
     };
-    const xN = px(0.767), yN = py(0.850), fsN = px(0.0155);   // N° de afiliación (tras la etiqueta larga)
+    const xN = px(0.620), yN = py(0.905), fsN = px(0.0230);   // N° de afiliación (debajo de su etiqueta)
 
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
