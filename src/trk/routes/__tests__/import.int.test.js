@@ -1,12 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 const CSV = path.join(__dirname, '..', '..', 'testing', 'fixtures', 'inscripciones-anonimizadas.csv');
 let admin;
 
@@ -16,10 +20,10 @@ beforeEach(async () => {
 });
 afterAll(cerrar);
 
-const preview = () => request(app).post('/api/trk/v1/import/preview')
+const preview = () => request(servidor).post('/api/trk/v1/import/preview')
   .set('Authorization', `Bearer ${admin.token}`)
   .attach('archivo', fs.readFileSync(CSV), 'inscripciones.csv');
-const confirmar = (token, decisiones = {}) => request(app).post('/api/trk/v1/import/confirm')
+const confirmar = (token, decisiones = {}) => request(servidor).post('/api/trk/v1/import/confirm')
   .set('Authorization', `Bearer ${admin.token}`)
   .send({ preview_token: token, decisiones });
 
@@ -91,9 +95,9 @@ test('categoría decidida inexistente → 400', async () => {
 });
 
 test('sin archivo → 400; sin permiso importar → 403', async () => {
-  const sinArchivo = await request(app).post('/api/trk/v1/import/preview').set('Authorization', `Bearer ${admin.token}`);
+  const sinArchivo = await request(servidor).post('/api/trk/v1/import/preview').set('Authorization', `Bearer ${admin.token}`);
   expect(sinArchivo.status).toBe(400);
   const cabina = await crearOperativo('TRK_CABINA');
-  const r = await request(app).post('/api/trk/v1/import/preview').set('Authorization', `Bearer ${cabina.token}`).attach('archivo', fs.readFileSync(CSV), 'x.csv');
+  const r = await request(servidor).post('/api/trk/v1/import/preview').set('Authorization', `Bearer ${cabina.token}`).attach('archivo', fs.readFileSync(CSV), 'x.csv');
   expect(r.status).toBe(403);
 });

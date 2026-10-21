@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
@@ -6,6 +7,9 @@ const { limpiar, cerrar } = require('../../testing/db');
 const { crearOperativo, crearParticipante, categoria } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let comentarista; let jurado; let eventos;
 const escuchar = (e) => eventos.push(e);
 
@@ -19,7 +23,7 @@ beforeEach(async () => {
 afterEach(() => bus.off('trk', escuchar));
 afterAll(cerrar);
 
-const llamar = (id, quien = comentarista) => request(app).post(`/api/trk/v1/pasarela/${id}`).set('Authorization', `Bearer ${quien.token}`);
+const llamar = (id, quien = comentarista) => request(servidor).post(`/api/trk/v1/pasarela/${id}`).set('Authorization', `Bearer ${quien.token}`);
 
 test('TRK-PAS-001 pone en pasarela, la anterior pasa a PRESENTADO y se emite el cambio (HU-7 CA1)', async () => {
   const a = await crearParticipante({ mascota_nombre: 'A' });
@@ -50,7 +54,7 @@ test('llamadas y reordenamientos concurrentes de una categoría no provocan dead
   const cat = await categoria('PEQ_MED');
   const ps = await Promise.all([1, 2, 3].map((n) => crearParticipante({ mascota_nombre: `D${n}`, orden_pasarela: n })));
   const orden = ps.map((p) => p.id);
-  const reordenar = () => request(app).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
+  const reordenar = () => request(servidor).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
     .send({ categoria_id: cat.id, orden: [...orden].reverse() });
   const rs = await Promise.all([
     ...ps.map((p) => llamar(p.id)),
@@ -77,7 +81,7 @@ test('TRK-PAS-002 reordena la cola de una categoría (HU-7 CA3)', async () => {
   const a = await crearParticipante({ mascota_nombre: 'A', orden_pasarela: 1 });
   const b = await crearParticipante({ mascota_nombre: 'B', orden_pasarela: 2 });
   const c = await crearParticipante({ mascota_nombre: 'C', orden_pasarela: 3 });
-  const r = await request(app).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
+  const r = await request(servidor).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
     .send({ categoria_id: cat.id, orden: [c.id, a.id, b.id] });
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-PAS-002');
@@ -89,7 +93,7 @@ test('reordenar con un participante de otra categoría → 400', async () => {
   const cat = await categoria('PEQ_MED');
   const a = await crearParticipante();
   const otro = await crearParticipante({ categoriaCodigo: 'GRANDES' });
-  const r = await request(app).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
+  const r = await request(servidor).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
     .send({ categoria_id: cat.id, orden: [a.id, otro.id] });
   expect(r.status).toBe(400);
 });
@@ -97,7 +101,7 @@ test('reordenar con un participante de otra categoría → 400', async () => {
 test('TRK-EVT-001 estado público sin sesión, sin datos personales', async () => {
   const p = await crearParticipante({ mascota_nombre: 'Canela' });
   await llamar(p.id);
-  const r = await request(app).get('/api/trk/v1/evento/estado');
+  const r = await request(servidor).get('/api/trk/v1/evento/estado');
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-EVT-001');
   expect(r.body.data).toMatchObject({ modo_pantalla: 'PASARELA', categoria_pantalla: null, ranking: null, en_pasarela: { id: p.id, mascota_nombre: 'Canela' } });

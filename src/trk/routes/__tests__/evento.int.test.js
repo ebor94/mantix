@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
@@ -6,6 +7,9 @@ const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, categoria } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let admin; let eventos;
 const escuchar = (e) => eventos.push(e);
 beforeEach(async () => {
@@ -17,7 +21,7 @@ beforeEach(async () => {
 afterEach(() => bus.off('trk', escuchar));
 afterAll(cerrar);
 
-const pantalla = (body) => request(app).put('/api/trk/v1/evento/pantalla').set('Authorization', `Bearer ${admin.token}`).send(body);
+const pantalla = (body) => request(servidor).put('/api/trk/v1/evento/pantalla').set('Authorization', `Bearer ${admin.token}`).send(body);
 
 test('TRK-EVT-002 modo RANKING exige ranking publicado', async () => {
   const cat = await categoria('FELINOS');
@@ -43,7 +47,7 @@ test('TRK-EVT-003 tablero: contadores por estado y progreso por jurado', async (
   await crearParticipante({ estado: 'EN_PASARELA' });
   await crearParticipante({ estado: 'INSCRITO', categoriaCodigo: 'GRANDES' });
   await db.TrkCalificacion.create({ participante_id: a.id, jurado_id: j1.usuario.id, total: 70, enviada_at: new Date(), bloqueada: true });
-  const r = await request(app).get('/api/trk/v1/evento/tablero').set('Authorization', `Bearer ${admin.token}`);
+  const r = await request(servidor).get('/api/trk/v1/evento/tablero').set('Authorization', `Bearer ${admin.token}`);
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-EVT-003');
   const peq = r.body.data.categorias.find((c) => c.codigo === 'PEQ_MED');
@@ -54,6 +58,6 @@ test('TRK-EVT-003 tablero: contadores por estado y progreso por jurado', async (
 
 test('sin permiso administrar → 403', async () => {
   const jurado = await crearOperativo('TRK_JURADO');
-  const r = await request(app).get('/api/trk/v1/evento/tablero').set('Authorization', `Bearer ${jurado.token}`);
+  const r = await request(servidor).get('/api/trk/v1/evento/tablero').set('Authorization', `Bearer ${jurado.token}`);
   expect(r.status).toBe(403);
 });

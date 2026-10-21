@@ -1,6 +1,6 @@
-const http = require('http');
 const express = require('express');
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { auth: authMantix } = require('../../../middleware/auth');
 const { crearAppTrk } = require('../../testing/app');
@@ -8,13 +8,16 @@ const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 beforeEach(limpiar);
 afterAll(cerrar);
 
 describe('TRK-AUTH-001 POST /auth/pin', () => {
   test('PIN correcto → token y perfil con permisos del rol', async () => {
     const { usuario } = await crearOperativo('TRK_JURADO', { nombre: 'Jurado Uno', pin: '246810' });
-    const r = await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '246810' });
+    const r = await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '246810' });
     expect(r.status).toBe(200);
     expect(r.headers['x-trk-api']).toBe('TRK-AUTH-001');
     expect(r.body.data.token).toEqual(expect.any(String));
@@ -23,25 +26,25 @@ describe('TRK-AUTH-001 POST /auth/pin', () => {
 
   test('PIN incorrecto → 401 con contrato TRK', async () => {
     const { usuario } = await crearOperativo('TRK_JURADO', { pin: '111111' });
-    const r = await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '222222' });
+    const r = await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '222222' });
     expect(r.status).toBe(401);
     expect(r.body).toMatchObject({ success: false, error: 'TRK-AUTH-001', motivo: 'NO_AUTENTICADO' });
   });
 
   test('usuario inactivo no entra', async () => {
     const { usuario } = await crearOperativo('TRK_CABINA', { pin: '333333', activo: false });
-    const r = await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '333333' });
+    const r = await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '333333' });
     expect(r.status).toBe(401);
   });
 
   test('un admin de Mantix no puede entrar por PIN', async () => {
     const { usuario } = await crearAdmin();
-    const r = await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '123456' });
+    const r = await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '123456' });
     expect(r.status).toBe(401);
   });
 
   test('PIN con formato inválido → 400 VALIDACION', async () => {
-    const r = await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: 1, pin: '12ab' });
+    const r = await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: 1, pin: '12ab' });
     expect(r.status).toBe(400);
     expect(r.body.motivo).toBe('VALIDACION');
   });
@@ -50,7 +53,7 @@ describe('TRK-AUTH-001 POST /auth/pin', () => {
     const { usuario } = await crearOperativo('TRK_JURADO', { pin: '555555' });
     const estados = [];
     for (let i = 0; i < 6; i++) {
-      estados.push((await request(app).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '000000' })).status);
+      estados.push((await request(servidor).post('/api/trk/v1/auth/pin').send({ usuario_id: usuario.id, pin: '000000' })).status);
     }
     expect(estados.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
     expect(estados[5]).toBe(429);
@@ -59,9 +62,6 @@ describe('TRK-AUTH-001 POST /auth/pin', () => {
 
 describe('TRK-AUTH-001 limitadores (I2)', () => {
   // Un único servidor (no uno por request) para las ráfagas de ~100 requests.
-  let servidor;
-  beforeAll((done) => { servidor = http.createServer(app).listen(0, done); });
-  afterAll((done) => { servidor.close(done); });
   const pinDesde = (ip, cuerpo) => request(servidor).post('/api/trk/v1/auth/pin').set('X-Forwarded-For', ip).send(cuerpo);
 
   test('variantes del mismo id ("01", " 1", "1.0", "1e0"…) comparten el límite IP+usuario', async () => {
@@ -106,7 +106,7 @@ describe('TRK-AUTH-002 GET /auth/usuarios-pin', () => {
     await crearAdmin();
     const { usuario: jurado } = await crearOperativo('TRK_JURADO', { nombre: 'Jurado Dos' });
     await crearOperativo('TRK_CABINA', { nombre: 'Cabina', activo: false });
-    const r = await request(app).get('/api/trk/v1/auth/usuarios-pin');
+    const r = await request(servidor).get('/api/trk/v1/auth/usuarios-pin');
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual([{ id: jurado.id, nombre: 'Jurado Dos', rol: 'TRK_JURADO' }]);
   });
@@ -115,21 +115,21 @@ describe('TRK-AUTH-002 GET /auth/usuarios-pin', () => {
 describe('TRK-AUTH-003 GET /auth/yo', () => {
   test('con token de PIN', async () => {
     const { usuario, token } = await crearOperativo('TRK_COMENTARISTA', { nombre: 'Locutor' });
-    const r = await request(app).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
+    const r = await request(servidor).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ id: usuario.id, nombre: 'Locutor', rol: 'TRK_COMENTARISTA', permisos: { pasarela: true } });
   });
 
   test('con token de Mantix de un administrador', async () => {
     const { token } = await crearAdmin();
-    const r = await request(app).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
+    const r = await request(servidor).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
     expect(r.status).toBe(200);
     expect(r.body.data.permisos).toMatchObject({ administrar: true, publicar: true });
     expect(r.body.data.permisos.calificar).toBeUndefined();
   });
 
   test('sin token → 401 con código', async () => {
-    const r = await request(app).get('/api/trk/v1/auth/yo');
+    const r = await request(servidor).get('/api/trk/v1/auth/yo');
     expect(r.status).toBe(401);
     expect(r.body).toMatchObject({ error: 'TRK-AUTH-003', motivo: 'NO_AUTENTICADO' });
   });
@@ -137,7 +137,7 @@ describe('TRK-AUTH-003 GET /auth/yo', () => {
   test('cambiar token_version invalida el token de PIN (HU-2 CA3)', async () => {
     const { usuario, token } = await crearOperativo('TRK_JURADO');
     await db.TrkAcceso.increment('token_version', { where: { usuario_id: usuario.id } });
-    const r = await request(app).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
+    const r = await request(servidor).get('/api/trk/v1/auth/yo').set('Authorization', `Bearer ${token}`);
     expect(r.status).toBe(401);
   });
 });

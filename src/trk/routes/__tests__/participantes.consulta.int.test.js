@@ -1,9 +1,13 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const { crearAppTrk } = require('../../testing/app');
 const { limpiar, cerrar } = require('../../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, categoria } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 const base = '/api/trk/v1/participantes';
 const SENSIBLES = ['responsable_documento', 'responsable_telefono', 'responsable_correo', 'responsable_nombre'];
 
@@ -17,7 +21,7 @@ beforeEach(async () => {
 });
 afterAll(cerrar);
 
-const get = (url, quien) => request(app).get(url).set('Authorization', `Bearer ${quien.token}`);
+const get = (url, quien) => request(servidor).get(url).set('Authorization', `Bearer ${quien.token}`);
 
 test('§13.8 jurado y comentarista: detalle sin documento, teléfono ni correo', async () => {
   const p = await crearParticipante({ mascota_nombre: 'Canela', estado: 'EN_PASARELA' });
@@ -121,5 +125,5 @@ test('fusionados no aparecen', async () => {
 });
 
 test('sin sesión → 401 (la pantalla pública no usa este endpoint)', async () => {
-  expect((await request(app).get(base)).status).toBe(401);
+  expect((await request(servidor).get(base)).status).toBe(401);
 });

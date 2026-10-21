@@ -1,10 +1,14 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const db = require('../../models');
 const { crearAppTrk } = require('../testing/app');
 const { limpiar, cerrar } = require('../testing/db');
 const { crearAdmin, crearOperativo, crearParticipante, categoria, criteriosDe } = require('../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 beforeEach(limpiar);
 afterAll(cerrar);
 
@@ -16,16 +20,16 @@ test('RNF-6: crear, desbloquear y reenviar calificación, cambiar categoría y f
   const p = await crearParticipante({ estado: 'EN_PASARELA' });
   const ps = (await criteriosDe(p)).map((c) => ({ criterio_id: c.id, puntaje: 1 }));
 
-  const cal = (await request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps }).expect(200)).body.data;
-  await comoAdmin(request(app).post(`/api/trk/v1/calificaciones/${cal.id}/desbloquear`)).expect(200);
-  await request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps.map((x) => ({ ...x, puntaje: 2 })) }).expect(200);
+  const cal = (await request(servidor).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps }).expect(200)).body.data;
+  await comoAdmin(request(servidor).post(`/api/trk/v1/calificaciones/${cal.id}/desbloquear`)).expect(200);
+  await request(servidor).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${jurado.token}`).send({ puntajes: ps.map((x) => ({ ...x, puntaje: 2 })) }).expect(200);
 
   const grandes = await categoria('GRANDES');
-  await request(app).patch(`/api/trk/v1/participantes/${p.id}`).set('Authorization', `Bearer ${cabina.token}`).send({ categoria_id: grandes.id }).expect(200);
-  await comoAdmin(request(app).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true }).expect(200);
+  await request(servidor).patch(`/api/trk/v1/participantes/${p.id}`).set('Authorization', `Bearer ${cabina.token}`).send({ categoria_id: grandes.id }).expect(200);
+  await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${p.id}/categoria/confirmar`)).send({ confirmar: true }).expect(200);
 
   const otro = await crearParticipante({ estado: 'PRESENTE', categoriaCodigo: 'GRANDES' });
-  await comoAdmin(request(app).post(`/api/trk/v1/participantes/${otro.id}/fusionar`)).send({ destino_id: p.id }).expect(200);
+  await comoAdmin(request(servidor).post(`/api/trk/v1/participantes/${otro.id}/fusionar`)).send({ destino_id: p.id }).expect(200);
 
   const filas = await db.TrkAuditoria.findAll({ order: [['id', 'ASC']] });
   const resumen = filas.map((a) => `${a.api_codigo}:${a.accion}`);

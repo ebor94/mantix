@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba');
 const db = require('../../../models');
 const { bus } = require('../../sockets/bus');
 const { crearAppTrk } = require('../../testing/app');
@@ -6,6 +7,9 @@ const { limpiar, cerrar } = require('../../testing/db');
 const { crearOperativo, crearParticipante, criteriosDe, categoria } = require('../../testing/fabricas');
 
 const app = crearAppTrk();
+let servidor;
+beforeAll(async () => { servidor = await servir(app); });
+afterAll(cerrarServidores);
 let jurado; let eventos;
 const escuchar = (e) => eventos.push(e);
 beforeEach(async () => {
@@ -21,7 +25,7 @@ afterAll(cerrar);
 async function puntajes(participante, k = 1) {
   return (await criteriosDe(participante)).map((c) => ({ criterio_id: c.id, puntaje: Math.max(c.puntaje_max - k, 0) }));
 }
-const enviar = (p, cuerpo, quien = jurado) => request(app).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${quien.token}`).send(cuerpo);
+const enviar = (p, cuerpo, quien = jurado) => request(servidor).put(`/api/trk/v1/calificaciones/${p.id}`).set('Authorization', `Bearer ${quien.token}`).send(cuerpo);
 
 test('TRK-CAL-002 crea y bloquea la calificación; el total lo calcula el servidor (CA6)', async () => {
   const p = await crearParticipante({ estado: 'EN_PASARELA' });
