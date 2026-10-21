@@ -61,7 +61,11 @@ const reportesController = {
                 model: MantenimientoEjecutado,
                 as: 'ejecucion',
                 required: false,
-                attributes: ['id', 'fecha_ejecucion']
+                attributes: ['id', 'fecha_ejecucion', 'nombre_recibe'],
+                include: [
+                  { model: Usuario, as: 'usuario_ejecutor', attributes: ['id', 'nombre', 'apellido'], required: false },
+                  { model: Proveedor, as: 'proveedor_ejecutor', attributes: ['id', 'nombre'], required: false }
+                ]
               }
             ]
           }
@@ -81,22 +85,33 @@ const reportesController = {
           grupos.set(catId, { categoria_id: catId, categoria: catNombre, actividades: [] });
         }
 
-        // Pivot 12 meses: { 1: { programado: false, ejecuciones: [] }, ... }
+        // Pivot 12 meses: { 1: { programaciones: ['2026-01-10'], ejecuciones: [{fecha, ejecutor}] }, ... }
         const meses = {};
         for (let m = 1; m <= 12; m++) {
-          meses[m] = { programado: false, ejecuciones: [] };
+          meses[m] = { programaciones: [], ejecuciones: [] };
         }
 
         for (const mp of act.mantenimientos || []) {
           if (!mp.fecha_programada) continue;
-          const mesProg = Number(mp.fecha_programada.toString().slice(5, 7));
-          if (mesProg >= 1 && mesProg <= 12) meses[mesProg].programado = true;
+          const fp = mp.fecha_programada.toString().slice(0, 10);
+          const mesProg = Number(fp.slice(5, 7));
+          if (mesProg >= 1 && mesProg <= 12) meses[mesProg].programaciones.push(fp);
 
           const ej = mp.ejecucion;
           if (ej && ej.fecha_ejecucion) {
             const fe = ej.fecha_ejecucion.toString().slice(0, 10);
             const mesEj = Number(fe.slice(5, 7));
-            if (mesEj >= 1 && mesEj <= 12) meses[mesEj].ejecuciones.push(fe);
+            if (mesEj >= 1 && mesEj <= 12) {
+              let ejecutor = '';
+              if (ej.usuario_ejecutor) {
+                ejecutor = [ej.usuario_ejecutor.nombre, ej.usuario_ejecutor.apellido].filter(Boolean).join(' ');
+              } else if (ej.proveedor_ejecutor) {
+                ejecutor = ej.proveedor_ejecutor.nombre || '';
+              } else if (ej.nombre_recibe) {
+                ejecutor = ej.nombre_recibe;
+              }
+              meses[mesEj].ejecuciones.push({ fecha: fe, ejecutor });
+            }
           }
         }
 
