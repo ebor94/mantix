@@ -40,6 +40,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('M', 'F'),
       allowNull: true
     },
+    // Color: solo aplica a mascotas (afiliación de mascotas).
+    color: {
+      type: DataTypes.STRING(60),
+      allowNull: true
+    },
     valorPorPersona: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: true,

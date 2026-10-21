@@ -347,23 +347,25 @@ async function generar(req, res, next) {
       doc.rect(40, y, 515, 15).fillColor('#f0f0f0').fill();
       doc.fillColor('black');
       doc.text('Nombre', 44, y + 4);
-      doc.text('Raza', 180, y + 4);
-      doc.text('Especie', 300, y + 4);
-      doc.text('Género', 380, y + 4);
-      doc.text('F. Nac.', 440, y + 4);
-      doc.text('Valor', 500, y + 4);
+      doc.text('Raza', 140, y + 4);
+      doc.text('Especie', 222, y + 4);
+      doc.text('Sexo', 280, y + 4);
+      doc.text('Color', 332, y + 4);
+      doc.text('F. Nac.', 404, y + 4);
+      doc.text('Valor', 462, y + 4);
       y += 15;
 
       doc.font('Helvetica').fontSize(8);
       for (const m of mascotas) {
         if (y + 16 > 730) { doc.addPage(); y = 120; }
-        const genero = m.genero === 'M' ? 'Macho' : (m.genero === 'F' ? 'Hembra' : '');
-        doc.text((m.primerApellido || '').toUpperCase(), 44, y, { width: 130 });
-        doc.text((m.primerNombre || '').toUpperCase(), 180, y, { width: 115 });
-        doc.text(m.parentesco || '', 300, y, { width: 75 });
-        doc.text(genero, 380, y, { width: 55 });
-        doc.text(formatFecha(m.fechaNacimiento), 440, y, { width: 55 });
-        doc.text(formatMoneda(m.valorPorPersona), 500, y, { width: 55 });
+        const sexo = m.genero === 'M' ? 'MACHO' : (m.genero === 'F' ? 'HEMBRA' : '');
+        doc.text((m.primerApellido || '').toUpperCase(), 44, y, { width: 92 });
+        doc.text((m.primerNombre || '').toUpperCase(), 140, y, { width: 78 });
+        doc.text(m.parentesco || '', 222, y, { width: 55 });
+        doc.text(sexo, 280, y, { width: 50 });
+        doc.text((m.color || '').toUpperCase(), 332, y, { width: 68 });
+        doc.text(formatFecha(m.fechaNacimiento), 404, y, { width: 55 });
+        doc.text(formatMoneda(m.valorPorPersona), 462, y, { width: 60 });
         y += 14;
       }
       y += 10;

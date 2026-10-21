@@ -21,6 +21,9 @@ const beneficiarioSchema = Joi.object({
 
   genero: Joi.string().valid('M', 'F').allow('', null),
 
+  // Color: solo mascotas. Declarado para que stripUnknown no lo elimine.
+  color: Joi.string().allow('', null).trim(),
+
   valorPorPersona: Joi.number().min(0).allow(null),
 
   tipoDocumento: Joi.string().valid('CC', 'TI', 'CE', 'PA', 'NIT', 'PPT', 'ADT', 'RC').required()
