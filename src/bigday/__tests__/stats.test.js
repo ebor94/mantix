@@ -79,6 +79,22 @@ describe('nps', () => {
     expect(nps(conP6(9, 3, 4, 7, 7, 7, 8, 8)).nps).toBe(-12);
   });
 
+  it('redondeo exacto en valores .5 (sin error de coma flotante)', () => {
+    const rep = (n, v) => Array.from({ length: n }, () => fila({ p6: v }));
+    // 24 resp., 4 promotores, 1 detractor: (4-1)*100/24 = 12.5 → 13
+    expect(nps([...rep(4, 10), ...rep(1, 2), ...rep(19, 8)]).nps).toBe(13);
+    // 40 resp., 18 promotores, 11 detractores: 700/40 = 17.5 → 18
+    expect(nps([...rep(18, 9), ...rep(11, 5), ...rep(11, 7)]).nps).toBe(18);
+  });
+
+  it('valores fuera de 1-10 no cuentan en ningún grupo ni en el total', () => {
+    const r = nps([...conP6(10, 8, 3), ...conP6(0, 11, -2, 99, null, 'x')]);
+    expect(r).toMatchObject({ total: 3, promotores: 1, pasivos: 1, detractores: 1 });
+    expect(r.total).toBe(r.promotores + r.pasivos + r.detractores);
+    expect(r.pctPromotores).toBe(33.3);
+    expect(nps(conP6(0, 11)).nps).toBeNull();
+  });
+
   it('sin respuestas: nps null y sin división por cero', () => {
     expect(nps([])).toEqual({
       total: 0, promotores: 0, pasivos: 0, detractores: 0,

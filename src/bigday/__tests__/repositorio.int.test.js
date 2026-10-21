@@ -71,6 +71,15 @@ describeSiBd('repositorio MySQL (integración)', () => {
       expect(filas[0].created_at).toBeInstanceOf(Date);
     });
 
+    it('created_at se lee en la zona del pool: el instante ISO coincide con ahora (BD en -05:00)', async () => {
+      const uuid = '00000000-0000-4000-8000-0000000000aa';
+      const repo = crearRepositorioMysql(pool);
+      await repo.guardar({ ...fila(uuid), p7: 'zona horaria' });
+      const filas = await repo.listar();
+      const f = filas.find((x) => x.p7 === 'zona horaria');
+      expect(Math.abs(f.created_at.getTime() - Date.now())).toBeLessThan(10000);
+    });
+
     it('expone las columnas necesarias y nunca ip_hash ni ua_hash', async () => {
       const filas = await crearRepositorioMysql(pool).listar();
       const claves = Object.keys(filas[1]).sort();

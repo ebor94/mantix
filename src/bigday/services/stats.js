@@ -46,20 +46,22 @@ function distribucion(filas) {
 
 /**
  * NPS = %promotores − %detractores. Redondeo: los porcentajes se devuelven con 1 decimal, pero el
- * NPS entero se calcula con los valores SIN redondear y luego Math.round (así no se acumula error
- * de redondeo). Sin respuestas: porcentajes y nps en null (no se divide por cero).
+ * NPS entero se calcula con enteros, Math.round(((P − D) × 100) / total), sin pasar por los porcentajes.
+ * El total del NPS es promotores + pasivos + detractores: los p6 fuera de 1–10 se ignoran. Sin respuestas: porcentajes y nps en null (no se divide por cero).
  */
 function nps(filas) {
-  const total = filas.length;
+  let total;
   let promotores = 0;
   let pasivos = 0;
   let detractores = 0;
   for (const f of filas) {
     const v = Number(f.p6);
-    if (v >= MIN_PROMOTOR) promotores += 1;
-    else if (v >= MIN_PASIVO) pasivos += 1;
-    else detractores += 1;
+    if (v >= MIN_PROMOTOR && v <= P6.max) promotores += 1;
+    else if (v >= MIN_PASIVO && v < MIN_PROMOTOR) pasivos += 1;
+    else if (v >= P6.min && v < MIN_PASIVO) detractores += 1;
+    // Fuera de 1–10 (dato corrupto): no cuenta en ningún grupo ni en el total.
   }
+  total = promotores + pasivos + detractores;
   if (total === 0) {
     return {
       total, promotores, pasivos, detractores,
@@ -73,7 +75,8 @@ function nps(filas) {
     pctPromotores: a1(pct(promotores)),
     pctPasivos: a1(pct(pasivos)),
     pctDetractores: a1(pct(detractores)),
-    nps: Math.round(pct(promotores) - pct(detractores)),
+    // Aritmética entera: (P − D) × 100 / total evita el error de coma flotante en los .5 exactos.
+    nps: Math.round(((promotores - detractores) * 100) / total),
   };
 }
 

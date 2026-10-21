@@ -43,41 +43,44 @@ function crearRouterResultados({ repositorio, config }) {
     return next();
   }
 
-  const cargar = async (res) => {
-    try {
-      return await repositorio.listar();
-    } catch (err) {
-      // Solo el mensaje del error: sin IP, token ni filas.
-      console.error('bigday: error al listar respuestas:', err instanceof Error ? err.message : 'desconocido');
-      res.status(500).json({ error: 'No se pudieron obtener los resultados.' });
-      return null;
-    }
+  // Respuesta 500 genérica: solo el mensaje del error en el log (sin IP, token ni filas).
+  const falla = (res, err, donde) => {
+    console.error(`bigday: error al ${donde}:`, err instanceof Error ? err.message : 'desconocido');
+    if (!res.headersSent) res.status(500).json({ error: 'No se pudieron obtener los resultados.' });
   };
 
   router.use(['/resultados', '/resultados.csv'], limitador, exigirToken);
 
+  // try/catch propio: en Express 4 un rechazo en un handler async no llega al manejador de errores.
   router.get('/resultados', async (req, res) => {
-    const filas = await cargar(res);
-    if (!filas) return undefined;
-    res.set('Cache-Control', 'no-store');
-    return res.json({
-      total: totales(filas),
-      distribucion: distribucion(filas),
-      nps: nps(filas),
-      matrizP2P3: matrizP2P3(filas),
-      ultimasFrases: ultimasFrases(filas, 20),
-    });
+    try {
+      const filas = await repositorio.listar();
+      const cuerpo = {
+        total: totales(filas),
+        distribucion: distribucion(filas),
+        nps: nps(filas),
+        matrizP2P3: matrizP2P3(filas),
+        ultimasFrases: ultimasFrases(filas, 20),
+      };
+      res.set('Cache-Control', 'no-store');
+      return res.json(cuerpo);
+    } catch (err) {
+      return falla(res, err, 'calcular resultados');
+    }
   });
 
   router.get('/resultados.csv', async (req, res) => {
-    const filas = await cargar(res);
-    if (!filas) return undefined;
-    res.set({
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="bigday-respuestas.csv"',
-      'Cache-Control': 'no-store',
-    });
-    return res.send(construirCsv(filas));
+    try {
+      const csv = construirCsv(await repositorio.listar());
+      res.set({
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="bigday-respuestas.csv"',
+        'Cache-Control': 'no-store',
+      });
+      return res.send(csv);
+    } catch (err) {
+      return falla(res, err, 'exportar el CSV');
+    }
   });
 
   return router;

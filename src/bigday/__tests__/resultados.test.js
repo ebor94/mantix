@@ -78,6 +78,19 @@ describe(`GET ${JSON_URL}`, () => {
   });
 });
 
+describe('errores inesperados en los handlers', () => {
+  it.each([JSON_URL, CSV_URL])('un fallo al procesar las filas en %s → 500 genérico, sin rechazo sin manejar', async (url) => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    // created_at inválido: las estadísticas / el CSV lanzan RangeError al formatear la fecha
+    const res = await request(appConFilas([fila({ created_at: 'no-es-fecha' })])).get(url).set(auth());
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: 'No se pudieron obtener los resultados.' });
+    expect(spy).toHaveBeenCalledWith(expect.any(String), expect.any(String));
+    expect(JSON.stringify(spy.mock.calls)).not.toContain(TOKEN);
+    spy.mockRestore();
+  });
+});
+
 describe('token de resultados no configurado', () => {
   it.each([undefined, null, '', '   '])('resultsToken=%p → 503 genérico, aunque se envíe un token vacío', async (valor) => {
     const app = appConFilas([fila()], { hashSalt: 'sal', resultsToken: valor });
