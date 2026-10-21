@@ -6,8 +6,9 @@ const { leerEntorno } = require('../config/entorno');
 const { crearRepositorioPerezoso } = require('../repositorio');
 const { bigdayErrorHandler } = require('../middleware/errorHandler');
 const { crearRouterRespuestas } = require('./respuestas.routes');
+const { crearRouterResultados } = require('./resultados.routes');
 
-/** Fábrica inyectable (tests): `repositorio` y `config` = { hashSalt }. */
+/** Fábrica inyectable (tests): `repositorio` y `config` = { hashSalt, resultsToken? }. */
 function crearRouterBigday({ repositorio, config }) {
   const router = express.Router();
 
@@ -22,6 +23,7 @@ function crearRouterBigday({ repositorio, config }) {
   });
 
   router.use(crearRouterRespuestas({ repositorio, config }));
+  router.use(crearRouterResultados({ repositorio, config }));
   router.use(bigdayErrorHandler);
   return router;
 }
@@ -44,7 +46,11 @@ function router(req, res, next) {
   if (!real) {
     real = crearRouterBigday({
       repositorio: crearRepositorioPerezoso(entorno.config.db),
-      config: { hashSalt: entorno.config.hashSalt },
+      config: {
+        hashSalt: entorno.config.hashSalt,
+        // Se lee del entorno en cada petición: no depende de cuándo se construyó el router.
+        get resultsToken() { return leerEntorno().config?.resultsToken ?? null; },
+      },
     });
   }
   return real(req, res, next);

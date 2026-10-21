@@ -14,6 +14,8 @@ function leerEntorno(env = process.env) {
     ok: true,
     config: {
       hashSalt: env.BIGDAY_HASH_SALT,
+      // Opcional: sin él solo las rutas de resultados responden 503 (el POST y el health siguen).
+      resultsToken: vacia(env.BIGDAY_RESULTS_TOKEN) ? null : String(env.BIGDAY_RESULTS_TOKEN).trim(),
       db: {
         host: env.BIGDAY_DB_HOST,
         port: parseInt(env.BIGDAY_DB_PORT, 10) || 3306,

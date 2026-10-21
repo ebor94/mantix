@@ -13,8 +13,16 @@ describe('leerEntorno', () => {
     expect(e.ok).toBe(true);
     expect(e.config).toEqual({
       hashSalt: 'sal',
+      resultsToken: null,
       db: { host: 'bd.interna', port: 3306, user: 'bigday_api', password: 'secreto', database: 'serfuweb' },
     });
+  });
+
+  it('BIGDAY_RESULTS_TOKEN es opcional: no cuenta como faltante y se lee recortado', () => {
+    expect(leerEntorno(completo).ok).toBe(true);
+    expect(leerEntorno({ ...completo, BIGDAY_RESULTS_TOKEN: '   ' }).config.resultsToken).toBeNull();
+    expect(leerEntorno({ ...completo, BIGDAY_RESULTS_TOKEN: '' }).config.resultsToken).toBeNull();
+    expect(leerEntorno({ ...completo, BIGDAY_RESULTS_TOKEN: ' abc123 ' }).config.resultsToken).toBe('abc123');
   });
 
   it('respeta puerto y base indicados', () => {

@@ -49,4 +49,37 @@ describeSiBd('repositorio MySQL (integración)', () => {
     const [filas] = await pool.query('SELECT COUNT(*) AS n FROM bigday_respuestas WHERE uuid = ?', [uuid]);
     expect(Number(filas[0].n)).toBe(1);
   });
+
+  describe('listar()', () => {
+    beforeAll(async () => {
+      await pool.query('DELETE FROM bigday_respuestas');
+      const repo = crearRepositorioMysql(pool);
+      await repo.guardar({ ...fila('00000000-0000-4000-8000-000000000003'), p7: 'tercera' });
+      await repo.guardar({ ...fila('00000000-0000-4000-8000-000000000001'), p7: 'primera' });
+      await repo.guardar({ ...fila('00000000-0000-4000-8000-000000000002'), p7: 'segunda', p3: 'otro', p3_otro: 'Un santuario' });
+      // created_at explícito para fijar el orden; la fila de otro evento debe quedar fuera
+      await pool.query("UPDATE bigday_respuestas SET created_at = '2026-10-17 10:00:00' WHERE p7 = 'primera'");
+      await pool.query("UPDATE bigday_respuestas SET created_at = '2026-10-17 11:00:00' WHERE p7 = 'segunda'");
+      await pool.query("UPDATE bigday_respuestas SET created_at = '2026-10-17 12:00:00' WHERE p7 = 'tercera'");
+      await repo.guardar({ ...fila('00000000-0000-4000-8000-000000000009'), p7: 'de otro evento' });
+      await pool.query("UPDATE bigday_respuestas SET evento_id = 'otro-evento' WHERE p7 = 'de otro evento'");
+    });
+
+    it('devuelve solo las filas del evento october-bigday-2, ordenadas por created_at', async () => {
+      const filas = await crearRepositorioMysql(pool).listar();
+      expect(filas.map((f) => f.p7)).toEqual(['primera', 'segunda', 'tercera']);
+      expect(filas[0].created_at).toBeInstanceOf(Date);
+    });
+
+    it('expone las columnas necesarias y nunca ip_hash ni ua_hash', async () => {
+      const filas = await crearRepositorioMysql(pool).listar();
+      const claves = Object.keys(filas[1]).sort();
+      expect(claves).toEqual([
+        'created_at', 'duracion_seg', 'origen', 'p1', 'p2', 'p3', 'p3_otro', 'p4', 'p4_otro', 'p5', 'p6', 'p7',
+      ]);
+      expect(claves).not.toContain('ip_hash');
+      expect(claves).not.toContain('ua_hash');
+      expect(filas[1]).toMatchObject({ p3: 'otro', p3_otro: 'Un santuario', p6: 8 });
+    });
+  });
 });

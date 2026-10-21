@@ -12,6 +12,10 @@ function repoEnMemoria() {
       filas.set(fila.uuid, fila);
       return 'creada';
     },
+    async listar() {
+      // Como el de MySQL: sin ip_hash ni ua_hash.
+      return [...filas.values()].map(({ ip_hash, ua_hash, uuid, ...resto }) => resto);
+    },
     async ping() {},
   };
   return { repo, filas };
