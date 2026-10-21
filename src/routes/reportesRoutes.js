@@ -16,4 +16,7 @@ router.get('/equipos', reportesController.generateEquipmentReport);
 // Generate user report
 router.get('/usuarios', reportesController.generateUserReport);
 
+// R-25 Programa anual de mantenimientos (pivot categoría × actividad × 12 meses P/E)
+router.get('/programa-anual', reportesController.generateProgramaAnualReport);
+
 module.exports = router;
