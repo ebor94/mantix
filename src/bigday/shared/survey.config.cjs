@@ -1,5 +1,5 @@
 // GENERADO por npm run sync:backend desde bigDay/shared — NO EDITAR A MANO
-// fuente-sha256: a2f7cf233139a46b9d430fa9cbc831064ad11a2ec351f42923592bb7cfd188c3
+// fuente-sha256: 7fd01998fbb43e8eced2927dd95923b41f6efb42f15b3b884b641ce97bd514aa
 
 "use strict";
 var __defProp = Object.defineProperty;
@@ -19751,6 +19751,7 @@ function date4(params) {
 var QUESTIONS = [
   {
     id: "p1",
+    title: "Antes de participar en el October Big Day, \xBFcu\xE1l de las siguientes afirmaciones describe mejor lo que sabes sobre la biodiversidad de Los Olivos?",
     type: "single",
     required: true,
     allowOther: false,
@@ -19763,6 +19764,7 @@ var QUESTIONS = [
   },
   {
     id: "p2",
+    title: "Antes de participar en el evento, \xBFcon qu\xE9 asociabas a Los Olivos?",
     type: "single",
     required: true,
     allowOther: false,
@@ -19775,6 +19777,7 @@ var QUESTIONS = [
   },
   {
     id: "p3",
+    title: "Despu\xE9s de vivir esta experiencia, \xBFcon qu\xE9 asocias ahora a Los Olivos?",
     type: "single",
     required: true,
     allowOther: true,
@@ -19788,6 +19791,7 @@ var QUESTIONS = [
   },
   {
     id: "p4",
+    title: "\xBFQu\xE9 fue lo que m\xE1s te sorprendi\xF3 o aprendiste durante el evento?",
     type: "single",
     required: true,
     allowOther: true,
@@ -19801,6 +19805,7 @@ var QUESTIONS = [
   },
   {
     id: "p5",
+    title: "Despu\xE9s de participar en el October Big Day, \xBFqu\xE9 aprendiste sobre la biodiversidad de Los Olivos?",
     type: "single",
     required: true,
     allowOther: false,
@@ -19813,6 +19818,7 @@ var QUESTIONS = [
   },
   {
     id: "p6",
+    title: "En una escala de 1 a 10, \xBFqu\xE9 tan probable es que recomiendes el October Big Day de Los Olivos a tus familiares o amigos?",
     type: "scale",
     required: true,
     allowOther: false,
@@ -19823,6 +19829,7 @@ var QUESTIONS = [
   },
   {
     id: "p7",
+    title: "En una frase, \xBFqu\xE9 le contar\xEDas a alguien para animarlo a conocer Parque de Vida Los Olivos?",
     type: "open",
     required: true,
     allowOther: false,
