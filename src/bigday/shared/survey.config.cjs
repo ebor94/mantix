@@ -1,5 +1,5 @@
 // GENERADO por npm run sync:backend desde bigDay/shared — NO EDITAR A MANO
-// fuente-sha256: 7fd01998fbb43e8eced2927dd95923b41f6efb42f15b3b884b641ce97bd514aa
+// fuente-sha256: 81ddd749719532e1c580a6df5d8881e14afc3e454efd46d80d176e03fb900cc1
 
 "use strict";
 var __defProp = Object.defineProperty;
@@ -19834,7 +19834,8 @@ var QUESTIONS = [
     required: true,
     allowOther: false,
     minLength: 10,
-    maxLength: 280
+    maxLength: 280,
+    placeholder: "Ej.: Ven a ver aves incre\xEDbles en un lugar lleno de vida"
   }
 ];
 var OTRO_MAX = 120;
