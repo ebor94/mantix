@@ -1,17 +1,10 @@
 const mysql = require('mysql2/promise');
 const { migrar } = require('../scripts/migrar');
 
-// Solo corre si hay una BD de prueba (ver jest.bigday-int.config.js).
-const hayBd = Boolean(process.env.BIGDAY_TEST_DB_HOST);
-const describeSiBd = hayBd ? describe : describe.skip;
+// Solo corre contra una BD local con nombre explícito (ver testing/guardaBd.js y jest.bigday-int.config.js).
+const { prepararBdPrueba } = require('../testing/guardaBd');
 
-const cfg = () => ({
-  host: process.env.BIGDAY_TEST_DB_HOST,
-  port: Number(process.env.BIGDAY_TEST_DB_PORT) || 3306,
-  user: process.env.BIGDAY_TEST_DB_USER || 'root',
-  password: process.env.BIGDAY_TEST_DB_PASSWORD || '',
-  database: process.env.BIGDAY_TEST_DB_NAME || 'serfuweb',
-});
+const { describeSiBd, cfg } = prepararBdPrueba();
 
 describeSiBd('migrar (integración)', () => {
   let conexion;

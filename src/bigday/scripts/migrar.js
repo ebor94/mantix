@@ -32,6 +32,19 @@ async function migrar(db, { log = console.log, dir } = {}) {
   }
 }
 
+const CODIGOS_ACCESO = [
+  'ER_ACCESS_DENIED_ERROR', 'ER_DBACCESS_DENIED_ERROR', 'ER_TABLEACCESS_DENIED_ERROR', 'ER_SPECIFIC_ACCESS_DENIED_ERROR',
+];
+
+/** Líneas de error para mostrar: solo código y mensaje de MySQL (nunca la configuración, que lleva la contraseña). */
+function mensajeError(err) {
+  const lineas = [`bigday: la migración falló (${err.code || 'error'}): ${err.sqlMessage || err.message}`];
+  if (CODIGOS_ACCESO.includes(err.code)) {
+    lineas.push('bigday: el usuario necesita CREATE y CREATE VIEW sobre la base indicada.');
+  }
+  return lineas;
+}
+
 async function main() {
   require('dotenv').config();
   const { leerConexion } = require('../config/entorno');
@@ -46,13 +59,11 @@ async function main() {
     await migrar(entorno.db);
     console.log('bigday: migraciones completas');
   } catch (err) {
-    // Solo código y mensaje de MySQL: nunca la configuración (contiene la contraseña).
-    console.error(`bigday: la migración falló (${err.code || 'error'}): ${err.sqlMessage || err.message}`);
-    console.error('bigday: el usuario necesita CREATE y CREATE VIEW sobre la base indicada.');
+    for (const l of mensajeError(err)) console.error(l);
     process.exit(1);
   }
 }
 
 if (require.main === module) main();
 
-module.exports = { listarMigraciones, migrar, DIR_MIGRACIONES };
+module.exports = { listarMigraciones, migrar, mensajeError, DIR_MIGRACIONES };
