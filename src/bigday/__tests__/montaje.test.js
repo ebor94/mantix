@@ -1,7 +1,9 @@
 // Carga la app real de Mantix: verifica el montaje en /api/bigday/v1, la exención del limitador global,
 // los errores del parser propio y el 503 cuando faltan variables BIGDAY_*.
 process.env.RATE_LIMIT_MAX_REQUESTS = '2';
-const VARIABLES = ['BIGDAY_DB_HOST', 'BIGDAY_DB_PORT', 'BIGDAY_DB_USER', 'BIGDAY_DB_PASSWORD', 'BIGDAY_DB_NAME', 'BIGDAY_HASH_SALT', 'BIGDAY_RESULTS_TOKEN'];
+const VARIABLES = ['BIGDAY_DB_HOST', 'BIGDAY_DB_PORT', 'BIGDAY_DB_USER', 'BIGDAY_DB_PASSWORD', 'BIGDAY_DB_NAME', 'BIGDAY_HASH_SALT', 'BIGDAY_RESULTS_TOKEN',
+  // Variables de Mantix que el módulo usa como respaldo: se limpian para que el 503 no dependa del entorno.
+  'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
 const request = require('supertest');
 const app = require('../../app');
 
