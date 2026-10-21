@@ -28,9 +28,19 @@ function crearRouterBigday({ repositorio, config }) {
   return router;
 }
 
-// Router de producción: toma la configuración de BIGDAY_* y se construye al primer request válido.
+// Router de producción: se construye UNA vez al cargar el módulo, porque express-rate-limit exige crear los
+// limitadores en la inicialización y no dentro de un request (ERR_ERL_CREATED_IN_REQUEST_HANDLER).
+// Nada aquí toca la red ni lanza si faltan variables: el pool se crea al primer uso de BD y la configuración
+// se lee del entorno en cada acceso (agregar variables y reiniciar basta; resultsToken sigue siendo dinámico).
+const real = crearRouterBigday({
+  repositorio: crearRepositorioPerezoso(() => leerEntorno().config.db),
+  config: {
+    get hashSalt() { return leerEntorno().config?.hashSalt; },
+    get resultsToken() { return leerEntorno().config?.resultsToken ?? null; },
+  },
+});
+
 // Si faltan variables responde 503 sin tumbar Mantix (se re-evalúa por request, es barato).
-let real = null;
 let avisado = false;
 function router(req, res, next) {
   const entorno = leerEntorno();
@@ -41,16 +51,6 @@ function router(req, res, next) {
     }
     return res.status(503).json({
       error: 'El módulo October Big Day no está disponible: configuración del servidor incompleta.',
-    });
-  }
-  if (!real) {
-    real = crearRouterBigday({
-      repositorio: crearRepositorioPerezoso(entorno.config.db),
-      config: {
-        hashSalt: entorno.config.hashSalt,
-        // Se lee del entorno en cada petición: no depende de cuándo se construyó el router.
-        get resultsToken() { return leerEntorno().config?.resultsToken ?? null; },
-      },
     });
   }
   return real(req, res, next);

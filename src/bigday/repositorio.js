@@ -32,10 +32,13 @@ function crearRepositorioMysql(pool) {
   };
 }
 
-/** Crea el pool al primer uso (no al requerir el módulo), para que Mantix arranque sin BD de bigday. */
+/**
+ * Crea el pool al primer uso (no al requerir el módulo), para que Mantix arranque sin BD de bigday.
+ * `cfgBd` puede ser el objeto de conexión o una función que lo devuelve (se evalúa en el primer uso).
+ */
 function crearRepositorioPerezoso(cfgBd) {
   let repo = null;
-  const obtener = () => repo || (repo = crearRepositorioMysql(crearPool(cfgBd)));
+  const obtener = () => repo || (repo = crearRepositorioMysql(crearPool(typeof cfgBd === 'function' ? cfgBd() : cfgBd)));
   return {
     guardar: (fila) => obtener().guardar(fila),
     listar: () => obtener().listar(),
