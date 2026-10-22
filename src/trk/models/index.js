@@ -12,6 +12,7 @@ module.exports = (sequelize, DataTypes) => {
   TrkAcceso:              require('./TrkAcceso')(sequelize, DataTypes),
   TrkCalificacion:        require('./TrkCalificacion')(sequelize, DataTypes),
   TrkCalificacionDetalle: require('./TrkCalificacionDetalle')(sequelize, DataTypes),
+  TrkBorrador:            require('./TrkBorrador')(sequelize, DataTypes),
   TrkAuditoria:           require('./TrkAuditoria')(sequelize, DataTypes),
   TrkEventoEstado:        require('./TrkEventoEstado')(sequelize, DataTypes),
   TrkRankingSnapshot:     require('./TrkRankingSnapshot')(sequelize, DataTypes),

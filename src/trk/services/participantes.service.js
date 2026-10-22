@@ -275,6 +275,9 @@ async function fusionar(origenId, destinoId, ctx) {
 
 async function confirmarCategoria(id, { confirmar }, ctx) {
   const p = await db.sequelize.transaction(async (transaction) => {
+    // Orden de bloqueo del módulo: evento → participantes → categoría. Sin el evento primero, esta transacción
+    // (participante → categoría destino) podía interbloquearse con el envío final del jurado (TRK-CAL-006).
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
     const participante = await buscarModelo(id, { transaction, lock: true });
     if (!participante.categoria_propuesta_id) throw new TrkError(400, 'VALIDACION', 'No hay un cambio de categoría propuesto');
     const calificaciones = await db.TrkCalificacion.findAll({ where: { participante_id: participante.id }, transaction, lock: transaction.LOCK.UPDATE });

@@ -2,7 +2,7 @@ const db = require('../../../models');
 
 const TABLAS = [
   'trk_rubricas', 'trk_criterios', 'trk_categorias', 'trk_participantes', 'trk_accesos',
-  'trk_calificaciones', 'trk_calificacion_detalle', 'trk_auditoria', 'trk_evento_estado',
+  'trk_calificaciones', 'trk_calificacion_detalle', 'trk_borradores', 'trk_auditoria', 'trk_evento_estado',
   'trk_ranking_snapshots', 'trk_importaciones', 'trk_migraciones'
 ];
 
@@ -40,4 +40,16 @@ test('único de calificaciones por participante y jurado', async () => {
 test('clave natural de participantes', async () => {
   const filas = await q("SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'trk_participantes' AND index_name = 'uq_trk_participantes_doc_mascota'");
   expect(filas[0].cols).toBe('responsable_documento,mascota_nombre_norm');
+});
+
+test('v2.1: único de borradores por participante, jurado y criterio', async () => {
+  const filas = await q("SELECT index_name AS i, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'trk_borradores' AND non_unique = 0 GROUP BY index_name");
+  expect(filas).toEqual(expect.arrayContaining([{ i: 'uq_trk_borradores_part_jur_crit', cols: 'participante_id,jurado_id,criterio_id' }]));
+});
+
+test('v2.1: trk_borradores.puntaje admite NULL (casilla vacía) y tiene sus tres FKs', async () => {
+  const [col] = await q("SELECT is_nullable AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'trk_borradores' AND column_name = 'puntaje'");
+  expect(col.n).toBe('YES');
+  const fks = await q("SELECT constraint_name AS c FROM information_schema.table_constraints WHERE table_schema = DATABASE() AND table_name = 'trk_borradores' AND constraint_type = 'FOREIGN KEY' ORDER BY constraint_name");
+  expect(fks.map((f) => f.c)).toEqual(['fk_trk_borradores_criterios', 'fk_trk_borradores_participantes', 'fk_trk_borradores_usuarios']);
 });
