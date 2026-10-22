@@ -1,4 +1,4 @@
-const { calcularDashboard, listarEmpresasConAfiliaciones } = require('../services/dashboardAfiliaciones.service');
+const { calcularDashboard, listarEmpresasConAfiliaciones, listarAsesoresConAfiliaciones } = require('../services/dashboardAfiliaciones.service');
 
 /**
  * GET /api/afiliados/dashboard
@@ -7,9 +7,9 @@ const { calcularDashboard, listarEmpresasConAfiliaciones } = require('../service
  */
 async function dashboard(req, res, next) {
   try {
-    const { desde, hasta, origen, convenioId, empresaId } = req.query;
+    const { desde, hasta, origen, convenioId, empresaId, asesorId } = req.query;
     const data = await calcularDashboard({
-      usuario: req.usuario, desde, hasta, origen, convenioId, empresaId
+      usuario: req.usuario, desde, hasta, origen, convenioId, empresaId, asesorId
     });
     res.json({ success: true, data });
   } catch (err) {
@@ -30,4 +30,17 @@ async function empresas(req, res, next) {
   }
 }
 
-module.exports = { dashboard, empresas };
+/**
+ * GET /api/afiliados/dashboard/asesores
+ * Lista los asesores que tienen afiliaciones, para el selector del dashboard.
+ */
+async function asesores(req, res, next) {
+  try {
+    const data = await listarAsesoresConAfiliaciones();
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { dashboard, empresas, asesores };

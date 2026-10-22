@@ -25,11 +25,11 @@ function fmtPeriodo(p) {
   return String(p);
 }
 
-async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, empresaId }) {
+async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, empresaId, asesorId }) {
   const scope = resolverScope(usuario);
   const rango = normalizarRango(desde, hasta);
   const granularidad = elegirGranularidad(rango.desde, rango.hasta);
-  const where = construirWhere({ rango, scope, origen, convenioId, empresaId });
+  const where = construirWhere({ rango, scope, origen, convenioId, empresaId, asesorId });
 
   // ── KPIs (una sola fila agregada) ─────────────────────────────
   const kpiRows = await Afiliado.findAll({
@@ -213,4 +213,24 @@ async function listarEmpresasConAfiliaciones() {
   return empresas;
 }
 
-module.exports = { calcularDashboard, listarEmpresasConAfiliaciones };
+/**
+ * Asesores que tienen al menos una afiliación (para el selector del dashboard).
+ * Devuelve [{ id, nombre }] ordenados por nombre. Incluye a cualquier usuario
+ * que figure como asesorId en afiliados, sin importar el conteo.
+ */
+async function listarAsesoresConAfiliaciones() {
+  const usuarios = await Usuario.findAll({
+    attributes: ['id', 'nombre', 'apellido'],
+    where: {
+      id: { [Op.in]: literal('(SELECT DISTINCT asesorId FROM afiliados WHERE asesorId IS NOT NULL)') }
+    },
+    order: [['nombre', 'ASC'], ['apellido', 'ASC']],
+    raw: true
+  });
+  return usuarios.map(u => ({
+    id: u.id,
+    nombre: `${u.nombre || ''} ${u.apellido || ''}`.trim() || `Asesor ${u.id}`
+  }));
+}
+
+module.exports = { calcularDashboard, listarEmpresasConAfiliaciones, listarAsesoresConAfiliaciones };

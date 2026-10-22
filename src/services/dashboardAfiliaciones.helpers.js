@@ -49,8 +49,8 @@ function elegirGranularidad(desde, hasta) {
   return dias <= 31 ? 'dia' : 'mes';
 }
 
-/** Construye el WHERE de Sequelize aplicando rango, scope, origen y empresa. */
-function construirWhere({ rango, scope, origen, convenioId, empresaId }) {
+/** Construye el WHERE de Sequelize aplicando rango, scope, origen, empresa y asesor. */
+function construirWhere({ rango, scope, origen, convenioId, empresaId, asesorId }) {
   const where = {
     createdAt: {
       [Op.between]: [
@@ -64,9 +64,12 @@ function construirWhere({ rango, scope, origen, convenioId, empresaId }) {
   // o empleador por NIT).
   if (empresaId) where.empresaId = Number(empresaId);
   if (!scope.esGlobal) {
+    // Usuario no global: siempre scopeado a lo suyo (ignora el filtro de asesor).
     where.asesorId = scope.asesorId;
     return where;
   }
+  // Vista global: permitir filtrar por un asesor concreto (ver qué afilió).
+  if (asesorId) where.asesorId = Number(asesorId);
   if (origen && ['ASESOR', 'VEOLIA', 'CONVENIO'].includes(origen)) {
     where.origen = origen;
     if (origen === 'CONVENIO' && convenioId) where.convenioId = Number(convenioId);
