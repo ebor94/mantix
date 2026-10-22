@@ -43,6 +43,9 @@ function vistaCalificacion(cal) {
 const conDetalles = { include: [{ model: db.TrkCalificacionDetalle, as: 'detalles' }] };
 const mismos = (a, b) => Object.keys(b).length === Object.keys(a).length && Object.keys(b).every((k) => a[k] === b[k]);
 
+const criteriosDeRubrica = (rubricaId, transaction) =>
+  db.TrkCriterio.findAll({ where: { rubrica_id: rubricaId }, order: [['orden', 'ASC']], transaction });
+
 async function enviarCalificacion(participanteId, puntajes, ctx, intento = 0) {
   try {
     const { calificacion, repetida } = await db.sequelize.transaction(async (transaction) => {
@@ -120,4 +123,4 @@ async function desbloquear(calificacionId, ctx) {
   return vistaCalificacion(cal);
 }
 
-module.exports = { validarPuntajes, enviarCalificacion, vistaCalificacion, conDetalles, rubricaDeCategoria, misCalificaciones, desbloquear };
+module.exports = { CALIFICABLES, criteriosDeRubrica, validarPuntajes, enviarCalificacion, vistaCalificacion, conDetalles, rubricaDeCategoria, misCalificaciones, desbloquear };

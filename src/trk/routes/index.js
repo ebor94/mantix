@@ -23,6 +23,8 @@ const modulos = [
   require('./pasarela.routes'),
   require('./evento.routes'),
   require('./calificaciones.routes'),
+  require('./jurado.routes'),
+  require('./borradores.routes'),
   require('./rubricas.routes'),
   require('./ranking.routes'),
   require('./export.routes'),
