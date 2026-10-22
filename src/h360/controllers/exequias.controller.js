@@ -3,7 +3,7 @@ const { buscarUsuarioPorSam } = require('../services/ldap.service')
 const { sendTextoSimple }     = require('../../services/whatsappService')
 const gchat                   = require('../services/googleChat.service')
 const karingsoft              = require('../services/karingsoft.service')
-const { referenciaServicio }  = require('../utils/contrato')
+const { referenciaServicio, contratoONada } = require('../utils/contrato')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -673,7 +673,7 @@ async function programacionPublica(req, res, next) {
       SELECT e.id, e.tipo, e.hora, e.lugar, e.barrio, e.parroquia, e.direccion,
              e.destino_final, e.lugar_destino_final,
              e.estado, e.conductor_id, v.placa AS vehiculo_placa,
-             a.nombre_ser_querido AS ser_querido,
+             a.nombre_ser_querido AS ser_querido, a.contrato,
              (SELECT sv.nombre FROM homenajes_sala hs
                 JOIN salas_velacion sv ON sv.id = hs.sala_id
                WHERE hs.asistencia_id = a.id
@@ -692,7 +692,9 @@ async function programacionPublica(req, res, next) {
       ok: true,
       generado_at: new Date().toISOString(),
       count: rows.length,
-      items: rows,
+      // Un contrato "PEND" o a medio escribir no es un dato: en la pantalla
+      // de sala confunde más de lo que ayuda, así que no viaja.
+      items: rows.map(r => ({ ...r, contrato: contratoONada(r.contrato) })),
     })
   } catch (err) { next(err) }
 }
