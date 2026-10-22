@@ -17,6 +17,8 @@ const esquemaEnvio = Joi.object({
 
 const router = express.Router();
 const esquemaIdNum = Joi.object({ id: Joi.number().integer().positive().required() });
+const esquemaFinalizar = Joi.object({ categoria_id: Joi.number().integer().positive().required() });
+router.post('/finalizar', apiCodigo('TRK-CAL-006'), trkAuth, trkPermiso('calificar'), validar(esquemaFinalizar), aw(ctrl.finalizar));
 router.get('/mias', apiCodigo('TRK-CAL-001'), trkAuth, trkPermiso('calificar'), aw(ctrl.mias));
 router.post('/:id/desbloquear', apiCodigo('TRK-CAL-003'), trkAuth, trkPermiso('calificaciones_desbloquear'), validar(esquemaIdNum, 'params'), aw(ctrl.desbloquear));
 router.put('/:participanteId', apiCodigo('TRK-CAL-002'), trkAuth, trkPermiso('calificar'), validar(esquemaParticipante, 'params'), validar(esquemaEnvio), aw(ctrl.enviar));
