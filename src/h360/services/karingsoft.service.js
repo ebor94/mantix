@@ -430,4 +430,50 @@ async function licenciaInhumacion(ordenServicio) {
   return r.recordset[0] || null
 }
 
-module.exports = { formatoR13, itemsR34, licenciaInhumacion, normalizarHora, configurado, ETIQUETA_GRUPO }
+/**
+ * Cabecera comercial de la orden de servicio, para mostrarla junto al F-01.
+ * Es el contrato tal como está en el ERP: convenio, auxilios, notaría y si ya
+ * está sellada. En H360 no se copia nada de esto — allá es donde se corrige.
+ *
+ * tipo_documento = 50 es "Orden Servicio"; la vista mezcla otros documentos
+ * sobre el mismo número.
+ */
+const CONSULTA_ORDEN = `
+  SELECT orden_servicio,
+         fecha,
+         descripcion_centro_costo   AS sede,
+         convenio,
+         descripcion_convenio,
+         entidad,
+         descripcion_entidad,
+         descripcion_tipos_servicio AS tipo_servicio,
+         inhumacion                 AS destino_final,
+         vendedor,
+         observaciones,
+         notaria_nombre,
+         notaria_folio,
+         certificado_defuncion,
+         valor_auxilio,
+         valor_convenio,
+         valor_excedente,
+         valor_facturado_convenio,
+         valor_facturado_excedente,
+         termina,
+         sellada
+    FROM salas_ordenes_view
+   WHERE orden_servicio = @p_orden
+     AND tipo_documento = 50`
+
+async function ordenServicio(numeroContrato) {
+  const orden = String(numeroContrato ?? '').trim()
+  if (!orden) return null
+
+  const pool = await obtenerPool()
+  const r = await pool.request()
+    .input('p_orden', driver().VarChar(20), orden)
+    .query(CONSULTA_ORDEN)
+
+  return r.recordset[0] || null
+}
+
+module.exports = { formatoR13, itemsR34, licenciaInhumacion, ordenServicio, normalizarHora, configurado, ETIQUETA_GRUPO }

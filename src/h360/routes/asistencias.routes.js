@@ -11,6 +11,8 @@ router.get ('/resumen',            ctrl.resumen)
 router.get ('/',                   ctrl.listar)
 router.get ('/:id',                ctrl.obtener)
 router.get ('/:id/historial',      ctrl.obtenerHistorial)
+// Solo lectura del ERP: lo ve quien ya puede ver la asistencia.
+router.get ('/:id/orden-servicio', ctrl.ordenServicioErp)
 router.get ('/:id/etapa/:etapa',   ctrl.obtenerEtapa)
 router.post('/',                 requireRol('asesor', 'coordinador', 'admin'), ctrl.crear)
 router.post('/:id/actores',      requireRol('asesor', 'coordinador', 'admin'), ctrl.asignarActores)

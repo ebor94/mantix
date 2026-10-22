@@ -26,6 +26,7 @@ const TIPOS_TRASLADO = ['MEDICINA_LEGAL', 'LOCAL', 'INTERMUNICIPAL']
 // (SCR-3937), así que no sirve exigir solo números. Longitud mínima y al menos
 // un dígito deja fuera los rellenos tipo "0", "PTE" o "N/A".
 const { MIN_LARGO_CONTRATO, contratoValido } = require('../utils/contrato')
+const karingsoft = require('../services/karingsoft.service')
 
 // Rol → estados en que puede trabajar
 const ESTADOS_POR_ROL = {
@@ -401,6 +402,37 @@ async function obtener(req, res, next) {
 }
 
 // GET /asistencias/:id/historial  — trazabilidad independiente
+/**
+ * GET /asistencias/:id/orden-servicio
+ *
+ * La cabecera del contrato tal como está en el ERP. No se guarda en H360: se
+ * lee cada vez, porque el ERP es donde se corrige y una copia quedaría vieja.
+ *
+ * Un fallo del ERP no es un fallo de la asistencia: el F-01 debe seguir
+ * abriendo, así que se responde 200 con `error` y el frontend lo muestra como
+ * un aviso en vez de romper la pantalla.
+ */
+async function ordenServicioErp(req, res, next) {
+  try {
+    const [[a]] = await db.query('SELECT contrato FROM asistencias WHERE id = ?', [req.params.id])
+    if (!a) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
+    if (!contratoValido(a.contrato))
+      return res.json({ contrato: null, orden: null })
+
+    if (!karingsoft.configurado())
+      return res.json({ contrato: a.contrato, orden: null, error: 'La conexión al ERP no está configurada' })
+
+    try {
+      const orden = await karingsoft.ordenServicio(a.contrato)
+      return res.json({ contrato: a.contrato, orden })
+    } catch (e) {
+      console.warn('[asistencias] ordenServicioErp:', e.message)
+      return res.json({ contrato: a.contrato, orden: null, error: 'No se pudo consultar el ERP' })
+    }
+  } catch (err) { next(err) }
+}
+
 async function obtenerHistorial(req, res, next) {
   try {
     const { id } = req.params
@@ -1011,4 +1043,4 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
+module.exports = { ordenServicioErp, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }

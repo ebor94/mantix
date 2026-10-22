@@ -105,6 +105,22 @@
       ]
     },
     {
+      "clave": "accion.asistencias.orden_servicio",
+      "modulo": "asistencias",
+      "roles": [
+        "admin",
+        "asesor",
+        "asistente",
+        "asistente_tanatologo",
+        "contabilidad",
+        "coordinador",
+        "recepcion",
+        "supervisora",
+        "tanatologo",
+        "tramitador"
+      ]
+    },
+    {
       "clave": "accion.asistencias.reapertura_solicitar",
       "modulo": "asistencias",
       "roles": [
