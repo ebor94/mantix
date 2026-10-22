@@ -104,9 +104,15 @@ async function emitirCarnetsMascotas(afiliado) {
     if (!mascotas.length) return;
 
     const base = await obtenerCarnetMascotaBase();
-    for (const m of mascotas) {
+    const afiliadoPlain = afiliado.toJSON ? afiliado.toJSON() : afiliado;
+    for (let idx = 0; idx < mascotas.length; idx++) {
+      const m = mascotas[idx];
       try {
-        const carnet = await pdfService.generarCarnetMascotaImagen(m.toJSON(), afiliado.toJSON ? afiliado.toJSON() : afiliado, base);
+        // Espaciar los envíos: WhatsApp descarta/limita mensajes en ráfaga a un
+        // mismo número (por eso antes solo llegaba un carné de dos). ~2.5s entre
+        // cada envío. También da margen tras el carné del afiliado (enviado antes).
+        await new Promise(r => setTimeout(r, 2500));
+        const carnet = await pdfService.generarCarnetMascotaImagen(m.toJSON(), afiliadoPlain, base);
         const url = buildPublicPdfUrl(carnet.url);
         await sendTemplateImagenTexto(afiliado.celular, url, captionCarnetMascota(afiliado, m));
       } catch (e) {
