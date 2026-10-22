@@ -69,4 +69,13 @@ async function calificar(participante, juradoUsuario, puntajesPorCodigo) {
   return cal;
 }
 
-module.exports = { sufijo, crearAdmin, crearOperativo, categoria, crearParticipante, criteriosDe, calificar };
+// Inserta/actualiza borradores directo en BD (pruebas de matriz y envío final). { CODIGO: entero|null }.
+async function borrador(participante, juradoUsuario, puntajesPorCodigo) {
+  const criterios = await criteriosDe(participante);
+  const filas = criterios
+    .filter((c) => Object.prototype.hasOwnProperty.call(puntajesPorCodigo, c.codigo))
+    .map((c) => ({ participante_id: participante.id, jurado_id: juradoUsuario.id, criterio_id: c.id, puntaje: puntajesPorCodigo[c.codigo] }));
+  await db.TrkBorrador.bulkCreate(filas, { updateOnDuplicate: ['puntaje', 'updated_at'] });
+}
+
+module.exports = { sufijo, crearAdmin, crearOperativo, categoria, crearParticipante, criteriosDe, calificar, borrador };

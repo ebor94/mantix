@@ -3,6 +3,7 @@
 const db = require('../../models');
 
 const TABLAS_DATOS = [
+  'trk_borradores',
   'trk_calificacion_detalle',
   'trk_calificaciones',
   'trk_auditoria',

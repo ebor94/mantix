@@ -15,7 +15,7 @@ const sqlMigraciones = fs.readdirSync(path.join(__dirname, '..', '..', 'migratio
 
 test('todos los modelos se llaman Trk* y usan tabla trk_* con freezeTableName', () => {
   expect(Object.keys(modelos).sort()).toEqual([
-    'TrkAcceso', 'TrkAuditoria', 'TrkCalificacion', 'TrkCalificacionDetalle', 'TrkCategoria', 'TrkCriterio',
+    'TrkAcceso', 'TrkAuditoria', 'TrkBorrador', 'TrkCalificacion', 'TrkCalificacionDetalle', 'TrkCategoria', 'TrkCriterio',
     'TrkEventoEstado', 'TrkImportacion', 'TrkParticipante', 'TrkRankingSnapshot', 'TrkRubrica'
   ]);
   for (const m of Object.values(modelos)) {
@@ -57,4 +57,14 @@ test('sync() de los modelos TRK no toca la BD (lo usa el arranque de Mantix)', a
 test('calificación pertenece a usuarios como jurado', () => {
   expect(modelos.TrkCalificacion.associations.jurado.target.options.tableName).toBe('usuarios');
   expect(modelos.TrkCalificacion.associations.detalles.foreignKey).toBe('calificacion_id');
+});
+
+test('v2.1: borrador pertenece a participante, jurado (usuarios) y criterio; puntaje admite null', () => {
+  const b = modelos.TrkBorrador;
+  expect(b.options.tableName).toBe('trk_borradores');
+  expect(b.rawAttributes.puntaje.allowNull).toBe(true);
+  expect(b.rawAttributes.created_at).toBeUndefined();
+  expect(b.associations.participante.foreignKey).toBe('participante_id');
+  expect(b.associations.jurado.target.options.tableName).toBe('usuarios');
+  expect(b.associations.criterio.foreignKey).toBe('criterio_id');
 });
