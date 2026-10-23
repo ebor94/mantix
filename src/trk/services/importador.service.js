@@ -201,14 +201,27 @@ async function categoriaTocadaAMano(participanteId, transaction) {
   return n > 0;
 }
 
+// La propuesta pendiente la dejó el importador (la última PROPONER_CATEGORIA es de TRK-IMP-002). Solo esas las
+// puede descartar una hoja nueva; una propuesta hecha a mano por el admin no se toca.
+async function propuestaDelImportador(participanteId, transaction) {
+  const ultima = await db.TrkAuditoria.findOne({
+    where: { entidad: 'participante', entidad_id: String(participanteId), accion: 'PROPONER_CATEGORIA' },
+    order: [['id', 'DESC']],
+    transaction
+  });
+  return Boolean(ultima && ultima.api_codigo === API_IMPORTAR);
+}
+
 // Categorías v2: si la fila trae otra categoría, la mascota se mueve directamente solo si nada depende de la
 // categoría actual (sin calificaciones, sin salir a pasarela, sin fusionar) y nadie la cambió a mano. Si no, el cambio
 // queda propuesto y el admin lo confirma en TRK-PAR-007 (que avisa del borrado de calificaciones). El destino
 // cerrado o publicado se revisa al bloquear las categorías (confirmarImportacion). Devuelve 'MOVER', 'PROPONER',
-// 'DESCARTAR' (la hoja ya coincide con la categoría actual y había propuesta pendiente) o null.
+// 'DESCARTAR' (la hoja ya coincide con la categoría actual y la propuesta pendiente era del importador) o null.
 async function decidirCategoria(existente, nuevaId, transaction) {
   if (existente.fusionado_en_id) return null;
-  if (existente.categoria_id === nuevaId) return existente.categoria_propuesta_id ? 'DESCARTAR' : null;
+  if (existente.categoria_id === nuevaId) {
+    return existente.categoria_propuesta_id && await propuestaDelImportador(existente.id, transaction) ? 'DESCARTAR' : null;
+  }
   if (existente.categoria_propuesta_id === nuevaId) return null;
   const calificaciones = await db.TrkCalificacion.count({ where: { participante_id: existente.id }, transaction });
   if (calificaciones || ['EN_PASARELA', 'PRESENTADO'].includes(existente.estado)) return 'PROPONER';

@@ -192,16 +192,6 @@ test('TRK-PAR-007 no confirma hacia una categoría cerrada (409 CATEGORIA_CERRAD
   expect([rex.categoria_id, rex.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), await idDe('MEDIANOS')]);
 });
 
-test('la hoja coincide con la categoría actual y había propuesta pendiente: se descarta (auditado)', async () => {
-  const kira = await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '2222222222', categoria_propuesta_id: await idDe('MEDIANOS') });
-  const r = await importar(csv('Ana,2222222222,Kira,Perro,Criollo,Perros pequeños.'));
-  expect(r.body.data).toMatchObject({ recategorizados: 0, propuestas: 0 });
-  await kira.reload();
-  expect(kira.categoria_propuesta_id).toBeNull();
-  const [audit] = await auditorias('DESCARTAR_PROPUESTA_CATEGORIA', kira.id);
-  expect(audit).toMatchObject({ api_codigo: 'TRK-IMP-002', antes: { categoria_propuesta_id: await idDe('MEDIANOS') }, despues: { categoria_propuesta_id: null } });
-});
-
 test('dos mascotas que pasan a la misma categoría reciben órdenes de pasarela distintos y crecientes', async () => {
   await crearParticipante({ categoriaCodigo: 'MEDIANOS', orden_pasarela: 5 });
   const a = await crearParticipante({ mascota_nombre: 'Rex', responsable_documento: '1111111111', orden_pasarela: 1 });
@@ -211,4 +201,33 @@ test('dos mascotas que pasan a la misma categoría reciben órdenes de pasarela 
   await a.reload();
   await b.reload();
   expect([a.orden_pasarela, b.orden_pasarela]).toEqual([6, 7]);
+});
+
+test('propuesta hecha a mano por el admin: sobrevive a una reimportación cuya hoja coincide con la categoría actual', async () => {
+  const jurado = await crearOperativo('TRK_JURADO');
+  const kira = await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '2222222222', estado: 'PRESENTADO' });
+  await calificar(kira, jurado.usuario, { CREATIVIDAD: 40, BIENESTAR: 20, PASARELA: 10 });
+  expect((await editar(kira.id, { categoria_id: await idDe('GRANDES') })).status).toBe(200);
+  await kira.reload();
+  expect(kira.categoria_propuesta_id).toBe(await idDe('GRANDES'));
+
+  await importar(csv('Ana,2222222222,Kira,Perro,Criollo,Perros pequeños.'));
+  await kira.reload();
+  expect([kira.categoria_id, kira.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), await idDe('GRANDES')]);
+  expect(await auditorias('DESCARTAR_PROPUESTA_CATEGORIA', kira.id)).toHaveLength(0);
+});
+
+test('propuesta creada por el importador: se descarta si la hoja vuelve a la categoría actual', async () => {
+  const jurado = await crearOperativo('TRK_JURADO');
+  const kira = await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '2222222222', estado: 'PRESENTADO' });
+  await calificar(kira, jurado.usuario, { CREATIVIDAD: 40, BIENESTAR: 20, PASARELA: 10 });
+  await importar(csv('Ana,2222222222,Kira,Perro,Criollo,Perros medianos.'));
+  await kira.reload();
+  expect(kira.categoria_propuesta_id).toBe(await idDe('MEDIANOS'));
+  const r = await importar(csv('Ana,2222222222,Kira,Perro,Criollo,Perros pequeños.'));
+  expect(r.body.data).toMatchObject({ recategorizados: 0, propuestas: 0 });
+  await kira.reload();
+  expect(kira.categoria_propuesta_id).toBeNull();
+  const [audit] = await auditorias('DESCARTAR_PROPUESTA_CATEGORIA', kira.id);
+  expect(audit).toMatchObject({ api_codigo: 'TRK-IMP-002', antes: { categoria_propuesta_id: await idDe('MEDIANOS') }, despues: { categoria_propuesta_id: null } });
 });
