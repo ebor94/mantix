@@ -25,7 +25,7 @@ async function enPasarela(p) {
   await p.update({ estado: 'EN_PASARELA' });
   await db.TrkEventoEstado.update({ participante_en_pasarela_id: p.id }, { where: { id: 1 } });
 }
-const puntos = (c, s, e, pa) => ({ CREATIVIDAD: c, SEGURIDAD: s, ELABORACION: e, PASARELA: pa });
+const puntos = (c, b, pa) => ({ CREATIVIDAD: c, BIENESTAR: b, PASARELA: pa });
 const DATOS_RESPONSABLE = ['responsable_nombre', 'responsable_documento', 'responsable_telefono', 'responsable_correo', 'responsable_primer_nombre'];
 
 test('TRK-CAL-004 por defecto muestra la categoría de quien está en pasarela: EN_PASARELA primero y luego PRESENTADO (CA1, CA2)', async () => {
@@ -100,7 +100,7 @@ test('TRK-CAL-005: puntaje fuera de 0..máx o decimal → 422; criterio ajeno o 
   await enPasarela(toby);
   const [c1] = await criteriosDe(toby);
   const familiar = await crearParticipante({ estado: 'PRESENTADO', categoriaCodigo: 'FAMILIAR' });
-  const ajeno = (await criteriosDe(familiar)).find((c) => c.codigo === 'INTEGRACION');
+  const [ajeno] = await criteriosDe(familiar); // misma codificación, otra rúbrica
 
   const alto = await guardar(toby, [{ criterio_id: c1.id, puntaje: c1.puntaje_max + 1 }]);
   expect([alto.status, alto.body.motivo, alto.body.error]).toEqual([422, 'PUNTAJE_FUERA_DE_RANGO', 'TRK-CAL-005']);
@@ -120,7 +120,7 @@ test('TRK-CAL-005: no ha desfilado → 409 ESTADO_INVALIDO; final bloqueada → 
   expect([r1.status, r1.body.motivo]).toEqual([409, 'ESTADO_INVALIDO']);
 
   const kira = await crearParticipante({ estado: 'PRESENTADO' });
-  await calificar(kira, jurado.usuario, puntos(30, 25, 15, 10));
+  await calificar(kira, jurado.usuario, puntos(40, 25, 15));
   const r2 = await guardar(kira, [{ criterio_id: c.id, puntaje: 1 }]);
   expect([r2.status, r2.body.motivo]).toEqual([409, 'CALIFICACION_BLOQUEADA']);
   expect((await guardar(kira, [{ criterio_id: c.id, puntaje: 1 }], otro)).status).toBe(200);
@@ -134,7 +134,7 @@ test('TRK-CAL-005: no ha desfilado → 409 ESTADO_INVALIDO; final bloqueada → 
 test('la matriz muestra FINAL / DESBLOQUEADA; desbloqueada sin borrador parte de la calificación final y vuelve a ser editable (CA7)', async () => {
   const kira = await crearParticipante({ mascota_nombre: 'Kira', estado: 'PRESENTADO' });
   const cat = await categoria('PEQ_MED');
-  const valores = puntos(30, 25, 15, 10);
+  const valores = puntos(40, 25, 15);
   const cal = await calificar(kira, jurado.usuario, valores);
   const criterios = await criteriosDe(kira);
   const esperado = Object.fromEntries(criterios.map((c) => [String(c.id), valores[c.codigo]]));
@@ -163,7 +163,7 @@ test('sin permiso calificar → 403 en ambos endpoints', async () => {
 test('CA9 (regresión): los borradores no cuentan en el ranking en vivo ni en el tablero de progreso', async () => {
   const admin = await crearAdmin();
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
-  await borrador(toby, jurado.usuario, puntos(33, 28, 18, 13));
+  await borrador(toby, jurado.usuario, puntos(43, 28, 18));
   const cat = await categoria('PEQ_MED');
 
   const rk = await conToken(request(servidor).get(`/api/trk/v1/ranking/${cat.id}`), admin);

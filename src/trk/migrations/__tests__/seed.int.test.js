@@ -8,15 +8,15 @@ afterAll(() => db.sequelize.close());
 test('cada rúbrica suma 100 (dato de BD, no código)', async () => {
   const filas = await q('SELECT r.codigo, SUM(c.puntaje_max) AS total, COUNT(*) AS n FROM trk_rubricas r JOIN trk_criterios c ON c.rubrica_id = r.id GROUP BY r.codigo ORDER BY r.codigo');
   expect(filas.map((f) => [f.codigo, Number(f.total), Number(f.n)])).toEqual([
-    ['FAMILIAR', 100, 5],
-    ['INDIVIDUAL', 100, 4]
+    ['FAMILIAR', 100, 3],
+    ['INDIVIDUAL', 100, 3]
   ]);
 });
 
-test('desempate: Creatividad primero, Seguridad segundo, en ambas rúbricas', async () => {
+test('desempate: Creatividad primero, Bienestar segundo, en ambas rúbricas', async () => {
   const filas = await q('SELECT r.codigo AS rubrica, c.codigo, c.peso_desempate AS peso FROM trk_criterios c JOIN trk_rubricas r ON r.id = c.rubrica_id WHERE c.peso_desempate IS NOT NULL ORDER BY r.codigo, c.peso_desempate');
   expect(filas.map((f) => `${f.rubrica}:${f.codigo}:${f.peso}`)).toEqual([
-    'FAMILIAR:CREATIVIDAD:1', 'FAMILIAR:SEGURIDAD:2', 'INDIVIDUAL:CREATIVIDAD:1', 'INDIVIDUAL:SEGURIDAD:2'
+    'FAMILIAR:CREATIVIDAD:1', 'FAMILIAR:BIENESTAR:2', 'INDIVIDUAL:CREATIVIDAD:1', 'INDIVIDUAL:BIENESTAR:2'
   ]);
 });
 

@@ -37,7 +37,7 @@ test('TRK-CAL-001 cada jurado ve solo sus calificaciones (R8)', async () => {
   const j2 = await crearOperativo('TRK_JURADO');
   const a = await crearParticipante({ estado: 'PRESENTADO' });
   const b = await crearParticipante({ estado: 'PRESENTADO' });
-  const max = { CREATIVIDAD: 10, SEGURIDAD: 10, ELABORACION: 10, PASARELA: 10 };
+  const max = { CREATIVIDAD: 10, BIENESTAR: 10, PASARELA: 10 };
   await calificar(a, j1.usuario, max);
   await calificar(b, j2.usuario, max);
   const r = await request(servidor).get('/api/trk/v1/calificaciones/mias').set('Authorization', `Bearer ${j1.token}`);

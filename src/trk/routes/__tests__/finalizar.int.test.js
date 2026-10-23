@@ -27,14 +27,14 @@ afterEach(() => bus.off('trk', escuchar));
 const conToken = (r, quien) => r.set('Authorization', `Bearer ${quien.token}`);
 const finalizar = (categoriaId = cat.id, quien = jurado) => conToken(request(servidor).post('/api/trk/v1/calificaciones/finalizar').send({ categoria_id: categoriaId }), quien);
 const matriz = (quien = jurado) => conToken(request(servidor).get(`/api/trk/v1/jurado/matriz?categoria=${cat.id}`), quien);
-const puntos = (c, s, e, pa) => ({ CREATIVIDAD: c, SEGURIDAD: s, ELABORACION: e, PASARELA: pa });
+const puntos = (c, b, pa) => ({ CREATIVIDAD: c, BIENESTAR: b, PASARELA: pa });
 const porParticipante = (r) => Object.fromEntries(r.body.data.calificaciones.map((c) => [c.participante_id, c]));
 
 test('TRK-CAL-006 convierte los borradores completos en calificaciones bloqueadas, audita CREAR y avisa al admin por fila (CA6)', async () => {
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
   const kira = await crearParticipante({ mascota_nombre: 'Kira', estado: 'EN_PASARELA' });
-  await borrador(toby, jurado.usuario, puntos(30, 25, 15, 10));
-  await borrador(kira, jurado.usuario, puntos(20, 20, 10, 5));
+  await borrador(toby, jurado.usuario, puntos(40, 25, 15));
+  await borrador(kira, jurado.usuario, puntos(25, 20, 10));
 
   const r = await finalizar();
   expect(r.status).toBe(200);
@@ -45,7 +45,7 @@ test('TRK-CAL-006 convierte los borradores completos en calificaciones bloqueada
   expect(cals[kira.id]).toMatchObject({ total: 55, bloqueada: true });
   expect(await db.TrkAuditoria.count({ where: { api_codigo: 'TRK-CAL-006', accion: 'CREAR', entidad: 'calificacion' } })).toBe(2);
   expect(eventos.filter((e) => e.evento === 'calificacion:recibida').map((e) => e.rooms)).toEqual([['admin'], ['admin']]);
-  expect(await db.TrkBorrador.count()).toBe(8); // se conservan para trazabilidad
+  expect(await db.TrkBorrador.count()).toBe(6); // 2 participantes x 3 criterios; se conservan para trazabilidad
   expect((await matriz()).body.data.filas.map((f) => f.final.estado)).toEqual(['FINAL', 'FINAL']);
   expect(await db.TrkCalificacion.count({ where: { jurado_id: otro.usuario.id } })).toBe(0);
 });
@@ -53,14 +53,14 @@ test('TRK-CAL-006 convierte los borradores completos en calificaciones bloqueada
 test('todo o nada: una fila incompleta → 422 CALIFICACION_INCOMPLETA con los nombres y no se crea ninguna', async () => {
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
   const kira = await crearParticipante({ mascota_nombre: 'Kira', estado: 'EN_PASARELA' });
-  await borrador(toby, jurado.usuario, puntos(30, 25, 15, 10));
-  await borrador(kira, jurado.usuario, { CREATIVIDAD: 10, SEGURIDAD: null });
+  await borrador(toby, jurado.usuario, puntos(40, 25, 15));
+  await borrador(kira, jurado.usuario, { CREATIVIDAD: 10, BIENESTAR: null });
 
   const r = await finalizar();
   expect([r.status, r.body.motivo, r.body.error]).toEqual([422, 'CALIFICACION_INCOMPLETA', 'TRK-CAL-006']);
   expect(r.body.message).toContain('Kira');
   expect(r.body.message).not.toContain('Toby');
-  expect(r.body.errors).toEqual([{ campo: kira.id, mensaje: expect.stringMatching(/^Kira: falta Seguridad, Elaboración, Pasarela$/) }]);
+  expect(r.body.errors).toEqual([{ campo: kira.id, mensaje: expect.stringMatching(/^Kira: falta Bienestar, Pasarela$/) }]);
   expect(await db.TrkCalificacion.count()).toBe(0);
   expect(await db.TrkAuditoria.count({ where: { entidad: 'calificacion' } })).toBe(0);
   expect(eventos.filter((e) => e.evento === 'calificacion:recibida')).toEqual([]);
@@ -68,14 +68,14 @@ test('todo o nada: una fila incompleta → 422 CALIFICACION_INCOMPLETA con los n
 
 test('solo envía las pendientes; sin pendientes → 409 SIN_PENDIENTES; una mascota que desfila después vuelve a habilitarlo (CA8)', async () => {
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
-  await borrador(toby, jurado.usuario, puntos(30, 25, 15, 10));
+  await borrador(toby, jurado.usuario, puntos(40, 25, 15));
   expect((await finalizar()).status).toBe(200);
 
   const otraVez = await finalizar();
   expect([otraVez.status, otraVez.body.motivo]).toEqual([409, 'SIN_PENDIENTES']);
 
   const luna = await crearParticipante({ mascota_nombre: 'Luna', estado: 'EN_PASARELA' });
-  await borrador(luna, jurado.usuario, puntos(10, 10, 10, 10));
+  await borrador(luna, jurado.usuario, puntos(10, 10, 10));
   const r = await finalizar();
   expect(r.status).toBe(200);
   expect(r.body.data.calificaciones.map((c) => c.participante_id)).toEqual([luna.id]);
@@ -85,7 +85,7 @@ test('solo envía las pendientes; sin pendientes → 409 SIN_PENDIENTES; una mas
 test('desbloqueada por el admin: se corrige el borrador y se reenvía con el botón final (auditoría REENVIAR) (CA7)', async () => {
   const admin = await crearAdmin();
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
-  await borrador(toby, jurado.usuario, puntos(30, 25, 15, 10));
+  await borrador(toby, jurado.usuario, puntos(40, 25, 15));
   await finalizar();
   const cal = await db.TrkCalificacion.findOne({ where: { participante_id: toby.id } });
 
@@ -97,7 +97,7 @@ test('desbloqueada por el admin: se corrige el borrador y se reenvía con el bot
 
   const r = await finalizar();
   expect(r.status).toBe(200);
-  expect(porParticipante(r)[toby.id]).toMatchObject({ id: cal.id, total: 51, bloqueada: true });
+  expect(porParticipante(r)[toby.id]).toMatchObject({ id: cal.id, total: 41, bloqueada: true });
   const acciones = (await db.TrkAuditoria.findAll({ where: { entidad: 'calificacion', entidad_id: String(cal.id) }, order: [['id', 'ASC']] }))
     .map((a) => [a.accion, a.api_codigo]);
   expect(acciones).toEqual([['CREAR', 'TRK-CAL-006'], ['DESBLOQUEAR', 'TRK-CAL-003'], ['REENVIAR', 'TRK-CAL-006']]);
@@ -105,7 +105,7 @@ test('desbloqueada por el admin: se corrige el borrador y se reenvía con el bot
 
 test('desbloqueada sin borradores (enviada con TRK-CAL-002) se reenvía con sus puntajes finales', async () => {
   const kira = await crearParticipante({ mascota_nombre: 'Kira', estado: 'PRESENTADO' });
-  const cal = await calificar(kira, jurado.usuario, puntos(30, 25, 15, 10));
+  const cal = await calificar(kira, jurado.usuario, puntos(40, 25, 15));
   await cal.update({ bloqueada: false });
   const r = await finalizar();
   expect(r.status).toBe(200);
@@ -115,7 +115,7 @@ test('desbloqueada sin borradores (enviada con TRK-CAL-002) se reenvía con sus 
 
 test('categoría cerrada → 409 CATEGORIA_CERRADA; inexistente → 404; sin categoria_id → 400; sin sesión → 401', async () => {
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
-  await borrador(toby, jurado.usuario, puntos(30, 25, 15, 10));
+  await borrador(toby, jurado.usuario, puntos(40, 25, 15));
   await db.TrkCategoria.update({ abierta: false }, { where: { id: cat.id } });
   const cerrada = await finalizar();
   expect([cerrada.status, cerrada.body.motivo]).toEqual([409, 'CATEGORIA_CERRADA']);
