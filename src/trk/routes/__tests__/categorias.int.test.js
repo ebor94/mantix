@@ -17,7 +17,7 @@ test('TRK-CAT-005 lista categorías en orden para cualquier sesión TRK', async 
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-CAT-005');
   expect(r.body.data.map((c) => [c.codigo, c.rubrica_codigo])).toEqual([
-    ['PEQ_MED', 'INDIVIDUAL'], ['GRANDES', 'INDIVIDUAL'], ['FELINOS', 'INDIVIDUAL'], ['FAMILIAR', 'FAMILIAR']
+    ['PEQUENOS', 'INDIVIDUAL'], ['MEDIANOS', 'INDIVIDUAL'], ['GRANDES', 'INDIVIDUAL'], ['FELINOS', 'INDIVIDUAL'], ['FAMILIAR', 'FAMILIAR']
   ]);
   expect(r.body.data[0]).toMatchObject({ abierta: true, ranking_publicado: false, puestos_premiados: 3 });
 });

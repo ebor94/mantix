@@ -40,7 +40,7 @@ test('TRK-IMP-002 confirma con decisiones por defecto: 8 creados (duplicado cons
   const token = (await preview()).body.data.preview_token;
   const r = await confirmar(token);
   expect(r.status).toBe(200);
-  expect(r.body.data).toEqual({ creados: 8, actualizados: 0, omitidos: 1 });
+  expect(r.body.data).toEqual({ creados: 8, actualizados: 0, omitidos: 1, recategorizados: 0, propuestas: 0 });
   const thor = await db.TrkParticipante.findAll({ where: { mascota_nombre_norm: 'thor' }, include: ['categoria'] });
   expect(thor.map((t) => t.categoria.codigo)).toEqual(['GRANDES']);
   const max = await db.TrkParticipante.findOne({ where: { mascota_nombre: 'Max' } });
@@ -52,19 +52,19 @@ test('TRK-IMP-002 confirma con decisiones por defecto: 8 creados (duplicado cons
 
 test('decisiones: conservar otra fila del grupo, aceptar sugerencia y omitir filas', async () => {
   const token = (await preview()).body.data.preview_token;
-  const r = await confirmar(token, { conservar: { 'dup-1': 4 }, categoria: { 1: 'PEQ_MED' }, omitir: [5] });
-  expect(r.body.data).toEqual({ creados: 7, actualizados: 0, omitidos: 2 });
+  const r = await confirmar(token, { conservar: { 'dup-1': 4 }, categoria: { 1: 'PEQUENOS' }, omitir: [5] });
+  expect(r.body.data).toEqual({ creados: 7, actualizados: 0, omitidos: 2, recategorizados: 0, propuestas: 0 });
   const thor = await db.TrkParticipante.findOne({ where: { mascota_nombre_norm: 'thor' }, include: ['categoria'] });
   expect(thor.categoria.codigo).toBe('FAMILIAR');
   const rocky = await db.TrkParticipante.findOne({ where: { mascota_nombre: 'Rocky' }, include: ['categoria'] });
-  expect(rocky.categoria.codigo).toBe('PEQ_MED');
+  expect(rocky.categoria.codigo).toBe('PEQUENOS');
   expect(await db.TrkParticipante.count({ where: { mascota_nombre_norm: { [db.Sequelize.Op.like]: 'trompis%' } } })).toBe(0);
 });
 
 test('§13.9 importar dos veces el mismo CSV → cero duplicados', async () => {
   await confirmar((await preview()).body.data.preview_token);
   const r = await confirmar((await preview()).body.data.preview_token);
-  expect(r.body.data).toEqual({ creados: 0, actualizados: 8, omitidos: 1 });
+  expect(r.body.data).toEqual({ creados: 0, actualizados: 8, omitidos: 1, recategorizados: 0, propuestas: 0 });
   expect(await db.TrkParticipante.count()).toBe(8);
 });
 

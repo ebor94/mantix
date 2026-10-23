@@ -38,7 +38,7 @@ async function login(nombre, pin) {
   const comentarista = await login('Comentarista E2E', '222222');
   const jurados = [await login('Jurado E2E 1', '333331'), await login('Jurado E2E 2', '333332'), await login('Jurado E2E 3', '333333')];
   const categorias = await json(`${API}/categorias`, { headers: cabina });
-  const peq = categorias.find((c) => c.codigo === 'PEQ_MED');
+  const peq = categorias.find((c) => c.codigo === 'PEQUENOS');
   const foto = await sharp({ create: { width: 1200, height: 1500, channels: 3, background: '#E8711A' } }).jpeg({ quality: 80 }).toBuffer();
 
   const tiemposAlta = [];

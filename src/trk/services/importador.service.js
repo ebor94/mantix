@@ -6,8 +6,9 @@ const TrkError = require('../utils/TrkError');
 const db = require('../../models');
 const previewCache = require('./previewCache');
 const { registrarAuditoria } = require('./auditoria.service');
+const { emitir } = require('../sockets/bus');
 const {
-  normalizarTexto, soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, telefonoValido,
+  normalizarTexto, soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, esCategoriaCombinada, telefonoValido,
   parsearFechaInscripcion, parsearAutorizacion, campoDeEncabezado, esRazaPequena, esRazaGrande
 } = require('../utils/normalizar');
 
@@ -16,12 +17,12 @@ const PATRON_VARIAS_MASCOTAS = /(\sy\s|,|&|\+|\bdos\b|\btres\b)/;
 
 const coherente = (especie, categoria) => (especie === 'GATO'
   ? ['FELINOS', 'FAMILIAR'].includes(categoria)
-  : ['PEQ_MED', 'GRANDES', 'FAMILIAR'].includes(categoria));
+  : ['PEQUENOS', 'MEDIANOS', 'GRANDES', 'FAMILIAR'].includes(categoria));
 
 function sugerirCategoria(especie, raza) {
   if (especie === 'GATO') return 'FELINOS';
   if (esRazaGrande(raza)) return 'GRANDES';
-  if (esRazaPequena(raza)) return 'PEQ_MED';
+  if (esRazaPequena(raza)) return 'PEQUENOS';
   return null;
 }
 
@@ -66,8 +67,15 @@ function analizarFila(celdas, campos, indice) {
       sugerencia: sugerirCategoria(especie, crudo.raza)
     });
   }
+  if (categoriaCodigo === 'PEQUENOS' && especie !== 'GATO' && esCategoriaCombinada(crudo.categoria)) {
+    advertencias.push({
+      codigo: 'CATEGORIA_COMBINADA',
+      mensaje: "Categoría antigua 'pequeños y medianos': revisa si es mediano",
+      sugerencia: 'MEDIANOS'
+    });
+  }
   if (categoriaCodigo === 'GRANDES' && esRazaPequena(crudo.raza)) {
-    advertencias.push({ codigo: 'RAZA_PEQUENA_EN_GRANDES', mensaje: `Raza "${crudo.raza}" inscrita en Caninos grandes`, sugerencia: 'PEQ_MED' });
+    advertencias.push({ codigo: 'RAZA_PEQUENA_EN_GRANDES', mensaje: `Raza "${crudo.raza}" inscrita en Caninos grandes`, sugerencia: 'PEQUENOS' });
   }
   if (PATRON_VARIAS_MASCOTAS.test(normalizarTexto(crudo.mascota_nombre))) {
     advertencias.push({ codigo: 'VARIAS_MASCOTAS', mensaje: 'La fila parece tener varias mascotas; divídela manualmente' });
@@ -151,7 +159,8 @@ function analizarCsv(buffer) {
   };
 }
 
-// Campos que una reimportación puede llenar si están vacíos (CA3). Nunca foto oficial, estado ni categoría.
+// Campos que una reimportación puede llenar si están vacíos (CA3). Nunca foto oficial ni estado; la categoría
+// tiene su propia regla (decidirCategoria).
 const CAMPOS_RELLENABLES = [
   'responsable_nombre', 'responsable_documento', 'responsable_telefono', 'responsable_correo', 'especie', 'raza',
   'edad_texto', 'sexo', 'disfraz_nombre', 'foto_inscripcion_url', 'fecha_inscripcion', 'notas_importacion'
@@ -174,6 +183,16 @@ function cambiosParaVacios(existente, datos, advertencias) {
   return cambios;
 }
 
+// Categorías v2: si la fila trae otra categoría, la mascota se mueve directamente solo si nada depende de la
+// categoría actual (sin calificaciones, sin salir a pasarela, sin fusionar). Si no, el cambio queda propuesto y el
+// admin lo confirma en TRK-PAR-007 (que avisa del borrado de calificaciones). Devuelve 'MOVER', 'PROPONER' o null.
+async function decidirCategoria(existente, nuevaId, transaction) {
+  if (existente.fusionado_en_id || existente.categoria_id === nuevaId) return null;
+  const calificaciones = await db.TrkCalificacion.count({ where: { participante_id: existente.id }, transaction });
+  if (!calificaciones && !['EN_PASARELA', 'PRESENTADO'].includes(existente.estado)) return 'MOVER';
+  return existente.categoria_propuesta_id === nuevaId ? null : 'PROPONER';
+}
+
 async function confirmarImportacion({ token, decisiones = {} }, ctx) {
   const entrada = previewCache.obtener(token);
   if (!entrada) throw new TrkError(409, 'PREVIEW_VENCIDO', 'La vista previa venció; vuelve a cargar el archivo');
@@ -192,8 +211,13 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
   const primeraDelGrupo = {};
   for (const f of filas) if (f.grupo_duplicado && f.conservar_por_defecto) primeraDelGrupo[f.grupo_duplicado] = f.indice;
 
-  const resultado = { creados: 0, actualizados: 0, omitidos: 0 };
+  const resultado = { creados: 0, actualizados: 0, omitidos: 0, recategorizados: 0, propuestas: 0 };
+  const tocados = [];
   await db.sequelize.transaction(async (transaction) => {
+    // Orden de bloqueo del módulo: evento → participantes → categoría (como confirmarCategoria y finalizarCategoria).
+    // Las categorías destino se bloquean al final, después de todos los participantes, para no invertirlo.
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
+    const movidos = [];
     for (const fila of filas) {
       const codigo = categoriaDecidida[String(fila.indice)] || fila.datos.categoria_codigo;
       const elegidaDelGrupo = fila.grupo_duplicado
@@ -212,6 +236,19 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
         const cambios = cambiosParaVacios(existente, datos, fila.advertencias);
         if (Object.keys(cambios).length) await existente.update(cambios, { transaction });
         resultado.actualizados += 1;
+        const nuevaId = idPorCodigo[codigo];
+        const decision = await decidirCategoria(existente, nuevaId, transaction);
+        if (decision === 'MOVER') {
+          movidos.push({ participante: existente, nuevaId });
+        } else if (decision === 'PROPONER') {
+          await existente.update({ categoria_propuesta_id: nuevaId }, { transaction });
+          await registrarAuditoria(ctx, {
+            entidad: 'participante', entidadId: existente.id, accion: 'PROPONER_CATEGORIA',
+            antes: { categoria_id: existente.categoria_id }, despues: { categoria_propuesta_id: nuevaId }
+          }, { transaction });
+          resultado.propuestas += 1;
+          tocados.push(existente);
+        }
       } else {
         await db.TrkParticipante.create({
           ...datos,
@@ -222,6 +259,24 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
         }, { transaction });
         resultado.creados += 1;
       }
+    }
+
+    // Categorías destino en orden de id; MAX+1 como confirmarCategoria (sin orden previo, sigue sin orden).
+    const destinos = [...new Set(movidos.map((m) => m.nuevaId))].sort((a, b) => a - b);
+    for (const id of destinos) await db.TrkCategoria.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+    for (const { participante, nuevaId } of movidos) {
+      const antes = { categoria_id: participante.categoria_id, orden_pasarela: participante.orden_pasarela };
+      const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: nuevaId }, transaction });
+      await participante.update({
+        categoria_id: nuevaId, categoria_propuesta_id: null, desempate_manual: null,
+        orden_pasarela: participante.orden_pasarela == null ? null : (maximo || 0) + 1
+      }, { transaction });
+      await registrarAuditoria(ctx, {
+        entidad: 'participante', entidadId: participante.id, accion: 'CAMBIAR_CATEGORIA',
+        antes, despues: { categoria_id: nuevaId, orden_pasarela: participante.orden_pasarela }
+      }, { transaction });
+      resultado.recategorizados += 1;
+      tocados.push(participante);
     }
 
     await db.TrkImportacion.create({
@@ -239,6 +294,7 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
   });
 
   previewCache.borrar(token);
+  for (const p of tocados) emitir('participante:actualizado', { participante: p.get({ plain: true }) });
   return resultado;
 }
 

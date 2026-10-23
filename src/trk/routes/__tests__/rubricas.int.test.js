@@ -27,7 +27,7 @@ test('TRK-RUB-001 devuelve criterios de la rúbrica de la categoría con máximo
 test('admin también puede ver la rúbrica; cabina no', async () => {
   const admin = await crearAdmin();
   const cabina = await crearOperativo('TRK_CABINA');
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   expect((await request(servidor).get(`/api/trk/v1/rubricas/${cat.id}`).set('Authorization', `Bearer ${admin.token}`)).status).toBe(200);
   expect((await request(servidor).get(`/api/trk/v1/rubricas/${cat.id}`).set('Authorization', `Bearer ${cabina.token}`)).status).toBe(403);
 });

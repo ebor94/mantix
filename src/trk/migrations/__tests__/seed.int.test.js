@@ -23,7 +23,8 @@ test('desempate: Creatividad primero, Bienestar segundo, en ambas rúbricas', as
 test('categorías con su rúbrica, abiertas, sin publicar y 3 puestos premiados', async () => {
   const filas = await q('SELECT c.codigo, r.codigo AS rubrica, c.abierta, c.ranking_publicado, c.puestos_premiados FROM trk_categorias c JOIN trk_rubricas r ON r.id = c.rubrica_id ORDER BY c.orden');
   expect(filas.map((f) => [f.codigo, f.rubrica, Number(f.abierta), Number(f.ranking_publicado), Number(f.puestos_premiados)])).toEqual([
-    ['PEQ_MED', 'INDIVIDUAL', 1, 0, 3],
+    ['PEQUENOS', 'INDIVIDUAL', 1, 0, 3],
+    ['MEDIANOS', 'INDIVIDUAL', 1, 0, 3],
     ['GRANDES', 'INDIVIDUAL', 1, 0, 3],
     ['FELINOS', 'INDIVIDUAL', 1, 0, 3],
     ['FAMILIAR', 'FAMILIAR', 1, 0, 3]

@@ -51,7 +51,7 @@ test('§13.14 llamadas concurrentes → exactamente una mascota EN_PASARELA', as
 });
 
 test('llamadas y reordenamientos concurrentes de una categoría no provocan deadlock (3 + 3 → 200, una EN_PASARELA)', async () => {
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   const ps = await Promise.all([1, 2, 3].map((n) => crearParticipante({ mascota_nombre: `D${n}`, orden_pasarela: n })));
   const orden = ps.map((p) => p.id);
   const reordenar = () => request(servidor).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)
@@ -77,7 +77,7 @@ test('un jurado no controla la pasarela → 403', async () => {
 });
 
 test('TRK-PAS-002 reordena la cola de una categoría (HU-7 CA3)', async () => {
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   const a = await crearParticipante({ mascota_nombre: 'A', orden_pasarela: 1 });
   const b = await crearParticipante({ mascota_nombre: 'B', orden_pasarela: 2 });
   const c = await crearParticipante({ mascota_nombre: 'C', orden_pasarela: 3 });
@@ -90,7 +90,7 @@ test('TRK-PAS-002 reordena la cola de una categoría (HU-7 CA3)', async () => {
 });
 
 test('reordenar con un participante de otra categoría → 400', async () => {
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   const a = await crearParticipante();
   const otro = await crearParticipante({ categoriaCodigo: 'GRANDES' });
   const r = await request(servidor).put('/api/trk/v1/pasarela/orden').set('Authorization', `Bearer ${comentarista.token}`)

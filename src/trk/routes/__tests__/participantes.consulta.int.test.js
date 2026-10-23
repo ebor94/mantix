@@ -112,7 +112,7 @@ test('filtros por categoría y estado; orden por orden de pasarela', async () =>
   const grandes = await categoria('GRANDES');
   await crearParticipante({ mascota_nombre: 'B', categoriaCodigo: 'GRANDES', orden_pasarela: 2 });
   await crearParticipante({ mascota_nombre: 'A', categoriaCodigo: 'GRANDES', orden_pasarela: 1 });
-  await crearParticipante({ mascota_nombre: 'C', categoriaCodigo: 'PEQ_MED' });
+  await crearParticipante({ mascota_nombre: 'C', categoriaCodigo: 'PEQUENOS' });
   const r = await get(`${base}?categoria=${grandes.id}&estado=PRESENTE`, cabina);
   expect(r.body.data.map((x) => x.mascota_nombre)).toEqual(['A', 'B']);
 });

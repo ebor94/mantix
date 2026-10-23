@@ -18,7 +18,7 @@ beforeEach(async () => {
   await limpiar();
   jurado = await crearOperativo('TRK_JURADO', { nombre: 'J1' });
   otro = await crearOperativo('TRK_JURADO', { nombre: 'J2' });
-  cat = await categoria('PEQ_MED');
+  cat = await categoria('PEQUENOS');
   eventos = [];
   bus.on('trk', escuchar);
 });

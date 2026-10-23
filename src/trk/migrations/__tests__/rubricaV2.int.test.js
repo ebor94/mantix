@@ -58,12 +58,14 @@ test('aplicada sobre una BD con la rúbrica de 003 y datos, borra calificaciones
   await calificar(kira, jurado.usuario, { CREATIVIDAD: 30, SEGURIDAD: 25, ELABORACION: 15, PASARELA: 10 });
   await calificar(luna, jurado.usuario, { CREATIVIDAD: 20, SEGURIDAD: 20, ELABORACION: 10, PASARELA: 5, INTEGRACION: 10 });
   await borrador(luna, jurado.usuario, { SEGURIDAD: 12, INTEGRACION: 7 });
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   await cat.update({ ranking_publicado: true });
   await q('INSERT INTO trk_ranking_snapshots (categoria_id, datos) VALUES (?, ?)', [cat.id, '{}']);
   await q("UPDATE trk_evento_estado SET modo_pantalla = 'RANKING', categoria_pantalla_id = ? WHERE id = 1", [cat.id]);
 
   await ejecutarArchivo('007_rubrica_v2.sql');
+  // 003 reaplicado reintroduce PEQ_MED y el orden v1 de categorías; 008 lo deja como está en producción.
+  await ejecutarArchivo('008_categorias_v2.sql');
 
   for (const tabla of ['trk_borradores', 'trk_calificacion_detalle', 'trk_calificaciones', 'trk_ranking_snapshots']) {
     const [{ n }] = await q(`SELECT COUNT(*) AS n FROM ${tabla}`);

@@ -18,7 +18,7 @@ beforeEach(async () => {
   admin = await crearAdmin();
   jurados = [];
   for (const n of [1, 2, 3]) jurados.push(await crearOperativo('TRK_JURADO', { nombre: `J${n}` }));
-  cat = await categoria('PEQ_MED');
+  cat = await categoria('PEQUENOS');
   eventos = [];
   bus.on('trk', escuchar);
 });
