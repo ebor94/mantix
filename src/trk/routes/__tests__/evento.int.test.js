@@ -50,7 +50,7 @@ test('TRK-EVT-003 tablero: contadores por estado y progreso por jurado', async (
   const r = await request(servidor).get('/api/trk/v1/evento/tablero').set('Authorization', `Bearer ${admin.token}`);
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-EVT-003');
-  const peq = r.body.data.categorias.find((c) => c.codigo === 'PEQ_MED');
+  const peq = r.body.data.categorias.find((c) => c.codigo === 'PEQUENOS');
   expect(peq).toMatchObject({ total: 2, por_estado: { PRESENTADO: 1, EN_PASARELA: 1, INSCRITO: 0 } });
   expect(r.body.data.calificables).toBe(2);
   expect(r.body.data.jurados.map((j) => [j.nombre, j.calificadas, j.pendientes])).toEqual([['J1', 1, 1], ['J2', 0, 2]]);

@@ -43,7 +43,7 @@ test('TRK-PAR-003 alta rápida de cabina con datos mínimos (CA6)', async () => 
 });
 
 test('alta duplicada (mismo documento y mascota) → 409 DUPLICADO', async () => {
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '55555' });
   const r = await como(cabina, request(servidor).post(base)).send({
     responsable_nombre: 'Xavier', responsable_telefono: '3000000000', responsable_documento: '55555', mascota_nombre: 'KIRA', especie: 'PERRO', categoria_id: cat.id

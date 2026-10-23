@@ -33,7 +33,7 @@ async function crearOperativo(rolNombre, { nombre = 'Operativo', pin = '123456',
 const categoria = (codigo) => db.TrkCategoria.findOne({ where: { codigo } });
 
 async function crearParticipante(overrides = {}) {
-  const { categoriaCodigo = 'PEQ_MED', ...resto } = overrides;
+  const { categoriaCodigo = 'PEQUENOS', ...resto } = overrides;
   const cat = await categoria(categoriaCodigo);
   const mascota = resto.mascota_nombre || `Firulais ${sufijo()}`;
   return db.TrkParticipante.create({

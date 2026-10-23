@@ -41,9 +41,9 @@ test('TRK-CAL-004 por defecto muestra la categoría de quien está en pasarela: 
   const r = await matriz();
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-CAL-004');
-  const cat = await categoria('PEQ_MED');
-  expect(r.body.data.categoria).toEqual({ id: cat.id, codigo: 'PEQ_MED', nombre: cat.nombre, abierta: true });
-  expect(r.body.data.categorias.map((c) => c.codigo)).toEqual(['PEQ_MED', 'GRANDES', 'FELINOS', 'FAMILIAR']);
+  const cat = await categoria('PEQUENOS');
+  expect(r.body.data.categoria).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: cat.nombre, abierta: true });
+  expect(r.body.data.categorias.map((c) => c.codigo)).toEqual(['PEQUENOS', 'MEDIANOS', 'GRANDES', 'FELINOS', 'FAMILIAR']);
   expect(r.body.data.filas.map((f) => f.participante.mascota_nombre)).toEqual(['Toby', 'Kira']);
   for (const f of r.body.data.filas) for (const campo of DATOS_RESPONSABLE) expect(f.participante).not.toHaveProperty(campo);
 });
@@ -64,7 +64,7 @@ test('?categoria= muestra otra categoría; inexistente → 404; sin nadie en pas
   const felinos = await categoria('FELINOS');
   const vacia = (await matriz()).body.data;
   expect(vacia).toMatchObject({ categoria: null, criterios: [], filas: [], puntaje_total_max: 0 });
-  expect(vacia.categorias).toHaveLength(4);
+  expect(vacia.categorias).toHaveLength(5);
   const r = await matriz(jurado, `?categoria=${felinos.id}`);
   expect(r.body.data.filas.map((f) => f.participante.mascota_nombre)).toEqual(['Misu']);
   const no = await matriz(jurado, '?categoria=9999');
@@ -133,7 +133,7 @@ test('TRK-CAL-005: no ha desfilado → 409 ESTADO_INVALIDO; final bloqueada → 
 
 test('la matriz muestra FINAL / DESBLOQUEADA; desbloqueada sin borrador parte de la calificación final y vuelve a ser editable (CA7)', async () => {
   const kira = await crearParticipante({ mascota_nombre: 'Kira', estado: 'PRESENTADO' });
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   const valores = puntos(40, 25, 15);
   const cal = await calificar(kira, jurado.usuario, valores);
   const criterios = await criteriosDe(kira);
@@ -164,7 +164,7 @@ test('CA9 (regresión): los borradores no cuentan en el ranking en vivo ni en el
   const admin = await crearAdmin();
   const toby = await crearParticipante({ mascota_nombre: 'Toby', estado: 'PRESENTADO' });
   await borrador(toby, jurado.usuario, puntos(43, 28, 18));
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
 
   const rk = await conToken(request(servidor).get(`/api/trk/v1/ranking/${cat.id}`), admin);
   expect(rk.status).toBe(200);

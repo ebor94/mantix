@@ -12,7 +12,7 @@ test('slug', () => {
 });
 
 const {
-  soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, telefonoValido,
+  soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, esCategoriaCombinada, telefonoValido,
   parsearFechaInscripcion, parsearAutorizacion, primerNombre, campoDeEncabezado, esRazaPequena, esRazaGrande
 } = require('../normalizar');
 
@@ -39,13 +39,29 @@ test('sexo', () => {
   expect(normalizarSexo('')).toBeNull();
 });
 
-test('categorías de la hoja (§7.1)', () => {
-  expect(mapearCategoria('Perros pequeños y medianos.')).toBe('PEQ_MED');
+test('categorías de la hoja (§7.1, v2)', () => {
+  expect(mapearCategoria('Perros pequeños.')).toBe('PEQUENOS');
+  expect(mapearCategoria('Caninos pequeños')).toBe('PEQUENOS');
+  expect(mapearCategoria('Perro pequeño')).toBe('PEQUENOS');
+  expect(mapearCategoria('Perros medianos.')).toBe('MEDIANOS');
+  expect(mapearCategoria('Caninos medianos')).toBe('MEDIANOS');
+  expect(mapearCategoria('mediano')).toBe('MEDIANOS');
+  expect(mapearCategoria('Caninos grandes')).toBe('GRANDES');
+  expect(mapearCategoria('Felinos')).toBe('FELINOS');
   expect(mapearCategoria('Perros grandes.')).toBe('GRANDES');
   expect(mapearCategoria('PERROS GRANDES')).toBe('GRANDES');
   expect(mapearCategoria('Gaticos.')).toBe('FELINOS');
   expect(mapearCategoria('Disfraz familiar: mascota y acompañante/s.')).toBe('FAMILIAR');
   expect(mapearCategoria('Otra cosa')).toBeNull();
+});
+
+test('texto antiguo combinado "pequeños y medianos" → PEQUENOS y se marca como combinado', () => {
+  expect(mapearCategoria('Perros pequeños y medianos.')).toBe('PEQUENOS');
+  expect(esCategoriaCombinada('Perros pequeños y medianos.')).toBe(true);
+  expect(esCategoriaCombinada('Caninos pequeños y medianos')).toBe(true);
+  expect(esCategoriaCombinada('Perros pequeños.')).toBe(false);
+  expect(esCategoriaCombinada('Perros medianos.')).toBe(false);
+  expect(esCategoriaCombinada(undefined)).toBe(false);
 });
 
 test('teléfono válido = 10 dígitos (§7.2 "302268158")', () => {

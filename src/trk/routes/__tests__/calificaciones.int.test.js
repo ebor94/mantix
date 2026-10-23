@@ -78,7 +78,7 @@ test('mascota que aún no sale a pasarela → 409 ESTADO_INVALIDO', async () => 
 
 test('HU-4 CA1 categoría cerrada → 409 CATEGORIA_CERRADA', async () => {
   const p = await crearParticipante({ estado: 'EN_PASARELA' });
-  await (await categoria('PEQ_MED')).update({ abierta: false });
+  await (await categoria('PEQUENOS')).update({ abierta: false });
   const r = await enviar(p, { puntajes: await puntajes(p) });
   expect(r.status).toBe(409);
   expect(r.body.motivo).toBe('CATEGORIA_CERRADA');

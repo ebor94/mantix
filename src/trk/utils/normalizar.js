@@ -33,12 +33,25 @@ function normalizarSexo(valor) {
   return null;
 }
 
+const textoCategoria = (valor) => normalizarTexto(valor).replace(/\.+$/, '').trim();
+const RE_PEQUENO = /\bpequenos?\b/;
+const RE_MEDIANO = /\bmedianos?\b/;
+
+// Texto de la hoja v1 ("Perros pequeños y medianos"): se importa como PEQUENOS con advertencia (§7.1).
+function esCategoriaCombinada(valor) {
+  const n = textoCategoria(valor);
+  return RE_PEQUENO.test(n) && RE_MEDIANO.test(n);
+}
+
+// Texto de la hoja → código de categoría (dato en trk_categorias). Las categorías son datos; esto solo
+// traduce los textos del formulario de inscripción.
 function mapearCategoria(valor) {
-  const n = normalizarTexto(valor).replace(/\.+$/, '').trim();
-  if (n.startsWith('perros pequenos') || n.includes('pequenos y medianos')) return 'PEQ_MED';
-  if (n.startsWith('perros grandes') || n === 'grandes') return 'GRANDES';
-  if (n.startsWith('gatico') || n.startsWith('gato') || n.startsWith('felino')) return 'FELINOS';
+  const n = textoCategoria(valor);
   if (n.startsWith('disfraz familiar') || n.startsWith('familiar')) return 'FAMILIAR';
+  if (RE_PEQUENO.test(n)) return 'PEQUENOS';
+  if (RE_MEDIANO.test(n)) return 'MEDIANOS';
+  if (n.startsWith('perros grandes') || n.startsWith('caninos grandes') || n === 'grandes') return 'GRANDES';
+  if (n.startsWith('gatico') || n.startsWith('gato') || n.startsWith('felino')) return 'FELINOS';
   return null;
 }
 
@@ -113,6 +126,6 @@ const esRazaGrande = (raza) => contieneAlguna(raza, RAZAS_GRANDES);
 const esRazaPequena = (raza) => !esRazaGrande(raza) && contieneAlguna(raza, RAZAS_PEQUENAS);
 
 module.exports = {
-  normalizarTexto, slug, soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, telefonoValido,
+  normalizarTexto, slug, soloDigitos, normalizarEspecie, normalizarSexo, mapearCategoria, esCategoriaCombinada, telefonoValido,
   parsearFechaInscripcion, parsearAutorizacion, primerNombre, campoDeEncabezado, esRazaPequena, esRazaGrande
 };

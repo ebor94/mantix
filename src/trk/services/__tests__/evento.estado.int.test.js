@@ -23,7 +23,7 @@ afterAll(cerrar);
 // Deja el evento en modo RANKING sobre una categoría con ranking publicado.
 // Se hace antes de instalar el spy: cambiarPantalla también llama a estadoPublico.
 async function enModoRanking() {
-  const cat = await categoria('PEQ_MED');
+  const cat = await categoria('PEQUENOS');
   await cat.update({ ranking_publicado: true });
   await request(servidor).put('/api/trk/v1/evento/pantalla')
     .set('Authorization', `Bearer ${admin.token}`)

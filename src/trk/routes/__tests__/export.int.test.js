@@ -32,8 +32,8 @@ test('TRK-EXP-001 genera Excel con hoja por categoría y detalle por jurado y cr
 
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(r.body);
-  expect(libro.worksheets.map((h) => h.name)).toEqual(['PEQ_MED', 'GRANDES', 'FELINOS', 'FAMILIAR', 'Detalle']);
-  const peq = libro.getWorksheet('PEQ_MED');
+  expect(libro.worksheets.map((h) => h.name)).toEqual(['PEQUENOS', 'MEDIANOS', 'GRANDES', 'FELINOS', 'FAMILIAR', 'Detalle']);
+  const peq = libro.getWorksheet('PEQUENOS');
   expect(peq.getRow(1).values).toEqual(expect.arrayContaining(['Puesto', 'Mascota', 'Puntaje final', 'Creatividad']));
   expect(peq.getRow(2).getCell(2).value).toBe('Canela');
   const detalle = libro.getWorksheet('Detalle');

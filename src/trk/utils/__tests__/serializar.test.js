@@ -1,7 +1,7 @@
 const { serializarParticipante, urlFoto } = require('../serializar');
 
 const p = {
-  id: 'u1', categoria_id: 1, categoria: { id: 1, codigo: 'PEQ_MED', nombre: 'Caninos pequeños', rubrica_id: 1 },
+  id: 'u1', categoria_id: 1, categoria: { id: 1, codigo: 'PEQUENOS', nombre: 'Caninos pequeños', rubrica_id: 1 },
   responsable_nombre: 'ANA MARÍA Pérez', responsable_documento: '123', responsable_telefono: '300', responsable_correo: 'a@b.co',
   mascota_nombre: 'Canela', especie: 'PERRO', raza: 'Criollo', edad_texto: '3', sexo: 'HEMBRA', disfraz_nombre: 'Bruja',
   foto_oficial_path: 'abc.jpg', foto_inscripcion_url: null, estado: 'PRESENTE', orden_pasarela: 1, llegada_at: null,
@@ -14,7 +14,7 @@ test('PUBLICO nunca incluye documento, teléfono, correo ni nombre completo (RNF
     expect(s).not.toHaveProperty(campo);
   }
   expect(JSON.stringify(s)).not.toMatch(/123|300|a@b\.co|MARÍA/);
-  expect(s).toMatchObject({ responsable_primer_nombre: 'Ana', mascota_nombre: 'Canela', foto_url: '/uploads/trk/fotos/abc.jpg', categoria: { id: 1, codigo: 'PEQ_MED', nombre: 'Caninos pequeños' } });
+  expect(s).toMatchObject({ responsable_primer_nombre: 'Ana', mascota_nombre: 'Canela', foto_url: '/uploads/trk/fotos/abc.jpg', categoria: { id: 1, codigo: 'PEQUENOS', nombre: 'Caninos pequeños' } });
   expect(s.categoria).not.toHaveProperty('rubrica_id');
 });
 

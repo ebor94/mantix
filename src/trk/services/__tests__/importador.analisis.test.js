@@ -12,7 +12,7 @@ test('lee todas las filas, mapeando columnas por nombre y no por posición', () 
   expect(fila(0).linea).toBe(2);
   expect(fila(0).datos).toMatchObject({
     responsable_nombre: 'Laura Gómez Ruiz', mascota_nombre: 'Canela', mascota_nombre_norm: 'canela',
-    especie: 'PERRO', sexo: 'HEMBRA', categoria_codigo: 'PEQ_MED', autoriza_datos: true, autoriza_reglamento: true,
+    especie: 'PERRO', sexo: 'HEMBRA', categoria_codigo: 'PEQUENOS', autoriza_datos: true, autoriza_reglamento: true,
     fecha_inscripcion: '2026-10-05', disfraz_nombre: 'Bruja de Oz',
     foto_inscripcion_url: 'https://drive.google.com/open?id=FICTICIO1'
   });
@@ -26,13 +26,29 @@ test('documento con formato se normaliza a dígitos con advertencia', () => {
 test('§13.10 "Perro(cupo lleno)" en "Gaticos." → texto extra + incoherencia con sugerencia por raza', () => {
   expect(fila(1).datos.especie).toBe('PERRO');
   expect(codigos(1)).toEqual(['ESPECIE_CATEGORIA_INCOHERENTE', 'ESPECIE_TEXTO_EXTRA']);
-  expect(fila(1).advertencias.find((a) => a.codigo === 'ESPECIE_CATEGORIA_INCOHERENTE').sugerencia).toBe('PEQ_MED');
+  expect(fila(1).advertencias.find((a) => a.codigo === 'ESPECIE_CATEGORIA_INCOHERENTE').sugerencia).toBe('PEQUENOS');
   expect(fila(1).datos.notas_importacion).toContain('Perro(cupo lleno)');
 });
 
-test('gato inscrito en perros pequeños → sugiere FELINOS', () => {
+test('gato inscrito en "pequeños y medianos" → sugiere FELINOS (sin la advertencia de categoría combinada)', () => {
+  expect(fila(2).datos.categoria_codigo).toBe('PEQUENOS');
   const a = fila(2).advertencias.find((x) => x.codigo === 'ESPECIE_CATEGORIA_INCOHERENTE');
   expect(a.sugerencia).toBe('FELINOS');
+  expect(codigos(2)).not.toContain('CATEGORIA_COMBINADA');
+});
+
+test('medianos del CSV v2 → MEDIANOS', () => {
+  expect(fila(5).datos.categoria_codigo).toBe('MEDIANOS');
+});
+
+test('perro con el texto antiguo "pequeños y medianos" → PEQUENOS con advertencia visible y sugerencia MEDIANOS', () => {
+  const viejo = Buffer.from('Nombre del responsable,Nombre de la mascota,especie,Cateogoría de participación\nAna,Rex,Perro,Perros pequeños y medianos.\n');
+  const [f] = analizarCsv(viejo).filas;
+  expect(f.datos.categoria_codigo).toBe('PEQUENOS');
+  expect(f.advertencias).toEqual([{
+    codigo: 'CATEGORIA_COMBINADA', mensaje: "Categoría antigua 'pequeños y medianos': revisa si es mediano", sugerencia: 'MEDIANOS'
+  }]);
+  expect(f.errores).toEqual([]);
 });
 
 test('perro grande en Gaticos → sugiere GRANDES', () => {

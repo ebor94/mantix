@@ -281,6 +281,12 @@ async function confirmarCategoria(id, { confirmar }, ctx) {
     const participante = await buscarModelo(id, { transaction, lock: true });
     if (!participante.categoria_propuesta_id) throw new TrkError(400, 'VALIDACION', 'No hay un cambio de categoría propuesto');
     const calificaciones = await db.TrkCalificacion.findAll({ where: { participante_id: participante.id }, transaction, lock: transaction.LOCK.UPDATE });
+    const nueva = participante.categoria_propuesta_id;
+    // Serializa el cálculo de MAX+1 entre participantes de la misma categoría (participantes → categoría).
+    const destino = await db.TrkCategoria.findByPk(nueva, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!destino.abierta) {
+      throw new TrkError(409, 'CATEGORIA_CERRADA', `La categoría ${destino.nombre} está cerrada; ábrela antes de confirmar el cambio`);
+    }
     if (calificaciones.length && confirmar !== true) {
       throw new TrkError(409, 'CONFIRMACION_REQUERIDA', `Confirmar borrará ${calificaciones.length} calificación(es) porque la rúbrica cambia`);
     }
@@ -289,9 +295,6 @@ async function confirmarCategoria(id, { confirmar }, ctx) {
       calificaciones: calificaciones.map((c) => ({ id: c.id, jurado_id: c.jurado_id, total: c.total }))
     };
     await db.TrkCalificacion.destroy({ where: { participante_id: participante.id }, transaction });
-    const nueva = participante.categoria_propuesta_id;
-    // Serializa el cálculo de MAX+1 entre participantes de la misma categoría.
-    await db.TrkCategoria.findByPk(nueva, { transaction, lock: transaction.LOCK.UPDATE });
     const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: nueva }, transaction });
     await participante.update({
       categoria_id: nueva, categoria_propuesta_id: null, desempate_manual: null,
