@@ -145,3 +145,70 @@ test('registro fusionado: la reimportación no le cambia ni le propone categorí
   await fusionado.reload();
   expect([fusionado.categoria_id, fusionado.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), null]);
 });
+
+// ---- Revisión: no deshacer arreglos manuales, no mover a categorías cerradas/publicadas ----
+const editar = (id, cambios) => request(servidor).patch(`/api/trk/v1/participantes/${id}`)
+  .set('Authorization', `Bearer ${admin.token}`).send(cambios);
+const confirmarCategoria = (id) => request(servidor).post(`/api/trk/v1/participantes/${id}/categoria/confirmar`)
+  .set('Authorization', `Bearer ${admin.token}`).send({ confirmar: true });
+
+test('texto combinado "pequeños y medianos" sin decisión en la vista previa: nunca mueve ni propone', async () => {
+  const rex = await crearParticipante({ mascota_nombre: 'Rex', responsable_documento: '1111111111', categoriaCodigo: 'MEDIANOS' });
+  const r = await importar(csv('Ana,1111111111,Rex,Perro,Criollo,Perros pequeños y medianos.'));
+  expect(r.body.data).toMatchObject({ actualizados: 1, recategorizados: 0, propuestas: 0 });
+  await rex.reload();
+  expect([rex.categoria_id, rex.categoria_propuesta_id]).toEqual([await idDe('MEDIANOS'), null]);
+});
+
+test('categoría cambiada a mano por el admin: la reimportación la propone en vez de moverla', async () => {
+  const rex = await crearParticipante({ mascota_nombre: 'Rex', responsable_documento: '1111111111' });
+  expect((await editar(rex.id, { categoria_id: await idDe('GRANDES') })).status).toBe(200);
+  const r = await importar(csv('Ana,1111111111,Rex,Perro,Criollo,Perros medianos.'));
+  expect(r.body.data).toMatchObject({ recategorizados: 0, propuestas: 1 });
+  await rex.reload();
+  expect([rex.categoria_id, rex.categoria_propuesta_id]).toEqual([await idDe('GRANDES'), await idDe('MEDIANOS')]);
+});
+
+test('destino cerrado o con ranking publicado: queda como propuesta', async () => {
+  const rex = await crearParticipante({ mascota_nombre: 'Rex', responsable_documento: '1111111111' });
+  const lola = await crearParticipante({ mascota_nombre: 'Lola', responsable_documento: '4444444444' });
+  await (await categoria('MEDIANOS')).update({ abierta: false });
+  await (await categoria('GRANDES')).update({ ranking_publicado: true });
+  const r = await importar(csv('Ana,1111111111,Rex,Perro,Criollo,Perros medianos.', 'Ana,4444444444,Lola,Perro,Criollo,Perros grandes.'));
+  expect(r.body.data).toMatchObject({ recategorizados: 0, propuestas: 2 });
+  await rex.reload();
+  await lola.reload();
+  expect([rex.categoria_id, rex.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), await idDe('MEDIANOS')]);
+  expect([lola.categoria_id, lola.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), await idDe('GRANDES')]);
+});
+
+test('TRK-PAR-007 no confirma hacia una categoría cerrada (409 CATEGORIA_CERRADA)', async () => {
+  const rex = await crearParticipante({ mascota_nombre: 'Rex', categoria_propuesta_id: await idDe('MEDIANOS') });
+  await (await categoria('MEDIANOS')).update({ abierta: false });
+  const r = await confirmarCategoria(rex.id);
+  expect(r.status).toBe(409);
+  expect(r.body).toMatchObject({ motivo: 'CATEGORIA_CERRADA' });
+  await rex.reload();
+  expect([rex.categoria_id, rex.categoria_propuesta_id]).toEqual([await idDe('PEQUENOS'), await idDe('MEDIANOS')]);
+});
+
+test('la hoja coincide con la categoría actual y había propuesta pendiente: se descarta (auditado)', async () => {
+  const kira = await crearParticipante({ mascota_nombre: 'Kira', responsable_documento: '2222222222', categoria_propuesta_id: await idDe('MEDIANOS') });
+  const r = await importar(csv('Ana,2222222222,Kira,Perro,Criollo,Perros pequeños.'));
+  expect(r.body.data).toMatchObject({ recategorizados: 0, propuestas: 0 });
+  await kira.reload();
+  expect(kira.categoria_propuesta_id).toBeNull();
+  const [audit] = await auditorias('DESCARTAR_PROPUESTA_CATEGORIA', kira.id);
+  expect(audit).toMatchObject({ api_codigo: 'TRK-IMP-002', antes: { categoria_propuesta_id: await idDe('MEDIANOS') }, despues: { categoria_propuesta_id: null } });
+});
+
+test('dos mascotas que pasan a la misma categoría reciben órdenes de pasarela distintos y crecientes', async () => {
+  await crearParticipante({ categoriaCodigo: 'MEDIANOS', orden_pasarela: 5 });
+  const a = await crearParticipante({ mascota_nombre: 'Rex', responsable_documento: '1111111111', orden_pasarela: 1 });
+  const b = await crearParticipante({ mascota_nombre: 'Lola', responsable_documento: '4444444444', orden_pasarela: 2 });
+  const r = await importar(csv('Ana,1111111111,Rex,Perro,Criollo,Perros medianos.', 'Ana,4444444444,Lola,Perro,Criollo,Perros medianos.'));
+  expect(r.body.data).toMatchObject({ recategorizados: 2 });
+  await a.reload();
+  await b.reload();
+  expect([a.orden_pasarela, b.orden_pasarela]).toEqual([6, 7]);
+});

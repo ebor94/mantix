@@ -4,6 +4,8 @@
 const { parse } = require('csv-parse/sync');
 const TrkError = require('../utils/TrkError');
 const db = require('../../models');
+
+const { Op } = db.Sequelize;
 const previewCache = require('./previewCache');
 const { registrarAuditoria } = require('./auditoria.service');
 const { emitir } = require('../sockets/bus');
@@ -183,14 +185,42 @@ function cambiosParaVacios(existente, datos, advertencias) {
   return cambios;
 }
 
+const API_IMPORTAR = 'TRK-IMP-002';
+
+// ¿Alguien cambió (o propuso) la categoría fuera del importador? Entonces la hoja no manda sobre ese arreglo manual.
+async function categoriaTocadaAMano(participanteId, transaction) {
+  const n = await db.TrkAuditoria.count({
+    where: {
+      entidad: 'participante',
+      entidad_id: String(participanteId),
+      accion: ['CAMBIAR_CATEGORIA', 'PROPONER_CATEGORIA'],
+      [Op.or]: [{ api_codigo: { [Op.ne]: API_IMPORTAR } }, { api_codigo: null }]
+    },
+    transaction
+  });
+  return n > 0;
+}
+
 // Categorías v2: si la fila trae otra categoría, la mascota se mueve directamente solo si nada depende de la
-// categoría actual (sin calificaciones, sin salir a pasarela, sin fusionar). Si no, el cambio queda propuesto y el
-// admin lo confirma en TRK-PAR-007 (que avisa del borrado de calificaciones). Devuelve 'MOVER', 'PROPONER' o null.
+// categoría actual (sin calificaciones, sin salir a pasarela, sin fusionar) y nadie la cambió a mano. Si no, el cambio
+// queda propuesto y el admin lo confirma en TRK-PAR-007 (que avisa del borrado de calificaciones). El destino
+// cerrado o publicado se revisa al bloquear las categorías (confirmarImportacion). Devuelve 'MOVER', 'PROPONER',
+// 'DESCARTAR' (la hoja ya coincide con la categoría actual y había propuesta pendiente) o null.
 async function decidirCategoria(existente, nuevaId, transaction) {
-  if (existente.fusionado_en_id || existente.categoria_id === nuevaId) return null;
+  if (existente.fusionado_en_id) return null;
+  if (existente.categoria_id === nuevaId) return existente.categoria_propuesta_id ? 'DESCARTAR' : null;
+  if (existente.categoria_propuesta_id === nuevaId) return null;
   const calificaciones = await db.TrkCalificacion.count({ where: { participante_id: existente.id }, transaction });
-  if (!calificaciones && !['EN_PASARELA', 'PRESENTADO'].includes(existente.estado)) return 'MOVER';
-  return existente.categoria_propuesta_id === nuevaId ? null : 'PROPONER';
+  if (calificaciones || ['EN_PASARELA', 'PRESENTADO'].includes(existente.estado)) return 'PROPONER';
+  return (await categoriaTocadaAMano(existente.id, transaction)) ? 'PROPONER' : 'MOVER';
+}
+
+async function proponerCategoria(existente, nuevaId, ctx, transaction) {
+  await existente.update({ categoria_propuesta_id: nuevaId }, { transaction });
+  await registrarAuditoria(ctx, {
+    entidad: 'participante', entidadId: existente.id, accion: 'PROPONER_CATEGORIA',
+    antes: { categoria_id: existente.categoria_id }, despues: { categoria_propuesta_id: nuevaId }
+  }, { transaction });
 }
 
 async function confirmarImportacion({ token, decisiones = {} }, ctx) {
@@ -236,17 +266,24 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
         const cambios = cambiosParaVacios(existente, datos, fila.advertencias);
         if (Object.keys(cambios).length) await existente.update(cambios, { transaction });
         resultado.actualizados += 1;
+        // "pequeños y medianos" sin decisión en la vista previa: el tamaño es incierto, no se toca la categoría.
+        const combinadaSinDecidir = !categoriaDecidida[String(fila.indice)]
+          && fila.advertencias.some((a) => a.codigo === 'CATEGORIA_COMBINADA');
         const nuevaId = idPorCodigo[codigo];
-        const decision = await decidirCategoria(existente, nuevaId, transaction);
+        const decision = combinadaSinDecidir ? null : await decidirCategoria(existente, nuevaId, transaction);
         if (decision === 'MOVER') {
           movidos.push({ participante: existente, nuevaId });
         } else if (decision === 'PROPONER') {
-          await existente.update({ categoria_propuesta_id: nuevaId }, { transaction });
-          await registrarAuditoria(ctx, {
-            entidad: 'participante', entidadId: existente.id, accion: 'PROPONER_CATEGORIA',
-            antes: { categoria_id: existente.categoria_id }, despues: { categoria_propuesta_id: nuevaId }
-          }, { transaction });
+          await proponerCategoria(existente, nuevaId, ctx, transaction);
           resultado.propuestas += 1;
+          tocados.push(existente);
+        } else if (decision === 'DESCARTAR') {
+          const pendiente = existente.categoria_propuesta_id;
+          await existente.update({ categoria_propuesta_id: null }, { transaction });
+          await registrarAuditoria(ctx, {
+            entidad: 'participante', entidadId: existente.id, accion: 'DESCARTAR_PROPUESTA_CATEGORIA',
+            antes: { categoria_propuesta_id: pendiente }, despues: { categoria_propuesta_id: null }
+          }, { transaction });
           tocados.push(existente);
         }
       } else {
@@ -262,9 +299,20 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
     }
 
     // Categorías destino en orden de id; MAX+1 como confirmarCategoria (sin orden previo, sigue sin orden).
+    // Un destino cerrado o con ranking publicado no recibe mascotas directamente: queda como propuesta.
     const destinos = [...new Set(movidos.map((m) => m.nuevaId))].sort((a, b) => a - b);
-    for (const id of destinos) await db.TrkCategoria.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+    const bloqueados = new Set();
+    for (const id of destinos) {
+      const cat = await db.TrkCategoria.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!cat.abierta || cat.ranking_publicado) bloqueados.add(id);
+    }
     for (const { participante, nuevaId } of movidos) {
+      if (bloqueados.has(nuevaId)) {
+        await proponerCategoria(participante, nuevaId, ctx, transaction);
+        resultado.propuestas += 1;
+        tocados.push(participante);
+        continue;
+      }
       const antes = { categoria_id: participante.categoria_id, orden_pasarela: participante.orden_pasarela };
       const maximo = await db.TrkParticipante.max('orden_pasarela', { where: { categoria_id: nuevaId }, transaction });
       await participante.update({
