@@ -11,7 +11,7 @@ let servidor;
 beforeAll(async () => { servidor = await servir(app); });
 afterAll(cerrarServidores);
 let admin; let j1; let j2;
-const P = { CREATIVIDAD: 10, SEGURIDAD: 10, ELABORACION: 10, PASARELA: 10 };
+const P = { CREATIVIDAD: 10, BIENESTAR: 10, PASARELA: 10 };
 beforeEach(async () => {
   await limpiar();
   admin = await crearAdmin();

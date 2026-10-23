@@ -22,7 +22,7 @@ test('TRK-EXP-001 genera Excel con hoja por categoría y detalle por jurado y cr
   const admin = await crearAdmin();
   const j = await crearOperativo('TRK_JURADO', { nombre: 'Jurado Ana' });
   const p = await crearParticipante({ mascota_nombre: 'Canela', estado: 'PRESENTADO', responsable_telefono: '3009990000' });
-  await calificar(p, j.usuario, { CREATIVIDAD: 30, SEGURIDAD: 25, ELABORACION: 15, PASARELA: 10 });
+  await calificar(p, j.usuario, { CREATIVIDAD: 40, BIENESTAR: 25, PASARELA: 15 });
 
   const r = await request(servidor).get('/api/trk/v1/export/resultados.xlsx').set('Authorization', `Bearer ${admin.token}`).buffer(true).parse(binario);
   expect(r.status).toBe(200);

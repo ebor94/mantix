@@ -26,7 +26,7 @@ afterEach(() => bus.off('trk', escuchar));
 afterAll(cerrar);
 
 const comoAdmin = (r) => r.set('Authorization', `Bearer ${admin.token}`);
-const puntos = (c, s, e, p) => ({ CREATIVIDAD: c, SEGURIDAD: s, ELABORACION: e, PASARELA: p });
+const puntos = (c, b, pa) => ({ CREATIVIDAD: c, BIENESTAR: b, PASARELA: pa });
 async function calificadoPorTodos(nombre, valores) {
   const p = await crearParticipante({ mascota_nombre: nombre, estado: 'PRESENTADO' });
   for (const j of jurados) await calificar(p, j.usuario, valores);
@@ -34,9 +34,9 @@ async function calificadoPorTodos(nombre, valores) {
 }
 
 test('TRK-RNK-001 admin ve el ranking en vivo con promedios, completitud y calificaciones por jurado', async () => {
-  const a = await calificadoPorTodos('A', puntos(30, 25, 15, 10));
+  const a = await calificadoPorTodos('A', puntos(40, 25, 15));
   const b = await crearParticipante({ mascota_nombre: 'B', estado: 'PRESENTADO' });
-  await calificar(b, jurados[0].usuario, puntos(35, 30, 20, 15));
+  await calificar(b, jurados[0].usuario, puntos(50, 30, 20));
   const r = await comoAdmin(request(servidor).get(`/api/trk/v1/ranking/${cat.id}`));
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-RNK-001');
@@ -48,7 +48,7 @@ test('TRK-RNK-001 admin ve el ranking en vivo con promedios, completitud y calif
 });
 
 test('R8: sin publicar, jurado o público reciben 404 RANKING_NO_PUBLICADO', async () => {
-  await calificadoPorTodos('A', puntos(30, 25, 15, 10));
+  await calificadoPorTodos('A', puntos(40, 25, 15));
   const publico = await request(servidor).get(`/api/trk/v1/ranking/${cat.id}`);
   expect(publico.status).toBe(404);
   expect(publico.body.motivo).toBe('RANKING_NO_PUBLICADO');
@@ -57,8 +57,8 @@ test('R8: sin publicar, jurado o público reciben 404 RANKING_NO_PUBLICADO', asy
 });
 
 test('publicar con empate sin resolver → 409; TRK-RNK-002 lo resuelve y TRK-CAT-003 publica', async () => {
-  const a = await calificadoPorTodos('A', puntos(30, 25, 15, 10));
-  const b = await calificadoPorTodos('B', puntos(30, 25, 10, 15));
+  const a = await calificadoPorTodos('A', puntos(40, 25, 15));
+  const b = await calificadoPorTodos('B', puntos(40, 25, 15));
   const bloqueado = await comoAdmin(request(servidor).post(`/api/trk/v1/categorias/${cat.id}/publicar`));
   expect(bloqueado.status).toBe(409);
   expect(bloqueado.body).toMatchObject({ error: 'TRK-CAT-003', motivo: 'EMPATE_SIN_RESOLVER' });
@@ -75,7 +75,7 @@ test('publicar con empate sin resolver → 409; TRK-RNK-002 lo resuelve y TRK-CA
 });
 
 test('lo publicado no cambia si luego se modifica una calificación (snapshot §8.1); sin calificaciones por jurado', async () => {
-  const a = await calificadoPorTodos('A', puntos(30, 25, 15, 10));
+  const a = await calificadoPorTodos('A', puntos(40, 25, 15));
   await comoAdmin(request(servidor).post(`/api/trk/v1/categorias/${cat.id}/publicar`)).expect(200);
   await db.TrkCalificacion.update({ total: 1 }, { where: { participante_id: a.id } });
   const publico = await request(servidor).get(`/api/trk/v1/ranking/${cat.id}`);
@@ -97,7 +97,7 @@ test('TRK-CAT-002 cerrar impide calificar; TRK-CAT-001 reabrir lo permite (HU-4 
 });
 
 test('TRK-CAT-004 puestos premiados configurables', async () => {
-  for (const [i, n] of ['A', 'B', 'C', 'D'].entries()) await calificadoPorTodos(n, puntos(30 - i, 20, 10, 10));
+  for (const [i, n] of ['A', 'B', 'C', 'D'].entries()) await calificadoPorTodos(n, puntos(30 - i, 20, 10));
   const r = await comoAdmin(request(servidor).patch(`/api/trk/v1/categorias/${cat.id}`)).send({ puestos_premiados: 4 });
   expect(r.status).toBe(200);
   expect(r.body.data.puestos_premiados).toBe(4);
@@ -107,15 +107,15 @@ test('TRK-CAT-004 puestos premiados configurables', async () => {
 
 test('desactivar un jurado completa a quien tenía 2 de 3 (R4 sobre jurados activos)', async () => {
   const p = await crearParticipante({ mascota_nombre: 'P', estado: 'PRESENTADO' });
-  await calificar(p, jurados[0].usuario, puntos(10, 10, 10, 10));
-  await calificar(p, jurados[1].usuario, puntos(10, 10, 10, 10));
+  await calificar(p, jurados[0].usuario, puntos(10, 10, 10));
+  await calificar(p, jurados[1].usuario, puntos(10, 10, 10));
   await jurados[2].usuario.update({ activo: false });
   const vivo = await comoAdmin(request(servidor).get(`/api/trk/v1/ranking/${cat.id}`));
   expect(vivo.body.data.filas[0]).toMatchObject({ completa: true, puesto: 1 });
 });
 
 test('estado público en modo RANKING incluye el ranking publicado (HU-9 CA2)', async () => {
-  await calificadoPorTodos('A', puntos(30, 25, 15, 10));
+  await calificadoPorTodos('A', puntos(40, 25, 15));
   await comoAdmin(request(servidor).post(`/api/trk/v1/categorias/${cat.id}/publicar`)).expect(200);
   await comoAdmin(request(servidor).put('/api/trk/v1/evento/pantalla')).send({ modo: 'RANKING', categoria_id: cat.id }).expect(200);
   const r = await request(servidor).get('/api/trk/v1/evento/estado');
@@ -128,8 +128,8 @@ test('sin permisos: jurado no publica ni cierra', async () => {
 });
 
 test('M1: TRK-RNK-002 bloquea trk_evento_estado (id=1) antes que los participantes (orden evento → participantes)', async () => {
-  const a = await calificadoPorTodos('A', puntos(30, 25, 15, 10));
-  const b = await calificadoPorTodos('B', puntos(30, 25, 10, 15));
+  const a = await calificadoPorTodos('A', puntos(40, 25, 15));
+  const b = await calificadoPorTodos('B', puntos(40, 25, 15));
   const bloqueos = [];
   const origEstado = db.TrkEventoEstado.findByPk;
   const origPart = db.TrkParticipante.findAll;
