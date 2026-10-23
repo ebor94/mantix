@@ -400,9 +400,12 @@ async function getAfiliadoById(id, usuario) {
  * Si el usuario es asesor (ver_propias), solo retorna las propias.
  * Si es aprobador o admin, retorna todas.
  */
-async function getPendientes(usuario) {
+async function getPendientes(usuario, params = {}) {
   const baseWhere = { estadoRegistro: 0, rechazado: { [Op.not]: 1 }, rechazadoParcial: 0, desistido: { [Op.not]: true } };
   const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
+  // Filtro por asesor (solo si el usuario ve todas: where.asesorId no fue fijado
+  // por el scope). Un asesor restringido no puede espiar a otros.
+  if (params.asesorId && where.asesorId === undefined) where.asesorId = Number(params.asesorId);
 
   return Afiliado.findAll({
     where,
@@ -441,6 +444,8 @@ async function getAprobados(usuario, params = {}) {
   }
 
   const where = whereConFiltroAsesorYEmpresa(baseWhere, usuario);
+  // Filtro por asesor (solo si el usuario ve todas: el scope no fijó asesorId).
+  if (params.asesorId && where.asesorId === undefined) where.asesorId = Number(params.asesorId);
 
   return Afiliado.findAll({
     where,

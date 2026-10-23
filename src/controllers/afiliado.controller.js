@@ -655,7 +655,7 @@ async function getById(req, res, next) {
 
 async function getPendientes(req, res, next) {
   try {
-    const afiliados = await afiliadoService.getPendientes(req.usuario);
+    const afiliados = await afiliadoService.getPendientes(req.usuario, { asesorId: req.query.asesorId });
     res.json({ success: true, data: afiliados });
   } catch (error) {
     next(error);
@@ -664,8 +664,8 @@ async function getPendientes(req, res, next) {
 
 async function getAprobados(req, res, next) {
   try {
-    const { desde, hasta } = req.query;
-    const afiliados = await afiliadoService.getAprobados(req.usuario, { desde, hasta });
+    const { desde, hasta, asesorId } = req.query;
+    const afiliados = await afiliadoService.getAprobados(req.usuario, { desde, hasta, asesorId });
     res.json({ success: true, data: afiliados });
   } catch (error) {
     next(error);
