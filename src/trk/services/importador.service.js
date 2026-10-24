@@ -137,9 +137,44 @@ function marcarDuplicados(filas) {
   return n;
 }
 
+// Bytes del archivo → texto. Quita BOM UTF-8; si los bytes no son UTF-8 válido (Excel "CSV" en Windows),
+// se decodifica como windows-1252 (superconjunto práctico de Latin-1: ñ, tildes).
+function decodificarCsv(buffer) {
+  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer ?? '');
+  let texto;
+  try {
+    texto = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    texto = new TextDecoder('windows-1252').decode(bytes);
+  }
+  return texto.replace(/^\ufeff/, '');
+}
+
+const DELIMITADORES = [',', ';', '\t'];
+
+// Excel en español exporta con ";". Se elige el delimitador cuyo encabezado reconoce más columnas
+// conocidas; a igualdad, el que produce más columnas; a igualdad, la coma.
+function detectarDelimitador(texto) {
+  let mejor = { delimitador: ',', conocidas: -1, columnas: -1 };
+  for (const delimitador of DELIMITADORES) {
+    let encabezado;
+    try {
+      [encabezado] = parse(texto, { delimiter: delimitador, to_line: 1, relax_column_count: true, relax_quotes: true, trim: true });
+    } catch {
+      continue;
+    }
+    if (!encabezado) continue;
+    const conocidas = encabezado.filter((h) => { const c = campoDeEncabezado(h); return c && c !== 'notas'; }).length;
+    if (conocidas > mejor.conocidas || (conocidas === mejor.conocidas && encabezado.length > mejor.columnas)) {
+      mejor = { delimitador, conocidas, columnas: encabezado.length };
+    }
+  }
+  return mejor.delimitador;
+}
+
 function analizarCsv(buffer) {
-  const texto = buffer.toString('utf8').replace(/^﻿/, '');
-  const registros = parse(texto, { columns: false, skip_empty_lines: true, relax_column_count: true, trim: true });
+  const texto = decodificarCsv(buffer);
+  const registros = parse(texto, { delimiter: detectarDelimitador(texto), columns: false, skip_empty_lines: true, relax_column_count: true, trim: true });
   if (!registros.length) throw new TrkError(400, 'VALIDACION', 'El archivo está vacío');
 
   const campos = registros[0].map(campoDeEncabezado);
@@ -359,4 +394,4 @@ async function confirmarImportacion({ token, decisiones = {} }, ctx) {
   return resultado;
 }
 
-module.exports = { analizarCsv, confirmarImportacion };
+module.exports = { analizarCsv, confirmarImportacion, decodificarCsv, detectarDelimitador };

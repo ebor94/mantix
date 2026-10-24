@@ -55,6 +55,37 @@ test('categorías de la hoja (§7.1, v2)', () => {
   expect(mapearCategoria('Otra cosa')).toBeNull();
 });
 
+test('categorías de la hoja v3 (textos exactos del formulario final)', () => {
+  expect(mapearCategoria('Caninos raza mediana')).toBe('MEDIANOS');
+  expect(mapearCategoria('Caninos raza pequeña')).toBe('PEQUENOS');
+  expect(mapearCategoria('Felinos')).toBe('FELINOS');
+  expect(mapearCategoria('Caninos raza grande')).toBe('GRANDES');
+  expect(mapearCategoria('Disfraz familiar')).toBe('FAMILIAR');
+  for (const t of ['Caninos raza mediana', 'Caninos raza pequeña', 'Felinos', 'Caninos raza grande', 'Disfraz familiar']) {
+    expect(esCategoriaCombinada(t)).toBe(false);
+  }
+});
+
+test('categorías: indiferente a tildes, mayúsculas, género y número', () => {
+  for (const t of ['CANINOS RAZA MEDIANA', 'caninos raza mediana.', 'Mediana', 'medianas', 'Medianos', 'mediano']) {
+    expect(mapearCategoria(t)).toBe('MEDIANOS');
+  }
+  for (const t of ['CANINOS RAZA PEQUEÑA', 'Caninos raza pequena', 'pequeña', 'Pequeñas', 'pequeño', 'Pequeños']) {
+    expect(mapearCategoria(t)).toBe('PEQUENOS');
+  }
+  for (const t of ['CANINOS RAZA GRANDE', 'grande', 'Grandes', 'perros grandes', 'Perro grande']) {
+    expect(mapearCategoria(t)).toBe('GRANDES');
+  }
+  for (const t of ['felino', 'FELINOS', 'Felina', 'gato', 'Gatos', 'gatico', 'Gaticos.']) {
+    expect(mapearCategoria(t)).toBe('FELINOS');
+  }
+  for (const t of ['disfraz familiar', 'DISFRAZ FAMILIAR', 'Familiar']) {
+    expect(mapearCategoria(t)).toBe('FAMILIAR');
+  }
+  expect(mapearCategoria('')).toBeNull();
+  expect(mapearCategoria(undefined)).toBeNull();
+});
+
 test('texto antiguo combinado "pequeños y medianos" → PEQUENOS y se marca como combinado', () => {
   expect(mapearCategoria('Perros pequeños y medianos.')).toBe('PEQUENOS');
   expect(esCategoriaCombinada('Perros pequeños y medianos.')).toBe(true);
@@ -62,6 +93,8 @@ test('texto antiguo combinado "pequeños y medianos" → PEQUENOS y se marca com
   expect(esCategoriaCombinada('Perros pequeños.')).toBe(false);
   expect(esCategoriaCombinada('Perros medianos.')).toBe(false);
   expect(esCategoriaCombinada(undefined)).toBe(false);
+  expect(mapearCategoria('Caninos pequeñas y medianas')).toBe('PEQUENOS');
+  expect(esCategoriaCombinada('Caninos pequeñas y medianas')).toBe(true);
 });
 
 test('teléfono válido = 10 dígitos (§7.2 "302268158")', () => {
