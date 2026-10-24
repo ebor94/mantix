@@ -42,8 +42,10 @@ test('TRK-CAL-004 por defecto muestra la categoría de quien está en pasarela: 
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-CAL-004');
   const cat = await categoria('PEQUENOS');
-  expect(r.body.data.categoria).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: cat.nombre, abierta: true });
-  expect(r.body.data.categorias.map((c) => c.codigo)).toEqual(['PEQUENOS', 'MEDIANOS', 'GRANDES', 'FELINOS', 'FAMILIAR']);
+  expect(r.body.data.categoria).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FF9900', abierta: true });
+  expect(r.body.data.categorias.map((c) => c.codigo)).toEqual(['MEDIANOS', 'PEQUENOS', 'FELINOS', 'GRANDES', 'FAMILIAR']);
+  expect(r.body.data.categorias.map((c) => c.color)).toEqual(['#92D050', '#FF9900', '#00B0F0', '#FFFF00', '#FF0000']);
+  for (const f of r.body.data.filas) expect(f.participante.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FF9900' });
   expect(r.body.data.filas.map((f) => f.participante.mascota_nombre)).toEqual(['Toby', 'Kira']);
   for (const f of r.body.data.filas) for (const campo of DATOS_RESPONSABLE) expect(f.participante).not.toHaveProperty(campo);
 });

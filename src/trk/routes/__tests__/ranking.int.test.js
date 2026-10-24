@@ -45,6 +45,8 @@ test('TRK-RNK-001 admin ve el ranking en vivo con promedios, completitud y calif
   expect(filaA.calificaciones.map((c) => c.jurado_nombre).sort()).toEqual(['J1', 'J2', 'J3']);
   expect(filaA.participante).toMatchObject({ id: a.id, mascota_nombre: 'A' });
   expect(filaA.participante).not.toHaveProperty('responsable_telefono');
+  expect(r.body.data.categoria).toMatchObject({ codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FF9900' });
+  expect(filaA.participante.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FF9900' });
 });
 
 test('R8: sin publicar, jurado o público reciben 404 RANKING_NO_PUBLICADO', async () => {
@@ -120,6 +122,22 @@ test('estado público en modo RANKING incluye el ranking publicado (HU-9 CA2)', 
   await comoAdmin(request(servidor).put('/api/trk/v1/evento/pantalla')).send({ modo: 'RANKING', categoria_id: cat.id }).expect(200);
   const r = await request(servidor).get('/api/trk/v1/evento/estado');
   expect(r.body.data.ranking.filas[0]).toMatchObject({ mascota_nombre: 'A', puesto: 1 });
+  expect(r.body.data.categoria_pantalla).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FF9900' });
+  expect(r.body.data.ranking.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FF9900' });
+  expect(r.body.data.ranking.filas[0].participante.categoria).toMatchObject({ color: '#FF9900' });
+});
+
+test('snapshot publicado antes de 009 (sin color) se completa con el color vigente de la categoría', async () => {
+  await calificadoPorTodos('A', puntos(40, 25, 15));
+  await comoAdmin(request(servidor).post(`/api/trk/v1/categorias/${cat.id}/publicar`)).expect(200);
+  const snap = await db.TrkRankingSnapshot.findOne({ where: { categoria_id: cat.id } });
+  const { color: _c, ...categoriaVieja } = snap.datos.categoria;
+  const filas = snap.datos.filas.map((f) => { const { color: _x, ...catP } = f.participante.categoria; return { ...f, participante: { ...f.participante, categoria: catP } }; });
+  await snap.update({ datos: { ...snap.datos, categoria: categoriaVieja, filas } });
+  const r = await request(servidor).get(`/api/trk/v1/ranking/${cat.id}`);
+  expect(r.status).toBe(200);
+  expect(r.body.data.categoria.color).toBe('#FF9900');
+  expect(r.body.data.filas[0].participante.categoria.color).toBe('#FF9900');
 });
 
 test('sin permisos: jurado no publica ni cierra', async () => {

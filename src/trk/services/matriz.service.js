@@ -9,7 +9,7 @@ const { borradorVigente } = require('../utils/borrador');
 const { buscarModelo, INCLUIR_CATEGORIA } = require('./participantes.service');
 const { CALIFICABLES, criteriosDeRubrica, conDetalles } = require('./calificaciones.service');
 
-const vistaCategoria = (c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, abierta: Boolean(c.abierta) });
+const vistaCategoria = (c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, color: c.color ?? null, abierta: Boolean(c.abierta) });
 const vistaCriterio = (c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, descripcion: c.descripcion, puntaje_max: c.puntaje_max, orden: c.orden });
 const ORDEN_FILAS = [
   [db.sequelize.literal('`TrkParticipante`.`orden_pasarela` IS NULL'), 'ASC'],

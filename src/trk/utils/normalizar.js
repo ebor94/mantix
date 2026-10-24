@@ -34,8 +34,11 @@ function normalizarSexo(valor) {
 }
 
 const textoCategoria = (valor) => normalizarTexto(valor).replace(/\.+$/, '').trim();
-const RE_PEQUENO = /\bpequenos?\b/;
-const RE_MEDIANO = /\bmedianos?\b/;
+// Género y número indiferentes: pequeño/pequeña/pequeños/pequeñas (ya sin tildes ni eñe).
+const RE_PEQUENO = /\bpequen[oa]s?\b/;
+const RE_MEDIANO = /\bmedian[oa]s?\b/;
+const RE_GRANDE = /\bgrandes?\b/;
+const RE_FELINO = /^(felin[oa]s?|gat[oa]s?|gatic[oa]s?|gatit[oa]s?)\b/;
 
 // Texto de la hoja v1 ("Perros pequeños y medianos"): se importa como PEQUENOS con advertencia (§7.1).
 function esCategoriaCombinada(valor) {
@@ -44,14 +47,16 @@ function esCategoriaCombinada(valor) {
 }
 
 // Texto de la hoja → código de categoría (dato en trk_categorias). Las categorías son datos; esto solo
-// traduce los textos del formulario de inscripción.
+// traduce los textos del formulario de inscripción, actuales ("Caninos raza mediana") y anteriores
+// ("Perros pequeños y medianos", "Caninos grandes", "Gatico"...).
 function mapearCategoria(valor) {
   const n = textoCategoria(valor);
+  if (!n) return null;
   if (n.startsWith('disfraz familiar') || n.startsWith('familiar')) return 'FAMILIAR';
   if (RE_PEQUENO.test(n)) return 'PEQUENOS';
   if (RE_MEDIANO.test(n)) return 'MEDIANOS';
-  if (n.startsWith('perros grandes') || n.startsWith('caninos grandes') || n === 'grandes') return 'GRANDES';
-  if (n.startsWith('gatico') || n.startsWith('gato') || n.startsWith('felino')) return 'FELINOS';
+  if (RE_GRANDE.test(n)) return 'GRANDES';
+  if (RE_FELINO.test(n)) return 'FELINOS';
   return null;
 }
 

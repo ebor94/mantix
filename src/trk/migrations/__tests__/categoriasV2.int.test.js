@@ -1,4 +1,4 @@
-// 008 Categorías v2: PEQ_MED se renombra a PEQUENOS (conserva id, participantes y calificaciones),
+// 008 Categorías v2 (009 cambia luego nombres/orden; aquí se prueba 008 aislada): PEQ_MED se renombra a PEQUENOS (conserva id, participantes y calificaciones),
 // nace MEDIANOS y se reordenan las 5 categorías.
 const fs = require('fs');
 const path = require('path');
@@ -32,9 +32,14 @@ async function categorias() {
 }
 
 beforeEach(limpiar);
-afterAll(cerrar);
+// 009 (v3) renombra y reordena después de 008: se deja la BD en v3 para los demás archivos de prueba.
+afterAll(async () => {
+  await ejecutarArchivo('009_categorias_v3.sql');
+  await cerrar();
+});
 
-test('quedan exactamente las 5 categorías v2, en orden y con su rúbrica', async () => {
+test('quedan exactamente las 5 categorías v2, en orden y con su rúbrica (008 sobre la BD actual)', async () => {
+  await ejecutarArchivo('008_categorias_v2.sql');
   expect(await categorias()).toEqual(ESPERADO);
   const [{ n }] = await q("SELECT COUNT(*) AS n FROM trk_categorias WHERE codigo = 'PEQ_MED'");
   expect(Number(n)).toBe(0);

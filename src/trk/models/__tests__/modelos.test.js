@@ -36,7 +36,10 @@ test('todo atributo existe como columna en la migración de su tabla', () => {
     const inicio = sqlMigraciones.indexOf(`CREATE TABLE ${tabla} (`);
     const bloque = sqlMigraciones.slice(inicio, sqlMigraciones.indexOf(') ENGINE', inicio));
     for (const attr of Object.values(m.rawAttributes)) {
-      expect({ tabla, columna: attr.field, presente: new RegExp(`\\n\\s+${attr.field} `).test(bloque) })
+      // En el CREATE TABLE o añadida después con ALTER TABLE ... ADD COLUMN (p. ej. 009: trk_categorias.color).
+      const presente = new RegExp(`\\n\\s+${attr.field} `).test(bloque)
+        || new RegExp(`ALTER TABLE ${tabla} ADD COLUMN ${attr.field} `).test(sqlMigraciones);
+      expect({ tabla, columna: attr.field, presente })
         .toEqual({ tabla, columna: attr.field, presente: true });
     }
   }

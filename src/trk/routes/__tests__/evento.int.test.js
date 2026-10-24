@@ -31,7 +31,7 @@ test('TRK-EVT-002 modo RANKING exige ranking publicado', async () => {
   await cat.update({ ranking_publicado: true });
   const ok = await pantalla({ modo: 'RANKING', categoria_id: cat.id });
   expect(ok.status).toBe(200);
-  expect(ok.body.data).toMatchObject({ modo_pantalla: 'RANKING', categoria_pantalla: { codigo: 'FELINOS' } });
+  expect(ok.body.data).toMatchObject({ modo_pantalla: 'RANKING', categoria_pantalla: { id: cat.id, codigo: 'FELINOS', nombre: 'Felinos', color: '#00B0F0' } });
   expect(eventos.some((e) => e.evento === 'pantalla:modo' && e.payload.modo_pantalla === 'RANKING')).toBe(true);
 });
 
@@ -51,7 +51,7 @@ test('TRK-EVT-003 tablero: contadores por estado y progreso por jurado', async (
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-EVT-003');
   const peq = r.body.data.categorias.find((c) => c.codigo === 'PEQUENOS');
-  expect(peq).toMatchObject({ total: 2, por_estado: { PRESENTADO: 1, EN_PASARELA: 1, INSCRITO: 0 } });
+  expect(peq).toMatchObject({ color: '#FF9900', total: 2, por_estado: { PRESENTADO: 1, EN_PASARELA: 1, INSCRITO: 0 } });
   expect(r.body.data.calificables).toBe(2);
   expect(r.body.data.jurados.map((j) => [j.nombre, j.calificadas, j.pendientes])).toEqual([['J1', 1, 1], ['J2', 0, 2]]);
 });

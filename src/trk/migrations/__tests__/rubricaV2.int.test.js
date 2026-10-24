@@ -31,7 +31,11 @@ async function criteriosPorRubrica() {
 }
 
 beforeEach(limpiar);
-afterAll(cerrar);
+// Reaplica 008 (orden/nombres v2): se restaura v3 (009) para los demás archivos de prueba.
+afterAll(async () => {
+  await ejecutarArchivo('009_categorias_v3.sql');
+  await cerrar();
+});
 
 test('ambas rúbricas tienen exactamente Creatividad 50, Bienestar 30 y Pasarela 20 (suma 100, desempate 1, 2, NULL)', async () => {
   const por = await criteriosPorRubrica();
@@ -64,8 +68,9 @@ test('aplicada sobre una BD con la rúbrica de 003 y datos, borra calificaciones
   await q("UPDATE trk_evento_estado SET modo_pantalla = 'RANKING', categoria_pantalla_id = ? WHERE id = 1", [cat.id]);
 
   await ejecutarArchivo('007_rubrica_v2.sql');
-  // 003 reaplicado reintroduce PEQ_MED y el orden v1 de categorías; 008 lo deja como está en producción.
+  // 003 reaplicado reintroduce PEQ_MED y el orden v1 de categorías; 008 + 009 lo dejan como en producción.
   await ejecutarArchivo('008_categorias_v2.sql');
+  await ejecutarArchivo('009_categorias_v3.sql');
 
   for (const tabla of ['trk_borradores', 'trk_calificacion_detalle', 'trk_calificaciones', 'trk_ranking_snapshots']) {
     const [{ n }] = await q(`SELECT COUNT(*) AS n FROM ${tabla}`);
