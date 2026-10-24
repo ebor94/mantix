@@ -45,8 +45,8 @@ test('TRK-RNK-001 admin ve el ranking en vivo con promedios, completitud y calif
   expect(filaA.calificaciones.map((c) => c.jurado_nombre).sort()).toEqual(['J1', 'J2', 'J3']);
   expect(filaA.participante).toMatchObject({ id: a.id, mascota_nombre: 'A' });
   expect(filaA.participante).not.toHaveProperty('responsable_telefono');
-  expect(r.body.data.categoria).toMatchObject({ codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FF9900' });
-  expect(filaA.participante.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FF9900' });
+  expect(r.body.data.categoria).toMatchObject({ codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FD7218' });
+  expect(filaA.participante.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FD7218' });
 });
 
 test('R8: sin publicar, jurado o público reciben 404 RANKING_NO_PUBLICADO', async () => {
@@ -122,9 +122,9 @@ test('estado público en modo RANKING incluye el ranking publicado (HU-9 CA2)', 
   await comoAdmin(request(servidor).put('/api/trk/v1/evento/pantalla')).send({ modo: 'RANKING', categoria_id: cat.id }).expect(200);
   const r = await request(servidor).get('/api/trk/v1/evento/estado');
   expect(r.body.data.ranking.filas[0]).toMatchObject({ mascota_nombre: 'A', puesto: 1 });
-  expect(r.body.data.categoria_pantalla).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FF9900' });
-  expect(r.body.data.ranking.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FF9900' });
-  expect(r.body.data.ranking.filas[0].participante.categoria).toMatchObject({ color: '#FF9900' });
+  expect(r.body.data.categoria_pantalla).toEqual({ id: cat.id, codigo: 'PEQUENOS', nombre: 'Caninos raza pequeña', color: '#FD7218' });
+  expect(r.body.data.ranking.categoria).toMatchObject({ codigo: 'PEQUENOS', color: '#FD7218' });
+  expect(r.body.data.ranking.filas[0].participante.categoria).toMatchObject({ color: '#FD7218' });
 });
 
 test('snapshot publicado antes de 009 (sin color) se completa con el color vigente de la categoría', async () => {
@@ -136,8 +136,8 @@ test('snapshot publicado antes de 009 (sin color) se completa con el color vigen
   await snap.update({ datos: { ...snap.datos, categoria: categoriaVieja, filas } });
   const r = await request(servidor).get(`/api/trk/v1/ranking/${cat.id}`);
   expect(r.status).toBe(200);
-  expect(r.body.data.categoria.color).toBe('#FF9900');
-  expect(r.body.data.filas[0].participante.categoria.color).toBe('#FF9900');
+  expect(r.body.data.categoria.color).toBe('#FD7218');
+  expect(r.body.data.filas[0].participante.categoria.color).toBe('#FD7218');
 });
 
 test('sin permisos: jurado no publica ni cierra', async () => {

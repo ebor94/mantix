@@ -34,6 +34,7 @@ beforeEach(limpiar);
 // Reaplica 008 (orden/nombres v2): se restaura v3 (009) para los demás archivos de prueba.
 afterAll(async () => {
   await ejecutarArchivo('009_categorias_v3.sql');
+  await ejecutarArchivo('010_colores_categoria.sql');
   await cerrar();
 });
 
@@ -71,6 +72,7 @@ test('aplicada sobre una BD con la rúbrica de 003 y datos, borra calificaciones
   // 003 reaplicado reintroduce PEQ_MED y el orden v1 de categorías; 008 + 009 lo dejan como en producción.
   await ejecutarArchivo('008_categorias_v2.sql');
   await ejecutarArchivo('009_categorias_v3.sql');
+  await ejecutarArchivo('010_colores_categoria.sql');
 
   for (const tabla of ['trk_borradores', 'trk_calificacion_detalle', 'trk_calificaciones', 'trk_ranking_snapshots']) {
     const [{ n }] = await q(`SELECT COUNT(*) AS n FROM ${tabla}`);

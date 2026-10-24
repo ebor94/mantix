@@ -30,9 +30,12 @@ async function categorias() {
   return filas.map((f) => [f.codigo, f.nombre, f.color, f.rubrica, f.orden]);
 }
 
+// Estas pruebas verifican 009 tal cual: parten del estado de 009 (la 010 solo cambia colores) y al final se restaura 009+010.
+beforeAll(() => ejecutarArchivo('009_categorias_v3.sql'));
 beforeEach(limpiar);
 afterAll(async () => {
   await ejecutarArchivo('009_categorias_v3.sql');
+  await ejecutarArchivo('010_colores_categoria.sql'); // deja la BD de pruebas en el estado final
   await cerrar();
 });
 

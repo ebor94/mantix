@@ -17,11 +17,11 @@ test('TRK-CAT-005 lista categorías en orden para cualquier sesión TRK', async 
   expect(r.status).toBe(200);
   expect(r.headers['x-trk-api']).toBe('TRK-CAT-005');
   expect(r.body.data.map((c) => [c.codigo, c.nombre, c.color, c.orden, c.rubrica_codigo])).toEqual([
-    ['MEDIANOS', 'Caninos raza mediana', '#92D050', 1, 'INDIVIDUAL'],
-    ['PEQUENOS', 'Caninos raza pequeña', '#FF9900', 2, 'INDIVIDUAL'],
-    ['FELINOS', 'Felinos', '#00B0F0', 3, 'INDIVIDUAL'],
-    ['GRANDES', 'Caninos raza grande', '#FFFF00', 4, 'INDIVIDUAL'],
-    ['FAMILIAR', 'Disfraz familiar', '#FF0000', 5, 'FAMILIAR']
+    ['MEDIANOS', 'Caninos raza mediana', '#4C9F43', 1, 'INDIVIDUAL'],
+    ['PEQUENOS', 'Caninos raza pequeña', '#FD7218', 2, 'INDIVIDUAL'],
+    ['FELINOS', 'Felinos', '#186EDD', 3, 'INDIVIDUAL'],
+    ['GRANDES', 'Caninos raza grande', '#FED104', 4, 'INDIVIDUAL'],
+    ['FAMILIAR', 'Disfraz familiar', '#DA1F12', 5, 'FAMILIAR']
   ]);
   expect(r.body.data[0]).toMatchObject({ abierta: true, ranking_publicado: false, puestos_premiados: 3 });
 });

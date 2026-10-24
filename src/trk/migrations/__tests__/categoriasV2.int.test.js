@@ -35,6 +35,7 @@ beforeEach(limpiar);
 // 009 (v3) renombra y reordena después de 008: se deja la BD en v3 para los demás archivos de prueba.
 afterAll(async () => {
   await ejecutarArchivo('009_categorias_v3.sql');
+  await ejecutarArchivo('010_colores_categoria.sql');
   await cerrar();
 });
 
