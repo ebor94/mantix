@@ -104,7 +104,8 @@ test('comentarista: lista sin datos sensibles y categoría reducida', async () =
   expect(r.body.data).toHaveLength(1);
   for (const x of r.body.data) {
     for (const campo of SENSIBLES) expect(x).not.toHaveProperty(campo);
-    expect(Object.keys(x.categoria).sort()).toEqual(['codigo', 'id', 'nombre']);
+    expect(Object.keys(x.categoria).sort()).toEqual(['codigo', 'color', 'id', 'nombre']);
+    expect(x.categoria.color).toMatch(/^#[0-9A-F]{6}$/);
   }
 });
 

@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     id:                { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     codigo:            { type: DataTypes.STRING(20), allowNull: false },
     nombre:            { type: DataTypes.STRING(100), allowNull: false },
+    color:             { type: DataTypes.CHAR(7), allowNull: true },
     rubrica_id:        { type: DataTypes.INTEGER, allowNull: false },
     abierta:           { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     ranking_publicado: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

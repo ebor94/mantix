@@ -9,7 +9,7 @@ const { ROL_JURADO, ESTADOS } = require('../config/constantes');
 const { serializarParticipante } = require('../utils/serializar');
 const { INCLUIR_CATEGORIA } = require('./participantes.service');
 
-const vistaCategoriaCorta = (c) => (c ? { id: c.id, codigo: c.codigo, nombre: c.nombre } : null);
+const vistaCategoriaCorta = (c) => (c ? { id: c.id, codigo: c.codigo, nombre: c.nombre, color: c.color ?? null } : null);
 
 // Lo que ve la pantalla pública (sin login) y lo que usan todos como respaldo de polling.
 async function estadoPublico() {
@@ -66,7 +66,7 @@ async function tablero() {
     const por_estado = vacios();
     for (const f of conteos.filter((x) => x.categoria_id === c.id)) por_estado[f.estado] = Number(f.n);
     return {
-      id: c.id, codigo: c.codigo, nombre: c.nombre, abierta: Boolean(c.abierta), ranking_publicado: Boolean(c.ranking_publicado),
+      id: c.id, codigo: c.codigo, nombre: c.nombre, color: c.color ?? null, abierta: Boolean(c.abierta), ranking_publicado: Boolean(c.ranking_publicado),
       total: Object.values(por_estado).reduce((s, n) => s + n, 0), por_estado
     };
   });

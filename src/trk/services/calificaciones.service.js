@@ -165,7 +165,7 @@ async function rubricaDeCategoria(categoriaId) {
   if (!categoria) throw new TrkError(404, 'NO_ENCONTRADO', 'Categoría no encontrada');
   const criterios = await criteriosDeRubrica(categoria.rubrica_id);
   return {
-    categoria: { id: categoria.id, codigo: categoria.codigo, nombre: categoria.nombre, abierta: Boolean(categoria.abierta) },
+    categoria: { id: categoria.id, codigo: categoria.codigo, nombre: categoria.nombre, color: categoria.color ?? null, abierta: Boolean(categoria.abierta) },
     rubrica: { codigo: categoria.rubrica.codigo, nombre: categoria.rubrica.nombre },
     criterios: criterios.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre, descripcion: c.descripcion, puntaje_max: c.puntaje_max, orden: c.orden })),
     puntaje_total_max: criterios.reduce((s, c) => s + c.puntaje_max, 0)

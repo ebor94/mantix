@@ -67,7 +67,21 @@ async function rankingPublicado(categoriaId) {
     ? await db.TrkRankingSnapshot.findOne({ where: { categoria_id: categoria.id }, order: [['publicado_at', 'DESC'], ['id', 'DESC']] })
     : null;
   if (!snapshot) throw new TrkError(404, 'RANKING_NO_PUBLICADO', 'El ranking de esta categoría aún no se ha publicado');
-  return { ...snapshot.datos, publicado_at: snapshot.publicado_at };
+  return { ...conColor(snapshot.datos, categoria), publicado_at: snapshot.publicado_at };
+}
+
+// Snapshots publicados antes de 009 no traen color: se completa con el color vigente de la categoría
+// (el color es presentación, no resultado; el nombre congelado se respeta).
+function conColor(datos, categoria) {
+  const color = categoria.color ?? null;
+  const completar = (c) => (c && !('color' in c) ? { ...c, color } : c);
+  return {
+    ...datos,
+    categoria: completar(datos.categoria),
+    filas: Array.isArray(datos.filas)
+      ? datos.filas.map((f) => (f.participante ? { ...f, participante: { ...f.participante, categoria: completar(f.participante.categoria) } } : f))
+      : datos.filas
+  };
 }
 
 async function fijarDesempate(categoriaId, orden, ctx) {

@@ -21,6 +21,7 @@ test('TRK-RUB-001 devuelve criterios de la rúbrica de la categoría con máximo
   const enBd = await db.TrkCriterio.findAll({ where: { rubrica_id: fam.rubrica_id }, order: [['orden', 'ASC']] });
   expect(r.body.data.criterios.map((c) => [c.codigo, c.puntaje_max])).toEqual(enBd.map((c) => [c.codigo, c.puntaje_max]));
   expect(r.body.data.criterios[0].descripcion).toEqual(expect.any(String));
+  expect(r.body.data.categoria).toMatchObject({ codigo: 'FAMILIAR', nombre: 'Disfraz familiar', color: '#FF0000' });
   expect(r.body.data.puntaje_total_max).toBe(enBd.reduce((s, c) => s + c.puntaje_max, 0));
 });
 

@@ -7,6 +7,7 @@ const vistaCategoria = (c) => ({
   id: c.id,
   codigo: c.codigo,
   nombre: c.nombre,
+  color: c.color ?? null,
   orden: c.orden,
   abierta: Boolean(c.abierta),
   ranking_publicado: Boolean(c.ranking_publicado),

@@ -24,7 +24,7 @@ function serializarParticipante(participante, nivel) {
   for (const campo of campos) if (campo in plano) salida[campo] = plano[campo];
   salida.responsable_primer_nombre = primerNombre(plano.responsable_nombre);
   salida.foto_url = urlFoto(plano.foto_oficial_path);
-  if (plano.categoria) salida.categoria = { id: plano.categoria.id, codigo: plano.categoria.codigo, nombre: plano.categoria.nombre };
+  if (plano.categoria) salida.categoria = { id: plano.categoria.id, codigo: plano.categoria.codigo, nombre: plano.categoria.nombre, color: plano.categoria.color ?? null };
   return salida;
 }
 
