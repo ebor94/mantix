@@ -33,6 +33,25 @@ async function llamarAPasarela(id, ctx) {
   return serializarParticipante(actual, nivelDatos(ctx.usuario));
 }
 
+// Fin de los desfiles: nadie queda en pasarela (la pantalla vuelve a la portada). Idempotente.
+async function terminarPasarela(ctx) {
+  const terminadas = await db.sequelize.transaction(async (transaction) => {
+    await db.TrkEventoEstado.findByPk(1, { transaction, lock: transaction.LOCK.UPDATE });
+    const enPasarela = await db.TrkParticipante.findAll({ where: { estado: 'EN_PASARELA' }, transaction, lock: transaction.LOCK.UPDATE });
+    for (const p of enPasarela) await p.update({ estado: 'PRESENTADO' }, { transaction });
+    await db.TrkEventoEstado.update({ participante_en_pasarela_id: null }, { where: { id: 1 }, transaction });
+    if (enPasarela.length) {
+      await registrarAuditoria(ctx, {
+        entidad: 'evento', entidadId: '1', accion: 'TERMINAR_PASARELA',
+        antes: { en_pasarela: enPasarela.map((x) => x.id) }, despues: { en_pasarela: null }
+      }, { transaction });
+    }
+    return enPasarela.map((x) => x.id);
+  });
+  if (terminadas.length) emitir('pasarela:cambio', { participante: null, anteriores: terminadas });
+  return { en_pasarela: null, terminado: terminadas[0] || null };
+}
+
 async function reordenarCola({ categoria_id: categoriaId, orden }, ctx) {
   await db.sequelize.transaction(async (transaction) => {
     // Mismo orden de bloqueo que llamarAPasarela (estado del evento primero) para evitar deadlocks.
@@ -50,4 +69,4 @@ async function reordenarCola({ categoria_id: categoriaId, orden }, ctx) {
   return listar({ categoria: categoriaId }, ctx.usuario);
 }
 
-module.exports = { llamarAPasarela, reordenarCola };
+module.exports = { llamarAPasarela, reordenarCola, terminarPasarela };

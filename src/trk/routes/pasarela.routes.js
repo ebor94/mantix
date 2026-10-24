@@ -13,8 +13,9 @@ const esquemaOrden = Joi.object({
 });
 
 const router = express.Router();
-// '/orden' antes de '/:id' para que Express no lo tome como id
+// '/orden' y '/terminar' antes de '/:id' para que Express no lo tome como id
 router.put('/orden', apiCodigo('TRK-PAS-002'), trkAuth, trkPermiso('pasarela'), validar(esquemaOrden), aw(ctrl.reordenar));
+router.post('/terminar', apiCodigo('TRK-PAS-003'), trkAuth, trkPermiso('pasarela'), aw(ctrl.terminar));
 router.post('/:id', apiCodigo('TRK-PAS-001'), trkAuth, trkPermiso('pasarela'), validar(esquemaId, 'params'), aw(ctrl.llamar));
 
 module.exports = { prefijo: '/pasarela', router };

@@ -107,3 +107,36 @@ test('TRK-EVT-001 estado público sin sesión, sin datos personales', async () =
   expect(r.body.data).toMatchObject({ modo_pantalla: 'PASARELA', categoria_pantalla: null, ranking: null, en_pasarela: { id: p.id, mascota_nombre: 'Canela' } });
   expect(r.body.data.en_pasarela).not.toHaveProperty('responsable_documento');
 });
+
+const terminar = (quien = comentarista) => request(servidor).post('/api/trk/v1/pasarela/terminar').set('Authorization', `Bearer ${quien.token}`);
+
+test('TRK-PAS-003 terminar pasarela: la mascota queda PRESENTADO, nadie en pasarela, se emite el cambio y se audita', async () => {
+  const a = await crearParticipante({ mascota_nombre: 'A' });
+  expect((await llamar(a.id)).status).toBe(200);
+  eventos = [];
+  const r = await terminar();
+  expect(r.status).toBe(200);
+  expect(r.headers['x-trk-api']).toBe('TRK-PAS-003');
+  expect(r.body.data).toEqual({ en_pasarela: null, terminado: a.id });
+  await a.reload();
+  expect(a.estado).toBe('PRESENTADO');
+  expect((await db.TrkEventoEstado.findByPk(1)).participante_en_pasarela_id).toBeNull();
+  const cambio = eventos.find((e) => e.evento === 'pasarela:cambio');
+  expect(cambio.payload).toEqual({ participante: null, anteriores: [a.id] });
+  const audit = await db.TrkAuditoria.findOne({ where: { accion: 'TERMINAR_PASARELA' } });
+  expect(audit.api_codigo).toBe('TRK-PAS-003');
+  const estado = await request(servidor).get('/api/trk/v1/evento/estado');
+  expect(estado.body.data.en_pasarela).toBeNull();
+});
+
+test('TRK-PAS-003 sin nadie en pasarela no hace nada (idempotente)', async () => {
+  const r = await terminar();
+  expect(r.status).toBe(200);
+  expect(r.body.data).toEqual({ en_pasarela: null, terminado: null });
+  expect(eventos.find((e) => e.evento === 'pasarela:cambio')).toBeUndefined();
+});
+
+test('TRK-PAS-003 requiere permiso de pasarela (jurado → 403)', async () => {
+  const r = await terminar(jurado);
+  expect(r.status).toBe(403);
+});

@@ -24,6 +24,7 @@ module.exports = {
   'TRK-PAR-007': { metodo: 'POST', ruta: '/participantes/:id/categoria/confirmar', descripcion: 'Confirma categoría propuesta; borra calificaciones' },
   'TRK-PAR-008': { metodo: 'PATCH', ruta: '/participantes/:id/estado', descripcion: 'Marca o desmarca AUSENTE' },
   'TRK-PAS-001': { metodo: 'POST', ruta: '/pasarela/:id', descripcion: 'Pone una mascota en pasarela' },
+  'TRK-PAS-003': { metodo: 'POST', ruta: '/pasarela/terminar', descripcion: 'Termina la pasarela: nadie queda en pasarela (pantalla a la portada)' },
   'TRK-PAS-002': { metodo: 'PUT', ruta: '/pasarela/orden', descripcion: 'Reordena la cola de una categoría' },
   'TRK-EVT-001': { metodo: 'GET', ruta: '/evento/estado', descripcion: 'Estado público: en pasarela, modo de pantalla, ranking publicado' },
   'TRK-EVT-002': { metodo: 'PUT', ruta: '/evento/pantalla', descripcion: 'Modo y categoría de la pantalla pública' },
