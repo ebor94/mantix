@@ -548,6 +548,18 @@ router.post('/:id/ejecucion', mantenimientosController.registrarEjecucion);
 
 /**
  * @swagger
+ * /api/mantenimientos/{id}/regenerar-drive:
+ *   post:
+ *     summary: Regenerar la carpeta de evidencias en Drive para un mantenimiento ejecutado.
+ *     tags: [Mantenimientos]
+ *     responses:
+ *       '200': { description: Carpeta creada y link guardado. }
+ *       '404': { description: Mantenimiento o ejecución no encontrada. }
+ */
+router.post('/:id/regenerar-drive', mantenimientosController.regenerarCarpetaDrive);
+
+/**
+ * @swagger
  * /api/mantenimientos/{id}/pdf:
  *   get:
  *     summary: Generar PDF del mantenimiento

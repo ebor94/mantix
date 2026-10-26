@@ -528,6 +528,56 @@ const mantenimientosController = {
     }
   },
 
+  // Regenerar la carpeta de evidencias en Drive para un mantenimiento ya ejecutado
+  // (útil cuando n8n falló en el momento del cierre o cuando se cerró antes de la integración)
+  async regenerarCarpetaDrive(req, res, next) {
+    try {
+      const { id } = req.params;
+      const mantenimiento = await MantenimientoProgramado.findByPk(id);
+      if (!mantenimiento) {
+        return res.status(404).json({ success: false, message: 'Mantenimiento no encontrado' });
+      }
+      const ejecucion = await MantenimientoEjecutado.findOne({
+        where: { mantenimiento_programado_id: id }
+      });
+      if (!ejecucion) {
+        return res.status(404).json({ success: false, message: 'El mantenimiento no está ejecutado' });
+      }
+
+      const payload = await armarPayloadEvidenciasIndividual({
+        mantenimientoId: id,
+        fecha_ejecucion: ejecucion.fecha_ejecucion,
+        hora_inicio: ejecucion.hora_inicio,
+        hora_fin: ejecucion.hora_fin,
+        nombre_recibe: ejecucion.nombre_recibe,
+        observaciones: ejecucion.observaciones,
+        req
+      });
+      if (!payload) {
+        return res.status(400).json({ success: false, message: 'No se pudo armar el payload' });
+      }
+      const drive = await driveEvidencias.crearCarpetaJornada(payload);
+      if (!drive) {
+        return res.status(502).json({ success: false, message: 'n8n no respondió o devolvió un error' });
+      }
+      await ejecucion.update({
+        drive_jornada_url: drive.drive_jornada_url,
+        drive_jornada_folder_id: drive.drive_jornada_folder_id
+      });
+      res.json({
+        success: true,
+        message: 'Carpeta de Drive generada',
+        data: {
+          drive_jornada_url: drive.drive_jornada_url,
+          drive_jornada_folder_id: drive.drive_jornada_folder_id
+        }
+      });
+    } catch (error) {
+      console.error('Error en regenerarCarpetaDrive:', error);
+      next(error);
+    }
+  },
+
   // Registrar ejecución múltiple (batch) - aplica los mismos datos de cierre a varios mantenimientos
   async registrarEjecucionMultiple(req, res, next) {
     const {
