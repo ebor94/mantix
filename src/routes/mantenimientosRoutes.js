@@ -588,11 +588,8 @@ router.post('/:id/regenerar-drive', mantenimientosController.regenerarCarpetaDri
  *       '400': { description: Payload inválido. }
  *       '409': { description: El mantenimiento no tiene carpeta de Drive. }
  */
-router.post(
-  '/:id/upload-evidencias',
-  express.json({ limit: '60mb' }),
-  mantenimientosController.subirEvidenciasAJornada
-);
+// El límite de 60 MB para esta ruta se configura en app.js (parser propio ANTES del global)
+router.post('/:id/upload-evidencias', mantenimientosController.subirEvidenciasAJornada);
 
 /**
  * @swagger
