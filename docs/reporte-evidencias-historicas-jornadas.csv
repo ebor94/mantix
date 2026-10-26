@@ -1,0 +1,120 @@
+fecha,proveedor,categoria,sedes,cant_mantenimientos,cant_urls,cant_equipos,nombre_sugerido
+2026-01-03,Palmeras Junior,Servicio de Lavado,PC,1,1,1,2026-01-03_PalmerasJunior_ServiciodeLavado_PC
+2026-01-03,Ingenin Limitada,Equipos de refrigeracion,SJ,2,1,2,2026-01-03_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-01-06,Palmeras Junior,Servicio de Lavado,GC,1,1,1,2026-01-06_PalmerasJunior_ServiciodeLavado_GC
+2026-01-07,Ingenin Limitada,Equipos de refrigeracion,SJ,1,1,1,2026-01-07_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-01-08,Palmeras Junior,Servicio de Lavado,SJ-PC,4,1,4,2026-01-08_PalmerasJunior_ServiciodeLavado_SJ-PC
+2026-01-10,Técnico Angel Rolon,Horno Crematorio,PC,2,1,2,2026-01-10_TecnicoAngelRolon_HornoCrematorio_PC
+2026-01-12,Técnico Angel Rolon,Equipos Electromecanicos,PC,6,1,6,2026-01-12_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-01-13,Técnico Angel Rolon,Maquinas y Herramientas,GC,1,1,0,2026-01-13_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-01-13,Palmeras Junior,Servicio de Lavado,GC,1,1,1,2026-01-13_PalmerasJunior_ServiciodeLavado_GC
+2026-01-14,Ingenin Limitada,Equipos de refrigeracion,PC,10,1,10,2026-01-14_IngeninLimitada_Equiposderefrigeracion_PC
+2026-01-14,Hidrosistemas,Servicio de Lavado,PC,1,1,1,2026-01-14_Hidrosistemas_ServiciodeLavado_PC
+2026-01-15,Ingenin Limitada,Equipos de refrigeracion,SP-CR,5,1,5,2026-01-15_IngeninLimitada_Equiposderefrigeracion_SP-CR
+2026-01-16,Ingenin Limitada,Equipos de refrigeracion,PC,2,1,2,2026-01-16_IngeninLimitada_Equiposderefrigeracion_PC
+2026-01-16,Hidrosistemas,Servicio de Lavado,PC,1,1,1,2026-01-16_Hidrosistemas_ServiciodeLavado_PC
+2026-01-17,Técnico Angel Rolon,Maquinas y Herramientas,GC,3,1,3,2026-01-17_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-01-17,Hidrosistemas,Servicio de Lavado,PC,1,1,1,2026-01-17_Hidrosistemas_ServiciodeLavado_PC
+2026-01-20,Ingenin Limitada,Equipos de refrigeracion,GC,13,1,13,2026-01-20_IngeninLimitada_Equiposderefrigeracion_GC
+2026-01-22,Palmeras Junior,Servicio de Lavado,PAM,1,1,1,2026-01-22_PalmerasJunior_ServiciodeLavado_PAM
+2026-01-24,Técnico Angel Rolon,Equipos Electromecanicos,PC,1,1,1,2026-01-24_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-01-27,Ingenin Limitada,Equipos de refrigeracion,GC,8,1,8,2026-01-27_IngeninLimitada_Equiposderefrigeracion_GC
+2026-01-27,Palmeras Junior,Servicio de Lavado,SJ,1,1,1,2026-01-27_PalmerasJunior_ServiciodeLavado_SJ
+2026-01-28,Ingenin Limitada,Equipos de refrigeracion,GC,4,1,4,2026-01-28_IngeninLimitada_Equiposderefrigeracion_GC
+2026-01-28,Ing. Jose Salazar,Laboratorio,GC,2,1,2,2026-01-28_IngJoseSalazar_Laboratorio_GC
+2026-01-29,Técnico Angel Rolon,Equipos Electromecanicos,PC,1,1,1,2026-01-29_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-01-30,Palmeras Junior,Servicio de Lavado,SJ,1,1,1,2026-01-30_PalmerasJunior_ServiciodeLavado_SJ
+2026-01-30,Ingenin Limitada,Equipos de refrigeracion,SJ,6,1,6,2026-01-30_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-01-30,BariEnergy,Paneles Solares,PC,1,1,1,2026-01-30_BariEnergy_PanelesSolares_PC
+2026-01-31,Técnico Angel Rolon,Laboratorio,GC,1,1,1,2026-01-31_TecnicoAngelRolon_Laboratorio_GC
+2026-01-31,Ingenin Limitada,Equipos de refrigeracion,SJ,1,1,1,2026-01-31_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-02,Ingenin Limitada,Equipos de refrigeracion,SJ,2,1,2,2026-02-02_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-03,Ingenin Limitada,Equipos de refrigeracion,SJ,5,1,5,2026-02-03_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-04,Ingenin Limitada,Equipos de refrigeracion,SJ,2,1,2,2026-02-04_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-04,Adrian Velasco,Puertas de Vidrio,GC,1,1,1,2026-02-04_AdrianVelasco_PuertasdeVidrio_GC
+2026-02-04,Técnico Angel Rolon,Compresores,PC,1,1,1,2026-02-04_TecnicoAngelRolon_Compresores_PC
+2026-02-05,Adrian Velasco,Puertas de Vidrio,GC,6,1,6,2026-02-05_AdrianVelasco_PuertasdeVidrio_GC
+2026-02-06,Ingenin Limitada,Equipos de refrigeracion,SJ,2,1,2,2026-02-06_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-06,Adrian Velasco,Puertas de Vidrio,GC,2,1,2,2026-02-06_AdrianVelasco_PuertasdeVidrio_GC
+2026-02-07,Ingenin Limitada,Equipos de refrigeracion,SJ,1,1,1,2026-02-07_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-02-19,Técnico Angel Rolon,Equipos Electromecanicos,PC,3,1,3,2026-02-19_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-02-20,Técnico Angel Rolon,Equipos Electromecanicos,PC,3,1,3,2026-02-20_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-02-21,Técnico Angel Rolon,Electrobombas,GC,1,1,1,2026-02-21_TecnicoAngelRolon_Electrobombas_GC
+2026-02-22,Técnico Angel Rolon,Electrobombas,SJ,1,1,1,2026-02-22_TecnicoAngelRolon_Electrobombas_SJ
+2026-02-25,Técnico Angel Rolon,Electrobombas,PC,3,1,3,2026-02-25_TecnicoAngelRolon_Electrobombas_PC
+2026-02-26,Técnico Angel Rolon,Laboratorio,GC,1,1,1,2026-02-26_TecnicoAngelRolon_Laboratorio_GC
+2026-02-26,Técnico Angel Rolon,Electrobombas,PC,1,1,1,2026-02-26_TecnicoAngelRolon_Electrobombas_PC
+2026-02-27,Técnico Angel Rolon,Electrobombas,PC,3,1,3,2026-02-27_TecnicoAngelRolon_Electrobombas_PC
+2026-03-17,Técnico Angel Rolon,Horno Crematorio,PC,1,1,1,2026-03-17_TecnicoAngelRolon_HornoCrematorio_PC
+2026-03-24,Técnico Angel Rolon,Equipos Electromecanicos,PC,3,1,3,2026-03-24_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-03-25,Técnico Angel Rolon,Maquinas y Herramientas,PC,1,1,1,2026-03-25_TecnicoAngelRolon_MaquinasyHerramientas_PC
+2026-03-25,Técnico Angel Rolon,Equipos Electromecanicos,PC,3,1,3,2026-03-25_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-03-25,SMP,Zonas Verdes,PC,1,1,1,2026-03-25_SMP_ZonasVerdes_PC
+2026-03-27,Técnico Angel Rolon,Equipos Electromecanicos,PC,3,1,3,2026-03-27_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-03-28,SMP,Zonas Verdes,GC-SJ,2,1,1,2026-03-28_SMP_ZonasVerdes_GC-SJ
+2026-04-02,Técnico Angel Rolon,Horno Crematorio,PC,1,1,1,2026-04-02_TecnicoAngelRolon_HornoCrematorio_PC
+2026-04-10,Ingenin Limitada,Equipos de refrigeracion,PC,1,1,1,2026-04-10_IngeninLimitada_Equiposderefrigeracion_PC
+2026-04-13,Ingenin Limitada,Equipos de refrigeracion,CR,3,1,3,2026-04-13_IngeninLimitada_Equiposderefrigeracion_CR
+2026-04-13,Adrian Velasco,Puertas de Vidrio,GC,14,1,14,2026-04-13_AdrianVelasco_PuertasdeVidrio_GC
+2026-04-14,Ingenin Limitada,Equipos de refrigeracion,CR-GC,8,1,8,2026-04-14_IngeninLimitada_Equiposderefrigeracion_CR-GC
+2026-04-14,Técnico Angel Rolon,Extractores,GC,1,1,1,2026-04-14_TecnicoAngelRolon_Extractores_GC
+2026-04-14,Técnico Angel Rolon,Maquinas y Herramientas,GC,3,1,3,2026-04-14_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-04-14,Adrian Velasco,Puertas de Vidrio,SJ,15,1,15,2026-04-14_AdrianVelasco_PuertasdeVidrio_SJ
+2026-04-15,Técnico Angel Rolon,Maquinas y Herramientas,GC,1,1,1,2026-04-15_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-04-15,Técnico Angel Rolon,Laboratorio,GC,1,1,1,2026-04-15_TecnicoAngelRolon_Laboratorio_GC
+2026-04-15,Adrian Velasco,Puertas de Vidrio,PC,5,1,5,2026-04-15_AdrianVelasco_PuertasdeVidrio_PC
+2026-04-15,Ingenin Limitada,Equipos de refrigeracion,GC-SJ,10,2,10,2026-04-15_IngeninLimitada_Equiposderefrigeracion_GC-SJ
+2026-04-16,Técnico Angel Rolon,Equipos Electromecanicos,PC,6,1,6,2026-04-16_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-04-16,Adrian Velasco,Puertas de Vidrio,CR,3,1,3,2026-04-16_AdrianVelasco_PuertasdeVidrio_CR
+2026-04-16,Ingenin Limitada,Equipos de refrigeracion,GC,2,1,2,2026-04-16_IngeninLimitada_Equiposderefrigeracion_GC
+2026-04-17,Adrian Velasco,Puertas de Vidrio,PAM,1,1,0,2026-04-17_AdrianVelasco_PuertasdeVidrio_PAM
+2026-04-18,Técnico Angel Rolon,Maquinas y Herramientas,PC,1,1,1,2026-04-18_TecnicoAngelRolon_MaquinasyHerramientas_PC
+2026-04-20,Técnico Angel Rolon,Maquinas y Herramientas,GC,1,1,1,2026-04-20_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-04-20,Ingenin Limitada,Equipos de refrigeracion,GC,4,1,4,2026-04-20_IngeninLimitada_Equiposderefrigeracion_GC
+2026-04-21,Técnico Angel Rolon,Maquinas y Herramientas,SJ,2,1,2,2026-04-21_TecnicoAngelRolon_MaquinasyHerramientas_SJ
+2026-04-21,Ingenin Limitada,Equipos de refrigeracion,GC-SJ,13,2,13,2026-04-21_IngeninLimitada_Equiposderefrigeracion_GC-SJ
+2026-04-22,Técnico Angel Rolon,Maquinas y Herramientas,PC,1,1,1,2026-04-22_TecnicoAngelRolon_MaquinasyHerramientas_PC
+2026-04-22,Ingenin Limitada,Equipos de refrigeracion,SJ,2,1,2,2026-04-22_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-04-23,Ingenin Limitada,Equipos de refrigeracion,SP,1,1,1,2026-04-23_IngeninLimitada_Equiposderefrigeracion_SP
+2026-04-27,Ingenin Limitada,Equipos de refrigeracion,SJ,3,1,3,2026-04-27_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-04-28,La Casa del Ozono,Filtros de Agua,GC,2,1,2,2026-04-28_LaCasadelOzono_FiltrosdeAgua_GC
+2026-04-28,Ingenin Limitada,Equipos de refrigeracion,SJ,6,1,6,2026-04-28_IngeninLimitada_Equiposderefrigeracion_SJ
+2026-04-29,La Casa del Ozono,Filtros de Agua,SJ,3,1,3,2026-04-29_LaCasadelOzono_FiltrosdeAgua_SJ
+2026-04-30,La Casa del Ozono,Filtros de Agua,PC,2,1,2,2026-04-30_LaCasadelOzono_FiltrosdeAgua_PC
+2026-05-01,Ing. Jose Salazar,Laboratorio,GC,2,1,2,2026-05-01_IngJoseSalazar_Laboratorio_GC
+2026-05-03,Técnico Angel Rolon,Electrobombas,PC,7,1,7,2026-05-03_TecnicoAngelRolon_Electrobombas_PC
+2026-05-06,Ingenin Limitada,Equipos de refrigeracion,GC,1,1,1,2026-05-06_IngeninLimitada_Equiposderefrigeracion_GC
+2026-05-20,Técnico Angel Rolon,Equipos Electromecanicos,PC,6,1,6,2026-05-20_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-05-30,Técnico Angel Rolon,Electrobombas,GC,2,1,2,2026-05-30_TecnicoAngelRolon_Electrobombas_GC
+2026-05-31,Técnico Angel Rolon,Electrobombas,SJ,3,1,3,2026-05-31_TecnicoAngelRolon_Electrobombas_SJ
+2026-06-01,Técnico Angel Rolon,Compresores,PC,1,1,1,2026-06-01_TecnicoAngelRolon_Compresores_PC
+2026-06-10,Adrian Velasco,Puertas de Vidrio,GC,14,2,14,2026-06-10_AdrianVelasco_PuertasdeVidrio_GC
+2026-06-29,Técnico Angel Rolon,Horno Crematorio,PC,10,2,10,2026-06-29_TecnicoAngelRolon_HornoCrematorio_PC
+2026-06-29,Técnico Angel Rolon,Equipos Electromecanicos,PC,6,1,6,2026-06-29_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-06-30,Técnico Angel Rolon,Maquinas y Herramientas,GC,3,1,2,2026-06-30_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-06-30,Técnico Angel Rolon,Horno Crematorio,PC,6,1,6,2026-06-30_TecnicoAngelRolon_HornoCrematorio_PC
+2026-06-30,Ingenin Limitada,Equipos de refrigeracion,GC,1,2,1,2026-06-30_IngeninLimitada_Equiposderefrigeracion_GC
+2026-07-29,Técnico Angel Rolon,Horno Crematorio,PC,2,1,2,2026-07-29_TecnicoAngelRolon_HornoCrematorio_PC
+2026-07-29,Técnico Angel Rolon,Laboratorio,GC,2,2,2,2026-07-29_TecnicoAngelRolon_Laboratorio_GC
+2026-07-29,Técnico Angel Rolon,Maquinas y Herramientas,PC,1,2,1,2026-07-29_TecnicoAngelRolon_MaquinasyHerramientas_PC
+2026-07-29,Palmeras Junior,Servicio de Lavado,SJ-GC-PC,7,2,7,2026-07-29_PalmerasJunior_ServiciodeLavado_SJ-GC-PC
+2026-07-29,SMP,Zonas Verdes,GC-SJ-PC,3,2,1,2026-07-29_SMP_ZonasVerdes_GC-SJ-PC
+2026-07-30,Técnico Angel Rolon,Equipos Electromecanicos,PC,7,2,7,2026-07-30_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-07-30,Técnico Angel Rolon,Maquinas y Herramientas,GC,1,2,1,2026-07-30_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-07-31,Ing. Jose Salazar,Laboratorio,GC,2,2,2,2026-07-31_IngJoseSalazar_Laboratorio_GC
+2026-07-31,Ingenin Limitada,Equipos de refrigeracion,SP,1,1,1,2026-07-31_IngeninLimitada_Equiposderefrigeracion_SP
+2026-08-03,Palmeras Junior,Servicio de Lavado,PC-PAM,3,1,3,2026-08-03_PalmerasJunior_ServiciodeLavado_PC-PAM
+2026-08-26,BariEnergy,Paneles Solares,PC,1,1,1,2026-08-26_BariEnergy_PanelesSolares_PC
+2026-08-27,Técnico Angel Rolon,Equipos Electromecanicos,PC,6,2,6,2026-08-27_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-08-27,Técnico Angel Rolon,Electrobombas,SJ-GC-PC,9,2,9,2026-08-27_TecnicoAngelRolon_Electrobombas_SJ-GC-PC
+2026-08-27,Técnico Angel Rolon,Laboratorio,GC,1,2,1,2026-08-27_TecnicoAngelRolon_Laboratorio_GC
+2026-08-27,Técnico Angel Rolon,Maquinas y Herramientas,PC,1,2,1,2026-08-27_TecnicoAngelRolon_MaquinasyHerramientas_PC
+2026-08-29,Palmeras Junior,Fumigación,OCA-PAM,2,1,1,2026-08-29_PalmerasJunior_Fumigacion_OCA-PAM
+2026-08-31,Ingenin Limitada,Equipos de refrigeracion,GC,1,1,1,2026-08-31_IngeninLimitada_Equiposderefrigeracion_GC
+2026-09-28,Adrian Velasco,Puertas de Vidrio,GC-PC-SJ-PAM-CR,38,2,37,2026-09-28_AdrianVelasco_PuertasdeVidrio_GC-PC-SJ-PAM-CR
+2026-09-30,Ingenin Limitada,Equipos de refrigeracion,GC-CR-PC-SJ,53,1,51,2026-09-30_IngeninLimitada_Equiposderefrigeracion_GC-CR-PC-SJ
+2026-09-30,Técnico Angel Rolon,Maquinas y Herramientas,GC,2,2,2,2026-09-30_TecnicoAngelRolon_MaquinasyHerramientas_GC
+2026-09-30,Técnico Angel Rolon,Equipos Electromecanicos,PC,9,2,9,2026-09-30_TecnicoAngelRolon_EquiposElectromecanicos_PC
+2026-09-30,Técnico Angel Rolon,Horno Crematorio,PC,2,2,2,2026-09-30_TecnicoAngelRolon_HornoCrematorio_PC
+2026-09-30,Data Clean,Fumigación,ARA-SAR-TAM,3,1,2,2026-09-30_DataClean_Fumigacion_ARA-SAR-TAM
+2026-09-30,Palmeras Junior,Fumigación,GC-SJ-CR-PC,4,1,3,2026-09-30_PalmerasJunior_Fumigacion_GC-SJ-CR-PC
