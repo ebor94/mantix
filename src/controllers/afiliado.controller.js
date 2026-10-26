@@ -1192,6 +1192,40 @@ async function liquidacionPdf(req, res, next) {
 }
 
 /**
+ * POST /api/afiliados/liquidacion-pdf-admin
+ * Descarga el PDF de liquidación SIN marcar 'liquidado' (solo lectura).
+ * Solo administradores (permiso afiliaciones.ver_todas / super_admin).
+ */
+async function liquidacionPdfAdmin(req, res, next) {
+  try {
+    const { afiliadoIds } = req.body || {};
+    const { afiliaciones, totales, valorAsistenciaEmpresarial } = await afiliadoService.calcularLiquidacion(
+      afiliadoIds, req.usuario, { soloLectura: true }
+    );
+
+    const asesor = await Usuario.findByPk(req.usuario.id, {
+      attributes: ['id', 'nombre', 'apellido', 'prefijo_recibo']
+    });
+    const prefijo = asesor?.prefijo_recibo || 'ADMIN';
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const fileName = `liquidacion-admin-${stamp}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    await pdfService.generarLiquidacionPDF(
+      afiliaciones,
+      totales,
+      asesor ? asesor.toJSON() : { nombre: '', apellido: '', prefijo_recibo: prefijo },
+      res,
+      { valorAsistenciaEmpresarial }
+    );
+  } catch (err) { next(err); }
+}
+
+/**
  * POST /api/afiliados/:id/regenerar-certificado
  * Re-emite el certificado (carné WhatsApp + correo + Drive) de una afiliación
  * aprobada, dejando el motivo en trazabilidad. Reutiliza emitirCarnetYCertificado.
@@ -1272,6 +1306,7 @@ module.exports = {
   getMisDelDia,
   legalizarAfiliaciones,
   liquidacionPdf,
+  liquidacionPdfAdmin,
   planoExcel,
   carnet,
   carnetMascota

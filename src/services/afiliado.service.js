@@ -1142,7 +1142,8 @@ async function getTrazabilidad(afiliadoId, usuario) {
  * @param {object}   usuario
  * @returns {Promise<{ afiliaciones: object[], totales: object }>}
  */
-async function calcularLiquidacion(afiliadoIds, usuario) {
+async function calcularLiquidacion(afiliadoIds, usuario, opts = {}) {
+  const soloLectura = !!opts.soloLectura; // admin: descarga sin marcar 'liquidado'
   if (!Array.isArray(afiliadoIds) || afiliadoIds.length === 0) {
     throw new AppError('Debe seleccionar al menos una afiliación', 400);
   }
@@ -1187,33 +1188,37 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
   }
 
   // ── Liquidación única: excluir las ya liquidadas y marcar las nuevas ──
-  // Una afiliación se liquida una sola vez (evita doble comisión). Igual que
-  // legalizar, las ya liquidadas se ignoran; el PDF y los totales incluyen
-  // solo las recién liquidadas.
-  const pendientes = afiliaciones.filter(a => !a.liquidado);
-  if (pendientes.length === 0) {
-    throw new AppError('Todas las afiliaciones seleccionadas ya fueron liquidadas', 400);
-  }
-  const ahora = new Date();
-  const tLiq = await sequelize.transaction();
-  try {
-    await Afiliado.update(
-      { liquidado: 1, fechaLiquidacion: ahora, liquidacionAsesorId: usuario.id },
-      { where: { id: { [Op.in]: pendientes.map(a => a.id) } }, transaction: tLiq }
-    );
-    await Trazabilidad.bulkCreate(
-      pendientes.map(a => ({
-        afiliadoId:  a.id,
-        tipo:        'LIQUIDACION',
-        descripcion: `Liquidación generada por ${usuario.nombre || 'asesor'} (id ${usuario.id})`,
-        usuarioId:   usuario.id
-      })),
-      { transaction: tLiq }
-    );
-    await tLiq.commit();
-  } catch (err) {
-    await tLiq.rollback();
-    throw err;
+  // Una afiliación se liquida una sola vez (evita doble comisión). En modo
+  // SOLO LECTURA (admin) se incluyen todas las aprobadas pedidas y NO se marca
+  // 'liquidado' ni se deja traza (es una re-descarga/consulta, no liquida).
+  const pendientes = soloLectura
+    ? afiliaciones
+    : afiliaciones.filter(a => !a.liquidado);
+  if (!soloLectura) {
+    if (pendientes.length === 0) {
+      throw new AppError('Todas las afiliaciones seleccionadas ya fueron liquidadas', 400);
+    }
+    const ahora = new Date();
+    const tLiq = await sequelize.transaction();
+    try {
+      await Afiliado.update(
+        { liquidado: 1, fechaLiquidacion: ahora, liquidacionAsesorId: usuario.id },
+        { where: { id: { [Op.in]: pendientes.map(a => a.id) } }, transaction: tLiq }
+      );
+      await Trazabilidad.bulkCreate(
+        pendientes.map(a => ({
+          afiliadoId:  a.id,
+          tipo:        'LIQUIDACION',
+          descripcion: `Liquidación generada por ${usuario.nombre || 'asesor'} (id ${usuario.id})`,
+          usuarioId:   usuario.id
+        })),
+        { transaction: tLiq }
+      );
+      await tLiq.commit();
+    } catch (err) {
+      await tLiq.rollback();
+      throw err;
+    }
   }
 
   // ── Agregados ──────────────────────────────────────────────────

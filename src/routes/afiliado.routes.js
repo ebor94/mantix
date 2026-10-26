@@ -190,6 +190,13 @@ router.post('/liquidacion-pdf',
   controller.liquidacionPdf
 );
 
+// ── POST /afiliados/liquidacion-pdf-admin — descarga SIN marcar (solo admin) ─
+router.post('/liquidacion-pdf-admin',
+  auth,
+  requirePermiso('afiliaciones', 'ver_todas'),
+  controller.liquidacionPdfAdmin
+);
+
 // ── GET /afiliados/veolia-unidades — listado público de unidades de negocio ──
 router.get('/veolia-unidades', controller.getVeoliaUnidades);
 
