@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Afiliado, Convenio, Usuario, ReciboCaja, ContratoValor } = require('../models');
+const { Afiliado, Convenio, Usuario, ReciboCaja, ContratoValor, Beneficiario } = require('../models');
 const {
   resolverScope, normalizarRango, elegirGranularidad, construirWhere,
   ensamblarKpis, ensamblarPorOrigen, ensamblarPorNovedad, ensamblarRanking,
@@ -180,6 +180,50 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, em
     { clave: 'seguros', label: 'Seguros', monto: Number(desgloseRow?.seguros || 0) }
   ];
 
+  // ── Mascotas afiliadas ────────────────────────────────────────
+  // Conteo de mascotas por especie (parentesco) y valor total (valorMascotas),
+  // dentro del mismo rango/scope/filtros (where) de las afiliaciones.
+  const especieLabel = {
+    PERRO: 'Perro', GATO: 'Gato', HAMSTER: 'Hamster', CONEJO: 'Conejo', PEZ: 'Pez'
+  };
+  const mascotaRows = await Beneficiario.findAll({
+    attributes: ['parentesco', [fn('COUNT', col('Beneficiario.id')), 'cantidad']],
+    where: { tipoBeneficiario: 'MASCOTA' },
+    include: [{ model: Afiliado, as: 'afiliado', attributes: [], where, required: true }],
+    group: ['parentesco'],
+    raw: true
+  });
+  const porEspecie = mascotaRows
+    .map(r => ({
+      especie: r.parentesco,
+      label: especieLabel[r.parentesco] || r.parentesco,
+      cantidad: Number(r.cantidad || 0)
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad);
+  const totalMascotas = porEspecie.reduce((s, e) => s + e.cantidad, 0);
+
+  // Valor total de mascotas: suma de contrato.valorMascotas (por afiliación, 0
+  // en las que no tienen) — sin JOIN a beneficiarios para no multiplicar.
+  const [mascValorRow] = await Afiliado.findAll({
+    where,
+    attributes: [[fn('COALESCE', fn('SUM', col('contrato.valorMascotas')), 0), 'valor']],
+    include: [{ model: ContratoValor, as: 'contrato', attributes: [] }],
+    raw: true
+  });
+  // Afiliaciones con al menos una mascota (conteo distinto).
+  const afiliacionesConMascota = await Afiliado.count({
+    where,
+    include: [{ model: Beneficiario, as: 'beneficiarios', attributes: [], where: { tipoBeneficiario: 'MASCOTA' }, required: true }],
+    distinct: true,
+    col: 'id'
+  });
+  const mascotas = {
+    totalMascotas,
+    afiliacionesConMascota: Number(afiliacionesConMascota || 0),
+    valorTotal: Number(mascValorRow?.valor || 0),
+    porEspecie
+  };
+
   return {
     rango: { desde: rango.desde, hasta: rango.hasta, granularidad },
     esGlobal: scope.esGlobal,
@@ -192,6 +236,7 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, em
     porCanal,
     porGrupo,
     porAsistencia,
+    mascotas,
     ranking
   };
 }
