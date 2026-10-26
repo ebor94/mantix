@@ -358,6 +358,18 @@ const equiposController = {
         }
       }
 
+      // Normalizadores: convierten '' o 'Invalid date' a null para columnas opcionales
+      const emptyToNull = (v) => (v === '' || v === 'Invalid date' || v === undefined ? null : v);
+      const emptyDateToNull = (v) => {
+        if (v === '' || v === 'Invalid date' || v == null) return null;
+        return v;
+      };
+      const emptyNumberToNull = (v) => {
+        if (v === '' || v == null) return null;
+        const n = Number(v);
+        return isNaN(n) ? null : n;
+      };
+
       // Preparar datos para actualizar
       const datosActualizacion = {};
       if (codigo !== undefined) datosActualizacion.codigo = codigo;
@@ -368,13 +380,13 @@ const equiposController = {
       if (modelo !== undefined) datosActualizacion.modelo = modelo;
       if (numero_serie !== undefined) datosActualizacion.numero_serie = numero_serie;
       if (ubicacion_especifica !== undefined) datosActualizacion.ubicacion_especifica = ubicacion_especifica;
-      if (fecha_instalacion !== undefined) datosActualizacion.fecha_instalacion = fecha_instalacion;
-      if (fecha_compra !== undefined) datosActualizacion.fecha_compra = fecha_compra;
-      if (valor_compra !== undefined) datosActualizacion.valor_compra = valor_compra;
-      if (vida_util_anos !== undefined) datosActualizacion.vida_util_anos = vida_util_anos;
-      if (responsable_id !== undefined) datosActualizacion.responsable_id = responsable_id;
+      if (fecha_instalacion !== undefined) datosActualizacion.fecha_instalacion = emptyDateToNull(fecha_instalacion);
+      if (fecha_compra !== undefined) datosActualizacion.fecha_compra = emptyDateToNull(fecha_compra);
+      if (valor_compra !== undefined) datosActualizacion.valor_compra = emptyNumberToNull(valor_compra);
+      if (vida_util_anos !== undefined) datosActualizacion.vida_util_anos = emptyNumberToNull(vida_util_anos);
+      if (responsable_id !== undefined) datosActualizacion.responsable_id = emptyToNull(responsable_id);
       if (responsable_proveedor_id !== undefined) {
-        datosActualizacion.responsable_proveedor_id = responsable_proveedor_id === '' ? null : responsable_proveedor_id;
+        datosActualizacion.responsable_proveedor_id = emptyToNull(responsable_proveedor_id);
       }
       if (estado !== undefined) datosActualizacion.estado = estado;
       if (observaciones !== undefined) datosActualizacion.observaciones = observaciones;
