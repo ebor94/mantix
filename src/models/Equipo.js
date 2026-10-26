@@ -171,6 +171,10 @@ module.exports = (sequelize, DataTypes) => {
     responsable_id: {
       type: DataTypes.INTEGER
     },
+    responsable_proveedor_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     estado: {
       type: DataTypes.ENUM('operativo', 'fuera_servicio', 'en_mantenimiento', 'dado_baja'),
       defaultValue: 'operativo'
@@ -204,6 +208,13 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'responsable_id',
       as: 'responsable'
     });
+
+    if (models.Proveedor) {
+      Equipo.belongsTo(models.Proveedor, {
+        foreignKey: 'responsable_proveedor_id',
+        as: 'responsable_proveedor'
+      });
+    }
     
     // Only associate with EquipoDocumento if it exists
     // Equipo.hasMany(models.EquipoDocumento, {

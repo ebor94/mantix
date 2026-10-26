@@ -57,6 +57,12 @@ const equiposController = {
               as: 'rol',
               attributes: ['nombre']
             }]
+          },
+          {
+            model: Proveedor,
+            as: 'responsable_proveedor',
+            attributes: ['id', 'nombre'],
+            required: false
           }
         ],
         order: [['codigo', 'ASC']]
@@ -95,6 +101,12 @@ const equiposController = {
               as: 'rol',
               attributes: ['nombre']
             }]
+          },
+          {
+            model: Proveedor,
+            as: 'responsable_proveedor',
+            attributes: ['id', 'nombre'],
+            required: false
           }
         ]
       });
@@ -139,6 +151,7 @@ const equiposController = {
         valor_compra,
         vida_util_anos,
         responsable_id,
+        responsable_proveedor_id,
         estado,
         observaciones,
         activo
@@ -206,6 +219,7 @@ const equiposController = {
         valor_compra,
         vida_util_anos,
         responsable_id,
+        responsable_proveedor_id: responsable_proveedor_id || null,
         estado: estado || 'operativo',
         observaciones,
         activo: activo !== undefined ? activo : true
@@ -261,6 +275,7 @@ const equiposController = {
         valor_compra,
         vida_util_anos,
         responsable_id,
+        responsable_proveedor_id,
         estado,
         observaciones,
         activo
@@ -271,8 +286,8 @@ const equiposController = {
       // Verificar si el equipo existe
       const equipo = await Equipo.findByPk(id);
       if (!equipo) {
-        return res.status(404).json({ 
-          error: 'Equipo no encontrado' 
+        return res.status(404).json({
+          error: 'Equipo no encontrado'
         });
       }
 
@@ -358,6 +373,9 @@ const equiposController = {
       if (valor_compra !== undefined) datosActualizacion.valor_compra = valor_compra;
       if (vida_util_anos !== undefined) datosActualizacion.vida_util_anos = vida_util_anos;
       if (responsable_id !== undefined) datosActualizacion.responsable_id = responsable_id;
+      if (responsable_proveedor_id !== undefined) {
+        datosActualizacion.responsable_proveedor_id = responsable_proveedor_id === '' ? null : responsable_proveedor_id;
+      }
       if (estado !== undefined) datosActualizacion.estado = estado;
       if (observaciones !== undefined) datosActualizacion.observaciones = observaciones;
       if (activo !== undefined) datosActualizacion.activo = activo;
@@ -485,6 +503,12 @@ const equiposController = {
               as: 'rol',
               attributes: ['nombre']
             }]
+          },
+          {
+            model: Proveedor,
+            as: 'responsable_proveedor',
+            attributes: ['id', 'nombre'],
+            required: false
           }
         ],
         order: [['codigo', 'ASC']]
