@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Explota la lista de archivos en N items y clasifica subcarpeta por extensión.\n// Los nombres de subcarpeta coinciden con los que crea el workflow mantix-evidencias.\nconst body = $input.first().json.body || $input.first().json;\nconst folderId = body.folderId;\nconst archivos = body.archivos || [];\n\nconst SUBCARPETAS = {\n  INFORME: '00_INFORME_CONSOLIDADO',\n  FOTOS: '02_Evidencias_Fotograficas',\n  CHECKLISTS: '03_Checklists_Firmados',\n  ACTAS: '04_Actas_Firmas'\n};\n\nconst clasificar = (nombre, mime) => {\n  const n = (nombre || '').toLowerCase();\n  const m = (mime || '').toLowerCase();\n  if (n.includes('acta') || n.includes('firma')) return SUBCARPETAS.ACTAS;\n  if (n.includes('checklist') || n.includes('check') || n.includes('lista')) return SUBCARPETAS.CHECKLISTS;\n  if (n.includes('informe') || n.includes('reporte')) return SUBCARPETAS.INFORME;\n  if (m.startsWith('image/') || /\\.(jpg|jpeg|png|heic|webp|gif)$/i.test(n)) return SUBCARPETAS.FOTOS;\n  if (m === 'application/pdf' || n.endsWith('.pdf')) return SUBCARPETAS.INFORME;\n  return SUBCARPETAS.FOTOS;\n};\n\nreturn archivos.map((a, i) => {\n  const sub = a.subcarpeta || clasificar(a.nombre, a.mime_type);\n  return {\n    json: {\n      index: i,\n      folderId,\n      subcarpeta: sub,\n      fileName: a.nombre,\n      mimeType: a.mime_type || 'application/octet-stream'\n    },\n    binary: {\n      data: {\n        data: a.base64,\n        mimeType: a.mime_type || 'application/octet-stream',\n        fileName: a.nombre\n      }\n    }\n  };\n});"
+        "jsCode": "// Explota la lista de archivos en N items y clasifica el destino por extensión.\n// Solo existen 3 subcarpetas reales en la jornada; 00_INFORME_CONSOLIDADO es un\n// ARCHIVO que va a la raíz (folderId de la jornada misma).\nconst body = $input.first().json.body || $input.first().json;\nconst folderId = body.folderId;\nconst archivos = body.archivos || [];\n\nconst DEST = {\n  RAIZ: '00_INFORME_CONSOLIDADO',\n  FOTOS: '02_Evidencias_Fotograficas',\n  CHECKLISTS: '03_Checklists_Firmados',\n  ACTAS: '04_Actas_Firmas'\n};\n\nconst clasificar = (nombre, mime) => {\n  const n = (nombre || '').toLowerCase();\n  const m = (mime || '').toLowerCase();\n  if (n.includes('acta') || n.includes('firma')) return DEST.ACTAS;\n  if (n.includes('checklist') || n.includes('check') || n.includes('lista')) return DEST.CHECKLISTS;\n  if (n.includes('informe') || n.includes('reporte')) return DEST.RAIZ;\n  if (m.startsWith('image/') || /\\.(jpg|jpeg|png|heic|webp|gif)$/i.test(n)) return DEST.FOTOS;\n  if (m === 'application/pdf' || n.endsWith('.pdf')) return DEST.RAIZ;\n  return DEST.FOTOS;\n};\n\nreturn archivos.map((a, i) => {\n  const destino = a.subcarpeta || clasificar(a.nombre, a.mime_type);\n  const esRaiz = destino === DEST.RAIZ;\n  return {\n    json: {\n      index: i,\n      folderId,\n      subcarpeta: destino,\n      esRaiz,\n      // Si va a raíz, usamos un nombre dummy que seguramente exista para que la\n      // búsqueda del siguiente nodo no falle. En \"Resolver destino\" ignoramos\n      // el resultado si esRaiz=true y usamos folderId directamente.\n      subcarpetaBuscar: esRaiz ? DEST.FOTOS : destino,\n      fileName: a.nombre,\n      mimeType: a.mime_type || 'application/octet-stream'\n    },\n    binary: {\n      data: {\n        data: a.base64,\n        mimeType: a.mime_type || 'application/octet-stream',\n        fileName: a.nombre\n      }\n    }\n  };\n});"
       },
       "id": "split-archivos",
       "name": "Split archivos",
@@ -29,7 +29,7 @@
       "parameters": {
         "resource": "fileFolder",
         "searchMethod": "query",
-        "queryString": "={{ \"'\" + $json.folderId + \"' in parents and name = '\" + $json.subcarpeta + \"' and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}",
+        "queryString": "={{ \"'\" + $json.folderId + \"' in parents and name = '\" + $json.subcarpetaBuscar + \"' and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}",
         "limit": 1,
         "options": {}
       },
@@ -47,7 +47,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Toma el folderId de la subcarpeta encontrada y mantiene el binary data.\nconst input = $input.first();\nconst busqueda = $('Buscar subcarpeta').first().json;\nconst subcarpetaId = busqueda.id;\nif (!subcarpetaId) {\n  throw new Error(`No se encontró subcarpeta ${input.json.subcarpeta} dentro de ${input.json.folderId}`);\n}\nreturn [{\n  json: { ...input.json, subcarpetaId },\n  binary: input.binary\n}];"
+        "jsCode": "// Si el archivo va a la RAÍZ (00_INFORME_CONSOLIDADO), subcarpetaId = folderId.\n// Si no, tomamos el id de la subcarpeta buscada.\nconst input = $input.first();\nlet subcarpetaId;\nif (input.json.esRaiz) {\n  subcarpetaId = input.json.folderId;\n} else {\n  const busqueda = $('Buscar subcarpeta').first().json;\n  subcarpetaId = busqueda.id;\n  if (!subcarpetaId) {\n    throw new Error(`No se encontró subcarpeta ${input.json.subcarpeta} dentro de ${input.json.folderId}`);\n  }\n}\nreturn [{\n  json: { ...input.json, subcarpetaId },\n  binary: input.binary\n}];"
       },
       "id": "resolver-destino",
       "name": "Resolver destino",
