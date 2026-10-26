@@ -288,7 +288,7 @@ async function resumen(req, res, next) {
 
 async function listar(req, res, next) {
   try {
-    const { estado, identificacion, q, fecha_desde, fecha_hasta, orden, dir, page = 1, limit = 20 } = req.query
+    const { estado, identificacion, q, fecha_desde, fecha_hasta, cerrado_mes, orden, dir, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const { rol, usuario } = req.user
 
@@ -337,6 +337,13 @@ async function listar(req, res, next) {
     }
     if (fecha_desde)   { conditions.push('DATE(created_at) >= ?'); params.push(fecha_desde) }
     if (fecha_hasta)   { conditions.push('DATE(created_at) <= ?'); params.push(fecha_hasta) }
+
+    // El dashboard cuenta "Cerrado/mes" con la fecha de cierre, no la de
+    // creación. Sin este filtro la tarjeta diría 30 y la lista traería 400.
+    if (cerrado_mes === '1') {
+      conditions.push(`YEAR(COALESCE(closed_at, updated_at)) = YEAR(CURDATE())
+                   AND MONTH(COALESCE(closed_at, updated_at)) = MONTH(CURDATE())`)
+    }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''
 
