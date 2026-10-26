@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepara nombres de carpeta, README y variables para el flujo.\n// Lee desde $input los datos del webhook.\n\nconst MESES = {\n  '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',\n  '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',\n  '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'\n};\n\nconst body = $input.first().json.body || $input.first().json;\n\nconst fecha = body.fecha_ejecucion; // 'YYYY-MM-DD'\nconst anio = fecha.slice(0, 4);\nconst mes = fecha.slice(5, 7);\nconst nombreMes = MESES[mes] || mes;\n\nconst slug = (s) => (s || '').toString()\n  .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') // sin tildes\n  .replace(/[^a-zA-Z0-9]+/g, '') // sin espacios ni símbolos\n  .trim();\n\nconst proveedorSlug = slug(body.proveedor);\nconst categoriaSlug = slug(body.categoria);\nconst sedes = (body.sedes || []).join('-');\n\nconst mesFolderName = `${anio}-${mes} ${nombreMes}`;\nconst jornadaFolderName = `${fecha}_${proveedorSlug}_${categoriaSlug}_${sedes}`;\n\n// Armo el README de la jornada\nconst mantenimientos = body.mantenimientos || [];\nconst filaMnt = mantenimientos.map((m, i) =>\n  ` ${String(i + 1).padStart(2, ' ')} | ${m.equipo_codigo.padEnd(10)} | ${(m.equipo_nombre || '').padEnd(40)} | ${(m.sede || '').padEnd(4)} | ${m.mnt_codigo}`\n).join('\\n');\n\nconst readme = `================================================================\nJORNADA DE MANTENIMIENTO\n================================================================\n\nDATOS GENERALES\n---------------\nFecha de ejecución : ${fecha}\nHora de inicio    : ${body.hora_inicio || '-'}\nHora de fin       : ${body.hora_fin || '-'}\nProveedor         : ${body.proveedor || '-'}\nTécnico responsable: ${body.tecnico || '-'}\nCategoría         : ${body.categoria || '-'}\nSedes atendidas   : ${(body.sedes || []).join(', ')}\n\n\nEQUIPOS CUBIERTOS (${mantenimientos.length})\n-------------------\n # | Equipo    | Nombre / Ubicación                     | Sede | Código MANTIX\n---|-----------|------------------------------------------|------|---------------\n${filaMnt}\n\n\nDOCUMENTOS ADJUNTOS EN ESTA CARPETA\n-----------------------------------\n[ ] 00_INFORME_CONSOLIDADO.pdf   (informe único entregado por el proveedor)\n[ ] 02_Evidencias_Fotograficas/  (fotos antes/después por equipo)\n[ ] 03_Checklists_Firmados/      (checklist firmado por equipo)\n[ ] 04_Actas_Firmas/             (acta de entrega y recibido)\n\n\nOBSERVACIONES\n-------------\n${body.observaciones || '-'}\n\n\n================================================================\nGenerado automáticamente por workflow n8n (Mantix - Evidencias Drive).\n================================================================\n`;\n\nreturn [{ json: {\n  anio,\n  mes,\n  nombreMes,\n  mesFolderName,\n  jornadaFolderName,\n  readme,\n  // ID de la raíz '2026' (hard-coded; cambiar si el año avanza)\n  anioFolderId: '14L1NVkA6jC9kvvPSYH2pWKKg5bb3G8lv',\n  // Metadatos para el response\n  payload: body\n}}];"
+        "jsCode": "// Calcula los nombres de carpeta, resuelve el ID del folder del mes a\n// partir de un mapa hardcoded (las 12 carpetas 2026-MM Mes ya existen),\n// y arma el contenido del README.txt.\n\nconst MESES = {\n  '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',\n  '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',\n  '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'\n};\n\n// IDs de las carpetas 2026-MM dentro de \"Evidencias Mantenimientos / 2026\".\n// Si creás los años 2027+ hay que agregar sus mapas acá.\nconst MESES_FOLDER_IDS = {\n  '2026': {\n    '01': '1oMDtMWDJRr-T9YWx4jrxRDiRpGiA36SK',\n    '02': '1FSB2_YUMuNmWkDzZ59mbEqwTT7T_yaPS',\n    '03': '1LLkh3n4XriO-FvUwCbqnuTrIVIGrFfLz',\n    '04': '1XUWEpPqFccwMv23m7N-wAEo3cVwyuo9N',\n    '05': '13iOn-hKulQprABxAm3_kesDSVLKdOoa9',\n    '06': '1jP-2zOOEltzqozn949A5JoSk6eKOdbqz',\n    '07': '1ZpD8KWwpldHQ1USJ7nfu_lUrYRvLELAB',\n    '08': '172iouxbOST_GvrU7LplmXw06o9QjLQr3',\n    '09': '1_G2Tj-9MqLGO_LXDDyALKkLxZeuRq5ZT',\n    '10': '1PeNA-4ALKlJffMA7RNUvSq230-VxLcO0',\n    '11': '1X47l_STYpMtYsj_hi93UEwHPVU8jDvL6',\n    '12': '1ID_X7mSWBxmQfnDHzw63oz61EkzVogne'\n  }\n};\n\nconst body = $input.first().json.body || $input.first().json;\n\nconst fecha = body.fecha_ejecucion; // 'YYYY-MM-DD'\nif (!fecha || !/^\\d{4}-\\d{2}-\\d{2}$/.test(fecha)) {\n  throw new Error('fecha_ejecucion inválido o faltante (esperado YYYY-MM-DD): ' + fecha);\n}\n\nconst anio = fecha.slice(0, 4);\nconst mes = fecha.slice(5, 7);\nconst nombreMes = MESES[mes] || mes;\n\nconst monthFolderId = (MESES_FOLDER_IDS[anio] || {})[mes];\nif (!monthFolderId) {\n  throw new Error('No hay carpeta de mes creada para ' + anio + '-' + mes + '. Crealas manualmente o actualizá el mapa MESES_FOLDER_IDS.');\n}\n\nconst slug = (s) => (s || '').toString()\n  .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') // sin tildes\n  .replace(/[^a-zA-Z0-9]+/g, '') // sin espacios ni símbolos\n  .trim();\n\nconst proveedorSlug = slug(body.proveedor);\nconst categoriaSlug = slug(body.categoria);\nconst sedes = (body.sedes || []).join('-');\n\nconst mesFolderName = `${anio}-${mes} ${nombreMes}`;\nconst jornadaFolderName = `${fecha}_${proveedorSlug}_${categoriaSlug}_${sedes}`;\n\n// README\nconst mantenimientos = body.mantenimientos || [];\nconst filaMnt = mantenimientos.map((m, i) =>\n  ` ${String(i + 1).padStart(2, ' ')} | ${(m.equipo_codigo || '').padEnd(10)} | ${(m.equipo_nombre || '').padEnd(40)} | ${(m.sede || '').padEnd(4)} | ${m.mnt_codigo}`\n).join('\\n');\n\nconst readme = `================================================================\nJORNADA DE MANTENIMIENTO\n================================================================\n\nDATOS GENERALES\n---------------\nFecha de ejecución : ${fecha}\nHora de inicio    : ${body.hora_inicio || '-'}\nHora de fin       : ${body.hora_fin || '-'}\nProveedor         : ${body.proveedor || '-'}\nTécnico responsable: ${body.tecnico || '-'}\nCategoría         : ${body.categoria || '-'}\nSedes atendidas   : ${(body.sedes || []).join(', ')}\n\n\nEQUIPOS CUBIERTOS (${mantenimientos.length})\n-------------------\n # | Equipo    | Nombre / Ubicación                     | Sede | Código MANTIX\n---|-----------|------------------------------------------|------|---------------\n${filaMnt}\n\n\nDOCUMENTOS ADJUNTOS EN ESTA CARPETA\n-----------------------------------\n[ ] 00_INFORME_CONSOLIDADO.pdf   (informe único entregado por el proveedor)\n[ ] 02_Evidencias_Fotograficas/  (fotos antes/después por equipo)\n[ ] 03_Checklists_Firmados/      (checklist firmado por equipo)\n[ ] 04_Actas_Firmas/             (acta de entrega y recibido)\n\n\nOBSERVACIONES\n-------------\n${body.observaciones || '-'}\n\n\n================================================================\nGenerado automáticamente por workflow n8n (Mantix - Evidencias Drive).\n================================================================\n`;\n\nreturn [{ json: {\n  anio,\n  mes,\n  nombreMes,\n  mesFolderName,\n  jornadaFolderName,\n  monthFolderId,\n  readme,\n  payload: body\n}}];"
       },
       "id": "function-prepare",
       "name": "Prepare names + README",
@@ -29,70 +29,29 @@
       "parameters": {
         "resource": "folder",
         "operation": "create",
-        "name": "={{ $json.mesFolderName }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ $json.anioFolderId }}"
-        },
-        "options": {}
-      },
-      "id": "drive-create-month",
-      "name": "Drive: Create/Get Month",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [680, 300],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "COMPLETAR_ID_CREDENCIAL",
-          "name": "coordticcucuta Drive"
-        }
-      },
-      "notes": "Si la carpeta del mes ya existe, Drive devuelve la existente en vez de duplicar (depende de configuración; de lo contrario reemplazar por un 'Search folder by name + create if missing')."
-    },
-    {
-      "parameters": {
-        "resource": "folder",
-        "operation": "create",
         "name": "={{ $json.jornadaFolderName }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ $json.id }}"
-        },
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "={{ $json.monthFolderId }}" },
         "options": {}
       },
       "id": "drive-create-jornada",
       "name": "Drive: Create Jornada",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [900, 300],
+      "position": [680, 300],
       "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "COMPLETAR_ID_CREDENCIAL",
-          "name": "coordticcucuta Drive"
-        }
+        "googleDriveOAuth2Api": { "id": "COMPLETAR_ID_CREDENCIAL", "name": "coordticcucuta Drive" }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Guardo el folderId de la jornada y propago los campos para los próximos nodos\nconst jornada = $input.first().json;\nconst prev = $('Prepare names + README').first().json;\n\nreturn [{ json: {\n  ...prev,\n  jornadaFolderId: jornada.id,\n  jornadaFolderUrl: `https://drive.google.com/drive/folders/${jornada.id}`\n}}];"
+        "jsCode": "// Captura el id/url de la carpeta de jornada recién creada,\n// y propaga el readme + jornadaFolderName para los próximos nodos.\nconst jornada = $input.first().json;\nconst prev = $('Prepare names + README').first().json;\n\nreturn [{ json: {\n  ...prev,\n  jornadaFolderId: jornada.id,\n  jornadaFolderUrl: `https://drive.google.com/drive/folders/${jornada.id}`\n}}];"
       },
       "id": "function-capture-jornada",
       "name": "Capture jornada ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [900, 300]
     },
     {
       "parameters": {
@@ -100,14 +59,14 @@
         "operation": "create",
         "name": "02_Evidencias_Fotograficas",
         "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
-        "folderId": { "__rl": true, "mode": "id", "value": "={{ $json.jornadaFolderId }}" },
+        "folderId": { "__rl": true, "mode": "id", "value": "={{ $('Capture jornada ID').first().json.jornadaFolderId }}" },
         "options": {}
       },
       "id": "drive-sub-02",
       "name": "Drive: Subfolder 02",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1340, 180],
+      "position": [1120, 300],
       "credentials": {
         "googleDriveOAuth2Api": { "id": "COMPLETAR_ID_CREDENCIAL", "name": "coordticcucuta Drive" }
       }
@@ -143,28 +102,36 @@
       "name": "Drive: Subfolder 04",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1340, 420],
+      "position": [1560, 300],
       "credentials": {
         "googleDriveOAuth2Api": { "id": "COMPLETAR_ID_CREDENCIAL", "name": "coordticcucuta Drive" }
       }
     },
     {
       "parameters": {
+        "jsCode": "// Convierte el string del README a binary (campo 'data') para que el\n// nodo 'Drive: Upload README' pueda subirlo como archivo.\nconst prev = $('Capture jornada ID').first().json;\nconst text = prev.readme || '';\nconst b64 = Buffer.from(text, 'utf-8').toString('base64');\n\nreturn [{\n  json: prev,\n  binary: {\n    data: {\n      data: b64,\n      mimeType: 'text/plain',\n      fileName: 'README.txt'\n    }\n  }\n}];"
+      },
+      "id": "function-readme-to-binary",
+      "name": "README to Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
         "resource": "file",
         "operation": "upload",
+        "inputDataFieldName": "data",
         "name": "README.txt",
         "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
         "folderId": { "__rl": true, "mode": "id", "value": "={{ $('Capture jornada ID').first().json.jornadaFolderId }}" },
-        "options": {
-          "fileContent": "={{ $('Capture jornada ID').first().json.readme }}",
-          "mimeType": "text/plain"
-        }
+        "options": {}
       },
       "id": "drive-readme",
       "name": "Drive: Upload README",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1560, 300],
+      "position": [2000, 300],
       "credentials": {
         "googleDriveOAuth2Api": { "id": "COMPLETAR_ID_CREDENCIAL", "name": "coordticcucuta Drive" }
       }
@@ -179,7 +146,7 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1780, 300]
+      "position": [2220, 300]
     }
   ],
   "connections": {
@@ -187,22 +154,24 @@
       "main": [[{ "node": "Prepare names + README", "type": "main", "index": 0 }]]
     },
     "Prepare names + README": {
-      "main": [[{ "node": "Drive: Create/Get Month", "type": "main", "index": 0 }]]
-    },
-    "Drive: Create/Get Month": {
       "main": [[{ "node": "Drive: Create Jornada", "type": "main", "index": 0 }]]
     },
     "Drive: Create Jornada": {
       "main": [[{ "node": "Capture jornada ID", "type": "main", "index": 0 }]]
     },
     "Capture jornada ID": {
-      "main": [[
-        { "node": "Drive: Subfolder 02", "type": "main", "index": 0 },
-        { "node": "Drive: Subfolder 03", "type": "main", "index": 0 },
-        { "node": "Drive: Subfolder 04", "type": "main", "index": 0 }
-      ]]
+      "main": [[{ "node": "Drive: Subfolder 02", "type": "main", "index": 0 }]]
     },
     "Drive: Subfolder 02": {
+      "main": [[{ "node": "Drive: Subfolder 03", "type": "main", "index": 0 }]]
+    },
+    "Drive: Subfolder 03": {
+      "main": [[{ "node": "Drive: Subfolder 04", "type": "main", "index": 0 }]]
+    },
+    "Drive: Subfolder 04": {
+      "main": [[{ "node": "README to Binary", "type": "main", "index": 0 }]]
+    },
+    "README to Binary": {
       "main": [[{ "node": "Drive: Upload README", "type": "main", "index": 0 }]]
     },
     "Drive: Upload README": {
