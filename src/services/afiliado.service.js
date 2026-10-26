@@ -1222,6 +1222,7 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
     asistencia:         { cantidad: 0, min: null, max: null, total: 0 },
     segurosPorNombre:   {}, // { SOLICANASTA: { cantidad, min, max, total } }
     adicionales:        { cantidad: 0, min: null, max: null, total: 0 },
+    mascotas:           { cantidad: 0, min: null, max: null, total: 0 },
     totalGeneral:       0,
     cantidadAfiliados:  pendientes.length
   };
@@ -1297,6 +1298,16 @@ async function calcularLiquidacion(afiliadoIds, usuario) {
       totales.adicionales.total    += valorAdic;
       // El min/max se mide por afiliación, no por adicional individual
       upsertMinMax(totales.adicionales, valorAdic);
+    }
+
+    // Mascotas (afiliación de mascotas) — valor por mascota (ya incluido en
+    // valorTotal; aquí se expone como concepto propio de la sumatoria).
+    const cantMascAfil = beneficiarios.filter(b => b.tipoBeneficiario === 'MASCOTA').length;
+    const valorMasc    = Number(contrato?.valorMascotas || 0);
+    if (cantMascAfil > 0) {
+      totales.mascotas.cantidad += cantMascAfil;
+      totales.mascotas.total    += valorMasc;
+      upsertMinMax(totales.mascotas, valorMasc);
     }
 
     totales.totalGeneral += valorTotalContr;

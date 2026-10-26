@@ -1541,6 +1541,13 @@ doc.fontSize(20)
         const ad = totales.adicionales;
         fila('Tarifa adicionales (por afiliación)', ad.cantidad, ad.min, ad.max, ad.total);
 
+        // Mascotas (solo si hay)
+        if (totales.mascotas && totales.mascotas.cantidad > 0) {
+          fila('MASCOTAS', null, null, null, null, { subheader: true });
+          const ms = totales.mascotas;
+          fila('Valor mascota (por afiliación)', ms.cantidad, ms.min, ms.max, ms.total);
+        }
+
         // ── TOTAL GENERAL ───────────────────────────────────────────
         y += 8;
         if (y > 720) { doc.addPage(); y = 50; }
