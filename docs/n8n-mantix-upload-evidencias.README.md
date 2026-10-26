@@ -1,6 +1,6 @@
 # Workflow n8n — Upload de evidencias a Drive
 
-Workflow secundario que recibe archivos (base64) desde Mantix y los sube a la carpeta de jornada ya existente en Drive, clasificándolos en subcarpetas (`00_INFORME`, `01_HOJAS_DE_SERVICIO`, `02_EVIDENCIAS_FOTOGRAFICAS`, `03_CERTIFICADOS`).
+Workflow secundario que recibe archivos (base64) desde Mantix y los sube a la carpeta de jornada ya existente en Drive, clasificándolos en subcarpetas que crea el workflow `mantix-evidencias`: `00_INFORME_CONSOLIDADO`, `02_Evidencias_Fotograficas`, `03_Checklists_Firmados`, `04_Actas_Firmas`.
 
 ## Pasos para activarlo
 
@@ -25,17 +25,18 @@ Workflow secundario que recibe archivos (base64) desde Mantix y los sube a la ca
 {
   "folderId": "1AbCdEf...",
   "archivos": [
-    { "nombre": "informe.pdf", "base64": "JVBERi0...", "mime_type": "application/pdf", "subcarpeta": "00_INFORME" },
+    { "nombre": "informe.pdf", "base64": "JVBERi0...", "mime_type": "application/pdf", "subcarpeta": "00_INFORME_CONSOLIDADO" },
     { "nombre": "foto1.jpg", "base64": "/9j/4AAQ...", "mime_type": "image/jpeg" }
   ]
 }
 ```
 
 Si no se pasa `subcarpeta`, el nodo `Split archivos` la deduce por el nombre/mime del archivo:
-- Contiene "informe" / "reporte" / `.pdf` → `00_INFORME`
-- Contiene "hoja" / "servicio" / "acta" → `01_HOJAS_DE_SERVICIO`
-- Imagen (`image/*` o `.jpg`/`.png`/`.heic`/...) → `02_EVIDENCIAS_FOTOGRAFICAS`
-- Contiene "certificad" o fallback → `03_CERTIFICADOS`
+- Contiene "acta" / "firma" → `04_Actas_Firmas`
+- Contiene "checklist" / "check" / "lista" → `03_Checklists_Firmados`
+- Contiene "informe" / "reporte" / `.pdf` → `00_INFORME_CONSOLIDADO`
+- Imagen (`image/*` o `.jpg`/`.png`/`.heic`/...) → `02_Evidencias_Fotograficas`
+- Fallback → `02_Evidencias_Fotograficas`
 
 ## Respuesta
 
