@@ -6,6 +6,7 @@ const { Op } = require('sequelize');
 const { paginar, formatearRespuestaPaginada, calcularPorcentaje } = require('../utils/helpers');
 const { MENSAJES, ESTADOS_MANTENIMIENTO } = require('../config/constants');
 const pdfService = require('../services/pdfService');
+const driveEvidencias = require('../services/driveEvidenciasService');
 // Destructurar modelos de forma segura
 const {
   MantenimientoProgramado,
@@ -492,6 +493,30 @@ const mantenimientosController = {
         estado_id: ESTADOS_MANTENIMIENTO.EJECUTADO
       });
 
+      // Crear carpeta de jornada en Drive via n8n (síncrono, timeout 15s)
+      try {
+        const payload = await armarPayloadEvidenciasIndividual({
+          mantenimientoId: id,
+          fecha_ejecucion,
+          hora_inicio,
+          hora_fin,
+          nombre_recibe,
+          observaciones,
+          req
+        });
+        if (payload) {
+          const drive = await driveEvidencias.crearCarpetaJornada(payload);
+          if (drive) {
+            await ejecucion.update({
+              drive_jornada_url: drive.drive_jornada_url,
+              drive_jornada_folder_id: drive.drive_jornada_folder_id
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[registrarEjecucion] Drive/n8n falló (no bloquea):', e.message);
+      }
+
       res.json({
         success: true,
         message: 'Ejecución registrada exitosamente',
@@ -575,6 +600,38 @@ const mantenimientosController = {
       }
 
       await t.commit();
+
+      // Crear carpeta de jornada en Drive via n8n (síncrono, timeout 15s)
+      try {
+        const payload = await armarPayloadEvidenciasLote({
+          mantenimientoIds: mantenimiento_ids,
+          fecha_ejecucion,
+          hora_inicio,
+          hora_fin,
+          nombre_recibe,
+          observaciones,
+          req
+        });
+        if (payload) {
+          const drive = await driveEvidencias.crearCarpetaJornada(payload);
+          if (drive) {
+            await MantenimientoEjecutado.update(
+              {
+                drive_jornada_url: drive.drive_jornada_url,
+                drive_jornada_folder_id: drive.drive_jornada_folder_id
+              },
+              { where: { id: { [Op.in]: ejecuciones.map(e => e.id) } } }
+            );
+            // Reflejar los links en los objetos devueltos
+            for (const e of ejecuciones) {
+              e.drive_jornada_url = drive.drive_jornada_url;
+              e.drive_jornada_folder_id = drive.drive_jornada_folder_id;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[registrarEjecucionMultiple] Drive/n8n falló (no bloquea):', e.message);
+      }
 
       res.json({
         success: true,
@@ -966,6 +1023,117 @@ async obtenerAtrasados(req, res, next) {
     }
   }
 };
+
+
+// =============================================================
+// Helpers payload para webhook n8n (evidencias Drive)
+// =============================================================
+
+/**
+ * Trae un mantenimiento con sus relaciones necesarias para armar
+ * el payload del webhook. Devuelve el objeto plano estructurado.
+ */
+async function fetchMantenimientoCompleto(mantenimientoId) {
+  return MantenimientoProgramado.findByPk(mantenimientoId, {
+    include: [
+      {
+        model: PlanActividad,
+        as: 'actividad',
+        include: [
+          { model: Sede, as: 'sede', attributes: ['id', 'codigo', 'nombre'] },
+          { model: Equipo, as: 'equipo', attributes: ['id', 'nombre'] },
+          { model: CategoriaMantenimiento, as: 'categoria', attributes: ['id', 'nombre'] },
+          { model: Proveedor, as: 'responsable_proveedor', attributes: ['id', 'nombre'], required: false },
+          { model: Usuario, as: 'responsable_usuario', attributes: ['id', 'nombre', 'apellido'], required: false }
+        ]
+      }
+    ]
+  });
+}
+
+function nombreTecnico(req) {
+  if (!req || !req.usuario) return '';
+  const u = req.usuario;
+  return [u.nombre, u.apellido].filter(Boolean).join(' ');
+}
+
+function resolverResponsable(actividad) {
+  if (!actividad) return '';
+  if (actividad.responsable_proveedor?.nombre) return actividad.responsable_proveedor.nombre;
+  if (actividad.responsable_usuario) {
+    const u = actividad.responsable_usuario;
+    return [u.nombre, u.apellido].filter(Boolean).join(' ');
+  }
+  return '';
+}
+
+function equipoCodigo(equipoId) {
+  if (!equipoId) return '';
+  return `EQ-${String(equipoId).padStart(5, '0')}`;
+}
+
+async function armarPayloadEvidenciasIndividual({ mantenimientoId, fecha_ejecucion, hora_inicio, hora_fin, nombre_recibe, observaciones, req }) {
+  const m = await fetchMantenimientoCompleto(mantenimientoId);
+  if (!m || !m.actividad) return null;
+  const act = m.actividad;
+  const proveedor = resolverResponsable(act) || 'SinProveedor';
+  const categoria = act.categoria?.nombre || 'SinCategoria';
+  const sedeCodigo = act.sede?.codigo || 'SIN';
+  return {
+    fecha_ejecucion,
+    hora_inicio: hora_inicio || '',
+    hora_fin: hora_fin || '',
+    proveedor,
+    tecnico: nombreTecnico(req) || nombre_recibe || '',
+    categoria,
+    sedes: [sedeCodigo],
+    mantenimientos: [
+      {
+        mnt_codigo: m.codigo || `MNT-${m.id}`,
+        equipo_codigo: equipoCodigo(act.equipo?.id),
+        equipo_nombre: act.equipo?.nombre || '',
+        sede: sedeCodigo
+      }
+    ],
+    observaciones: observaciones || ''
+  };
+}
+
+async function armarPayloadEvidenciasLote({ mantenimientoIds, fecha_ejecucion, hora_inicio, hora_fin, nombre_recibe, observaciones, req }) {
+  const mantenimientos = await Promise.all(mantenimientoIds.map(id => fetchMantenimientoCompleto(id)));
+  const validos = mantenimientos.filter(m => m && m.actividad);
+  if (validos.length === 0) return null;
+
+  // Proveedor y categoría más comunes del lote (si hay dispersion → "Varios")
+  const freq = (arr) => {
+    const map = new Map();
+    for (const v of arr) if (v) map.set(v, (map.get(v) || 0) + 1);
+    if (map.size === 0) return '';
+    if (map.size === 1) return map.keys().next().value;
+    return 'Varios';
+  };
+
+  const proveedor = freq(validos.map(m => resolverResponsable(m.actividad))) || 'SinProveedor';
+  const categoria = freq(validos.map(m => m.actividad?.categoria?.nombre)) || 'SinCategoria';
+  const sedesUnicas = Array.from(new Set(validos.map(m => m.actividad?.sede?.codigo).filter(Boolean)));
+
+  return {
+    fecha_ejecucion,
+    hora_inicio: hora_inicio || '',
+    hora_fin: hora_fin || '',
+    proveedor,
+    tecnico: nombreTecnico(req) || nombre_recibe || '',
+    categoria,
+    sedes: sedesUnicas,
+    mantenimientos: validos.map(m => ({
+      mnt_codigo: m.codigo || `MNT-${m.id}`,
+      equipo_codigo: equipoCodigo(m.actividad.equipo?.id),
+      equipo_nombre: m.actividad.equipo?.nombre || '',
+      sede: m.actividad.sede?.codigo || ''
+    })),
+    observaciones: observaciones || ''
+  };
+}
 
 
 module.exports = mantenimientosController;

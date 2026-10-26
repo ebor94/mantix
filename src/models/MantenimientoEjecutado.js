@@ -68,6 +68,19 @@ module.exports = (sequelize, DataTypes) => {
     },
     nombre_recibe: {
       type: DataTypes.STRING(100)
+    },
+    // Links a la estructura de evidencias en Google Drive (creada por workflow n8n)
+    drive_jornada_url: {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    },
+    drive_jornada_folder_id: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    drive_informe_url: {
+      type: DataTypes.STRING(500),
+      allowNull: true
     }
   }, {
     tableName: 'mantenimientos_ejecutados',
