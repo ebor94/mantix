@@ -26,6 +26,9 @@ router.post('/sin-exequias/:asistenciaId/quitar',
 
 router.get('/:id',                    ctrl.obtener)
 router.get('/:id/formato-r13',        ctrl.formatoR13)
+// Cargar el contrato que falta, desde la exequia: lo hace quien atiende a la
+// familia o quien coordina, que son los que lo tienen a mano.
+router.post('/:id/contrato',          requireRol('asesor', 'coordinador', 'admin'), ctrl.cargarContrato)
 
 // ── Seguimiento y pago ────────────────────────────────────────────────────
 // Cada escritura es su propia acción con POST, como el resto del módulo

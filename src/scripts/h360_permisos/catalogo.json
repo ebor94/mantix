@@ -197,6 +197,15 @@
       ]
     },
     {
+      "clave": "accion.exequias.contrato",
+      "modulo": "exequias",
+      "roles": [
+        "admin",
+        "asesor",
+        "coordinador"
+      ]
+    },
+    {
       "clave": "accion.exequias.crear",
       "modulo": "exequias",
       "roles": [

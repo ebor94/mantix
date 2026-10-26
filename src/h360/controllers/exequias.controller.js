@@ -3,7 +3,7 @@ const { buscarUsuarioPorSam } = require('../services/ldap.service')
 const { sendTextoSimple }     = require('../../services/whatsappService')
 const gchat                   = require('../services/googleChat.service')
 const karingsoft              = require('../services/karingsoft.service')
-const { referenciaServicio, contratoONada } = require('../utils/contrato')
+const { referenciaServicio, contratoONada, contratoValido, MIN_LARGO_CONTRATO } = require('../utils/contrato')
 
 // ─────────────────────────────────────────────────────────────
 // Historial
@@ -60,7 +60,7 @@ async function formatoR13(req, res, next) {
         WHERE e.id = ?`, [id])
     if (!ex) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
 
-    const contrato = String(ex.contrato ?? '').trim()
+    const contrato = contratoONada(ex.contrato)
     if (!contrato)
       return res.status(409).json({
         mensaje: 'La asistencia no tiene número de contrato, que es con lo que se consulta el ERP.',
@@ -79,6 +79,86 @@ async function formatoR13(req, res, next) {
     // Que el ERP no responda no es un error de H360: se dice qué pasó.
     console.warn('[exequias] formatoR13:', err.message)
     res.status(502).json({ mensaje: `No se pudo consultar el ERP: ${err.message}` })
+  }
+}
+
+/**
+ * POST /exequias/:id/contrato   { contrato }
+ *
+ * Carga el contrato que le falta a la asistencia, desde la exequia: es ahí
+ * donde se descubre que falta, al no poder sacar el R-13.
+ *
+ * Se consulta el ERP ANTES de guardar. Un contrato equivocado guardado es
+ * peor que uno ausente: el ausente se nota, el equivocado trae los datos de
+ * otro servicio al R-13 y nadie lo revisa.
+ *
+ * Solo rellena lo que falta. Reemplazar un contrato que ya sirve es editar
+ * el F-01, y para eso está la reapertura.
+ */
+async function cargarContrato(req, res, next) {
+  try {
+    const { id } = req.params
+    const propuesto = String(req.body?.contrato ?? '').trim()
+    if (!contratoValido(propuesto))
+      return res.status(400).json({
+        mensaje: `El contrato debe tener al menos ${MIN_LARGO_CONTRATO} caracteres e incluir números.`,
+      })
+
+    const [[ex]] = await db.query(
+      `SELECT e.id, e.asistencia_id, a.contrato, a.codigo AS asistencia_codigo
+         FROM exequias e JOIN asistencias a ON a.id = e.asistencia_id
+        WHERE e.id = ?`, [id])
+    if (!ex) return res.status(404).json({ mensaje: 'Exequia no encontrada' })
+
+    if (contratoONada(ex.contrato))
+      return res.status(409).json({
+        mensaje: `La asistencia ya tiene el contrato ${ex.contrato}. Para cambiarlo hay que reabrir el F-01.`,
+      })
+
+    if (!karingsoft.configurado())
+      return res.status(503).json({ mensaje: 'La conexión al ERP no está configurada' })
+
+    let datos
+    try {
+      datos = await karingsoft.formatoR13(propuesto)
+    } catch (e) {
+      console.warn('[exequias] cargarContrato:', e.message)
+      return res.status(502).json({ mensaje: `No se pudo consultar el ERP: ${e.message}` })
+    }
+    if (!datos)
+      return res.status(404).json({
+        mensaje: `El ERP no tiene una orden de servicio con el contrato ${propuesto}. Verifica el número.`,
+      })
+
+    await db.query('UPDATE asistencias SET contrato = ? WHERE id = ?', [propuesto, ex.asistencia_id])
+    await insertarHistorial(ex.asistencia_id, propuesto, req.user)
+
+    res.json({
+      ok: true,
+      contrato: propuesto,
+      ...datos,
+      h360: { exequia_id: ex.id, asistencia: ex.asistencia_codigo },
+    })
+  } catch (err) { next(err) }
+}
+
+/** Queda en el historial de la asistencia: es un dato que entró por un camino
+ *  lateral y conviene saber quién lo puso. */
+async function insertarHistorial(asistenciaId, contrato, user) {
+  try {
+    const [[a]] = await db.query('SELECT estado FROM asistencias WHERE id = ?', [asistenciaId])
+    // No es un cambio de estado: desde y hasta son el mismo, y el dato real
+    // va en el comentario. usuario_id no admite nulo.
+    await db.query(
+      `INSERT INTO asistencia_historial
+       (asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario)
+       VALUES (?,?,?,?,?,?)`,
+      [asistenciaId, a?.estado ?? null, a?.estado ?? 'SIN_ESTADO',
+       user?.usuario || 'sistema', user?.nombre || null,
+       `Contrato ${contrato} cargado desde la exequia (formato R-13)`])
+  } catch (e) {
+    // El historial no puede tumbar la carga del contrato.
+    console.warn('[exequias] historial contrato:', e.message)
   }
 }
 
@@ -700,6 +780,7 @@ async function programacionPublica(req, res, next) {
 }
 
 module.exports = {
+  cargarContrato,
   marcarSinExequias, quitarSinExequias,
   listar, pendientes, obtener, crear, actualizar, eliminar, formatoR13,
   // Lo usa exequias_seguimiento.controller: el seguimiento y el pago quedan en
