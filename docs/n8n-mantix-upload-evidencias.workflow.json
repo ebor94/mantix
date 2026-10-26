@@ -1,0 +1,117 @@
+{
+  "name": "Mantix - Upload Evidencias",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mantix-upload-evidencias",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-upload",
+      "name": "Webhook Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "mantix-upload-evidencias"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Explota la lista de archivos en N items y clasifica subcarpeta por extensión.\nconst body = $input.first().json.body || $input.first().json;\nconst folderId = body.folderId;\nconst archivos = body.archivos || [];\n\nconst SUBCARPETAS = {\n  INFORME: '00_INFORME',\n  HOJAS: '01_HOJAS_DE_SERVICIO',\n  FOTOS: '02_EVIDENCIAS_FOTOGRAFICAS',\n  CERT: '03_CERTIFICADOS'\n};\n\nconst clasificar = (nombre, mime) => {\n  const n = (nombre || '').toLowerCase();\n  const m = (mime || '').toLowerCase();\n  if (n.includes('informe') || n.includes('reporte')) return SUBCARPETAS.INFORME;\n  if (n.includes('certificad')) return SUBCARPETAS.CERT;\n  if (n.includes('hoja') || n.includes('servicio') || n.includes('acta')) return SUBCARPETAS.HOJAS;\n  if (m.startsWith('image/') || /\\.(jpg|jpeg|png|heic|webp|gif)$/i.test(n)) return SUBCARPETAS.FOTOS;\n  if (m === 'application/pdf' || n.endsWith('.pdf')) return SUBCARPETAS.INFORME;\n  return SUBCARPETAS.CERT;\n};\n\nreturn archivos.map((a, i) => {\n  const sub = a.subcarpeta || clasificar(a.nombre, a.mime_type);\n  return {\n    json: {\n      index: i,\n      folderId,\n      subcarpeta: sub,\n      fileName: a.nombre,\n      mimeType: a.mime_type || 'application/octet-stream'\n    },\n    binary: {\n      data: {\n        data: a.base64,\n        mimeType: a.mime_type || 'application/octet-stream',\n        fileName: a.nombre\n      }\n    }\n  };\n});"
+      },
+      "id": "split-archivos",
+      "name": "Split archivos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "={{ \"'\" + $json.folderId + \"' in parents and name = '\" + $json.subcarpeta + \"' and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}",
+        "limit": 1,
+        "options": {}
+      },
+      "id": "buscar-subcarpeta",
+      "name": "Buscar subcarpeta",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [640, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REEMPLAZAR_CREDENTIAL_ID",
+          "name": "Google Drive - coordticcucuta"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toma el folderId de la subcarpeta encontrada y mantiene el binary data.\nconst input = $input.first();\nconst busqueda = $('Buscar subcarpeta').first().json;\nconst subcarpetaId = busqueda.id;\nif (!subcarpetaId) {\n  throw new Error(`No se encontró subcarpeta ${input.json.subcarpeta} dentro de ${input.json.folderId}`);\n}\nreturn [{\n  json: { ...input.json, subcarpetaId },\n  binary: input.binary\n}];"
+      },
+      "id": "resolver-destino",
+      "name": "Resolver destino",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.fileName }}",
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "mode": "id",
+          "value": "={{ $json.subcarpetaId }}"
+        },
+        "options": {}
+      },
+      "id": "upload-file",
+      "name": "Upload a Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1080, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REEMPLAZAR_CREDENTIAL_ID",
+          "name": "Google Drive - coordticcucuta"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrega todos los uploads en un solo item de respuesta.\nconst items = $input.all();\nconst archivos = items.map(it => ({\n  nombre: it.json.name || it.json.fileName,\n  url: it.json.webViewLink || it.json.webContentLink || `https://drive.google.com/file/d/${it.json.id}/view`,\n  file_id: it.json.id,\n  subcarpeta: it.json.subcarpeta || null\n}));\nreturn [{ json: { archivos, cantidad: archivos.length } }];"
+      },
+      "id": "agregar-respuesta",
+      "name": "Agregar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300],
+      "executeOnce": false
+    }
+  ],
+  "connections": {
+    "Webhook Upload": {
+      "main": [[{ "node": "Split archivos", "type": "main", "index": 0 }]]
+    },
+    "Split archivos": {
+      "main": [[{ "node": "Buscar subcarpeta", "type": "main", "index": 0 }]]
+    },
+    "Buscar subcarpeta": {
+      "main": [[{ "node": "Resolver destino", "type": "main", "index": 0 }]]
+    },
+    "Resolver destino": {
+      "main": [[{ "node": "Upload a Drive", "type": "main", "index": 0 }]]
+    },
+    "Upload a Drive": {
+      "main": [[{ "node": "Agregar respuesta", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": ["mantix", "evidencias"]
+}

@@ -560,6 +560,42 @@ router.post('/:id/regenerar-drive', mantenimientosController.regenerarCarpetaDri
 
 /**
  * @swagger
+ * /api/mantenimientos/{id}/upload-evidencias:
+ *   post:
+ *     summary: Subir archivos (base64) a la carpeta de jornada en Drive via n8n.
+ *     tags: [Mantenimientos]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               archivos:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [nombre, base64]
+ *                   properties:
+ *                     nombre: { type: string }
+ *                     base64: { type: string }
+ *                     mime_type: { type: string }
+ *                     subcarpeta:
+ *                       type: string
+ *                       enum: [00_INFORME, 01_HOJAS_DE_SERVICIO, 02_EVIDENCIAS_FOTOGRAFICAS, 03_CERTIFICADOS]
+ *     responses:
+ *       '200': { description: Archivos subidos. }
+ *       '400': { description: Payload inválido. }
+ *       '409': { description: El mantenimiento no tiene carpeta de Drive. }
+ */
+router.post(
+  '/:id/upload-evidencias',
+  express.json({ limit: '60mb' }),
+  mantenimientosController.subirEvidenciasAJornada
+);
+
+/**
+ * @swagger
  * /api/mantenimientos/{id}/pdf:
  *   get:
  *     summary: Generar PDF del mantenimiento

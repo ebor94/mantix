@@ -578,6 +578,60 @@ const mantenimientosController = {
     }
   },
 
+  // Subir evidencias (archivos base64) a la carpeta de jornada en Drive via n8n.
+  // Body: { archivos: [{ nombre, base64, mime_type, subcarpeta? }] }
+  // Si subcarpeta no se pasa, n8n la clasifica por extensión del archivo.
+  async subirEvidenciasAJornada(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { archivos } = req.body || {};
+
+      if (!Array.isArray(archivos) || archivos.length === 0) {
+        return res.status(400).json({ success: false, message: 'No se recibieron archivos' });
+      }
+      if (archivos.length > 20) {
+        return res.status(400).json({ success: false, message: 'Máximo 20 archivos por carga' });
+      }
+      for (const a of archivos) {
+        if (!a?.nombre || !a?.base64) {
+          return res.status(400).json({ success: false, message: 'Cada archivo requiere nombre y base64' });
+        }
+        // ~33 MB base64 ≈ 25 MB binario
+        if (a.base64.length > 34_000_000) {
+          return res.status(413).json({
+            success: false,
+            message: `Archivo "${a.nombre}" excede el límite de 25 MB`
+          });
+        }
+      }
+
+      const ejecucion = await MantenimientoEjecutado.findOne({
+        where: { mantenimiento_programado_id: id }
+      });
+      if (!ejecucion) {
+        return res.status(404).json({ success: false, message: 'El mantenimiento no está ejecutado' });
+      }
+      if (!ejecucion.drive_jornada_folder_id) {
+        return res.status(409).json({
+          success: false,
+          message: 'Este mantenimiento no tiene carpeta de Drive. Generala primero.'
+        });
+      }
+
+      const resultado = await driveEvidencias.subirArchivosJornada({
+        folderId: ejecucion.drive_jornada_folder_id,
+        archivos
+      });
+      if (!resultado) {
+        return res.status(502).json({ success: false, message: 'n8n no respondió' });
+      }
+      res.json({ success: true, message: 'Archivos subidos a Drive', data: resultado });
+    } catch (error) {
+      console.error('Error en subirEvidenciasAJornada:', error);
+      res.status(500).json({ success: false, message: error.message || 'Error subiendo evidencias' });
+    }
+  },
+
   // Registrar ejecución múltiple (batch) - aplica los mismos datos de cierre a varios mantenimientos
   async registrarEjecucionMultiple(req, res, next) {
     const {
