@@ -202,12 +202,13 @@ async function calcularDashboard({ usuario, desde, hasta, origen, convenioId, em
     .sort((a, b) => b.cantidad - a.cantidad);
   const totalMascotas = porEspecie.reduce((s, e) => s + e.cantidad, 0);
 
-  // Valor total de mascotas: suma de contrato.valorMascotas (por afiliación, 0
-  // en las que no tienen) — sin JOIN a beneficiarios para no multiplicar.
-  const [mascValorRow] = await Afiliado.findAll({
-    where,
-    attributes: [[fn('COALESCE', fn('SUM', col('contrato.valorMascotas')), 0), 'valor']],
-    include: [{ model: ContratoValor, as: 'contrato', attributes: [] }],
+  // Valor total de mascotas: suma del valorPorPersona de los beneficiarios
+  // tipo MASCOTA (dato fiable en el beneficiario; no depende de que
+  // contrato.valorMascotas se haya persistido), dentro del mismo scope.
+  const [mascValorRow] = await Beneficiario.findAll({
+    attributes: [[fn('COALESCE', fn('SUM', col('Beneficiario.valorPorPersona')), 0), 'valor']],
+    where: { tipoBeneficiario: 'MASCOTA' },
+    include: [{ model: Afiliado, as: 'afiliado', attributes: [], where, required: true }],
     raw: true
   });
   // Afiliaciones con al menos una mascota (conteo distinto).
