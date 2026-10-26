@@ -93,6 +93,7 @@ const contratoSchema = Joi.object({
   valorAdicionales:  Joi.number().min(0).default(0),
   valorAsistencia:   Joi.number().min(0).default(0),
   valorSeguros:      Joi.number().min(0).default(0),
+  valorMascotas:     Joi.number().min(0).default(0),
   valorTotal:        Joi.number().min(0).default(0),
   periodicidad: Joi.string()
     .valid('MENSUAL', 'ANUAL', 'TRIMESTRAL', 'SEMESTRAL', 'SEMANAL')
