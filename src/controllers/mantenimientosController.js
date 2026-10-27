@@ -1176,6 +1176,13 @@ function equipoCodigo(equipoId) {
   return `EQ-${String(equipoId).padStart(5, '0')}`;
 }
 
+// Normaliza fecha a 'YYYY-MM-DD' aunque venga como Date, ISO string, etc.
+function toISODate(v) {
+  if (!v) return '';
+  const s = typeof v === 'string' ? v : (v instanceof Date ? v.toISOString() : String(v));
+  return s.slice(0, 10);
+}
+
 async function armarPayloadEvidenciasIndividual({ mantenimientoId, fecha_ejecucion, hora_inicio, hora_fin, nombre_recibe, observaciones, req }) {
   const m = await fetchMantenimientoCompleto(mantenimientoId);
   if (!m || !m.actividad) return null;
@@ -1184,7 +1191,7 @@ async function armarPayloadEvidenciasIndividual({ mantenimientoId, fecha_ejecuci
   const categoria = act.categoria?.nombre || 'SinCategoria';
   const sedeCodigo = act.sede?.codigo || 'SIN';
   return {
-    fecha_ejecucion,
+    fecha_ejecucion: toISODate(fecha_ejecucion),
     hora_inicio: hora_inicio || '',
     hora_fin: hora_fin || '',
     proveedor,
@@ -1222,7 +1229,7 @@ async function armarPayloadEvidenciasLote({ mantenimientoIds, fecha_ejecucion, h
   const sedesUnicas = Array.from(new Set(validos.map(m => m.actividad?.sede?.codigo).filter(Boolean)));
 
   return {
-    fecha_ejecucion,
+    fecha_ejecucion: toISODate(fecha_ejecucion),
     hora_inicio: hora_inicio || '',
     hora_fin: hora_fin || '',
     proveedor,
