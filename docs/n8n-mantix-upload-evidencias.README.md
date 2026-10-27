@@ -1,10 +1,9 @@
 # Workflow n8n — Upload de evidencias a Drive
 
 Workflow secundario que recibe archivos (base64) desde Mantix y los sube a la carpeta de jornada ya existente en Drive. Destinos:
-- `00_INFORME_CONSOLIDADO` → **raíz de la jornada** (es un archivo, no subcarpeta). El informe principal del proveedor queda directo adentro de la carpeta jornada.
-- `02_Evidencias_Fotograficas/` (subcarpeta)
-- `03_Checklists_Firmados/` (subcarpeta)
-- `04_Actas_Firmas/` (subcarpeta)
+- `00_INFORME_CONSOLIDADO` → **raíz de la jornada** (es un archivo, no subcarpeta). Informe principal del proveedor directo en la carpeta jornada.
+- `02_Requisitos_Legales/` → certificados, RUT, ARL, requisitos legales del proveedor
+- `03_Actas_Firmas/` → actas, firmas y fotos de respaldo
 
 ## Pasos para activarlo
 
