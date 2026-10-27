@@ -7,7 +7,7 @@ const convenioService = require('../services/convenio.service');
 const invitacionService = require('../services/invitacion.service');
 const emailService = require('../services/emailService');
 const { esOrigenPublico } = require('../utils/origen');
-const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion, notificarBienvenidaEmpresarial } = require('../services/n8nService');
+const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma, notificarAprobacionPublica, notificarAnulacionAfiliacion, notificarBienvenidaEmpresarial, notificarDesistimiento } = require('../services/n8nService');
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
@@ -846,7 +846,8 @@ async function anular(req, res, next) {
 
 /**
  * POST /:id/desistir — el cliente desiste de una afiliación PENDIENTE. Requiere
- * motivo. No notifica al cliente ni toca el recibo.
+ * motivo. No toca el recibo. Envía al afiliado un correo de confirmación del
+ * desistimiento (workflow n8n, fire-and-forget).
  */
 async function desistir(req, res, next) {
   try {
@@ -857,6 +858,8 @@ async function desistir(req, res, next) {
     const { afiliado } = await afiliadoService.desistirAfiliado(
       req.params.id, String(motivo).trim(), req.usuario.id
     );
+    // Correo al afiliado confirmando el desistimiento (workflow n8n). Fire-and-forget.
+    notificarDesistimiento(afiliado.id).catch(() => {});
     res.json({ success: true, message: 'Desistimiento registrado', data: afiliado });
   } catch (error) {
     next(error);

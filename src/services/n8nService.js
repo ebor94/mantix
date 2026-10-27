@@ -36,6 +36,9 @@ const N8N_ANULACION_URL =
 const N8N_BIENVENIDA_EMPRESARIAL_URL =
   process.env.N8N_BIENVENIDA_EMPRESARIAL_WEBHOOK_URL ||
   'http://192.9.17.10:5678/webhook/bienvenida-empresarial';
+const N8N_DESISTIMIENTO_URL =
+  process.env.N8N_DESISTIMIENTO_WEBHOOK_URL ||
+  'http://192.9.17.10:5678/webhook/desistimiento-afiliacion';
 const PORTAL_URL =
   process.env.R44_PORTAL_URL || 'https://losolivoscucuta.com/portalproveedores/login';
 const DRIVE_ROOT_FOLDER_ID =
@@ -330,6 +333,30 @@ async function notificarBienvenidaEmpresarial(afiliadoId) {
   }
 }
 
+/**
+ * Dispara (fire-and-forget) el workflow n8n de DESISTIMIENTO. n8n resuelve el
+ * afiliado por afiliadoId, verifica que esté desistido y tenga correo, y envía
+ * al afiliado un correo confirmando la cancelación con el motivo.
+ *
+ * @param {number} afiliadoId
+ */
+async function notificarDesistimiento(afiliadoId) {
+  try {
+    const res = await axios.post(
+      N8N_DESISTIMIENTO_URL,
+      { afiliadoId },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 8000 }
+    );
+    return res.data;
+  } catch (err) {
+    console.error(
+      `[n8nService] Error disparando desistimiento (afiliado ${afiliadoId}):`,
+      err.message
+    );
+    return null;
+  }
+}
+
 module.exports = {
   notificarN8n,
   notificarCertificadoAfiliacion,
@@ -341,4 +368,5 @@ module.exports = {
   archivarDocumentosEnDrive,
   notificarBienvenidaProveedor,
   notificarBienvenidaEmpresarial,
+  notificarDesistimiento,
 };
