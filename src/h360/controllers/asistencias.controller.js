@@ -193,16 +193,22 @@ const TRANSICIONES = {
   APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
 
+/** Los casos que no pasan por velación: se saltan el estado SALA. */
+function sinVelacion(a) {
+  return !!(a?.traslado_otra_ciudad || a?.destino_final_directo)
+}
+
 /**
  * Transición que le toca a una asistencia, que no siempre es la del mapa.
  *
- * Cuando el ser querido se traslada a otra ciudad no hay velación aquí: el
- * caso va del encuentro directo a aprobación.
+ * Hay dos casos sin velación aquí: el traslado a otra ciudad, donde el
+ * homenaje es de otra funeraria, y el destino final directo, donde la familia
+ * decide no velar. En los dos el caso va del encuentro directo a aprobación.
  */
 function transicionDe(asistencia) {
   const base = TRANSICIONES[asistencia?.estado]
   if (!base) return null
-  if (asistencia.estado === 'ENCUENTRO' && asistencia.traslado_otra_ciudad)
+  if (asistencia.estado === 'ENCUENTRO' && sinVelacion(asistencia))
     return { ...base, siguiente: 'APROBACION' }
   return base
 }
@@ -478,7 +484,7 @@ async function crear(req, res, next) {
       causa_fallecimiento, categoria_sanitaria,
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
-      traslado_otra_ciudad, ciudad_destino, tipo_traslado,
+      traslado_otra_ciudad, ciudad_destino, tipo_traslado, destino_final_directo,
     } = req.body
 
     // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
@@ -513,9 +519,10 @@ async function crear(req, res, next) {
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, traslado_otra_ciudad, ciudad_destino, tipo_traslado,
+            destino_final_directo,
             condiciones_logisticas, conductor, conductor_id, conductor_rol,
             fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
@@ -524,6 +531,7 @@ async function crear(req, res, next) {
             lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
             traslado_otra_ciudad ? String(ciudad_destino).trim() : null,
             tipo_traslado,
+            destino_final_directo ? 1 : 0,
             JSON.stringify(condiciones_logisticas || []),
             conductor, conductor_id || null, conductorRol,
             fecha_contacto || null, usuario,
@@ -719,7 +727,7 @@ async function guardarEtapa(req, res, next) {
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
     const [asist] = await db.query(
-      `SELECT estado, certificado_defuncion, contrato, conductor_rol, traslado_otra_ciudad
+      `SELECT estado, certificado_defuncion, contrato, conductor_rol, traslado_otra_ciudad, destino_final_directo
          FROM asistencias WHERE id = ?`, [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 

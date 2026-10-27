@@ -164,6 +164,7 @@ const CAMPOS_F01 = [
   'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
   'causa_fallecimiento', 'categoria_sanitaria',
   'lugar_asistencia', 'traslado_otra_ciudad', 'ciudad_destino', 'tipo_traslado',
+  'destino_final_directo',
   'nombre_contacto', 'telefono_contacto',
   'conductor', 'conductor_id', 'fecha_contacto',
 ]
@@ -209,6 +210,8 @@ async function actualizarF01(req, res, next) {
     // Checkbox: llega como booleano y la columna es TINYINT.
     if (updates.traslado_otra_ciudad !== undefined)
       updates.traslado_otra_ciudad = updates.traslado_otra_ciudad ? 1 : 0
+    if (updates.destino_final_directo !== undefined)
+      updates.destino_final_directo = updates.destino_final_directo ? 1 : 0
 
     // La ciudad solo tiene sentido si va a otra ciudad; y si va, hace falta.
     // Puede venir en este guardado o estar ya registrada.
