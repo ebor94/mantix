@@ -417,6 +417,7 @@
       "modulo": "novedades",
       "roles": [
         "admin",
+        "asistente",
         "asistente_tanatologo"
       ]
     },
@@ -883,6 +884,7 @@
       "modulo": "novedades",
       "roles": [
         "admin",
+        "asistente",
         "asistente_tanatologo",
         "supervisora"
       ]

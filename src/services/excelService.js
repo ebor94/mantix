@@ -182,6 +182,13 @@ SELECT * FROM (
                 THEN '13'
             WHEN a.grupo = 'BASICO'
                 THEN '11'
+            -- ======== GRUPOS INDIV II (titular) ========
+            WHEN a.grupo = 'UNIFAMILIAR_INDIV_II'
+                THEN '52'
+            WHEN a.grupo = 'BASICO_INDIV_II' AND a.asistenciaFueraDeCasa = 'SI'
+                THEN '49'
+            WHEN a.grupo = 'BASICO_INDIV_II'
+                THEN '46'
             ELSE 'PENDIENTE'
         END                                                       AS \`CATEGORIA\`,
         1                                                         AS \`CENTRO DE COSTO\`,
@@ -461,6 +468,21 @@ SELECT * FROM (
                 THEN '25'
             WHEN a.grupo = 'BASICO' AND b.tipoBeneficiario = 'ADICIONAL' AND b.edad < 50
                 THEN '23'
+            -- ======== GRUPOS INDIV II (beneficiarios) ========
+            WHEN a.grupo = 'UNIFAMILIAR_INDIV_II' AND b.tipoBeneficiario = 'DE_LEY'
+                THEN '52'
+            WHEN a.grupo = 'UNIFAMILIAR_INDIV_II' AND b.tipoBeneficiario = 'ADICIONAL'
+                THEN '53'
+            WHEN a.grupo = 'BASICO_INDIV_II' AND b.tipoBeneficiario = 'DE_LEY'
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                THEN '50'
+            WHEN a.grupo = 'BASICO_INDIV_II' AND b.tipoBeneficiario = 'ADICIONAL'
+                 AND a.asistenciaFueraDeCasa = 'SI'
+                THEN '51'
+            WHEN a.grupo = 'BASICO_INDIV_II' AND b.tipoBeneficiario = 'DE_LEY'
+                THEN '47'
+            WHEN a.grupo = 'BASICO_INDIV_II' AND b.tipoBeneficiario = 'ADICIONAL'
+                THEN '48'
             ELSE 'PENDIENTE'
         END                                                       AS \`CATEGORIA\`,
         1                                                         AS \`CENTRO DE COSTO\`,
