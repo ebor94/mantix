@@ -314,7 +314,10 @@ async function crear(req, res, next) {
        ['INHUMACION', 'CREMACION'].includes(destino_final) ? destino_final : null,
        String(lugar_destino_final ?? '').trim() || null,
        // Lo marca quien registra la exequia; recepción lo corrige al coordinar.
-       requiere_confirmacion_pago ? 1 : 0,
+       // Una ceremonia no se legaliza —no hay parroquia ni cementerio cobrando
+       // por adelantado—, así que ahí el check no aplica y nunca entra a la
+       // bandeja del tramitador.
+       (tipo !== 'CEREMONIA' && requiere_confirmacion_pago) ? 1 : 0,
        // Sin responder es NULL, que no es lo mismo que "no se gestionó".
        gestiono_obituario == null ? null : (gestiono_obituario ? 1 : 0),
        usuario]
@@ -362,6 +365,12 @@ async function actualizar(req, res, next) {
         ? null : (updates.gestiono_obituario ? 1 : 0)
     if (!Object.keys(updates).length)
       return res.status(400).json({ mensaje: 'Nada que actualizar' })
+
+    // Una ceremonia no se legaliza. Se fuerza aquí y no sólo en la pantalla
+    // para cubrir los dos caminos: que llegue marcada, y que el tipo cambie a
+    // CEREMONIA dejando atrás un check que ya no aplica.
+    if ((updates.tipo ?? antes.tipo) === 'CEREMONIA')
+      updates.requiere_confirmacion_pago = 0
 
     // Qué cambió, para dejarlo en el historial
     const norm = (k, v) => (k === 'fecha' ? String(v ?? '').slice(0, 10)
