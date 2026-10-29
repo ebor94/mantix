@@ -737,6 +737,29 @@ async function cancelar(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Dónde se está velando. Una asistencia puede tener los dos homenajes —empieza
+// en sala y termina en residencia, o al revés—, así que no basta con preguntar
+// si existe uno de sala: manda el que siga abierto, y si ya cerraron los dos,
+// el último que abrieron. El tablero anuncia dónde está el ser querido ahora,
+// no dónde estuvo.
+const SALA_CERRADA       = ['SALIDA_REGISTRADA', 'FINALIZADO']
+const RESIDENCIA_CERRADA = ['COMPLETADO']
+
+function velacionEn(r) {
+  const homenajes = []
+  if (r.sala_nombre)
+    homenajes.push({ donde: 'SALA', creada: r.sala_creada,
+                     abierto: !SALA_CERRADA.includes(r.sala_estado) })
+  if (r.residencia_id)
+    homenajes.push({ donde: 'RESIDENCIA', creada: r.residencia_creada,
+                     abierto: !RESIDENCIA_CERRADA.includes(r.residencia_estado) })
+  if (!homenajes.length) return null
+
+  const abiertos = homenajes.filter(h => h.abierto)
+  const entre    = abiertos.length ? abiertos : homenajes
+  return entre.sort((a, b) => new Date(b.creada) - new Date(a.creada))[0].donde
+}
+
 // GET /publico/programacion/:token — sin auth
 async function programacionPublica(req, res, next) {
   try {
@@ -758,9 +781,21 @@ async function programacionPublica(req, res, next) {
                 JOIN salas_velacion sv ON sv.id = hs.sala_id
                WHERE hs.asistencia_id = a.id
                ORDER BY hs.id DESC LIMIT 1)                       AS sala_nombre,
+             (SELECT hs.estado FROM homenajes_sala hs
+               WHERE hs.asistencia_id = a.id
+               ORDER BY hs.id DESC LIMIT 1)                       AS sala_estado,
+             (SELECT hs.created_at FROM homenajes_sala hs
+               WHERE hs.asistencia_id = a.id
+               ORDER BY hs.id DESC LIMIT 1)                       AS sala_creada,
              (SELECT hr.id FROM homenajes_residencia hr
                WHERE hr.asistencia_id = a.id
-               ORDER BY hr.id DESC LIMIT 1)                       AS residencia_id
+               ORDER BY hr.id DESC LIMIT 1)                       AS residencia_id,
+             (SELECT hr.estado FROM homenajes_residencia hr
+               WHERE hr.asistencia_id = a.id
+               ORDER BY hr.id DESC LIMIT 1)                       AS residencia_estado,
+             (SELECT hr.created_at FROM homenajes_residencia hr
+               WHERE hr.asistencia_id = a.id
+               ORDER BY hr.id DESC LIMIT 1)                       AS residencia_creada
         FROM exequias e
         JOIN asistencias a ON a.id = e.asistencia_id
    LEFT JOIN vehiculos  v ON v.id = e.vehiculo_id
@@ -774,7 +809,11 @@ async function programacionPublica(req, res, next) {
       count: rows.length,
       // Un contrato "PEND" o a medio escribir no es un dato: en la pantalla
       // de sala confunde más de lo que ayuda, así que no viaja.
-      items: rows.map(r => ({ ...r, contrato: contratoONada(r.contrato) })),
+      items: rows.map(r => ({
+        ...r,
+        contrato:    contratoONada(r.contrato),
+        velacion_en: velacionEn(r),
+      })),
     })
   } catch (err) { next(err) }
 }
