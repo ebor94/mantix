@@ -154,8 +154,10 @@ function generarR34Pdf(r34) {
           ['Fecha de entrega', fechaLarga(r34.fecha_entrega), 2]])
 
     fila([['Nombre del ser querido', r34.ser_querido, 1]])
-    fila([['Nombre del contratante', r34.contratante, 3],
-          ['Teléfono', r34.telefono_cliente, 2]])
+    // El teléfono del contratante no va impreso: el formato lo lee el
+    // proveedor, que no necesita el dato de contacto de la familia. Se sigue
+    // guardando y se consulta en /r34.
+    fila([['Nombre del contratante', r34.contratante, 1]])
 
     // ── Servicio: la rejilla de casillas ───────────────────────────────────
     doc.save()
