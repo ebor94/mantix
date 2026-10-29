@@ -131,7 +131,7 @@ async function cargarContrato(req, res, next) {
       })
 
     await db.query('UPDATE asistencias SET contrato = ? WHERE id = ?', [propuesto, ex.asistencia_id])
-    await insertarHistorial(ex.asistencia_id, propuesto, req.user)
+    await historialContratoCargado(ex.asistencia_id, propuesto, req.user)
 
     res.json({
       ok: true,
@@ -142,9 +142,12 @@ async function cargarContrato(req, res, next) {
   } catch (err) { next(err) }
 }
 
-/** Queda en el historial de la asistencia: es un dato que entró por un camino
- *  lateral y conviene saber quién lo puso. */
-async function insertarHistorial(asistenciaId, contrato, user) {
+/** Queda en el historial de la ASISTENCIA: es un dato que entró por un camino
+ *  lateral y conviene saber quién lo puso. Ojo con el nombre: llamarla
+ *  insertarHistorial tapaba —por hoisting— a la del historial de exequias que
+ *  está arriba, y todo este controlador terminaba escribiendo en la tabla
+ *  equivocada. */
+async function historialContratoCargado(asistenciaId, contrato, user) {
   try {
     const [[a]] = await db.query('SELECT estado FROM asistencias WHERE id = ?', [asistenciaId])
     // No es un cambio de estado: desde y hasta son el mismo, y el dato real
