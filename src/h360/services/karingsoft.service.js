@@ -168,12 +168,16 @@ async function formatoR13(ordenServicio) {
 /**
  * ═══ R-34 · Contratación de servicios ═══════════════════════════════════
  *
- * Los servicios de la orden que se le contratan a un proveedor.
+ * Los servicios de la orden. Salen TODOS: a cualquiera se le puede emitir un
+ * R-34, porque la lista curada siempre terminaba dejando algo afuera.
  *
- * No sirve ninguna bandera del ERP para identificarlos: en el contrato 42322,
+ * Lo que la lista decide ahora es solo qué casilla marca el formato impreso.
+ * No sirve ninguna bandera del ERP para eso: en el contrato 42322,
  * requiere_tercero='S' deja fuera dos de los que operaciones espera, y "tiene
- * NIT asignado" mete dos que no van. Es una lista curada de códigos, y el
- * grupo que sale de aquí es el que marca la casilla del formato impreso.
+ * NIT asignado" mete dos que no van. Los servicios que no están en la lista
+ * caen en la casilla "Otro", que lleva al lado la línea para escribir de qué
+ * se trata, y vienen marcados con en_formato = false para que la pantalla los
+ * muestre aparte y no ahogue a los cinco o seis de siempre.
  *
  * El 340 "Traslado local del cuerpo" también entra, por pedido de
  * operaciones. Ojo: solo el 17% de sus líneas trae proveedor, así que en la
@@ -205,11 +209,12 @@ const CONSULTA_R34_ITEMS = `
 DECLARE @orden varchar(20) = @p_orden;
 
 WITH grupos (grupo, servicio) AS (${GRUPOS_R34})
-SELECT g.grupo,
+SELECT ISNULL(g.grupo, 'OTRO') AS grupo,
+       CASE WHEN g.grupo IS NULL THEN 0 ELSE 1 END AS en_formato,
        d.orden_servicio,
        d.contador         AS item,
        d.servicio         AS codigo,
-       RTRIM(s.descripcion)   AS servicio,
+       RTRIM(ISNULL(s.descripcion, 'Servicio ' + d.servicio)) AS servicio,
        RTRIM(c.descripcion)   AS categoria,
        d.tercero          AS nit_proveedor,
        RTRIM(t.nombre)    AS proveedor,
@@ -220,12 +225,14 @@ SELECT g.grupo,
        CASE WHEN s.requiere_tercero = 'S' AND d.tercero IS NULL THEN 'FALTA PROVEEDOR' END AS alerta_proveedor,
        CASE WHEN s.requiere_costo   = 'S' AND ISNULL(d.costo, 0) = 0 THEN 'FALTA COSTO' END AS alerta_costo
 FROM salas_ordenes_detalle d
-JOIN grupos g                          ON g.servicio = d.servicio
-JOIN salas_servicios s                 ON CAST(s.servicio AS varchar(30)) = d.servicio
+LEFT JOIN grupos g                     ON g.servicio = d.servicio
+LEFT JOIN salas_servicios s            ON CAST(s.servicio AS varchar(30)) = d.servicio
 LEFT JOIN salas_servicios_categorias c ON c.servicio_categoria = s.servicio_categoria
 LEFT JOIN terceros t                   ON t.compania = 1 AND CAST(t.tercero AS varchar(30)) = d.tercero
 WHERE d.orden_servicio = @orden
-ORDER BY g.grupo, d.contador;`
+-- Primero los que tienen casilla propia, que son los que se contratan todos
+-- los días; detrás el resto de la orden, en el orden en que el ERP la armó.
+ORDER BY CASE WHEN g.grupo IS NULL THEN 1 ELSE 0 END, g.grupo, d.contador;`
 
 /**
  * Lo que el formato necesita de la orden y no está en la línea del servicio.
@@ -322,6 +329,7 @@ async function itemsR34(ordenServicio) {
     },
     items: det.recordset.map(f => ({
       ...f,
+      en_formato: !!f.en_formato,
       grupo_clave: f.grupo,
       grupo_etiqueta: ETIQUETA_GRUPO[f.grupo] || f.grupo,
       observacion: String(f.observacion ?? '').trim(),

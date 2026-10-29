@@ -67,6 +67,8 @@ function agrupar(items) {
         clave,
         grupo: i.grupo_clave,
         grupo_etiqueta: i.grupo_etiqueta,
+        // false = no tiene casilla propia en el formato, va en "Otro".
+        en_formato: i.en_formato !== false,
         codigo_servicio: i.codigo,
         servicio_desc: i.servicio,
         proveedor_nit: i.nit_proveedor || null,
