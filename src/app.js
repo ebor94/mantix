@@ -77,7 +77,9 @@ const limiter = rateLimit({
   message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
   // TRIKIPELUDOS: todo el evento comparte IP pública; el módulo aplica sus propios límites.
   // October Big Day: el evento también comparte Wi-Fi; el módulo aplica su propio límite en el POST.
+  // Portería: las casetas de una sede pueden compartir IP; el módulo aplica su propio límite en el login.
   skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
+    || req.originalUrl.startsWith('/api/porteria/')
 });
 app.use('/api/', limiter);
 
@@ -95,6 +97,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/trk', require('./trk/middleware/errorHandler').trkErrorHandler);
 // October Big Day: errores del parser (413 / JSON inválido) en /api/bigday/* en JSON y español
 app.use('/api/bigday', require('./bigday/middleware/errorHandler').bigdayErrorHandler);
+// Portería: errores del body parser en /api/porteria/* con el contrato del módulo
+app.use('/api/porteria', require('./porteria/middleware/errorHandler').porteriaErrorHandler);
 app.use(compression());
 
 // ============================================

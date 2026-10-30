@@ -46,6 +46,7 @@ const svRoutes     = require('../sv/routes');             // ← Módulo SerVent
 const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (identidad compartida)
 const trkRoutes    = require('../trk/routes').router;   // ← Módulo TRIKIPELUDOS
 const bigdayRoutes = require('../bigday/routes').router; // ← Módulo October Big Day
+const porteriaRoutes = require('../porteria/routes').router; // ← Módulo Portería
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -92,5 +93,6 @@ router.use('/sv',     svRoutes);     // ← Módulo SerVentas CRM (Serfunorte)
 router.use('/identidad', identidadRoutes); // ← SSO compartido entre apps (afiliaciones, genflow, h360...)
 router.use('/trk/v1', trkRoutes);   // ← Módulo TRIKIPELUDOS (concurso de disfraces)
 router.use('/bigday/v1', bigdayRoutes); // ← Módulo October Big Day (encuesta)
+router.use('/porteria/v1', porteriaRoutes); // ← Módulo Portería (ingresos y salidas de vehículos)
 
 module.exports = router;
