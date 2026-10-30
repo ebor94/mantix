@@ -378,6 +378,7 @@ const r44RevisionController = {
 
       const pid = parseInt(proveedor_id, 10);
       const guardados = [];
+      const paraDrive = [];
       for (const [fieldname, [file]] of entradas) {
         const tipoDB = MAPA[fieldname] || fieldname;
         // Reemplazar: no hay índice único en (proveedor_id, tipo_documento),
@@ -394,7 +395,17 @@ const r44RevisionController = {
           estado_extraccion:       'completado',
         });
         guardados.push(tipoDB);
+        paraDrive.push({ tipo: fieldname, ruta: file.path });
       }
+
+      // Archivar en la carpeta del proveedor en Google Drive (vía n8n), sin
+      // bloquear la respuesta. Usa la misma carpeta que el flujo normal.
+      archivarDocumentosEnDrive({
+        proveedorId: pid,
+        anio: proveedor.anio_vinculacion || new Date().getFullYear(),
+        carpeta: carpetaProveedor(proveedor),
+        documentos: paraDrive,
+      }).catch((e) => console.error('[drive] archivado (revisor) falló:', e.message));
 
       return res.json({ ok: true, message: `Documentos cargados: ${guardados.join(', ')}`, tipos: guardados });
     } catch (err) {
