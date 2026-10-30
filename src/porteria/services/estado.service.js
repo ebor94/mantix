@@ -17,6 +17,7 @@ function crearServicioEstado({ bd, h360, vehiculosExternos }) {
     ]);
     const tipo = vehiculo ? 'PROPIO' : externo ? externo.tipo : null;
     // Mismo criterio que al registrar: sin historial, un propio está dentro y un proveedor fuera.
+    const tipoVehiculo = vehiculo ? 'PROPIO' : externo?.tipo ?? estado?.tipo_vehiculo ?? null;
     const dentro = estado ? estado.dentro === 1 : tipo === 'PROPIO';
 
     let propuesta = null;
@@ -30,9 +31,14 @@ function crearServicioEstado({ bd, h360, vehiculosExternos }) {
       }
     }
 
+    if (tipoVehiculo && tipoVehiculo !== 'PROPIO' && estado && estado.dentro === 1 && estado.ultimo_evento_id) {
+      const u = await repoEventos.obtener(bd.obtener(), estado.ultimo_evento_id);
+      if (u) propuesta = { motivo: u.motivo, empresa: u.empresa, conductor_nombre: u.conductor_nombre, conductor_documento: u.conductor_documento };
+    }
+
     return {
       placa,
-      tipo_vehiculo: tipo,
+      tipo_vehiculo: tipoVehiculo,
       vehiculo,
       vehiculo_externo: externo,
       estado: estado ? { dentro: estado.dentro === 1, sede_id: estado.sede_id, desde: estado.desde } : null,

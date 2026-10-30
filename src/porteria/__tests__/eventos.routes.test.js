@@ -84,6 +84,8 @@ describe('GET /eventos', () => {
     ['?desde=2026-10-31&hasta=2026-10-01', 'La fecha inicial es posterior a la final'],
     ['?placa[]=x', 'Placa inválida'],
     ['?placa[a]=x', 'Placa inválida'],
+    ['?inconsistente=si', 'Valor inválido en inconsistente'],
+    ['?inconsistente[]=1', 'Valor inválido en inconsistente'],
   ])('%s → 400', async (query, message) => {
     const { res } = await llamar('get', query);
     expect(res.status).toBe(400);
@@ -121,7 +123,15 @@ describe('GET /eventos/:id', () => {
     expect((await llamar('get', '/4', { prueba })).res.body.data).toEqual({ id: 4, sede_id: 3 });
     expect(prueba.deps.eventos.obtener).toHaveBeenCalledWith(4);
     expect((await llamar('get', '/abc')).res.status).toBe(404);
+    for (const id of ['1e1', '0x10', '1234567890', '0']) expect((await llamar('get', `/${id}`, { prueba })).res.status).toBe(404);
   });
+});
+
+test.each(['true', 'false', '0', '1'])('inconsistente=%s se acepta', async (v) => {
+  const prueba = crearAppPrueba();
+  const { res } = await llamar('get', `?inconsistente=${v}`, { prueba });
+  expect(res.status).toBe(200);
+  expect(prueba.deps.eventos.listar).toHaveBeenCalledWith(expect.objectContaining({ inconsistente: v === 'true' || v === '1' }), { pagina: 1 });
 });
 
 test('PATCH y anular delegan en el servicio', async () => {

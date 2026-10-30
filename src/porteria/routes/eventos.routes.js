@@ -31,6 +31,11 @@ function leerFiltros(query) {
   };
   const tipo = vacio(query.tipo_vehiculo) ? undefined : query.tipo_vehiculo;
   if (tipo !== undefined && !TIPOS.includes(tipo)) throw invalido('Tipo de vehículo inválido');
+  const booleanoQuery = (v) => {
+    if (vacio(v)) return undefined;
+    if (typeof v !== 'string' || !['1', 'true', '0', 'false'].includes(v)) throw invalido('Valor inválido en inconsistente');
+    return v === '1' || v === 'true';
+  };
   const desde = fecha(query.desde);
   const hasta = fecha(query.hasta);
   if (desde && hasta && desde > hasta) throw invalido('La fecha inicial es posterior a la final');
@@ -42,16 +47,15 @@ function leerFiltros(query) {
       placa: normalizarPlaca(query.placa) || undefined,
       tipoVehiculo: tipo,
       motivoId: positivo(query.motivo_id, 'Motivo inválido'),
-      inconsistente: vacio(query.inconsistente) ? undefined : ['1', 'true'].includes(query.inconsistente),
+      inconsistente: booleanoQuery(query.inconsistente),
     },
     pagina: positivo(query.pagina, 'Página inválida') ?? 1,
   };
 }
 
 const idDe = (req) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) throw noExiste();
-  return id;
+  if (!ENTERO.test(req.params.id) || Number(req.params.id) <= 0) throw noExiste();
+  return Number(req.params.id);
 };
 const ctx = (req) => ({ ip: req.ip, apiCodigo: req.porApiCodigo });
 

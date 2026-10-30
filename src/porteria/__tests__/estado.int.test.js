@@ -71,3 +71,21 @@ test('dentro de la sede y propios fuera', async () => {
 test('placa vacía → 400', async () => {
   await expect(estado.sugerir(' - ')).rejects.toMatchObject({ statusCode: 400, motivo: 'VALIDACION', message: 'Indica la placa' });
 });
+
+test('proveedor dentro: propone lo de su ingreso', async () => {
+  const s = await estado.sugerir('S7V001');
+  expect(s).toMatchObject({
+    sentido_sugerido: 'SALIDA',
+    propuesta: { motivo: { codigo: 'ENTREGA_MERCANCIA' }, empresa: 'Cofres SA', conductor_nombre: 'Y', conductor_documento: '1' },
+  });
+});
+
+test('proveedor fuera del catálogo: el tipo sale del estado y, si está dentro, se propone su ingreso', async () => {
+  await eventos.registrar({
+    sentido: 'INGRESO', placa: 'S7V002', tipo_vehiculo: 'PROVEEDOR', motivo_id: m.ENTREGA_MERCANCIA, empresa: 'Z', conductor_nombre: 'W', conductor_documento: '5',
+  }, sesion);
+  expect(await estado.sugerir('S7V002')).toMatchObject({
+    tipo_vehiculo: 'PROVEEDOR', vehiculo_externo: null, sentido_sugerido: 'SALIDA',
+    propuesta: { empresa: 'Z', conductor_nombre: 'W', conductor_documento: '5' },
+  });
+});
