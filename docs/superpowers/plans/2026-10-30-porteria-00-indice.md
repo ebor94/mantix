@@ -13,7 +13,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | cerrada (revisión final + correcciones) | Login AD con roles de portería, sede activa, catálogos de H360 |
 | 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | cerrada (revisión final + correcciones) | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
 | 2b — Puesta en marcha | `2026-10-30-porteria-fase2b-arranque.md` | cerrada | Siembra de propios por sede, propios fuera para el guarda, salida por otra sede inconsistente |
-| 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
+| 3 — Front del guarda | `2026-10-31-porteria-fase3-front-guarda.md` (repo `porteriasfn`, rama `feature/guarda`) | listo para ejecutar | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
 | 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
 

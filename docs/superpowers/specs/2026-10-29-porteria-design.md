@@ -199,6 +199,8 @@ GET    /admin/reportes/movimientos.xlsx?…mismos filtros que /eventos   (excelj
 
 ## 9. Frontend (`ebor94/porteriasfn`)
 
+- Patrón de `peludos` (TRIKIPELUDOS): mismas versiones, estructura `services/ stores/ views/ components/ router/` y pruebas `__tests__/*.spec.js`. Servido en la subruta `/porteria/`; despliegue copiando `dist/` a `smb://192.9.17.11/www/porteria`. Mobile-first (celular y tablet).
+
 - **Stack:** Vue 3 + Vite + Tailwind + Pinia + Vue Router; axios con `VITE_API_URL`. PWA instalable solo como acceso directo (manifest e íconos, sin caché offline de datos).
 - **Interceptores:** 401 → limpia sesión y va al login. 503 → pantalla "Portería no disponible".
 - **Diseño para la caseta:** tablet o celular en vertical, botones de al menos 56 px, alto contraste, poco texto, flujo de 3–4 toques.
