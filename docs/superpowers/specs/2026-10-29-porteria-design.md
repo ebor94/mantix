@@ -26,7 +26,7 @@ Tipos de vehículo: `PROPIO` (tabla `vehiculos` de H360), `PROVEEDOR_ASISTENCIA`
 | 8 | Alertas | No en V1. Inconsistencias y propios fuera se ven en el dashboard admin. |
 | — | Viaje entre sedes | El estado es por placa, no por sede. Un propio que sale de A e ingresa en B cierra el viaje con normalidad. |
 | — | Acceso a BD | Pool `mysql2` propio y SQL explícito (patrón Big Day), migrador con tabla de control (patrón TRK). |
-| — | Puesta en marcha (Fase 2b) | Siembra de propios: `npm run porteria:sembrar -- --sede <id> [--placas …]` marca como *dentro* de esa sede a los propios activos de H360 sin estado (varias corridas reparten la flota). No crea movimientos; queda en `por_auditoria` (`SEMBRAR`). Un sembrado cuenta como "con historial". Los proveedores arrancan fuera. |
+| — | Puesta en marcha (Fase 2b) | Siembra de propios: `npm run porteria:sembrar -- --sede <id> (--placas … | --todos)` marca como *dentro* de esa sede a los propios activos de H360 sin estado (varias corridas reparten la flota). No crea movimientos; queda en `por_auditoria` (`SEMBRAR`). Un sembrado cuenta como "con historial". Los proveedores arrancan fuera. |
 | — | Propios fuera (Fase 2b) | El guarda ve toda la flota fuera, con la sede de salida en cada fila; el admin puede filtrar por sede. |
 | — | Salida por otra sede (Fase 2b) | Si el vehículo figura dentro de la sede A y se registra su salida en la B: 409 `SENTIDO_INCOHERENTE` ("figura dentro de otra sede"); forzado queda `inconsistente` con tipo `SALIDA_OTRA_SEDE`. Un propio sin historial ni siembra (dentro, sin sede) puede salir por cualquier sede. |
 

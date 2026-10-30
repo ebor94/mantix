@@ -12,7 +12,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | 0 — Base | `2026-10-30-porteria-fase0-base.md` | cerrada (revisión final + correcciones) | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
 | 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | cerrada (revisión final + correcciones) | Login AD con roles de portería, sede activa, catálogos de H360 |
 | 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | cerrada (revisión final + correcciones) | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
-| 2b — Puesta en marcha | `2026-10-30-porteria-fase2b-arranque.md` | listo para ejecutar | Siembra de propios por sede, propios fuera para el guarda, salida por otra sede inconsistente |
+| 2b — Puesta en marcha | `2026-10-30-porteria-fase2b-arranque.md` | cerrada | Siembra de propios por sede, propios fuera para el guarda, salida por otra sede inconsistente |
 | 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
 | 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
@@ -64,6 +64,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - Front: pantallas 6–8 y store `motivos`.
 
 ### Fase 5 — Despliegue
+- Antes del piloto: `npm run porteria:migrate` (hasta 005) y, por sede, `npm run porteria:sembrar -- --sede <id> --placas …` con la flota que pernocta en cada una (`--todos` siembra todos los propios activos sin estado en esa sede). El comando nunca pisa un estado existente; se puede repetir.
 - `SELECT VERSION()` en serfuweb: `FOR UPDATE OF` exige MySQL ≥ 8.0.1 (MariaDB y 5.7 lo rechazan; corregir/anular fallarían con 500). Aplicar migraciones 001–004 en orden. El pool (10 conexiones) comparte esperas de bloqueo: revisar `innodb_lock_wait_timeout` frente al timeout de nginx.
 - Confirmar que nginx es el único salto (`trust proxy` = 1) y que el puerto de Node no es accesible directo; si no, `req.ip` es falsificable o es el del balanceador. Los limitadores viven en memoria por proceso (se reinician con el servicio). Pendientes de serfuweb: `exequias.fecha` es DATE, collation/charset de las tablas de H360, placas con tabulaciones o espacios no separables.
 - Variables en `srv-backend`, `npm run porteria:migrate` en producción, origen del front en `CORS_ORIGIN`, sitio nginx del front, grupos AD creados, piloto en una sede con checklist.
