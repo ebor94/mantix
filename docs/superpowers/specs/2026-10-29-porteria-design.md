@@ -179,14 +179,15 @@ GET    /vehiculos-externos?q=      POST /vehiculos-externos (guarda, admin)   PA
 POST   /eventos                    { sentido, placa, tipo_vehiculo?, vehiculo_externo_id?, conductor..., motivo_id,
                                      asistencia_id?, exequia_id?, referencia_texto?, kilometraje?, observaciones?,
                                      forzar?, guardar_en_catalogo?, empresa? }
-GET    /eventos?sede_id=&desde=&hasta=&placa=&tipo_vehiculo=&motivo_id=&inconsistente=&page=
+GET    /eventos?sede_id=&desde=&hasta=&placa=&tipo_vehiculo=&motivo_id=&inconsistente=&pagina=
+                                   (respuesta: { items, total, pagina, por_pagina }; 50 por página)
 GET    /eventos/:id
 PATCH  /eventos/:id                corrección
 POST   /eventos/:id/anular         { motivo }
 
 GET    /estado/dentro?sede_id=
 GET    /estado/fuera               propios fuera, con motivo, sede de salida y desde cuándo
-GET    /estado/placa/:placa
+GET    /estado/placa/:placa   (no se limita por sede: el viaje de un propio puede cerrar en otra sede)
 
 GET    /admin/motivos   POST /admin/motivos   PATCH /admin/motivos/:id   DELETE /admin/motivos/:id
 GET    /admin/reportes/movimientos.xlsx?…mismos filtros que /eventos   (exceljs en streaming)
