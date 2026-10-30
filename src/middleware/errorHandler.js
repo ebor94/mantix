@@ -20,6 +20,8 @@ const ETIQUETAS_CAMPOS = {
   entidad: 'Entidad bancaria', numero_cuenta: 'Número de cuenta', empresa: 'Empresa (referencia comercial)',
   contacto: 'Contacto', telefono: 'Teléfono', direccion: 'Dirección', ciudad: 'Ciudad',
   productos_servicios: 'Productos / servicios', cual_certificacion: 'Certificación',
+  total_activos: 'Activos totales', total_pasivos: 'Pasivos totales', total_patrimonio: 'Patrimonio',
+  total_ingresos_brutos: 'Ingresos operacionales', utilidad_operacional: 'Utilidad neta', anio_gravable: 'Año de declaración',
 };
 
 function etiquetaCampo(col) {

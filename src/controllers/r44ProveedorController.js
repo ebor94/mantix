@@ -25,14 +25,43 @@ const INCLUDE_COMPLETO = [
 ];
 
 // Mapea financiero del frontend a columnas reales de r44_info_financiera
+// Convierte un valor monetario (string con formato o número) a un entero de
+// pesos (BIGINT). Tolera "$", separadores de miles y decimales en formato
+// colombiano ("1.234.567,50") o anglosajón ("1,234,567.50"). Evita el error
+// "Data truncated" que lanza MySQL en modo estricto al recibir texto con formato.
+function aEnteroPesos(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return isFinite(v) ? Math.round(v) : null;
+  let s = String(v).trim().replace(/[^0-9.,-]/g, ''); // quita $, espacios, letras
+  if (!s || s === '-') return null;
+  const neg = s.startsWith('-');
+  s = s.replace(/-/g, '');
+  const tieneComa = s.includes(',');
+  const tienePunto = s.includes('.');
+  if (tieneComa && tienePunto) {
+    // El separador decimal es el que aparece de último (CO: coma; US: punto).
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (tieneComa) {
+    const p = s.split(',');
+    s = (p.length === 2 && p[1].length <= 2) ? p[0] + '.' + p[1] : s.replace(/,/g, '');
+  } else if (tienePunto) {
+    const p = s.split('.');
+    if (!(p.length === 2 && p[1].length <= 2)) s = s.replace(/\./g, ''); // puntos = miles
+  }
+  const n = Math.round(parseFloat(s));
+  if (!isFinite(n)) return null;
+  return neg ? -n : n;
+}
+
 function mapearFinanciero(fin) {
   return {
     anio_gravable:         fin.anio_gravable         ?? fin.anio_declaracion      ?? null,
-    total_activos:         fin.total_activos         ?? fin.activos_totales        ?? null,
-    total_pasivos:         fin.total_pasivos         ?? fin.pasivos_totales        ?? null,
-    total_patrimonio:      fin.total_patrimonio      ?? fin.patrimonio             ?? null,
-    total_ingresos_brutos: fin.total_ingresos_brutos ?? fin.ingresos_operacionales ?? null,
-    utilidad_operacional:  fin.utilidad_operacional  ?? fin.utilidad_neta          ?? null,
+    total_activos:         aEnteroPesos(fin.total_activos         ?? fin.activos_totales),
+    total_pasivos:         aEnteroPesos(fin.total_pasivos         ?? fin.pasivos_totales),
+    total_patrimonio:      aEnteroPesos(fin.total_patrimonio      ?? fin.patrimonio),
+    total_ingresos_brutos: aEnteroPesos(fin.total_ingresos_brutos ?? fin.ingresos_operacionales),
+    utilidad_operacional:  aEnteroPesos(fin.utilidad_operacional  ?? fin.utilidad_neta),
   };
 }
 
