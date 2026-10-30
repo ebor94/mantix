@@ -13,7 +13,7 @@ beforeAll(async () => {
   await conn.query("DELETE FROM por_estado_vehiculo WHERE placa LIKE 'B3S%'");
   for (const t of ['vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 2970 AND 2989`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2971, 'B3S', 'B3S', 'Cúcuta', 1), (2972, 'B3SX', 'Cerrada', 'Cúcuta', 0)");
-  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2971, 'B3S-001', 'F', 'F', 'CARROZA', 1), (2972, 'B3S002', 'F', 'F', 'CARROZA', 1), (2973, 'B3S003', 'F', 'F', 'CARROZA', 0), (2974, '--', 'F', 'F', 'CARROZA', 1)");
+  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2976, 'B3S004', 'F', 'F', 'CARROZA', 1), (2971, 'B3S-001', 'F', 'F', 'CARROZA', 1), (2972, 'B3S002', 'F', 'F', 'CARROZA', 1), (2973, 'B3S003', 'F', 'F', 'CARROZA', 0), (2974, '--', 'F', 'F', 'CARROZA', 1)");
   siembra = crearServicioSiembra({ bd, h360: crearH360Lectura(bd) });
 });
 afterAll(async () => {
@@ -35,13 +35,40 @@ test('con placas: siembra las pedidas y reporta las que no son propios activos',
   expect(aud.despues).toEqual({ placa: 'B3S001', sede_id: 2971 });
 });
 
+test('simular clasifica igual que sembrar pero no escribe filas ni auditoría', async () => {
+  const [[{ n: antes }]] = await conn.query("SELECT COUNT(*) AS n FROM por_auditoria WHERE accion = 'SEMBRAR'");
+  const pedidas = ['B3S004', 'B3S001', 'B3S999'];
+  const simulado = await siembra.sembrarPropios({ sedeId: 2971, placas: pedidas, usuario: 'x', simular: true });
+  expect(simulado).toEqual({
+    sede: { id: 2971, nombre: 'B3S' },
+    sembrados: ['B3S004'],
+    omitidos: [
+      { placa: 'B3S999', razon: 'no es un vehículo activo de la empresa' },
+      { placa: 'B3S001', razon: 'ya tiene estado' },
+    ],
+  });
+  const [filas] = await conn.query("SELECT 1 FROM por_estado_vehiculo WHERE placa = 'B3S004'");
+  expect(filas).toEqual([]);
+  const [[{ n: despues }]] = await conn.query("SELECT COUNT(*) AS n FROM por_auditoria WHERE accion = 'SEMBRAR'");
+  expect(despues).toBe(antes);
+  // Y el modo real da la misma clasificación.
+  const real = await siembra.sembrarPropios({ sedeId: 2971, placas: pedidas, usuario: 'x' });
+  expect(real).toEqual(simulado);
+});
+
+test('el servicio avisa la sede antes de sembrar', async () => {
+  const vistas = [];
+  await siembra.sembrarPropios({ sedeId: 2971, placas: ['B3S001'], usuario: 'x', simular: true, alResolverSede: (s) => vistas.push(s) });
+  expect(vistas).toEqual([{ id: 2971, nombre: 'B3S' }]);
+});
+
 test('sin placas: siembra todos los propios activos sin estado y nunca pisa uno existente', async () => {
   const r = await siembra.sembrarPropios({ sedeId: 2971, usuario: 'carga-inicial' });
   expect(r.sembrados).toContain('B3S002');
   expect(r.sembrados).not.toContain('B3S001');
   expect(r.omitidos).toContainEqual({ placa: 'B3S001', razon: 'ya tiene estado' });
   const otra = await siembra.sembrarPropios({ sedeId: 2971, placas: ['B3S002'], usuario: 'x' });
-  expect(otra).toEqual({ sembrados: [], omitidos: [{ placa: 'B3S002', razon: 'ya tiene estado' }] });
+  expect(otra).toEqual({ sede: { id: 2971, nombre: 'B3S' }, sembrados: [], omitidos: [{ placa: 'B3S002', razon: 'ya tiene estado' }] });
 });
 
 test('placas de H360 vacías al normalizar o de más de 20 caracteres no se siembran', async () => {

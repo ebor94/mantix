@@ -1,5 +1,6 @@
 // Puesta en marcha: marca como dentro de una sede a los propios activos de H360 que aún no tienen estado.
 // No crea eventos y nunca pisa un estado existente; cada fila sembrada queda auditada.
+// Con `simular` solo clasifica (sin transacciones ni escrituras).
 const PorteriaError = require('../utils/PorteriaError');
 const { conTransaccion } = require('../utils/transaccion');
 const repoEstado = require('../repositorios/estado');
@@ -8,9 +9,11 @@ const { registrarAuditoria } = require('../repositorios/auditoria');
 const PLACA_MAX = 20;
 
 function crearServicioSiembra({ bd, h360 }) {
-  async function sembrarPropios({ sedeId, placas = null, usuario }) {
+  async function sembrarPropios({ sedeId, placas = null, usuario, simular = false, alResolverSede = null }) {
     const sede = await h360.obtenerSede(sedeId);
     if (!sede) throw new PorteriaError(404, 'SEDE_NO_ENCONTRADA', 'La sede no existe o está inactiva');
+
+    if (alResolverSede) alResolverSede({ id: sede.id, nombre: sede.nombre });
 
     const propios = await h360.listarVehiculosPropios();
     const omitidos = [];
@@ -29,6 +32,12 @@ function crearServicioSiembra({ bd, h360 }) {
 
     const sembrados = [];
     for (const vehiculo of objetivo) {
+      if (simular) {
+        const [filas] = await bd.obtener().query('SELECT 1 FROM por_estado_vehiculo WHERE placa = ?', [vehiculo.placa]);
+        if (filas.length) omitidos.push({ placa: vehiculo.placa, razon: 'ya tiene estado' });
+        else sembrados.push(vehiculo.placa);
+        continue;
+      }
       const creado = await conTransaccion(bd, async (conn) => {
         if (!(await repoEstado.sembrar(conn, { placa: vehiculo.placa, sedeId: sede.id }))) return false;
         await registrarAuditoria(conn, {
@@ -40,7 +49,7 @@ function crearServicioSiembra({ bd, h360 }) {
       if (creado) sembrados.push(vehiculo.placa);
       else omitidos.push({ placa: vehiculo.placa, razon: 'ya tiene estado' });
     }
-    return { sembrados, omitidos };
+    return { sede: { id: sede.id, nombre: sede.nombre }, sembrados, omitidos };
   }
 
   return { sembrarPropios };
