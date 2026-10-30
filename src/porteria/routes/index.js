@@ -14,6 +14,7 @@ const { crearH360Lectura } = require('../services/h360Lectura.service');
 const { crearConductores } = require('../services/conductores.service');
 const { crearRepositorioMotivos } = require('../repositorios/motivos');
 const { crearRouterAuth } = require('./auth.routes');
+const { crearRouterCatalogos } = require('./catalogos.routes');
 
 /**
  * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
@@ -36,6 +37,7 @@ function crearRouterPorteria({
   });
 
   router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, h360, autenticar }));
+  router.use('/catalogos', crearRouterCatalogos({ autenticar, h360, conductores, motivos }));
 
   router.use(apiCodigo('POR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 

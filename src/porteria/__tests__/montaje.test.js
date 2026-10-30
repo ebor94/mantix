@@ -55,3 +55,13 @@ test('JSON inválido en /api/porteria responde con el contrato del módulo', asy
   expect(r.status).toBe(400);
   expect(r.body).toMatchObject({ success: false, motivo: 'VALIDACION', message: 'JSON inválido' });
 });
+
+test('las rutas de la Fase 1 están montadas en la app real', async () => {
+  completas();
+  const login = await request(await servir(app)).post('/api/porteria/v1/auth/login').send({});
+  expect(login.status).toBe(400);
+  expect(login.body.error).toBe('POR-AUT-001');
+  const sedes = await request(await servir(app)).get('/api/porteria/v1/catalogos/sedes');
+  expect(sedes.status).toBe(401);
+  expect(sedes.body.error).toBe('POR-CAT-001');
+});
