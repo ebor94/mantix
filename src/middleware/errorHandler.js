@@ -22,6 +22,7 @@ const ETIQUETAS_CAMPOS = {
   productos_servicios: 'Productos / servicios', cual_certificacion: 'Certificación',
   total_activos: 'Activos totales', total_pasivos: 'Pasivos totales', total_patrimonio: 'Patrimonio',
   total_ingresos_brutos: 'Ingresos operacionales', utilidad_operacional: 'Utilidad neta', anio_gravable: 'Año de declaración',
+  total_empleados: 'Total de empleados',
 };
 
 function etiquetaCampo(col) {
@@ -102,7 +103,9 @@ const errorHandler = (err, req, res, next) => {
       mensaje = `El campo "${campo}" es demasiado largo. Acórtalo e inténtalo de nuevo.`;
     } else if (code === 'ER_BAD_NULL_ERROR') {
       mensaje = `El campo "${campo}" es obligatorio.`;
-    } else if (code === 'WARN_DATA_TRUNCATED' || code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || code === 'ER_WARN_DATA_OUT_OF_RANGE') {
+    } else if (code === 'ER_WARN_DATA_OUT_OF_RANGE') {
+      mensaje = `El valor del campo "${campo}" está fuera del rango permitido. Revisa que el número sea correcto.`;
+    } else if (code === 'WARN_DATA_TRUNCATED' || code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD') {
       mensaje = `El valor del campo "${campo}" no es válido.`;
     } else {
       mensaje = col
