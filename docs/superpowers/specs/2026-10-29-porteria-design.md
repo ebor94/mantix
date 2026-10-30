@@ -115,18 +115,19 @@ Migraciones `src/porteria/migrations/NNN_nombre.sql`, aplicadas por `scripts/mig
 - `empresa NULL`
 - `motivo_id, asistencia_id NULL, exequia_id NULL, referencia_texto NULL, referencia_snapshot JSON NULL`
 - `evento_par_id NULL, kilometraje INT NULL, observaciones NULL`
-- `inconsistente TINYINT DEFAULT 0, inconsistencia_tipo ENUM('INGRESO_ESTANDO_DENTRO','SALIDA_ESTANDO_FUERA') NULL`
+- `inconsistente TINYINT DEFAULT 0, inconsistencia_tipo ENUM('INGRESO_ESTANDO_DENTRO','SALIDA_ESTANDO_FUERA','SALIDA_OTRA_SEDE') NULL`
 - `registrado_at` (servidor), `registrado_por`
 - `corregido_at NULL, corregido_por NULL`
 - `anulado TINYINT DEFAULT 0, anulado_por, anulado_at, anulado_motivo`
 - Índices: `(sede_id, registrado_at)`, `(placa, registrado_at)`, `(motivo_id)`, `(inconsistente)`.
 
 **`por_estado_vehiculo`:** un registro por placa (no por sede).
-`placa PK, tipo_vehiculo, sede_id, dentro TINYINT, ultimo_evento_id, salida_abierta_id NULL, actualizado_at`, índice `(sede_id, dentro)`.
+`placa PK, tipo_vehiculo, sede_id, dentro TINYINT, ultimo_evento_id, salida_abierta_id NULL, sembrado_at NULL, sembrado_sede_id NULL, actualizado_at`, índice `(sede_id, dentro)`.
+- `sembrado_at` / `sembrado_sede_id`: carga inicial de la puesta en marcha (comando `porteria:sembrar`). Un propio sembrado figura dentro de esa sede sin tener eventos (`ultimo_evento_id` NULL).
 - `dentro = 1` → el vehículo está en `sede_id`.
 - `dentro = 0` → está fuera; `sede_id` es la sede por donde salió y `salida_abierta_id` la salida pendiente de cierre.
 
-**`por_auditoria`:** `id, usuario, api_codigo, entidad, entidad_id, accion ENUM('CREAR','CORREGIR','ANULAR','FORZAR'), antes JSON, despues JSON, ip, created_at` (equivalente a `trk_auditoria`, con usuario AD en texto).
+**`por_auditoria`:** `id, usuario, api_codigo, entidad, entidad_id, accion ENUM('CREAR','CORREGIR','ANULAR','FORZAR','SEMBRAR'), antes JSON, despues JSON, ip, created_at` (equivalente a `trk_auditoria`, con usuario AD en texto).
 
 **Vista `v_por_movimientos`** (para Superset): evento + nombre de sede + motivo + datos del vehículo. Para los ingresos con par, agrega la duración del viaje (minutos) y los km recorridos (si ambos eventos tienen kilometraje). Excluye los anulados.
 
@@ -146,7 +147,7 @@ Migraciones `src/porteria/migrations/NNN_nombre.sql`, aplicadas por `scripts/mig
    - Proveedor: `empresa`, `conductor_nombre` y `conductor_documento` obligatorios.
 5. **Transacción:**
    1. `SELECT … FROM por_estado_vehiculo WHERE placa = ? FOR UPDATE`. Con REPEATABLE READ, un `FOR UPDATE` sobre una placa sin fila solo toma un *gap lock*, que no serializa dos primeros registros simultáneos. Por eso, si la placa no tiene fila, antes se inserta una fila provisional (`INSERT … ON DUPLICATE KEY UPDATE placa = placa`, marcada como "sin eventos") y luego se bloquea. Un *deadlock* (1213) se reintenta una vez; si persiste, responde 409. Al recalcular el estado se ordena por `registrado_at DESC, id DESC` (DATETIME tiene resolución de segundos).
-   2. Coherencia: si no hay fila, la placa se toma como fuera. `INGRESO` con `dentro = 1` o `SALIDA` con `dentro = 0` → **409 `SENTIDO_INCOHERENTE`** con el estado actual (sede, desde cuándo). Con `forzar: true` y `observaciones` no vacías se registra con `inconsistente = 1`, el `inconsistencia_tipo` y auditoría `FORZAR`.
+   2. Coherencia: si no hay fila, la placa se toma como fuera. `INGRESO` con `dentro = 1` o `SALIDA` con `dentro = 0` → **409 `SENTIDO_INCOHERENTE`** con el estado actual (sede, desde cuándo). Con `forzar: true` y `observaciones` no vacías se registra con `inconsistente = 1`, el `inconsistencia_tipo` (`SALIDA_OTRA_SEDE` si sale por una sede distinta de la que figura) y auditoría `FORZAR`. El payload del 409 incluye `otra_sede` cuando el vehículo figura dentro de una sede distinta de la de la sesión, en ambos sentidos.
    3. Un `INGRESO` con `salida_abierta_id` se enlaza (`evento_par_id`) con esa salida, sin importar la sede.
    4. Inserta el evento, hace upsert del estado (`dentro`, `sede_id`, `ultimo_evento_id`, `salida_abierta_id` = la salida o NULL) y escribe la auditoría `CREAR`.
 6. **Catálogo:** si es proveedor, la placa no está en el catálogo y viene `guardar_en_catalogo: true`, se crea en `por_vehiculos_externos` en la misma transacción.
@@ -157,7 +158,7 @@ Migraciones `src/porteria/migrations/NNN_nombre.sql`, aplicadas por `scripts/mig
 
 **Anulación (`POST /eventos/:id/anular { motivo }`):** en una transacción con bloqueo de la placa:
 - Marca el evento como anulado y quita `evento_par_id` del ingreso que lo apunte (y el propio).
-- Recalcula `por_estado_vehiculo` desde el último evento no anulado de la placa. Si no queda ninguno, borra la fila de estado (es tabla derivada, no histórico).
+- Recalcula `por_estado_vehiculo` desde el último evento no anulado de la placa. Si no queda ninguno: un vehículo sembrado vuelve a su siembra (dentro de `sembrado_sede_id`, sin eventos); cualquier otro queda sin fila de estado (es tabla derivada, no histórico).
 - Audita `ANULAR`.
 
 **Permisos de corrección y anulación:** un guarda solo puede corregir o anular los eventos que él registró, dentro de los 15 minutos de `registrado_at` (hora del servidor). El admin puede cualquiera. Nunca se hace `DELETE` de eventos.
