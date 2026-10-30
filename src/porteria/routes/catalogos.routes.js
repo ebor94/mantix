@@ -5,15 +5,7 @@ const apiCodigo = require('../middleware/apiCodigo');
 const PorteriaError = require('../utils/PorteriaError');
 const aw = require('../utils/aw');
 const { TIPOS_VEHICULO, SENTIDOS } = require('../repositorios/motivos');
-
-/** Texto opcional de la query: recortado, vacío → undefined, máximo 50 caracteres. */
-function textoOpcional(valor) {
-  if (valor === undefined) return undefined;
-  if (typeof valor !== 'string') throw new PorteriaError(400, 'VALIDACION', 'La búsqueda es demasiado larga');
-  const texto = valor.trim();
-  if (texto.length > 50) throw new PorteriaError(400, 'VALIDACION', 'La búsqueda es demasiado larga');
-  return texto === '' ? undefined : texto;
-}
+const { textoOpcional } = require('../utils/texto');
 
 function crearRouterCatalogos({ autenticar, h360, conductores, motivos }) {
   const router = express.Router();

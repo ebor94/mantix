@@ -65,3 +65,16 @@ test('las rutas de la Fase 1 están montadas en la app real', async () => {
   expect(sedes.status).toBe(401);
   expect(sedes.body.error).toBe('POR-CAT-001');
 });
+
+test('las rutas de la Fase 2 están montadas en la app real', async () => {
+  completas();
+  for (const [metodo, ruta, codigo] of [
+    ['post', '/api/porteria/v1/eventos', 'POR-EVT-001'],
+    ['get', '/api/porteria/v1/estado/placa/ABC123', 'POR-EST-003'],
+    ['get', '/api/porteria/v1/vehiculos-externos', 'POR-VEX-001'],
+  ]) {
+    const r = await request(await servir(app))[metodo](ruta);
+    expect(r.status).toBe(401);
+    expect(r.body.error).toBe(codigo);
+  }
+});

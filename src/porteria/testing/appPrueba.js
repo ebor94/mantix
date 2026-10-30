@@ -21,8 +21,27 @@ function crearAppPrueba(deps = {}) {
       buscarVehiculosPropios: jest.fn(async () => []),
       buscarAsistencias: jest.fn(async () => []),
       buscarExequias: jest.fn(async () => []),
+      obtenerVehiculoPropioPorPlaca: jest.fn(async () => null),
     },
     motivos: { listarActivos: jest.fn(async () => []) },
+    vehiculosExternos: {
+      buscar: jest.fn(async () => []),
+      obtenerPorId: jest.fn(async () => null),
+      crear: jest.fn(async () => 1),
+      actualizar: jest.fn(async () => true),
+    },
+    eventos: {
+      registrar: jest.fn(async () => ({})),
+      listar: jest.fn(async () => ({ items: [], total: 0, pagina: 1, por_pagina: 50 })),
+      obtener: jest.fn(async () => null),
+      corregir: jest.fn(async () => ({})),
+      anular: jest.fn(async () => ({})),
+    },
+    estado: {
+      sugerir: jest.fn(async () => ({})),
+      dentro: jest.fn(async () => []),
+      fuera: jest.fn(async () => []),
+    },
     ...deps,
   };
   const app = express();

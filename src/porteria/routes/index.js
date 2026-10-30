@@ -13,15 +13,26 @@ const { errorParaLog } = require('../utils/errorSeguro');
 const { crearH360Lectura } = require('../services/h360Lectura.service');
 const { crearConductores } = require('../services/conductores.service');
 const { crearRepositorioMotivos } = require('../repositorios/motivos');
+const { crearRepositorioVehiculosExternos } = require('../repositorios/vehiculosExternos');
+const { crearServicioEventos } = require('../services/eventos.service');
+const { crearServicioEstado } = require('../services/estado.service');
 const { crearRouterAuth } = require('./auth.routes');
 const { crearRouterCatalogos } = require('./catalogos.routes');
+const { crearRouterEventos } = require('./eventos.routes');
+const { crearRouterEstado } = require('./estado.routes');
+const { crearRouterVehiculosExternos } = require('./vehiculosExternos.routes');
 
 /**
  * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
- * `directorio` = { validarCredenciales }; `conductores` = { listar(), existe() }.
+ * `directorio` = { validarCredenciales }; `conductores` = { listar(), buscar() }. Lo demás se construye desde ahí.
  */
 function crearRouterPorteria({
-  bd, obtenerConfig, directorio, conductores, h360 = crearH360Lectura(bd), motivos = crearRepositorioMotivos(bd),
+  bd, obtenerConfig, directorio, conductores,
+  h360 = crearH360Lectura(bd),
+  motivos = crearRepositorioMotivos(bd),
+  vehiculosExternos = crearRepositorioVehiculosExternos(bd),
+  eventos = crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExternos }),
+  estado = crearServicioEstado({ bd, h360, vehiculosExternos }),
 }) {
   const router = express.Router();
   const autenticar = crearAutenticacion(obtenerConfig);
@@ -38,6 +49,9 @@ function crearRouterPorteria({
 
   router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, h360, autenticar }));
   router.use('/catalogos', crearRouterCatalogos({ autenticar, h360, conductores, motivos }));
+  router.use('/eventos', crearRouterEventos({ autenticar, eventos }));
+  router.use('/estado', crearRouterEstado({ autenticar, estado }));
+  router.use('/vehiculos-externos', crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }));
 
   router.use(apiCodigo('POR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 
