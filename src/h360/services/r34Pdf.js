@@ -26,6 +26,16 @@ const HOJA_H = 396       // 5.5"
 const M      = 22        // margen
 const CW     = HOJA_W - M * 2
 
+/**
+ * La versión del formato en el sistema de calidad. Sube cuando cambia lo que
+ * va impreso, no cuando cambia el código: la 09 quitó el teléfono de la
+ * familia de la hoja que recibe el proveedor y agregó el valor acordado.
+ *
+ * Va aquí arriba y no dentro del encabezado porque la imprimen las dos hojas y
+ * el próximo cambio del formato tiene que ser una sola línea.
+ */
+const VERSION_FORMATO = '09'
+
 const VERDE  = '#1a4a2e'
 const TINTA  = '#1b1b1b'
 const GRIS   = '#666666'
@@ -122,7 +132,7 @@ function generarR34Pdf(r34) {
       doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11.5)
          .text(titulo, M + 56, y + 7, { width: CW - 210 })
       doc.font('Helvetica').fontSize(7)
-         .text('Código: R-34   Versión: 08', M + CW - 150, y + 6, { width: 140, align: 'right' })
+         .text(`Código: R-34   Versión: ${VERSION_FORMATO}`, M + CW - 150, y + 6, { width: 140, align: 'right' })
          .font('Helvetica-Bold').fontSize(8.5)
          .text(texto(r34.consecutivo), M + CW - 150, y + 17, { width: 140, align: 'right' })
       doc.restore()
