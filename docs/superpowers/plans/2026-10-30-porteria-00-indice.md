@@ -9,8 +9,8 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 
 | Fase | Plan | Estado | Entrega |
 |---|---|---|---|
-| 0 — Base | `2026-10-30-porteria-fase0-base.md` | listo para ejecutar | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
-| 1 — Auth + catálogos | por escribir | — | Login AD con roles de portería, sede activa, catálogos de H360 |
+| 0 — Base | `2026-10-30-porteria-fase0-base.md` | cerrada (revisión final + correcciones) | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
+| 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | listo para ejecutar | Login AD con roles de portería, sede activa, catálogos de H360 |
 | 2 — Eventos | por escribir | — | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
 | 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
