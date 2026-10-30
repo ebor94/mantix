@@ -61,6 +61,14 @@ function crearConductores({ listarMiembrosGrupo, grupos, ttlMs = DIEZ_MINUTOS, a
     async existe(usuario) {
       return (await listar()).some((c) => c.usuario === usuario);
     },
+    /**
+     * { conductor, listaCompleta }. listaCompleta es false si el AD nunca respondió del todo: quien llama
+     * no debe tratar "no está" como definitivo (la portería no se bloquea por el AD).
+     */
+    async buscar(usuario) {
+      const lista = await listar();
+      return { conductor: lista.find((c) => c.usuario === usuario) || null, listaCompleta: cache !== null };
+    },
   };
 }
 

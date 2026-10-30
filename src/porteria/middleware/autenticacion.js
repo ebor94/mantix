@@ -1,5 +1,5 @@
 const PorteriaError = require('../utils/PorteriaError');
-const { verificarToken } = require('../services/auth.service');
+const { verificarToken, ROLES } = require('../services/auth.service');
 
 /** `obtenerConfig()` se llama en cada request: el secreto es el del entorno vigente. */
 function crearAutenticacion(obtenerConfig) {
@@ -28,4 +28,25 @@ function requiereSede(req, res, next) {
     : next(new PorteriaError(403, 'SEDE_REQUERIDA', 'Elige la sede de tu turno para continuar'));
 }
 
-module.exports = { crearAutenticacion, requiereRol, requiereSede };
+/**
+ * Sede de una consulta. El guarda siempre consulta la de su turno. El admin puede pedir otra con ?sede_id=;
+ * si no, usa la de su token; sin ninguna, `todasParaAdmin` devuelve null (todas) y si no es un 400.
+ */
+function sedeDeConsulta(req, { todasParaAdmin = false } = {}) {
+  const usuario = req.porUsuario;
+  if (usuario.rol !== ROLES.ADMIN) {
+    if (!usuario.sede_id) throw new PorteriaError(403, 'SEDE_REQUERIDA', 'Elige la sede de tu turno para continuar');
+    return usuario.sede_id;
+  }
+  const pedida = req.query && req.query.sede_id;
+  if (pedida !== undefined && pedida !== '') {
+    const id = Number(pedida);
+    if (!Number.isInteger(id) || id <= 0) throw new PorteriaError(400, 'VALIDACION', 'Sede inválida');
+    return id;
+  }
+  if (usuario.sede_id) return usuario.sede_id;
+  if (todasParaAdmin) return null;
+  throw new PorteriaError(400, 'VALIDACION', 'Indica la sede');
+}
+
+module.exports = { crearAutenticacion, requiereRol, requiereSede, sedeDeConsulta };

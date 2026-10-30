@@ -109,3 +109,15 @@ test('existe consulta la lista', async () => {
   expect(await conductores.existe('baez')).toBe(true);
   expect(await conductores.existe('nadie')).toBe(false);
 });
+
+test('buscar distingue "no está en la lista" de "no se sabe"', async () => {
+  const ok = preparar();
+  expect(await ok.conductores.buscar('baez')).toEqual({ conductor: { usuario: 'baez', nombre: 'Báez Luis' }, listaCompleta: true });
+  expect(await ok.conductores.buscar('nadie')).toEqual({ conductor: null, listaCompleta: true });
+
+  const caido = preparar({ fallan: ['GA', 'GB'] });
+  expect(await caido.conductores.buscar('baez')).toEqual({ conductor: null, listaCompleta: false });
+
+  const parcial = preparar({ fallan: ['GB'] });
+  expect(await parcial.conductores.buscar('perez')).toEqual({ conductor: { usuario: 'perez', nombre: 'Pérez Juan' }, listaCompleta: false });
+});
