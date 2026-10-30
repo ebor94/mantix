@@ -41,7 +41,9 @@ function crearServicioEstado({ bd, h360, vehiculosExternos }) {
       tipo_vehiculo: tipoVehiculo,
       vehiculo,
       vehiculo_externo: externo,
-      estado: estado ? { dentro: estado.dentro === 1, sede_id: estado.sede_id, desde: estado.desde } : null,
+      estado: estado
+        ? { dentro: estado.dentro === 1, sede_id: estado.sede_id, desde: estado.desde, sembrado: estado.ultimo_evento_id === null }
+        : null,
       sentido_sugerido: dentro ? 'SALIDA' : 'INGRESO',
       propuesta,
     };

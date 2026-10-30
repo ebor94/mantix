@@ -52,21 +52,29 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
 
     return conTransaccion(bd, async (conn) => {
       const estado = await repoEstado.bloquear(conn, entrada.placa);
-      const conHistoria = estado.ultimo_evento_id !== null;
+      // Un vehículo sembrado en la puesta en marcha también tiene historial (figura dentro de su sede).
+      const conHistoria = estado.ultimo_evento_id !== null || estado.sembrado_at !== null;
       // Sin historial, un propio está en la sede (su primer movimiento es salir) y un proveedor está fuera.
       const dentro = conHistoria ? estado.dentro === 1 : tipo === 'PROPIO';
       const esIngreso = entrada.sentido === 'INGRESO';
-      const incoherente = esIngreso === dentro;
+      // Salir por una sede distinta de la que figura: hubo movimientos sin registrar.
+      const otraSede = !esIngreso && dentro && estado.sede_id !== null && estado.sede_id !== sesion.sede_id;
+      const incoherente = esIngreso === dentro || otraSede;
 
       if (incoherente && !entrada.forzar) {
-        const ultimo = conHistoria ? await repoEventos.obtener(conn, estado.ultimo_evento_id) : null;
-        throw new PorteriaError(
-          409, 'SENTIDO_INCOHERENTE',
-          dentro
-            ? 'Este vehículo figura dentro. Para registrar el ingreso igual, confírmalo y escribe una observación.'
-            : 'Este vehículo figura fuera. Para registrar la salida igual, confírmalo y escribe una observación.',
-          { estado: { dentro, sede_id: estado.sede_id, desde: ultimo ? ultimo.registrado_at : null, sin_historial: !conHistoria } },
-        );
+        const ultimo = estado.ultimo_evento_id !== null ? await repoEventos.obtener(conn, estado.ultimo_evento_id) : null;
+        let mensaje = 'Este vehículo figura fuera. Para registrar la salida igual, confírmalo y escribe una observación.';
+        if (otraSede) mensaje = 'Este vehículo figura dentro de otra sede. Para registrar la salida igual, confírmalo y escribe una observación.';
+        else if (dentro) mensaje = 'Este vehículo figura dentro. Para registrar el ingreso igual, confírmalo y escribe una observación.';
+        throw new PorteriaError(409, 'SENTIDO_INCOHERENTE', mensaje, {
+          estado: {
+            dentro,
+            sede_id: estado.sede_id,
+            desde: ultimo ? ultimo.registrado_at : estado.sembrado_at,
+            sin_historial: !conHistoria,
+            otra_sede: otraSede,
+          },
+        });
       }
       if (incoherente && !columnas.observaciones) throw regla('Escribe una observación para registrar igual');
 
@@ -82,7 +90,9 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
         // Solo los propios dejan salida abierta: su ingreso cierra el viaje, sin importar la sede.
         evento_par_id: esIngreso && tipo === 'PROPIO' ? estado.salida_abierta_id : null,
         inconsistente: incoherente ? 1 : 0,
-        inconsistencia_tipo: incoherente ? (esIngreso ? 'INGRESO_ESTANDO_DENTRO' : 'SALIDA_ESTANDO_FUERA') : null,
+        inconsistencia_tipo: !incoherente ? null
+          : otraSede ? 'SALIDA_OTRA_SEDE'
+            : esIngreso ? 'INGRESO_ESTANDO_DENTRO' : 'SALIDA_ESTANDO_FUERA',
         registrado_por: sesion.usuario,
       });
       await repoEstado.guardar(conn, {
