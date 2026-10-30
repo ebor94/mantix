@@ -7,6 +7,13 @@ const COLUMNA_TIPO = {
 };
 const COLUMNA_SENTIDO = { INGRESO: 'aplica_ingreso', SALIDA: 'aplica_salida' };
 
+const BOOLEANAS = ['activo', 'referencia_obligatoria', 'aplica_propio', 'aplica_proveedor_asistencia', 'aplica_proveedor', 'aplica_ingreso', 'aplica_salida'];
+
+/** ¿El motivo aplica a ese tipo de vehículo y sentido? (motivo tal como lo devuelve `obtener`). */
+function aplica(motivo, tipoVehiculo, sentido) {
+  return Boolean(motivo[COLUMNA_TIPO[tipoVehiculo]]) && Boolean(motivo[COLUMNA_SENTIDO[sentido]]);
+}
+
 function crearRepositorioMotivos(bd) {
   async function listarActivos({ tipoVehiculo, sentido } = {}) {
     const condiciones = ['activo = 1'];
@@ -25,11 +32,23 @@ function crearRepositorioMotivos(bd) {
     return filas.map((m) => ({ ...m, referencia_obligatoria: m.referencia_obligatoria === 1 }));
   }
 
-  return { listarActivos };
+  async function obtener(id) {
+    const [[fila]] = await bd.obtener().query(
+      `SELECT id, codigo, nombre, descripcion, tipo_referencia, referencia_obligatoria, activo,
+              aplica_propio, aplica_proveedor_asistencia, aplica_proveedor, aplica_ingreso, aplica_salida
+         FROM por_motivos WHERE id = ?`,
+      [id],
+    );
+    if (!fila) return null;
+    return { ...fila, ...Object.fromEntries(BOOLEANAS.map((c) => [c, fila[c] === 1])) };
+  }
+
+  return { listarActivos, obtener };
 }
 
 module.exports = {
   crearRepositorioMotivos,
+  aplica,
   TIPOS_VEHICULO: Object.keys(COLUMNA_TIPO),
   SENTIDOS: Object.keys(COLUMNA_SENTIDO),
 };
