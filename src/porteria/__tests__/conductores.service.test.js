@@ -39,11 +39,61 @@ test('usa la caché durante 10 minutos', async () => {
 });
 
 test('si un grupo falla sin caché previa devuelve lo que pudo leer y no lo guarda', async () => {
-  const { conductores, listarMiembrosGrupo, log } = preparar({ fallan: ['GB'] });
+  const { conductores, listarMiembrosGrupo, log, avanzar } = preparar({ fallan: ['GB'] });
   expect((await conductores.listar()).map((c) => c.usuario)).toEqual(['perez', 'zuleta']);
   expect(log.warn).toHaveBeenCalledWith('porteria: no se pudo leer un grupo de conductores', { grupo: 'GB' });
+  avanzar(60001);
   await conductores.listar();
   expect(listarMiembrosGrupo).toHaveBeenCalledTimes(4);
+});
+
+test('llamadas concurrentes comparten una sola ronda de lecturas', async () => {
+  const { conductores, listarMiembrosGrupo } = preparar();
+  const [a, b] = await Promise.all([conductores.listar(), conductores.listar()]);
+  expect(listarMiembrosGrupo).toHaveBeenCalledTimes(2);
+  expect(a).toEqual(b);
+});
+
+test('tras una lectura incompleta no reintenta durante 60 s y luego sí', async () => {
+  const { conductores, listarMiembrosGrupo, avanzar } = preparar({ fallan: ['GB'] });
+  const primera = await conductores.listar();
+  expect(listarMiembrosGrupo).toHaveBeenCalledTimes(2);
+  avanzar(59999);
+  expect(await conductores.listar()).toEqual(primera);
+  expect(listarMiembrosGrupo).toHaveBeenCalledTimes(2);
+  avanzar(2);
+  await conductores.listar();
+  expect(listarMiembrosGrupo).toHaveBeenCalledTimes(4);
+});
+
+test('tras una lectura incompleta con caché vencida sirve la última lista buena sin reintentar', async () => {
+  const p = preparar();
+  const buena = await p.conductores.listar();
+  p.avanzar(600001);
+  p.fallan.push('GA', 'GB');
+  expect(await p.conductores.listar()).toEqual(buena);
+  const llamadas = p.listarMiembrosGrupo.mock.calls.length;
+  expect(await p.conductores.listar()).toEqual(buena);
+  expect(p.listarMiembrosGrupo).toHaveBeenCalledTimes(llamadas);
+});
+
+test('mutar la lista devuelta no altera la siguiente', async () => {
+  const { conductores } = preparar();
+  const lista = await conductores.listar();
+  lista.push({ usuario: 'intruso', nombre: 'Intruso' });
+  lista[0].nombre = 'Cambiado';
+  expect((await conductores.listar()).map((c) => c.usuario)).toEqual(['baez', 'perez', 'zuleta']);
+  expect((await conductores.listar())[0].nombre).toBe('Báez Luis');
+});
+
+test('sin log inyectado usa console', async () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const conductores = crearConductores({
+    listarMiembrosGrupo: async () => { throw new Error('x'); }, grupos: () => ['GA'],
+  });
+  await expect(conductores.listar()).resolves.toEqual([]);
+  expect(warn).toHaveBeenCalled();
+  warn.mockRestore();
 });
 
 test('si el AD falla después, conserva la última lista buena', async () => {

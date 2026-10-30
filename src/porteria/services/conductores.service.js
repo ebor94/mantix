@@ -2,8 +2,9 @@
 // Conductores de vehículos propios: miembros de los grupos del AD que conducen (los mismos que usa H360).
 // Caché en memoria; si el AD falla nunca se bloquea la portería (el front ofrece "otro" con nombre libre).
 const DIEZ_MINUTOS = 10 * 60 * 1000;
+const UN_MINUTO = 60 * 1000;
 
-function crearConductores({ listarMiembrosGrupo, grupos, ttlMs = DIEZ_MINUTOS, ahora = Date.now, log }) {
+function crearConductores({ listarMiembrosGrupo, grupos, ttlMs = DIEZ_MINUTOS, ahora = Date.now, log = console, reintentoMs = UN_MINUTO }) {
   let cache = null; // { lista, vence }
 
   async function leerDelDirectorio() {
@@ -24,14 +25,35 @@ function crearConductores({ listarMiembrosGrupo, grupos, ttlMs = DIEZ_MINUTOS, a
     return { lista, completo };
   }
 
-  async function listar() {
-    if (cache && ahora() < cache.vence) return cache.lista;
+  // Una sola lectura en vuelo, y tras una incompleta no se vuelve a molestar al AD hasta `reintentoMs`:
+  // con el AD caído cada petición esperaría el timeout completo.
+  let enVuelo = null;
+  let noReintentarHasta = 0;
+  let ultima = null; // lo último que se obtuvo aunque fuera parcial
+
+  async function refrescar() {
     const { lista, completo } = await leerDelDirectorio();
     if (completo) {
       cache = { lista, vence: ahora() + ttlMs };
-      return lista;
+      noReintentarHasta = 0;
+    } else {
+      noReintentarHasta = ahora() + reintentoMs;
     }
-    return cache ? cache.lista : lista;
+    // Una lectura parcial no pisa una buena anterior.
+    ultima = completo || !cache ? lista : cache.lista;
+    return ultima;
+  }
+
+  async function listar() {
+    const t = ahora();
+    let lista;
+    if (cache && t < cache.vence) lista = cache.lista;
+    else if (t < noReintentarHasta) lista = cache ? cache.lista : ultima;
+    else {
+      if (!enVuelo) enVuelo = refrescar().finally(() => { enVuelo = null; });
+      lista = await enVuelo;
+    }
+    return lista.map((c) => ({ ...c }));
   }
 
   return {
