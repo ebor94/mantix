@@ -219,7 +219,7 @@ Se agrega el origen del front a `CORS_ORIGIN`. Front: `VITE_API_URL`.
 ## 11. Pruebas
 
 - **TDD obligatorio.** Unitarias (`npm run test:porteria`): reglas de `eventos.service` con repositorios en memoria y `h360Lectura` y `conductores` simulados; normalización de placa; roles; contrato de error; paridad entre rutas y códigos.
-- **Integración** (`npm run test:porteria:int`, `jest.porteria-int.config.js`, `--runInBand`): MySQL 8 de `testing/docker-compose.yml` (`npm run porteria:db:test`). `globalSetup` recrea la base `*_test`, carga `src/trk/testing/sql/mantix_base.sql` y luego `src/porteria/testing/sql/h360_minimo.sql`, y corre las migraciones. `mantix_base.sql` no trae `vehiculos`, `asistencias` ni `exequias`, y sus `CREATE TABLE` no están en el repo: `h360_minimo.sql` define solo las columnas que lee Portería. En la fase 1 se contrasta con `SHOW CREATE TABLE` de la base real. Cubre:
+- **Integración** (`npm run test:porteria:int`, `jest.porteria-int.config.js`, `--runInBand`): MySQL 8 de `testing/docker-compose.yml` (`npm run porteria:db:test`). `globalSetup` recrea la base `porteria_test`, carga `src/porteria/testing/sql/h360_minimo.sql` y corre las migraciones. No se usa `mantix_base.sql` de TRK: solo trae `roles` y `usuarios`, y los `CREATE TABLE` de `sedes`, `vehiculos`, `asistencias` y `exequias` no están en el repo. `h360_minimo.sql` define solo las columnas que lee Portería. En la fase 1 se contrasta con `SHOW CREATE TABLE` de la base real. Cubre:
   - Lecturas reales de H360.
   - Transacción con bloqueo: dos ingresos simultáneos de la misma placa → uno pasa y el otro da 409.
   - Recalcular el estado al anular.
