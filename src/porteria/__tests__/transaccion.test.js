@@ -12,6 +12,7 @@ function bdFalsa() {
           commit: jest.fn(async () => {}),
           rollback: jest.fn(async () => {}),
           release: jest.fn(),
+          destroy: jest.fn(),
         };
         conexiones.push(c);
         return c;
@@ -54,8 +55,37 @@ test('un deadlock se reintenta una vez con otra conexión', async () => {
   expect(bd.conexiones.every((c) => c.release.mock.calls.length === 1)).toBe(true);
 });
 
-test('un segundo deadlock se relanza', async () => {
+test('un deadlock persistente tras el reintento → 409 OCUPADO', async () => {
   const bd = bdFalsa();
-  await expect(conTransaccion(bd, async () => { throw deadlock(); })).rejects.toMatchObject({ errno: 1213 });
+  await expect(conTransaccion(bd, async () => { throw deadlock(); })).rejects.toMatchObject({
+    statusCode: 409, motivo: 'OCUPADO', message: 'Otro registro de esta placa está en curso. Intenta de nuevo.',
+  });
   expect(bd.conexiones).toHaveLength(2);
+});
+
+test('un timeout de bloqueo (1205) no se reintenta y es 409 OCUPADO', async () => {
+  const bd = bdFalsa();
+  const err = await conTransaccion(bd, async () => { throw Object.assign(new Error('Lock wait timeout'), { errno: 1205 }); })
+    .then(() => undefined, (e) => e);
+  expect(err).toMatchObject({ statusCode: 409, motivo: 'OCUPADO' });
+  expect(bd.conexiones).toHaveLength(1);
+});
+
+test('si el rollback falla, la conexión se destruye y no se libera', async () => {
+  const bd = bdFalsa();
+  const original = bd.obtener;
+  bd.obtener = () => {
+    const pool = original();
+    return {
+      getConnection: async () => {
+        const c = await pool.getConnection();
+        c.rollback = jest.fn(async () => { throw new Error('conexión caída'); });
+        return c;
+      },
+    };
+  };
+  await expect(conTransaccion(bd, async () => { throw new Error('falla'); })).rejects.toThrow('falla');
+  const [c] = bd.conexiones;
+  expect(c.destroy).toHaveBeenCalled();
+  expect(c.release).not.toHaveBeenCalled();
 });
