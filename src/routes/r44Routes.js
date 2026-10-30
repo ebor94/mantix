@@ -67,6 +67,10 @@ router.patch('/revisores/proveedores/:id/estado',
 router.patch('/revisores/proveedores/:id/datos',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.editarProveedor);
 
+// El revisor adjunta documentos en nombre del proveedor (sin disparar extracción)
+router.post('/revisores/proveedores/:proveedor_id/documentos',
+  r44Auth, r44Authorize(...REVISORES), uploadR44, r44RevCtrl.cargarDocumentos);
+
 // Formato R-44 en PDF: (re)generar+archivar en Drive / descargar inline
 router.post('/revisores/proveedores/:id/r44-pdf',
   r44Auth, r44Authorize(...REVISORES), r44RevCtrl.generarR44);

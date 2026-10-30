@@ -354,6 +354,55 @@ const r44RevisionController = {
   },
 
   /**
+   * POST /api/r44/revisores/proveedores/:proveedor_id/documentos
+   * El revisor adjunta documentos (RUT, Cámara, Renta, Cédula) en nombre del
+   * proveedor cuando este los envió por otro medio o la subida falló.
+   * A diferencia del flujo del proveedor, NO cambia el estado ni dispara la
+   * extracción con IA: solo guarda/reemplaza los archivos. Rol: revisores/admin.
+   */
+  async cargarDocumentos(req, res, next) {
+    try {
+      const { proveedor_id } = req.params;
+      const files = req.files || {};
+      const MAPA = { rut: 'rut', camara: 'camara_comercio', renta: 'declaracion_renta', cedula: 'cedula_rl' };
+
+      const proveedor = await R44Proveedor.findByPk(proveedor_id);
+      if (!proveedor) {
+        return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
+      }
+
+      const entradas = Object.entries(files).filter(([, arr]) => arr && arr.length);
+      if (!entradas.length) {
+        return res.status(400).json({ ok: false, error: 'No se adjuntó ningún documento' });
+      }
+
+      const pid = parseInt(proveedor_id, 10);
+      const guardados = [];
+      for (const [fieldname, [file]] of entradas) {
+        const tipoDB = MAPA[fieldname] || fieldname;
+        // Reemplazar: no hay índice único en (proveedor_id, tipo_documento),
+        // así que se borra el existente de ese tipo antes de crear el nuevo.
+        await R44Documento.destroy({ where: { proveedor_id: pid, tipo_documento: tipoDB } });
+        await R44Documento.create({
+          proveedor_id:            pid,
+          tipo_documento:          tipoDB,
+          nombre_archivo_original: file.originalname,
+          nombre_archivo_storage:  file.filename,
+          ruta_almacenamiento:     file.path,
+          mime_type:               file.mimetype,
+          tamano_bytes:            file.size,
+          estado_extraccion:       'completado',
+        });
+        guardados.push(tipoDB);
+      }
+
+      return res.json({ ok: true, message: `Documentos cargados: ${guardados.join(', ')}`, tipos: guardados });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  /**
    * GET /api/r44/revisores/documentos/:id/descargar
    * Sirve el archivo adjunto (RUT, Cámara, Renta, Cédula) desde disco.
    * Solo revisores/admin. Se muestra inline (PDF/imagen) en el navegador.
