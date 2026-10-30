@@ -40,18 +40,23 @@ function crearH360Lectura(bd) {
     obtenerSede: (id) => primera(`SELECT ${COLUMNAS_SEDE} FROM sedes WHERE id = ? AND activo = 1`, [id]),
 
     async buscarVehiculosPropios(q) {
+      // Una búsqueda de solo '-' o espacios no debe listar todo.
+      const buscada = q ? normalizarPlaca(q) : null;
+      if (q && !buscada) return [];
       const filtro = q ? `AND ${placaSql('placa')} LIKE ?` : '';
       const filas = await consultar(
         `SELECT ${COLUMNAS_VEHICULO} FROM vehiculos WHERE activo = 1 ${filtro} ORDER BY placa LIMIT ${LIMITE}`,
-        q ? [patronContiene(normalizarPlaca(q))] : [],
+        q ? [patronContiene(buscada)] : [],
       );
       return filas.map(conPlacaNormalizada);
     },
 
     async obtenerVehiculoPropioPorPlaca(placa) {
+      const buscada = normalizarPlaca(placa);
+      if (!buscada) return null;
       return conPlacaNormalizada(await primera(
-        `SELECT ${COLUMNAS_VEHICULO} FROM vehiculos WHERE activo = 1 AND ${placaSql('placa')} = ? LIMIT 1`,
-        [normalizarPlaca(placa)],
+        `SELECT ${COLUMNAS_VEHICULO} FROM vehiculos WHERE activo = 1 AND ${placaSql('placa')} = ? ORDER BY id LIMIT 1`,
+        [buscada],
       ));
     },
 
@@ -70,7 +75,7 @@ function crearH360Lectura(bd) {
     ),
 
     async buscarExequias({ q, placa } = {}) {
-      const placaNormalizada = placa ? normalizarPlaca(placa) : null;
+      const placaNormalizada = (placa && normalizarPlaca(placa)) || null;
       const filtro = q ? 'AND (a.codigo LIKE ? OR a.nombre_ser_querido LIKE ?)' : '';
       const patron = patronContiene(q ?? '');
       const filas = await consultar(
@@ -80,7 +85,7 @@ function crearH360Lectura(bd) {
           WHERE e.estado NOT IN (?)
             AND e.fecha BETWEEN CURDATE() - INTERVAL 1 DAY AND CURDATE() + INTERVAL 1 DAY
             ${filtro}
-          ORDER BY es_de_la_placa DESC, e.fecha, e.hora, e.id
+          ORDER BY es_de_la_placa DESC, e.fecha, e.hora IS NULL, e.hora, e.id
           LIMIT ${LIMITE}`,
         [placaNormalizada, placaNormalizada, ESTADOS_EXEQUIA_TERMINALES, ...(q ? [patron, patron] : [])],
       );

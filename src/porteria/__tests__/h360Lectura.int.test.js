@@ -57,10 +57,18 @@ test('vehículos propios: búsqueda por placa normalizada, solo activos', async 
   expect(await h360.obtenerVehiculoPropioPorPlaca('OFF110')).toBeNull();
 });
 
+test('una placa que normaliza a vacío no lista ni encuentra nada', async () => {
+  expect(await h360.buscarVehiculosPropios('-')).toEqual([]);
+  expect(await h360.buscarVehiculosPropios('  ')).toEqual([]);
+  expect(await h360.obtenerVehiculoPropioPorPlaca('-')).toBeNull();
+  expect(await h360.obtenerVehiculoPropioPorPlaca('')).toBeNull();
+  expect(propios(await h360.buscarVehiculosPropios())).toHaveLength(2);
+});
+
 test('asistencias: solo NUEVO y ASISTENCIA, recientes primero', async () => {
   expect(propios(await h360.buscarAsistencias('C-7')).map((a) => a.id)).toEqual([1102, 1101]);
   expect(propios(await h360.buscarAsistencias('maria')).map((a) => a.id)).toEqual([1101]);
-  expect(propios(await h360.buscarAsistencias()).map((a) => a.id)).toEqual([1102, 1101]);
+  expect(propios(await h360.buscarAsistencias('H360-2026-11')).map((a) => a.id)).toEqual([1102, 1101]);
   expect(await h360.obtenerAsistenciaVigente(1103)).toBeNull();
   expect(await h360.obtenerAsistenciaVigente(1101)).toMatchObject({ codigo: 'H360-2026-1101', estado: 'NUEVO' });
 });
@@ -77,6 +85,20 @@ test('exequias: no terminales entre ayer y mañana, primero las de la placa', as
 
   expect(propios(await h360.buscarExequias({})).map((e) => e.id)).toEqual([1103, 1101, 1102]);
   expect(propios(await h360.buscarExequias({ q: 'pedro' })).map((e) => e.id)).toEqual([1102]);
+  // una placa que normaliza a vacío equivale a no pasar placa
+  const sinPlaca = propios(await h360.buscarExequias({ placa: '-' }));
+  expect(sinPlaca.map((e) => e.id)).toEqual([1103, 1101, 1102]);
+  expect(sinPlaca.every((e) => e.es_de_la_placa === false)).toBe(true);
+});
+
+test('exequias: las sin hora van al final de su día', async () => {
+  await conn.query(`INSERT INTO exequias (id, asistencia_id, tipo, fecha, hora, lugar, vehiculo_id, estado) VALUES
+    (1106, 1101, 'Misa', CURDATE(), NULL, 'Sin hora', NULL, 'PROGRAMADA')`);
+  try {
+    expect(propios(await h360.buscarExequias({})).map((e) => e.id)).toEqual([1103, 1101, 1106, 1102]);
+  } finally {
+    await conn.query('DELETE FROM exequias WHERE id = 1106');
+  }
 });
 
 test('exequia vigente: sin ventana de fechas, excluye terminales', async () => {
