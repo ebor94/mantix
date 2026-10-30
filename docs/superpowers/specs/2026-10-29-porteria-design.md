@@ -34,9 +34,10 @@ src/porteria/
   config/        entorno.js          leerEntorno() → { ok, faltantes } (nunca lanza)
                  verificarEntorno.js secreto JWT presente y distinto de JWT_SECRET / IDENTIDAD_JWT_SECRET
                  apiCodigos.js       registro de códigos POR-xxx-nnn
-  db.js          pool mysql2 perezoso: timezone '-05:00', utf8mb4, credenciales DB_* de Mantix
+  db.js          pool mysql2 perezoso: utf8mb4, credenciales DB_* de Mantix; cada conexión ejecuta
+                 SET time_zone = '-05:00' (la opción timezone de mysql2 solo convierte Date de JS)
   repositorios/  eventos, estado, motivos, vehiculosExternos, auditoria (SQL explícito, reciben conexión/transacción)
-  services/      h360Lectura.service.js   único punto que lee vehiculos, sedes, asistencias, exequias
+  services/      h360Lectura.service.js   único punto que lee vehiculos, asistencias, exequias (H360) y sedes (Mantix)
                  conductores.service.js   listarMiembrosGrupo() de H360 + caché en memoria 10 min
                  auth.service.js, eventos.service.js, estado.service.js, motivos.service.js, reportes.service.js
   middleware/    porteriaAuth.js (JWT), requiereRol.js, requiereSede.js, errorHandler.js
@@ -140,7 +141,7 @@ Migraciones `src/porteria/migrations/NNN_nombre.sql`, aplicadas por `scripts/mig
    - Propio: `conductor_usuario` que esté en la lista del AD (caché), o `conductor_otro = 1` con `conductor_nombre`.
    - Proveedor: `empresa`, `conductor_nombre` y `conductor_documento` obligatorios.
 5. **Transacción:**
-   1. `SELECT … FROM por_estado_vehiculo WHERE placa = ? FOR UPDATE`.
+   1. `SELECT … FROM por_estado_vehiculo WHERE placa = ? FOR UPDATE`. Con REPEATABLE READ, un `FOR UPDATE` sobre una placa sin fila solo toma un *gap lock*, que no serializa dos primeros registros simultáneos. Por eso, si la placa no tiene fila, antes se inserta una fila provisional (`INSERT … ON DUPLICATE KEY UPDATE placa = placa`, marcada como "sin eventos") y luego se bloquea. Un *deadlock* (1213) se reintenta una vez; si persiste, responde 409. Al recalcular el estado se ordena por `registrado_at DESC, id DESC` (DATETIME tiene resolución de segundos).
    2. Coherencia: si no hay fila, la placa se toma como fuera. `INGRESO` con `dentro = 1` o `SALIDA` con `dentro = 0` → **409 `SENTIDO_INCOHERENTE`** con el estado actual (sede, desde cuándo). Con `forzar: true` y `observaciones` no vacías se registra con `inconsistente = 1`, el `inconsistencia_tipo` y auditoría `FORZAR`.
    3. Un `INGRESO` con `salida_abierta_id` se enlaza (`evento_par_id`) con esa salida, sin importar la sede.
    4. Inserta el evento, hace upsert del estado (`dentro`, `sede_id`, `ultimo_evento_id`, `salida_abierta_id` = la salida o NULL) y escribe la auditoría `CREAR`.

@@ -25,13 +25,18 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - `services/h360Lectura.service.js`: `listarSedes`, `buscarVehiculoPropioPorPlaca`, `buscarVehiculosPropios(q)`, `buscarAsistencias(q)`, `obtenerAsistencia(id)`, `buscarExequias({q, placa, hoy})`, `obtenerExequia(id)`. Normalización de placa en SQL.
 - `services/conductores.service.js`: caché 10 min; `[]` si el AD falla.
 - Rutas `/catalogos/*`.
-- Primer paso de la fase: contrastar `testing/sql/h360_minimo.sql` con `SHOW CREATE TABLE` de la base real.
+- Primer paso de la fase: contrastar `testing/sql/h360_minimo.sql` con `SHOW CREATE TABLE` de la base real, **incluida la collation** de `vehiculos.placa` (si es `utf8mb4_0900_ai_ci`, comparar con `por_*.placa` falla con error 1267: usar `COLLATE` explícito o igualar). Revisar también `SHOW GRANTS` del usuario `DB_USER` (CREATE VIEW, REFERENCES) y `@@global.time_zone` en serfuweb.
+- El limitador de `/auth/login` entra en el mismo cambio que la ruta (el módulo está exento del limitador global).
+- `ldap.service.js` lanza `Error` simples: el login debe mapearlos a `PorteriaError` (401 credenciales, 503 AD caído), no dejar que salgan como 500.
+- `bd` exportado por `routes/index.js` lanza un error claro si se usa sin configuración válida; los servicios lo usan solo detrás del guardián.
 
 ### Fase 2 — Eventos
 - `utils/placa.js` (`normalizarPlaca`), repositorios `eventos`, `estado`, `motivos`, `vehiculosExternos`, `auditoria` (reciben la conexión de la transacción).
 - `services/eventos.service.js`: `registrar`, `corregir`, `anular` con las reglas del diseño §7; `estado.service.js`: `sugerir(placa)`, `dentro(sedeId)`, `fuera()`.
 - Rutas `/eventos`, `/estado/*`, `/vehiculos-externos`.
-- Integración: concurrencia (dos ingresos simultáneos), viaje entre sedes, recalcular estado al anular, ventana de 15 min.
+- Helper `conTransaccion(fn)` sobre `bd.obtener().getConnection()`: los repositorios reciben la conexión.
+- Bloqueo de la primera placa (diseño §7.5): fila provisional en `por_estado_vehiculo` antes del `FOR UPDATE`. Requiere una migración `004` que permita representar "sin eventos" (p. ej. `ultimo_evento_id` y `sede_id` NULL, `dentro` 0); reintento único ante 1213.
+- Integración: concurrencia (dos ingresos simultáneos **de una placa nueva** y de una existente → uno pasa y el otro 409, nunca 500), viaje entre sedes, recalcular estado al anular (orden `registrado_at DESC, id DESC`), ventana de 15 min.
 
 ### Fase 3 — Front del guarda (`porteriasfn`)
 - Scaffold Vue 3 + Vite + Tailwind + Pinia + Vue Router + Vitest, PWA solo con manifest.
