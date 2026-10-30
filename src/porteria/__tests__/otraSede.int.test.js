@@ -21,10 +21,10 @@ const salida = (placa, extra = {}) => ({ sentido: 'SALIDA', placa, motivo_id: la
 beforeAll(async () => {
   conn = await abrirConexion();
   bd = crearBdDePrueba();
-  for (const t of ['por_eventos', 'por_estado_vehiculo']) await conn.query(`DELETE FROM ${t} WHERE placa IN ('B2P051', 'B2P052', 'B2P053')`);
+  for (const t of ['por_eventos', 'por_estado_vehiculo']) await conn.query(`DELETE FROM ${t} WHERE placa IN ('B2P051', 'B2P052', 'B2P053', 'B2P054', 'B2P055', 'B2V056')`);
   for (const t of ['vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 2950 AND 2969`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2951, 'B2SA', 'A', 'Cúcuta', 1), (2952, 'B2SB', 'B', 'Cúcuta', 1)");
-  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2951, 'B2P051', 'F', 'F', 'CARROZA', 1), (2952, 'B2P052', 'F', 'F', 'CARROZA', 1), (2953, 'B2P053', 'F', 'F', 'CARROZA', 1)");
+  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2951, 'B2P051', 'F', 'F', 'CARROZA', 1), (2952, 'B2P052', 'F', 'F', 'CARROZA', 1), (2953, 'B2P053', 'F', 'F', 'CARROZA', 1), (2954, 'B2P054', 'F', 'F', 'CARROZA', 1), (2955, 'B2P055', 'F', 'F', 'CARROZA', 1)");
   [[{ id: lavado }]] = await conn.query("SELECT id FROM por_motivos WHERE codigo = 'LAVADO'");
   const h360 = crearH360Lectura(bd);
   const vehiculosExternos = crearRepositorioVehiculosExternos(bd);
@@ -59,6 +59,24 @@ test('salir por B estando dentro de A: 409 otra sede; forzado queda SALIDA_OTRA_
   });
   const ev = await eventos.registrar(salida('B2P052', { forzar: true, observaciones: 'Lo movieron sin registrar' }), sedeB);
   expect(ev).toMatchObject({ inconsistente: true, inconsistencia_tipo: 'SALIDA_OTRA_SEDE', sede_id: 2952 });
+  // La salida forzada deja al vehículo fuera, por B; su siguiente ingreso por B la cierra.
+  expect((await estado.sugerir('B2P052')).estado).toMatchObject({ dentro: false, sede_id: 2952 });
+  const ingreso = await eventos.registrar({ ...salida('B2P052'), sentido: 'INGRESO' }, sedeB);
+  expect(ingreso).toMatchObject({ inconsistente: false, evento_par_id: ev.id });
+});
+
+test('ingresar por B un vehículo que figura dentro de A: 409 con otra_sede', async () => {
+  await repoEstado.sembrar(conn, { placa: 'B2P054', sedeId: 2951 });
+  const err = await errorDe(eventos.registrar({ ...salida('B2P054'), sentido: 'INGRESO' }, sedeB));
+  expect(err).toMatchObject({ statusCode: 409, errors: { estado: { dentro: true, sede_id: 2951, otra_sede: true } } });
+});
+
+test('un proveedor que entra por A y sale por B: 409 otra_sede', async () => {
+  const [[{ id: entrega }]] = await conn.query("SELECT id FROM por_motivos WHERE codigo = 'ENTREGA_MERCANCIA'");
+  const proveedor = { sentido: 'INGRESO', placa: 'B2V056', tipo_vehiculo: 'PROVEEDOR', motivo_id: entrega, conductor_nombre: 'Luis', conductor_documento: '1', empresa: 'Acme' };
+  await eventos.registrar(proveedor, sedeA);
+  const err = await errorDe(eventos.registrar({ ...proveedor, sentido: 'SALIDA' }, sedeB));
+  expect(err).toMatchObject({ statusCode: 409, errors: { estado: { dentro: true, sede_id: 2951, otra_sede: true } } });
 });
 
 test('un propio sin historial ni siembra sale por cualquier sede sin marca', async () => {

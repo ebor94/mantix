@@ -72,7 +72,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
             sede_id: estado.sede_id,
             desde: ultimo ? ultimo.registrado_at : estado.sembrado_at,
             sin_historial: !conHistoria,
-            otra_sede: otraSede,
+            otra_sede: dentro && estado.sede_id !== null && estado.sede_id !== sesion.sede_id,
           },
         });
       }
@@ -167,10 +167,16 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
     });
   }
 
-  /** El estado de la placa vuelve a ser el de su último evento vigente; sin ninguno, la placa no tiene estado. */
-  async function recalcularEstado(conn, placa) {
+  /**
+   * El estado de la placa vuelve a ser el de su último evento vigente. Sin ninguno: un sembrado vuelve a su
+   * siembra; cualquier otra placa queda sin estado. `fila` es el estado ya bloqueado de la placa.
+   */
+  async function recalcularEstado(conn, placa, fila) {
     const ultimo = await repoEventos.ultimoVigente(conn, placa);
-    if (!ultimo) return repoEstado.borrar(conn, placa);
+    if (!ultimo) {
+      if (fila.sembrado_at !== null && fila.sembrado_sede_id !== null) return repoEstado.restaurarSiembra(conn, placa);
+      return repoEstado.borrar(conn, placa);
+    }
     return repoEstado.guardar(conn, {
       placa,
       tipo_vehiculo: ultimo.tipo_vehiculo,
@@ -189,11 +195,11 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
 
     return conTransaccion(bd, async (conn) => {
       // Mismo orden de bloqueo que registrar: primero la placa, después el evento.
-      await repoEstado.bloquear(conn, actual.placa);
+      const fila = await repoEstado.bloquear(conn, actual.placa);
       const antes = await repoEventos.obtener(conn, id, { bloquear: true });
       if (antes.anulado) throw new PorteriaError(409, 'ANULADO', 'El registro ya está anulado');
       await repoEventos.anular(conn, id, { usuario: sesion.usuario, motivo });
-      await recalcularEstado(conn, actual.placa);
+      await recalcularEstado(conn, actual.placa, fila);
       const despues = await repoEventos.obtener(conn, id);
       await registrarAuditoria(conn, {
         usuario: sesion.usuario, apiCodigo: ctx.apiCodigo, entidad: 'evento', entidadId: id, accion: 'ANULAR', antes, despues, ip: ctx.ip,

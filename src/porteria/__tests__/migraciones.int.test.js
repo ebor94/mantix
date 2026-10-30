@@ -8,7 +8,7 @@ afterAll(async () => { await conn.end(); });
 test('las migraciones quedan registradas y un segundo intento no aplica nada', async () => {
   const [filas] = await conn.query('SELECT nombre FROM por_migraciones ORDER BY nombre');
   expect(filas.map((f) => f.nombre)).toEqual([
-    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql', '005_siembra_y_otra_sede.sql',
+    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql', '005_siembra_y_otra_sede.sql', '006_sede_sembrada.sql',
   ]);
   expect(await aplicarMigraciones(conn)).toEqual([]);
 });

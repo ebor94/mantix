@@ -1,9 +1,11 @@
 // src/porteria/repositorios/estado.js
 // por_estado_vehiculo: dónde está cada placa ahora. Tabla derivada de por_eventos, escrita en la misma
-// transacción que cada evento. Una fila con ultimo_evento_id NULL y sin sembrado_at es provisional (solo existe para bloquear); con sembrado_at es una carga inicial.
+// transacción que cada evento. Una fila con ultimo_evento_id NULL y sin sembrado_at es provisional (solo existe para bloquear);
+// con sembrado_at es una carga inicial (sembrado_sede_id = sede donde se sembró). Si se anula el último evento de un
+// sembrado, la fila vuelve a su siembra (restaurarSiembra) en vez de borrarse.
 const { COLUMNAS_EVENTO, eventoPublico } = require('./eventos');
 
-const COLUMNAS_ESTADO = 'placa, tipo_vehiculo, sede_id, dentro, ultimo_evento_id, salida_abierta_id, sembrado_at';
+const COLUMNAS_ESTADO = 'placa, tipo_vehiculo, sede_id, dentro, ultimo_evento_id, salida_abierta_id, sembrado_at, sembrado_sede_id';
 const DESDE_ULTIMO_EVENTO = `
   FROM por_estado_vehiculo s
   JOIN por_eventos e ON e.id = s.ultimo_evento_id
@@ -26,6 +28,16 @@ async function guardar(conn, { placa, tipo_vehiculo, sede_id, dentro, ultimo_eve
   );
 }
 
+/** Devuelve un propio sembrado a su carga inicial (dentro de la sede donde se sembró). No hace nada si no fue sembrado. */
+async function restaurarSiembra(conn, placa) {
+  await conn.query(
+    `UPDATE por_estado_vehiculo
+        SET tipo_vehiculo = 'PROPIO', sede_id = sembrado_sede_id, dentro = 1, ultimo_evento_id = NULL, salida_abierta_id = NULL
+      WHERE placa = ? AND sembrado_at IS NOT NULL AND sembrado_sede_id IS NOT NULL`,
+    [placa],
+  );
+}
+
 async function borrar(conn, placa) {
   await conn.query('DELETE FROM por_estado_vehiculo WHERE placa = ?', [placa]);
 }
@@ -34,9 +46,9 @@ async function borrar(conn, placa) {
 async function sembrar(conn, { placa, sedeId }) {
   try {
     await conn.query(
-      `INSERT INTO por_estado_vehiculo (placa, tipo_vehiculo, sede_id, dentro, sembrado_at)
-       VALUES (?, 'PROPIO', ?, 1, NOW())`,
-      [placa, sedeId],
+      `INSERT INTO por_estado_vehiculo (placa, tipo_vehiculo, sede_id, dentro, sembrado_at, sembrado_sede_id)
+       VALUES (?, 'PROPIO', ?, 1, NOW(), ?)`,
+      [placa, sedeId, sedeId],
     );
     return true;
   } catch (err) {
@@ -85,4 +97,4 @@ async function propiosFuera(ejecutor, sedeId) {
   return filas.map(eventoPublico);
 }
 
-module.exports = { bloquear, guardar, borrar, sembrar, obtener, dentroDeSede, propiosFuera };
+module.exports = { bloquear, guardar, borrar, restaurarSiembra, sembrar, obtener, dentroDeSede, propiosFuera };
