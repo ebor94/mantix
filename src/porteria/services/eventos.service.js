@@ -7,7 +7,13 @@ const { conTransaccion } = require('../utils/transaccion');
 const repoEventos = require('../repositorios/eventos');
 const repoEstado = require('../repositorios/estado');
 const { registrarAuditoria } = require('../repositorios/auditoria');
-const { leerEntradaRegistro, crearResolutorDetalle } = require('./detalleEvento');
+const { ROLES } = require('./auth.service');
+const {
+  leerEntradaRegistro, leerCambiosCorreccion, crearResolutorDetalle, CAMPOS_REFERENCIA, CAMPOS_CONDUCTOR,
+} = require('./detalleEvento');
+
+const QUINCE_MINUTOS = 15 * 60;
+const noExiste = () => new PorteriaError(404, 'NO_ENCONTRADO', 'El registro no existe');
 
 const regla = (message) => new PorteriaError(422, 'VALIDACION', message);
 
@@ -96,8 +102,92 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
     });
   }
 
+  async function verificarPermisoEdicion(evento, sesion) {
+    if (sesion.rol === ROLES.ADMIN) return;
+    const segundos = await repoEventos.antiguedadSegundos(bd.obtener(), evento.id);
+    if (evento.registrado_por !== sesion.usuario || segundos > QUINCE_MINUTOS) {
+      throw new PorteriaError(403, 'SIN_PERMISO', 'Solo puedes corregir o anular tus registros de los últimos 15 minutos');
+    }
+  }
+
+  async function cargarEditable(id, sesion, mensajeAnulado) {
+    const evento = await repoEventos.obtener(bd.obtener(), id);
+    if (!evento) throw noExiste();
+    if (evento.anulado) throw new PorteriaError(409, 'ANULADO', mensajeAnulado);
+    await verificarPermisoEdicion(evento, sesion);
+    return evento;
+  }
+
+  /** Lo que se corrige de un evento, tal como está guardado. */
+  const datosDe = (e) => ({
+    motivo_id: e.motivo_id, asistencia_id: e.asistencia_id, exequia_id: e.exequia_id, referencia_texto: e.referencia_texto,
+    referencia_snapshot: e.referencia, conductor_usuario: e.conductor_usuario, conductor_nombre: e.conductor_nombre,
+    conductor_documento: e.conductor_documento, conductor_otro: e.conductor_otro, empresa: e.empresa,
+    kilometraje: e.kilometraje, observaciones: e.observaciones,
+  });
+
+  async function corregir(id, body, sesion, ctx = {}) {
+    const cambios = leerCambiosCorreccion(body);
+    const actual = await cargarEditable(id, sesion, 'El registro está anulado');
+    const cambia = (campos) => campos.some((c) => c in cambios);
+    const { columnas } = await resolutor.resolver({
+      tipo: actual.tipo_vehiculo,
+      sentido: actual.sentido,
+      datos: { ...datosDe(actual), ...cambios },
+      conservar: { referencia: !cambia(CAMPOS_REFERENCIA), conductor: !cambia(CAMPOS_CONDUCTOR) },
+    });
+    if (actual.inconsistente && !columnas.observaciones) throw regla('El registro forzado necesita una observación');
+
+    return conTransaccion(bd, async (conn) => {
+      const antes = await repoEventos.obtener(conn, id, { bloquear: true });
+      if (antes.anulado) throw new PorteriaError(409, 'ANULADO', 'El registro está anulado');
+      await repoEventos.actualizar(conn, id, columnas, sesion.usuario);
+      const despues = await repoEventos.obtener(conn, id);
+      await registrarAuditoria(conn, {
+        usuario: sesion.usuario, apiCodigo: ctx.apiCodigo, entidad: 'evento', entidadId: id, accion: 'CORREGIR', antes, despues, ip: ctx.ip,
+      });
+      return despues;
+    });
+  }
+
+  /** El estado de la placa vuelve a ser el de su último evento vigente; sin ninguno, la placa no tiene estado. */
+  async function recalcularEstado(conn, placa) {
+    const ultimo = await repoEventos.ultimoVigente(conn, placa);
+    if (!ultimo) return repoEstado.borrar(conn, placa);
+    return repoEstado.guardar(conn, {
+      placa,
+      tipo_vehiculo: ultimo.tipo_vehiculo,
+      sede_id: ultimo.sede_id,
+      dentro: ultimo.sentido === 'INGRESO' ? 1 : 0,
+      ultimo_evento_id: ultimo.id,
+      salida_abierta_id: ultimo.sentido === 'SALIDA' && ultimo.tipo_vehiculo === 'PROPIO' ? ultimo.id : null,
+    });
+  }
+
+  async function anular(id, body, sesion, ctx = {}) {
+    const motivo = typeof (body && body.motivo) === 'string' ? body.motivo.trim() : '';
+    if (!motivo || motivo.length > 255) throw new PorteriaError(400, 'VALIDACION', 'Escribe el motivo de la anulación');
+    const actual = await cargarEditable(id, sesion, 'El registro ya está anulado');
+
+    return conTransaccion(bd, async (conn) => {
+      // Mismo orden de bloqueo que registrar: primero la placa, después el evento.
+      await repoEstado.bloquear(conn, actual.placa);
+      const antes = await repoEventos.obtener(conn, id, { bloquear: true });
+      if (antes.anulado) throw new PorteriaError(409, 'ANULADO', 'El registro ya está anulado');
+      await repoEventos.anular(conn, id, { usuario: sesion.usuario, motivo });
+      await recalcularEstado(conn, actual.placa);
+      const despues = await repoEventos.obtener(conn, id);
+      await registrarAuditoria(conn, {
+        usuario: sesion.usuario, apiCodigo: ctx.apiCodigo, entidad: 'evento', entidadId: id, accion: 'ANULAR', antes, despues, ip: ctx.ip,
+      });
+      return despues;
+    });
+  }
+
   return {
     registrar,
+    corregir,
+    anular,
     listar: (filtros, opciones) => repoEventos.listar(bd.obtener(), filtros, opciones),
     obtener: (id) => repoEventos.obtener(bd.obtener(), id),
   };
