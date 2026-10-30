@@ -56,10 +56,11 @@ src/porteria/
 ## 4. Autenticación y roles
 
 - `POST /auth/login { usuario, password }`:
-  1. `autenticarLDAP()` de `src/h360/services/ldap.service.js` valida las credenciales. Su rol de H360 se ignora; si lanza solo por "usuario sin rol" en H360, Portería debe poder seguir. Para eso se agrega a `ldap.service.js` una función nueva `validarCredenciales(usuario, password)` (bind + datos básicos, sin exigir rol H360) y `perteneceAGrupos(usuario, grupos[])`. Las funciones existentes no cambian.
+  1. `validarCredenciales(usuario, password)` de `src/h360/services/ldap.service.js` (extraída de `autenticarLDAP`, que ahora la usa) valida las credenciales con **un único bind por DN** y devuelve `{ usuario, nombre, email, memberOf }` sin exigir rol de H360. Sus errores llevan `codigo` (`CREDENCIALES_INVALIDAS` o `AD_NO_DISPONIBLE`). La pertenencia a grupos se lee de `memberOf` (solo membresía directa; los grupos anidados no cuentan).
   2. Rol: `LDAP_GROUP_PORTERIA_ADMIN` o `LDAP_GROUP_ADMIN` → `admin_porteria`; si no, `LDAP_GROUP_PORTERIA_GUARDA` → `guarda`; si no, 403.
   3. Responde `{ token, user, sedes }`. El token aún no tiene sede.
-- `POST /auth/sede { sede_id }` → nuevo token con `sede_id` (la sede debe estar activa).
+- `POST /auth/sede { sede_id }` → nuevo token con `sede_id` (la sede debe estar activa) y **el mismo vencimiento** del token recibido: elegir sede no extiende la sesión.
+- Login con dos limitadores que solo cuentan respuestas 401: 10 por usuario+IP y 100 por IP, en ventanas de 15 minutos.
 - JWT firmado con `PORTERIA_JWT_SECRET`, `scope: 'porteria'`, expira en `PORTERIA_JWT_EXPIRES` (12h).
 - `requiereSede` en todas las rutas operativas. Todo evento queda en la sede del token, nunca la del cuerpo.
 - Un admin consulta cualquier sede con `?sede_id=`. Para registrar también elige sede.

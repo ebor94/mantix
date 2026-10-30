@@ -10,7 +10,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | Fase | Plan | Estado | Entrega |
 |---|---|---|---|
 | 0 — Base | `2026-10-30-porteria-fase0-base.md` | cerrada (revisión final + correcciones) | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
-| 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | listo para ejecutar | Login AD con roles de portería, sede activa, catálogos de H360 |
+| 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | cerrada (revisión final + correcciones) | Login AD con roles de portería, sede activa, catálogos de H360 |
 | 2 — Eventos | por escribir | — | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
 | 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
@@ -31,6 +31,12 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - `bd` exportado por `routes/index.js` lanza un error claro si se usa sin configuración válida; los servicios lo usan solo detrás del guardián.
 
 ### Fase 2 — Eventos
+- Heredado de la revisión de la Fase 1:
+  - `requiereSede` solo para escrituras. Para lecturas, helper `sedeEfectiva(req)`: el guarda usa la sede del token; el admin, `?sede_id=` o la de su token (diseño §4).
+  - `conductores.existe()` responde `false` también cuando el AD no está disponible o la lista es parcial: el registro no debe rechazar por eso. Si el conductor no está en la lista, 422 con "elige 'otro'", o aceptar el usuario si la lista no es completa (decidir en el plan).
+  - Las lecturas de H360 usan el pool, no la conexión de la transacción. Para la validación y el snapshot dentro de `POST /eventos`, permitir pasar una conexión opcional o documentar que se acepta la ventana entre validar e insertar.
+  - Validar `asistencia_id` y `exequia_id` como enteros positivos antes de leerlos. Rechazar la placa que normaliza a vacío en `POST /eventos` y en `/estado/placa/:placa`. Usar siempre `.query()` (nunca `.execute()`), por los `IN (?)` con arrays.
+  - `obtenerExequiaVigente` usa JOIN con asistencias: una exequia sin asistencia cuenta como inexistente (igual que en H360).
 - `utils/placa.js` (`normalizarPlaca`), repositorios `eventos`, `estado`, `motivos`, `vehiculosExternos`, `auditoria` (reciben la conexión de la transacción).
 - `services/eventos.service.js`: `registrar`, `corregir`, `anular` con las reglas del diseño §7; `estado.service.js`: `sugerir(placa)`, `dentro(sedeId)`, `fuera()`.
 - Rutas `/eventos`, `/estado/*`, `/vehiculos-externos`.
@@ -39,6 +45,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - Integración: concurrencia (dos ingresos simultáneos **de una placa nueva** y de una existente → uno pasa y el otro 409, nunca 500), viaje entre sedes, recalcular estado al anular (orden `registrado_at DESC, id DESC`), ventana de 15 min.
 
 ### Fase 3 — Front del guarda (`porteriasfn`)
+- El interceptor de 503 debe distinguir `motivo`: `PORTERIA_DESHABILITADO` (módulo) vs `DIRECTORIO_NO_DISPONIBLE` (login). El interceptor de 401 no aplica a la respuesta de `/auth/login`.
 - Scaffold Vue 3 + Vite + Tailwind + Pinia + Vue Router + Vitest, PWA solo con manifest.
 - Cliente axios con interceptores 401/503; stores `auth`, `catalogos`, `estado`, `eventos`.
 - Pantallas 1–5 del diseño §9, incluido el diálogo de 409 con `forzar`.
@@ -48,4 +55,5 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - Front: pantallas 6–8 y store `motivos`.
 
 ### Fase 5 — Despliegue
+- Confirmar que nginx es el único salto (`trust proxy` = 1) y que el puerto de Node no es accesible directo; si no, `req.ip` es falsificable o es el del balanceador. Los limitadores viven en memoria por proceso (se reinician con el servicio). Pendientes de serfuweb: `exequias.fecha` es DATE, collation/charset de las tablas de H360, placas con tabulaciones o espacios no separables.
 - Variables en `srv-backend`, `npm run porteria:migrate` en producción, origen del front en `CORS_ORIGIN`, sitio nginx del front, grupos AD creados, piloto en una sede con checklist.
