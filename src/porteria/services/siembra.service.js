@@ -5,16 +5,21 @@ const { conTransaccion } = require('../utils/transaccion');
 const repoEstado = require('../repositorios/estado');
 const { registrarAuditoria } = require('../repositorios/auditoria');
 
+const PLACA_MAX = 20;
+
 function crearServicioSiembra({ bd, h360 }) {
   async function sembrarPropios({ sedeId, placas = null, usuario }) {
     const sede = await h360.obtenerSede(sedeId);
     if (!sede) throw new PorteriaError(404, 'SEDE_NO_ENCONTRADA', 'La sede no existe o está inactiva');
 
     const propios = await h360.listarVehiculosPropios();
-    const porPlaca = new Map(propios.map((v) => [v.placa, v]));
     const omitidos = [];
-    let objetivo = propios;
-    if (placas) {
+    const validos = propios.filter((v) => v.placa && v.placa.length <= PLACA_MAX);
+    const porPlaca = new Map(validos.map((v) => [v.placa, v]));
+    let objetivo = validos;
+    if (!placas) {
+      for (const v of propios) if (!validos.includes(v)) omitidos.push({ placa: v.placa, razon: 'placa inválida en H360' });
+    } else {
       objetivo = [];
       for (const placa of placas) {
         if (porPlaca.has(placa)) objetivo.push(porPlaca.get(placa));
