@@ -3,15 +3,27 @@
 // ============================================
 const express = require('express');
 const logger = require('../../utils/logger');
+const ldapService = require('../../h360/services/ldap.service');
 const { leerEntorno } = require('../config/entorno');
 const { crearBdPerezosa } = require('../db');
 const apiCodigo = require('../middleware/apiCodigo');
 const { porteriaErrorHandler } = require('../middleware/errorHandler');
+const { crearAutenticacion } = require('../middleware/autenticacion');
 const { errorParaLog } = require('../utils/errorSeguro');
+const { crearH360Lectura } = require('../services/h360Lectura.service');
+const { crearConductores } = require('../services/conductores.service');
+const { crearRepositorioMotivos } = require('../repositorios/motivos');
+const { crearRouterAuth } = require('./auth.routes');
 
-/** Fábrica inyectable (tests): `bd` = { ping(), obtener() }. */
-function crearRouterPorteria({ bd }) {
+/**
+ * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
+ * `directorio` = { validarCredenciales }; `conductores` = { listar(), existe() }.
+ */
+function crearRouterPorteria({
+  bd, obtenerConfig, directorio, conductores, h360 = crearH360Lectura(bd), motivos = crearRepositorioMotivos(bd),
+}) {
   const router = express.Router();
+  const autenticar = crearAutenticacion(obtenerConfig);
 
   router.get('/health', apiCodigo('POR-SIS-001'), async (req, res) => {
     try {
@@ -23,20 +35,32 @@ function crearRouterPorteria({ bd }) {
     }
   });
 
+  router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, h360, autenticar }));
+
   router.use(apiCodigo('POR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 
   router.use(porteriaErrorHandler);
   return router;
 }
 
-// Producción: el router se construye UNA vez al cargar (los limitadores de fases siguientes lo exigen).
+// Producción: el router se construye UNA vez al cargar (express-rate-limit exige crear los limitadores aquí).
 // Nada aquí toca la red ni lanza si faltan variables: el pool se crea al primer uso.
 const bd = crearBdPerezosa(() => {
   const e = leerEntorno();
   if (!e.ok) throw new Error(`Portería sin configuración válida: ${e.motivo}`);
   return e.config.db;
 });
-const real = crearRouterPorteria({ bd });
+const real = crearRouterPorteria({
+  bd,
+  // Solo se llama detrás del guardián, cuando la configuración ya es válida.
+  obtenerConfig: () => leerEntorno().config,
+  directorio: ldapService,
+  conductores: crearConductores({
+    listarMiembrosGrupo: ldapService.listarMiembrosGrupo,
+    grupos: () => [process.env.LDAP_GROUP_ASIST_TANATOLOGO, process.env.LDAP_GROUP_ASISTENTE],
+    log: logger,
+  }),
+});
 
 // Si la configuración no es válida responde 503 sin tumbar Mantix (se re-evalúa por request, es barato).
 let avisado = false;
