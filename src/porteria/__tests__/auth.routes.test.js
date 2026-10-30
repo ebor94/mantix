@@ -1,5 +1,6 @@
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+const logger = require('../../utils/logger');
 const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const { crearAppPrueba, tokenDe, CONFIG } = require('../testing/appPrueba');
 const { verificarToken, firmarToken } = require('../services/auth.service');
@@ -76,17 +77,97 @@ describe('POST /auth/login', () => {
     expect(r.body).toMatchObject({ motivo: 'SIN_ROL_PORTERIA', message: 'Tu usuario no tiene acceso a Portería. Contacta a TI.' });
   });
 
-  test('10 intentos fallidos por IP → el 11.º responde 429', async () => {
+  const login = (servidor, usuario, password = 'mala') =>
+    request(servidor).post('/api/porteria/v1/auth/login').send({ usuario, password });
+  const credencialesMalas = () => errorDirectorio('CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos');
+
+  test('10 fallos del mismo usuario → el 11.º responde 429, pero otro usuario desde la misma IP sigue entrando', async () => {
     const { app: a, deps } = app();
-    deps.directorio.validarCredenciales.mockRejectedValue(errorDirectorio('CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos'));
+    deps.directorio.validarCredenciales.mockImplementation(async (u) => {
+      if (u === 'jperez') return { usuario: 'jperez', nombre: 'Juan Pérez', email: '', memberOf: [DN_GUARDA] };
+      throw credencialesMalas();
+    });
     const servidor = await servir(a);
-    for (let i = 0; i < 10; i++) {
-      const r = await request(servidor).post('/api/porteria/v1/auth/login').send({ usuario: 'x', password: 'mala' });
-      expect(r.status).toBe(401);
-    }
-    const r = await request(servidor).post('/api/porteria/v1/auth/login').send({ usuario: 'x', password: 'mala' });
-    expect(r.status).toBe(429);
-    expect(r.body).toMatchObject({ error: 'POR-AUT-001', motivo: 'DEMASIADOS_INTENTOS' });
+    for (let i = 0; i < 10; i++) expect((await login(servidor, 'x')).status).toBe(401);
+    const bloqueado = await login(servidor, 'x');
+    expect(bloqueado.status).toBe(429);
+    expect(bloqueado.body).toMatchObject({ error: 'POR-AUT-001', motivo: 'DEMASIADOS_INTENTOS' });
+    expect((await login(servidor, 'jperez', 'clave')).status).toBe(200);
+  });
+
+  test('el usuario se normaliza: OLIVOS\\X, x@olivos.local y X comparten contador', async () => {
+    const { app: a, deps } = app();
+    deps.directorio.validarCredenciales.mockRejectedValue(credencialesMalas());
+    const servidor = await servir(a);
+    const variantes = ['OLIVOS\\X', 'x@olivos.local', 'X', ' x '];
+    for (let i = 0; i < 10; i++) await login(servidor, variantes[i % variantes.length]);
+    expect((await login(servidor, 'x')).status).toBe(429);
+  });
+
+  test('100 fallos desde una IP bloquean incluso a usuarios nuevos (techo por caseta)', async () => {
+    const { app: a, deps } = app();
+    deps.directorio.validarCredenciales.mockRejectedValue(credencialesMalas());
+    const servidor = await servir(a);
+    for (let i = 0; i < 100; i++) expect((await login(servidor, `u${i}`)).status).toBe(401);
+    expect((await login(servidor, 'nuevo')).status).toBe(429);
+  });
+
+  test('el AD caído (503) repetido nunca da 429', async () => {
+    const { app: a, deps } = app();
+    deps.directorio.validarCredenciales.mockRejectedValue(errorDirectorio('AD_NO_DISPONIBLE', 'caído'));
+    const servidor = await servir(a);
+    for (let i = 0; i < 12; i++) expect((await login(servidor, 'x')).status).toBe(503);
+  });
+
+  test('403 SIN_ROL repetido nunca da 429', async () => {
+    const { app: a, deps } = app();
+    deps.directorio.validarCredenciales.mockResolvedValue({ usuario: 'x', nombre: 'X', email: '', memberOf: [] });
+    const servidor = await servir(a);
+    for (let i = 0; i < 12; i++) expect((await login(servidor, 'x', 'clave')).status).toBe(403);
+  });
+
+  test('un error inesperado (no del AD) → 500 ERROR_INTERNO, no 503', async () => {
+    const { app: a, deps } = app();
+    deps.directorio.validarCredenciales.mockRejectedValue(new TypeError('boom'));
+    const r = await login(await servir(a), 'jperez', 'clave');
+    expect(r.status).toBe(500);
+    expect(r.body).toMatchObject({ motivo: 'ERROR_INTERNO' });
+  });
+
+  describe('registro de seguridad', () => {
+    let child;
+    beforeEach(() => {
+      child = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+      jest.spyOn(logger, 'child').mockReturnValue(child);
+    });
+    afterEach(() => jest.restoreAllMocks());
+    const resultados = () => child.info.mock.calls.filter(([m]) => m === 'porteria login').map(([, d]) => d);
+
+    test('ok', async () => {
+      const { app: a } = app();
+      await login(await servir(a), 'OLIVOS\\JPerez', 'clave-secreta');
+      expect(resultados()).toEqual([expect.objectContaining({ usuario: 'jperez', resultado: 'ok' })]);
+      expect(JSON.stringify(child.info.mock.calls)).not.toContain('clave-secreta');
+    });
+    test('credenciales_invalidas', async () => {
+      const { app: a, deps } = app();
+      deps.directorio.validarCredenciales.mockRejectedValue(credencialesMalas());
+      await login(await servir(a), 'x@olivos.local');
+      expect(resultados()).toEqual([expect.objectContaining({ usuario: 'x', resultado: 'credenciales_invalidas' })]);
+    });
+    test('sin_rol', async () => {
+      const { app: a, deps } = app();
+      deps.directorio.validarCredenciales.mockResolvedValue({ usuario: 'x', nombre: 'X', email: '', memberOf: [] });
+      await login(await servir(a), 'x');
+      expect(resultados()).toEqual([expect.objectContaining({ usuario: 'x', resultado: 'sin_rol' })]);
+    });
+    test('directorio_no_disponible (con warn con codigo y causa)', async () => {
+      const { app: a, deps } = app();
+      deps.directorio.validarCredenciales.mockRejectedValue(errorDirectorio('AD_NO_DISPONIBLE', 'sin red'));
+      await login(await servir(a), 'x');
+      expect(resultados()).toEqual([expect.objectContaining({ usuario: 'x', resultado: 'directorio_no_disponible' })]);
+      expect(child.warn).toHaveBeenCalledWith(expect.any(String), { codigo: 'AD_NO_DISPONIBLE', causa: 'sin red' });
+    });
   });
 
   test('los logins exitosos no cuentan para el límite', async () => {
