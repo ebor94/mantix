@@ -12,6 +12,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | 0 — Base | `2026-10-30-porteria-fase0-base.md` | cerrada (revisión final + correcciones) | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
 | 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | cerrada (revisión final + correcciones) | Login AD con roles de portería, sede activa, catálogos de H360 |
 | 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | cerrada (revisión final + correcciones) | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
+| 2b — Puesta en marcha | `2026-10-30-porteria-fase2b-arranque.md` | listo para ejecutar | Siembra de propios por sede, propios fuera para el guarda, salida por otra sede inconsistente |
 | 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
 | 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
@@ -51,10 +52,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
   - "Movimientos del día": la ventana de 15 minutos la decide el servidor; considerar exponer `puede_editar`/`editable_hasta` por ítem en `/eventos` para no depender del reloj de la tablet.
   - Al corregir el conductor, enviar el bloque completo (usuario u "otro" + nombre; proveedor: empresa, nombre y documento): un cambio parcial del conductor responde 422.
   - `sugerir` trae `propuesta` para un propio fuera (motivo, referencia, conductor) y para un proveedor dentro (motivo, empresa, nombre y documento del conductor).
-- **Decisiones de producto pendientes (antes de la Fase 3):**
-  1. Puesta en marcha: con la decisión 1, el primer ingreso de cada propio que esté fuera ese día y la primera salida de cada proveedor que esté dentro darán 409 y quedarán como inconsistentes. ¿Sembrar `por_estado_vehiculo` al arrancar, no marcar inconsistente un primer registro, o aceptarlo?
-  2. Contador "propios fuera" del guarda: hoy muestra solo los que salieron por su sede. ¿Basta, o debe ver todos los propios fuera?
-  3. Salida por la sede B de un vehículo que figura dentro en la sede A: hoy se acepta como coherente. ¿Marcarla como inconsistente?
+- Decisiones de producto tomadas (Fase 2b): siembra de propios por sede desde H360 (los proveedores arrancan fuera; lo que no cuadre se corrige con la primera inconsistencia); el guarda ve todos los propios fuera; la salida por otra sede es inconsistente (`SALIDA_OTRA_SEDE`, `errors.estado.otra_sede`). En "vehículos dentro" las filas sembradas llegan con `carga_inicial: true`, `id` y `motivo` nulos.
 - El interceptor de 503 debe distinguir `motivo`: `PORTERIA_DESHABILITADO` (módulo) vs `DIRECTORIO_NO_DISPONIBLE` (login). El interceptor de 401 no aplica a la respuesta de `/auth/login`.
 - Scaffold Vue 3 + Vite + Tailwind + Pinia + Vue Router + Vitest, PWA solo con manifest.
 - Cliente axios con interceptores 401/503; stores `auth`, `catalogos`, `estado`, `eventos`.
