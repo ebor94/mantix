@@ -39,12 +39,13 @@ function escapeFilter(str) {
   return String(str).replace(/[*()\\\x00]/g, c => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'))
 }
 
-// Promise que rechaza automáticamente después de N ms
+// Promise que rechaza automáticamente después de N ms (y limpia su temporizador al terminar)
 function withTimeout(promise, ms, msg) {
-  return Promise.race([
-    promise,
-    new Promise((_, rej) => setTimeout(() => rej(new Error(msg || `Timeout después de ${ms}ms`)), ms))
-  ])
+  let temporizador
+  const limite = new Promise((_, rej) => {
+    temporizador = setTimeout(() => rej(new Error(msg || `Timeout después de ${ms}ms`)), ms)
+  })
+  return Promise.race([promise, limite]).finally(() => clearTimeout(temporizador))
 }
 
 function createClient() {
@@ -188,18 +189,31 @@ async function listarMiembrosGrupo(groupName) {
   return miembros
 }
 
+/** Error del directorio con un código estable para quien llama; el mensaje es el de siempre. */
+function errorDirectorio(message, codigo) {
+  const err = new Error(message)
+  err.codigo = codigo
+  return err
+}
+
+// Aceptar "bortega", "bortega@olivos.local" o "OLIVOS\bortega"
+function normalizarUsuario(usuarioRaw) {
+  const usuario = String(usuarioRaw ?? '').trim()
+  if (usuario.includes('@')) return usuario.split('@')[0]
+  if (usuario.includes('\\')) return usuario.split('\\')[1]
+  return usuario
+}
+
 /**
- * Autentica un usuario contra el AD olivos.local.
- * Patrón: bind con cuenta de servicio → busca usuario → re-bind con
- * credenciales del usuario para verificarlas → retorna { usuario, nombre, email, rol }.
+ * Verifica usuario y contraseña contra el AD olivos.local, sin exigir rol de ninguna aplicación.
+ * Patrón: bind con cuenta de servicio → busca usuario → re-bind con sus credenciales.
+ * Retorna { usuario, nombre, email, memberOf }. Los errores llevan `codigo`:
+ * CREDENCIALES_INVALIDAS (vacías, usuario inexistente o contraseña incorrecta) o AD_NO_DISPONIBLE.
  */
-async function autenticarLDAP(usuarioRaw, password) {
-  // Aceptar "bortega", "bortega@olivos.local" o "OLIVOS\bortega"
-  const usuario = usuarioRaw.includes('@')
-    ? usuarioRaw.split('@')[0]
-    : usuarioRaw.includes('\\')
-      ? usuarioRaw.split('\\')[1]
-      : usuarioRaw
+async function validarCredenciales(usuarioRaw, password) {
+  const usuario = normalizarUsuario(usuarioRaw)
+  // Un bind con contraseña vacía es anónimo y el AD lo acepta: nunca puede valer como login.
+  if (!usuario || !password) throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
 
   console.log(`[LDAP] Autenticando usuario: ${usuario}`)
 
@@ -210,7 +224,7 @@ async function autenticarLDAP(usuarioRaw, password) {
     console.log('[LDAP] Paso 1 OK — bind svc')
   } catch (err) {
     svcClient.destroy()
-    throw new Error('No se pudo conectar al directorio activo: ' + err.message)
+    throw errorDirectorio('No se pudo conectar al directorio activo: ' + err.message, 'AD_NO_DISPONIBLE')
   }
 
   // --- Paso 2: buscar usuario por sAMAccountName ---
@@ -221,13 +235,13 @@ async function autenticarLDAP(usuarioRaw, password) {
       ['dn', 'sAMAccountName', 'displayName', 'mail', 'memberOf'])
     console.log(`[LDAP] Paso 2 OK — ${entries.length} resultado(s)`)
   } catch (err) {
-    throw new Error('Error al buscar usuario en el directorio: ' + err.message)
+    throw errorDirectorio('Error al buscar usuario en el directorio: ' + err.message, 'AD_NO_DISPONIBLE')
   } finally {
     svcClient.destroy()
   }
 
   if (!entries.length) {
-    throw new Error('Usuario no encontrado en el directorio')
+    throw errorDirectorio('Usuario no encontrado en el directorio', 'CREDENCIALES_INVALIDAS')
   }
 
   const { dn: userDN, sam, displayName, mail, memberOf } = extraerAtributos(entries[0])
@@ -246,23 +260,33 @@ async function autenticarLDAP(usuarioRaw, password) {
       console.log('[LDAP] Paso 3 OK — bind usuario con DN')
     }
   } catch {
-    throw new Error('Usuario o contraseña incorrectos')
+    throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
   } finally {
     userClient.destroy()
   }
 
+  return { usuario: sam || usuario, nombre: displayName || usuario, email: mail || '', memberOf }
+}
+
+/**
+ * Autentica para H360: credenciales válidas + al menos un rol de H360.
+ * Retorna { usuario, nombre, email, rol, roles }.
+ */
+async function autenticarLDAP(usuarioRaw, password) {
+  const datos = await validarCredenciales(usuarioRaw, password)
+
   // --- Paso 4: determinar roles por membresía de grupos ---
-  const roles = detectarRoles(memberOf)
-  console.log(`[LDAP] Paso 4 — roles: ${roles.join(', ') || 'ninguno'}, grupos: ${memberOf.length}`)
+  const roles = detectarRoles(datos.memberOf)
+  console.log(`[LDAP] Paso 4 — roles: ${roles.join(', ') || 'ninguno'}, grupos: ${datos.memberOf.length}`)
 
   if (!roles.length) {
     throw new Error('Tu usuario no tiene rol asignado en Homenajes360. Contacta a TI.')
   }
 
   return {
-    usuario: sam         || usuario,
-    nombre:  displayName || usuario,
-    email:   mail        || '',
+    usuario: datos.usuario,
+    nombre:  datos.nombre,
+    email:   datos.email,
     // `rol` es el activo; `roles` son todos los que puede usar. Si hay más de
     // uno, la pantalla de ingreso le pregunta con cuál entra.
     rol:   roles[0],
@@ -342,4 +366,4 @@ async function buscarUsuarioPorSam(sam) {
   }
 }
 
-module.exports = { autenticarLDAP, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles }
+module.exports = { autenticarLDAP, validarCredenciales, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles }
