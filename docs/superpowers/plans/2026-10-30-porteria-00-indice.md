@@ -11,7 +11,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 |---|---|---|---|
 | 0 — Base | `2026-10-30-porteria-fase0-base.md` | cerrada (revisión final + correcciones) | Módulo montado, 503 sin configuración, `/health`, esquema + seed + vista, pruebas de integración |
 | 1 — Auth + catálogos | `2026-10-30-porteria-fase1-auth-catalogos.md` | cerrada (revisión final + correcciones) | Login AD con roles de portería, sede activa, catálogos de H360 |
-| 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | listo para ejecutar | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
+| 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | cerrada (revisión final + correcciones) | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
 | 3 — Front del guarda | por escribir (repo `porteriasfn`) | — | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4 — Admin | por escribir | — | Motivos, catálogo de proveedores, consulta, Excel, Swagger, pantallas 6–8 |
 | 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
@@ -45,15 +45,27 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - Integración: concurrencia (dos ingresos simultáneos **de una placa nueva** y de una existente → uno pasa y el otro 409, nunca 500), viaje entre sedes, recalcular estado al anular (orden `registrado_at DESC, id DESC`), ventana de 15 min.
 
 ### Fase 3 — Front del guarda (`porteriasfn`)
+- Heredado de la revisión de la Fase 2:
+  - Diálogo de 409 `SENTIDO_INCOHERENTE`: `errors.estado = { dentro, sede_id, desde, sin_historial }`; `sede_id` y `desde` pueden ser null; `desde` es un instante ISO (UTC). Con `sin_historial` mostrar "Primer registro de esta placa". Reenviar con `forzar: true` y `observaciones` (si no, 422).
+  - 409 `OCUPADO` (otro registro de la placa en curso) y `MODIFICADO` (el registro cambió mientras se editaba): mensaje y reintento.
+  - "Movimientos del día": la ventana de 15 minutos la decide el servidor; considerar exponer `puede_editar`/`editable_hasta` por ítem en `/eventos` para no depender del reloj de la tablet.
+  - Al corregir el conductor, enviar el bloque completo (usuario u "otro" + nombre; proveedor: empresa, nombre y documento): un cambio parcial del conductor responde 422.
+  - `sugerir` trae `propuesta` para un propio fuera (motivo, referencia, conductor) y para un proveedor dentro (motivo, empresa, nombre y documento del conductor).
+- **Decisiones de producto pendientes (antes de la Fase 3):**
+  1. Puesta en marcha: con la decisión 1, el primer ingreso de cada propio que esté fuera ese día y la primera salida de cada proveedor que esté dentro darán 409 y quedarán como inconsistentes. ¿Sembrar `por_estado_vehiculo` al arrancar, no marcar inconsistente un primer registro, o aceptarlo?
+  2. Contador "propios fuera" del guarda: hoy muestra solo los que salieron por su sede. ¿Basta, o debe ver todos los propios fuera?
+  3. Salida por la sede B de un vehículo que figura dentro en la sede A: hoy se acepta como coherente. ¿Marcarla como inconsistente?
 - El interceptor de 503 debe distinguir `motivo`: `PORTERIA_DESHABILITADO` (módulo) vs `DIRECTORIO_NO_DISPONIBLE` (login). El interceptor de 401 no aplica a la respuesta de `/auth/login`.
 - Scaffold Vue 3 + Vite + Tailwind + Pinia + Vue Router + Vitest, PWA solo con manifest.
 - Cliente axios con interceptores 401/503; stores `auth`, `catalogos`, `estado`, `eventos`.
 - Pantallas 1–5 del diseño §9, incluido el diálogo de 409 con `forzar`.
 
 ### Fase 4 — Admin
+- Auditar los cambios del catálogo de proveedores (alta y PATCH) y la limpieza del par al anular.
 - Backend: `/admin/motivos` (CRUD, inactivar o 409 si tiene eventos), `PATCH /vehiculos-externos/:id`, `GET /eventos` con filtros para admin, `/admin/reportes/movimientos.xlsx` en streaming, Swagger de todas las rutas.
 - Front: pantallas 6–8 y store `motivos`.
 
 ### Fase 5 — Despliegue
+- `SELECT VERSION()` en serfuweb: `FOR UPDATE OF` exige MySQL ≥ 8.0.1 (MariaDB y 5.7 lo rechazan; corregir/anular fallarían con 500). Aplicar migraciones 001–004 en orden. El pool (10 conexiones) comparte esperas de bloqueo: revisar `innodb_lock_wait_timeout` frente al timeout de nginx.
 - Confirmar que nginx es el único salto (`trust proxy` = 1) y que el puerto de Node no es accesible directo; si no, `req.ip` es falsificable o es el del balanceador. Los limitadores viven en memoria por proceso (se reinician con el servicio). Pendientes de serfuweb: `exequias.fecha` es DATE, collation/charset de las tablas de H360, placas con tabulaciones o espacios no separables.
 - Variables en `srv-backend`, `npm run porteria:migrate` en producción, origen del front en `CORS_ORIGIN`, sitio nginx del front, grupos AD creados, piloto en una sede con checklist.
