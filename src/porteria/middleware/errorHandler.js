@@ -1,12 +1,13 @@
 const logger = require('../../utils/logger');
 const PorteriaError = require('../utils/PorteriaError');
-const { errorParaLog } = require('../../trk/utils/errorSeguro');
+const { errorParaLog } = require('../utils/errorSeguro');
 
 const SIN_CODIGO = 'POR-SIN-CODIGO';
 
 // Último middleware del router de Portería (y de /api/porteria en app.js para errores del parser).
 // eslint-disable-next-line no-unused-vars
 function porteriaErrorHandler(err, req, res, next) {
+  if (res.headersSent) return next(err);
   const codigo = req.porApiCodigo || SIN_CODIGO;
   const log = req.porLog || logger.child({ modulo: 'porteria', api_codigo: codigo });
   if (!res.getHeader('X-POR-API')) res.setHeader('X-POR-API', codigo);

@@ -3,11 +3,12 @@ require('./env');
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
+const { validarBdPrueba } = require('./bd');
 const { aplicarMigraciones } = require('../scripts/migrador');
 
 module.exports = async () => {
+  validarBdPrueba(process.env);
   const bd = process.env.DB_NAME;
-  if (!/_test$/.test(bd)) throw new Error(`Por seguridad, la BD de pruebas debe terminar en _test (recibido: ${bd})`);
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT, 10),

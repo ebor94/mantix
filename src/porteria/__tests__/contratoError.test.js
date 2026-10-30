@@ -55,3 +55,17 @@ test('JSON inválido → 400 VALIDACION', async () => {
   expect(r.status).toBe(400);
   expect(r.body).toEqual({ success: false, error: 'POR-SIN-CODIGO', motivo: 'VALIDACION', message: 'JSON inválido' });
 });
+
+test('si la respuesta ya fue enviada delega en next sin enviar otra vez', async () => {
+  const delegados = [];
+  const app = express();
+  app.get('/x', apiCodigo('POR-TST-001'), (req, res, next) => { res.write('x'); next(new Error('tarde')); });
+  app.use('/', porteriaErrorHandler);
+  // Manejador final: recibe el error solo si porteriaErrorHandler lo delegó con next(err).
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => { delegados.push(err.message); res.end(); });
+  const r = await request(await servir(app)).get('/x');
+  expect(r.status).toBe(200);
+  expect(r.text).toBe('x');
+  expect(delegados).toEqual(['tarde']);
+});

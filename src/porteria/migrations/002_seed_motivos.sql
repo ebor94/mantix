@@ -14,4 +14,5 @@ VALUES
   ('SERES_QUERIDOS_TERCERIZADA', 'Seres queridos (asistencia tercerizada)', 0, 1, 0, 'ASISTENCIA', 1,  90, 'seed'),
   ('ENTREGA_MERCANCIA',          'Entrega de mercancía',                    0, 0, 1, 'NINGUNA',    0, 100, 'seed'),
   ('MANTENIMIENTO_SERVICIO',     'Mantenimiento / servicio técnico',        0, 0, 1, 'NINGUNA',    0, 110, 'seed'),
-  ('OTRO',                       'Otro',                                    0, 1, 1, 'TEXTO',      1, 120, 'seed');
+  ('OTRO',                       'Otro',                                    0, 1, 1, 'TEXTO',      1, 120, 'seed')
+ON DUPLICATE KEY UPDATE codigo = codigo;

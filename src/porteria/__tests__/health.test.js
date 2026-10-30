@@ -26,3 +26,9 @@ test('health 503 cuando la BD no responde, sin filtrar el error', async () => {
     success: false, error: 'POR-SIS-001', motivo: 'NO_DISPONIBLE', message: 'La base de datos no responde',
   });
 });
+
+test('ruta inexistente → 404 propio del módulo', async () => {
+  const r = await request(await servir(appCon({ ping: async () => {} }))).get('/api/porteria/v1/no-existe');
+  expect(r.status).toBe(404);
+  expect(r.body).toEqual({ success: false, error: 'POR-SIS-002', motivo: 'NO_ENCONTRADO', message: 'Ruta no encontrada' });
+});

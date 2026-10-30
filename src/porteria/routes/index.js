@@ -7,7 +7,7 @@ const { leerEntorno } = require('../config/entorno');
 const { crearBdPerezosa } = require('../db');
 const apiCodigo = require('../middleware/apiCodigo');
 const { porteriaErrorHandler } = require('../middleware/errorHandler');
-const { errorParaLog } = require('../../trk/utils/errorSeguro');
+const { errorParaLog } = require('../utils/errorSeguro');
 
 /** Fábrica inyectable (tests): `bd` = { ping(), obtener() }. */
 function crearRouterPorteria({ bd }) {
@@ -23,13 +23,19 @@ function crearRouterPorteria({ bd }) {
     }
   });
 
+  router.use(apiCodigo('POR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
+
   router.use(porteriaErrorHandler);
   return router;
 }
 
 // Producción: el router se construye UNA vez al cargar (los limitadores de fases siguientes lo exigen).
 // Nada aquí toca la red ni lanza si faltan variables: el pool se crea al primer uso.
-const bd = crearBdPerezosa(() => leerEntorno().config.db);
+const bd = crearBdPerezosa(() => {
+  const e = leerEntorno();
+  if (!e.ok) throw new Error(`Portería sin configuración válida: ${e.motivo}`);
+  return e.config.db;
+});
 const real = crearRouterPorteria({ bd });
 
 // Si la configuración no es válida responde 503 sin tumbar Mantix (se re-evalúa por request, es barato).

@@ -11,8 +11,9 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  const conn = await mysql.createConnection({ ...conexion.db, charset: 'utf8mb4', multipleStatements: true });
+  const conn = await mysql.createConnection({ ...conexion.db, charset: 'utf8mb4', timezone: '-05:00', multipleStatements: true });
   try {
+    await conn.query("SET time_zone = '-05:00'");
     const aplicadas = await aplicarMigraciones(conn, undefined, (a) => console.log(`aplicada ${a}`));
     console.log(aplicadas.length ? `${aplicadas.length} migración(es) aplicada(s)` : 'Sin migraciones pendientes');
   } finally {

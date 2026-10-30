@@ -1,12 +1,12 @@
 jest.mock('mysql2/promise', () => ({ createPool: jest.fn() }));
 const mysql = require('mysql2/promise');
-const { crearBdPerezosa } = require('../db');
+const { crearPool, crearBdPerezosa } = require('../db');
 
 beforeEach(() => mysql.createPool.mockReset());
 
 test('no lee la configuración ni crea el pool hasta el primer uso', async () => {
   const query = jest.fn().mockResolvedValue([[{ 1: 1 }]]);
-  mysql.createPool.mockReturnValue({ query, end: jest.fn().mockResolvedValue() });
+  mysql.createPool.mockReturnValue({ pool: { on: jest.fn() }, query, end: jest.fn().mockResolvedValue() });
   const cfgFn = jest.fn(() => ({ host: 'h', port: 1, user: 'u', password: 'p', database: 'd' }));
 
   const bd = crearBdPerezosa(cfgFn);
@@ -20,9 +20,19 @@ test('no lee la configuración ni crea el pool hasta el primer uso', async () =>
   expect(query).toHaveBeenCalledWith('SELECT 1');
 });
 
+test('fija la zona horaria de cada conexión nueva del pool (SET time_zone)', () => {
+  const on = jest.fn();
+  mysql.createPool.mockReturnValue({ pool: { on }, query: jest.fn(), end: jest.fn() });
+  crearPool({ host: 'h' });
+  expect(on).toHaveBeenCalledWith('connection', expect.any(Function));
+  const conexion = { query: jest.fn() };
+  on.mock.calls.find(([evento]) => evento === 'connection')[1](conexion);
+  expect(conexion.query).toHaveBeenCalledWith("SET time_zone = '-05:00'");
+});
+
 test('cerrar libera el pool y el siguiente uso crea uno nuevo', async () => {
   const end = jest.fn().mockResolvedValue();
-  mysql.createPool.mockReturnValue({ query: jest.fn().mockResolvedValue([[]]), end });
+  mysql.createPool.mockReturnValue({ pool: { on: jest.fn() }, query: jest.fn().mockResolvedValue([[]]), end });
   const bd = crearBdPerezosa(() => ({}));
   bd.obtener();
   await bd.cerrar();
