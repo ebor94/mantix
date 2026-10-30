@@ -22,3 +22,4 @@ uploads/
 !src/trk/migrations/*.sql
 !src/trk/testing/sql/*.sql
 !src/bigday/migrations/*.sql
+!src/porteria/migrations/*.sql
