@@ -29,7 +29,8 @@ const CW     = HOJA_W - M * 2
 /**
  * La versión del formato en el sistema de calidad. Sube cuando cambia lo que
  * va impreso, no cuando cambia el código: la 09 quitó el teléfono de la
- * familia de la hoja que recibe el proveedor y agregó el valor acordado.
+ * familia de la hoja que recibe el proveedor, agregó el valor acordado y la
+ * descripción del servicio del ERP.
  *
  * Va aquí arriba y no dentro del encabezado porque la imprimen las dos hojas y
  * el próximo cambio del formato tiene que ser una sola línea.
@@ -86,6 +87,20 @@ const moneda = v => {
   if (!Number.isFinite(n) || n <= 0) return BLANCO
   return '$ ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
+
+/**
+ * Deja un texto plano para compararlo: sin tildes, en minúsculas y con los
+ * espacios colapsados.
+ *
+ * Hace falta porque los dos textos que se comparan vienen de lados distintos
+ * del ERP y no se escriben igual: el maestro de servicios dice "Transporte
+ * Microbus" y la observación de la línea "Transporte Microbús", y varios
+ * nombres traen espacios dobles ("Coro Exequias  2 musicos"). Comparando en
+ * bruto, la hoja imprimiría dos veces lo mismo.
+ */
+const plano = v => String(v ?? '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/\s+/g, ' ').trim()
 
 /** "2026-10-08" o un Date → "8 de octubre de 2026". */
 const MESES = ['enero','febrero','marzo','abril','mayo','junio',
@@ -229,12 +244,46 @@ function generarR34Pdf(r34) {
           ['Cementerio', r34.cementerio, 1]])
 
     // Observaciones: es el campo que más texto lleva, así que va más alto.
+    //
+    // Arriba va la descripción del servicio tal como la tiene el ERP, porque
+    // el nombre de la casilla marcada es genérico: "Arreglo floral" no le dice
+    // al proveedor si es corona, pedestal o tradicional. Se imprime solo
+    // cuando no está ya a la vista en la hoja —dentro de la observación, que
+    // es el caso corriente porque la sugerida se arma con ella, o al lado de
+    // la casilla "Otro"—; repetida sería ruido en el único campo donde el
+    // proveedor busca lo que tiene que entregar.
+    const desc = String(r34.servicio_desc ?? '').trim()
+    const descVisible = !desc
+      || r34.grupo === 'OTRO'
+      || plano(r34.observaciones).includes(plano(desc))
+
+    // La cantidad solo cuando es más de uno, y solo aquí: en la observación
+    // sugerida ya va, y si se llegó hasta esta línea es porque la observación
+    // que escribieron no la trae. Son cuatro coronas y la orden tiene que
+    // decirlo.
+    const cant = Number(r34.cantidad)
+    const lineaServicio = !descVisible && Number.isFinite(cant) && cant > 1
+      ? `${Number.isInteger(cant) ? cant : cant.toFixed(2)} × ${desc}`
+      : desc
+
     doc.save()
-    const altoObs = 40
+    // El alto es fijo aunque la descripción no se imprima: es un formato de
+    // calidad y las firmas tienen que quedar en el mismo sitio en todas las
+    // hojas. Cuando no va la descripción, la observación se queda con el
+    // renglón de más.
+    const altoObs = 54
     doc.rect(M, y, CW, altoObs).lineWidth(0.6).strokeColor(BORDE).stroke()
     doc.fillColor(GRIS).font('Helvetica').fontSize(6.5).text('OBSERVACIONES', M + 5, y + 3.5)
+
+    let yObs = y + 13
+    if (!descVisible) {
+      doc.fillColor(VERDE).font('Helvetica-Bold').fontSize(8)
+         .text(lineaServicio, M + 5, yObs, { width: CW - 10, height: 10, ellipsis: true })
+      yObs += 11
+    }
     doc.fillColor(TINTA).font('Helvetica-Bold').fontSize(9)
-       .text(texto(r34.observaciones), M + 5, y + 14, { width: CW - 10, height: altoObs - 18 })
+       .text(texto(r34.observaciones), M + 5, yObs,
+             { width: CW - 10, height: y + altoObs - 4 - yObs })
     doc.restore()
     y += altoObs + 12
 
