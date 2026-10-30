@@ -55,6 +55,28 @@ describe('leerEntorno', () => {
         motivo: 'PORTERIA_JWT_SECRET debe ser distinto de JWT_SECRET, IDENTIDAD_JWT_SECRET y TRK_JWT_SECRET',
       });
     });
+  test('recorta los nombres de grupo y PORTERIA_JWT_EXPIRES', () => {
+    const r = leerEntorno({
+      ...base(),
+      LDAP_GROUP_PORTERIA_GUARDA: ' PorteriaGuardas ',
+      LDAP_GROUP_PORTERIA_ADMIN: 'PorteriaAdmins\t',
+      LDAP_GROUP_ADMIN: ' Admins ',
+      PORTERIA_JWT_EXPIRES: ' 8h ',
+    });
+    expect(r.config.grupos).toEqual({ guarda: 'PorteriaGuardas', admin: 'PorteriaAdmins', adminGeneral: 'Admins' });
+    expect(r.config.jwtExpires).toBe('8h');
+  });
+  test.each(['3600', '30s', '15m', '12h', '7d'])('PORTERIA_JWT_EXPIRES %p es válido', (v) => {
+    expect(leerEntorno({ ...base(), PORTERIA_JWT_EXPIRES: v }).ok).toBe(true);
+  });
+  test('un entero de segundos pasa como número (jsonwebtoken lo leería como ms si fuera texto)', () => {
+    expect(leerEntorno({ ...base(), PORTERIA_JWT_EXPIRES: '3600' }).config.jwtExpires).toBe(3600);
+  });
+  test.each(['abc', '0', '0h', '-5', '-1h', '1.5h', '12 horas', 'h', '1w'])('PORTERIA_JWT_EXPIRES %p es inválido', (v) => {
+    expect(leerEntorno({ ...base(), PORTERIA_JWT_EXPIRES: v })).toEqual({
+      ok: false, motivo: 'PORTERIA_JWT_EXPIRES inválido (usa p. ej. 12h)',
+    });
+  });
   test('secreto corto solo advierte', () => {
     const r = leerEntorno({ ...base(), PORTERIA_JWT_SECRET: 'corto' });
     expect(r.ok).toBe(true);

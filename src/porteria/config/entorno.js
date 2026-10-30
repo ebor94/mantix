@@ -7,6 +7,9 @@ const CONEXION = ['DB_HOST', 'DB_USER', 'DB_PASSWORD'];
 const PROPIAS = ['PORTERIA_JWT_SECRET', 'LDAP_GROUP_PORTERIA_GUARDA', 'LDAP_GROUP_PORTERIA_ADMIN'];
 const OTROS_SECRETOS = ['JWT_SECRET', 'IDENTIDAD_JWT_SECRET', 'TRK_JWT_SECRET'];
 
+const recortada = (v) => (vacia(v) ? undefined : String(v).trim());
+const DURACION = /^([1-9]\d*)(s|m|h|d)?$/;
+
 const faltantesDe = (env, nombres) => nombres.filter((n) => vacia(env[n]));
 
 /** Solo la conexión (la usa también `npm run porteria:migrate`). */
@@ -34,16 +37,19 @@ function leerEntorno(env = process.env) {
     return { ok: false, motivo: 'PORTERIA_JWT_SECRET debe ser distinto de JWT_SECRET, IDENTIDAD_JWT_SECRET y TRK_JWT_SECRET' };
   }
 
+  const expira = recortada(env.PORTERIA_JWT_EXPIRES) ?? '12h';
+  if (!DURACION.test(expira)) return { ok: false, motivo: 'PORTERIA_JWT_EXPIRES inválido (usa p. ej. 12h)' };
+
   return {
     ok: true,
     advertencia: secreto.length < 32 ? 'PORTERIA_JWT_SECRET tiene menos de 32 caracteres' : null,
     config: {
       jwtSecret: secreto,
-      jwtExpires: vacia(env.PORTERIA_JWT_EXPIRES) ? '12h' : env.PORTERIA_JWT_EXPIRES,
+      jwtExpires: /^\d+$/.test(expira) ? Number(expira) : expira, // un texto sin unidad lo leería jsonwebtoken como ms
       grupos: {
-        guarda: env.LDAP_GROUP_PORTERIA_GUARDA,
-        admin: env.LDAP_GROUP_PORTERIA_ADMIN,
-        adminGeneral: vacia(env.LDAP_GROUP_ADMIN) ? null : env.LDAP_GROUP_ADMIN,
+        guarda: recortada(env.LDAP_GROUP_PORTERIA_GUARDA),
+        admin: recortada(env.LDAP_GROUP_PORTERIA_ADMIN),
+        adminGeneral: recortada(env.LDAP_GROUP_ADMIN) ?? null,
       },
       db: leerConexion(env).db,
     },
