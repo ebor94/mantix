@@ -1,9 +1,9 @@
 // src/porteria/repositorios/estado.js
 // por_estado_vehiculo: dónde está cada placa ahora. Tabla derivada de por_eventos, escrita en la misma
-// transacción que cada evento. Una fila con ultimo_evento_id NULL es provisional (solo existe para bloquear).
+// transacción que cada evento. Una fila con ultimo_evento_id NULL y sin sembrado_at es provisional (solo existe para bloquear); con sembrado_at es una carga inicial.
 const { COLUMNAS_EVENTO, eventoPublico } = require('./eventos');
 
-const COLUMNAS_ESTADO = 'placa, tipo_vehiculo, sede_id, dentro, ultimo_evento_id, salida_abierta_id';
+const COLUMNAS_ESTADO = 'placa, tipo_vehiculo, sede_id, dentro, ultimo_evento_id, salida_abierta_id, sembrado_at';
 const DESDE_ULTIMO_EVENTO = `
   FROM por_estado_vehiculo s
   JOIN por_eventos e ON e.id = s.ultimo_evento_id
@@ -30,22 +30,48 @@ async function borrar(conn, placa) {
   await conn.query('DELETE FROM por_estado_vehiculo WHERE placa = ?', [placa]);
 }
 
+/** Carga inicial de un propio dentro de una sede. false si la placa ya tenía estado (nunca se pisa). */
+async function sembrar(conn, { placa, sedeId }) {
+  try {
+    await conn.query(
+      `INSERT INTO por_estado_vehiculo (placa, tipo_vehiculo, sede_id, dentro, sembrado_at)
+       VALUES (?, 'PROPIO', ?, 1, NOW())`,
+      [placa, sedeId],
+    );
+    return true;
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') return false;
+    throw err;
+  }
+}
+
 async function obtener(ejecutor, placa) {
   const [[fila]] = await ejecutor.query(
-    `SELECT s.placa, s.tipo_vehiculo, s.sede_id, s.dentro, s.ultimo_evento_id, s.salida_abierta_id, e.registrado_at AS desde
-       FROM por_estado_vehiculo s JOIN por_eventos e ON e.id = s.ultimo_evento_id
-      WHERE s.placa = ?`,
+    `SELECT s.placa, s.tipo_vehiculo, s.sede_id, s.dentro, s.ultimo_evento_id, s.salida_abierta_id, s.sembrado_at,
+            COALESCE(e.registrado_at, s.sembrado_at) AS desde
+       FROM por_estado_vehiculo s LEFT JOIN por_eventos e ON e.id = s.ultimo_evento_id
+      WHERE s.placa = ? AND (s.ultimo_evento_id IS NOT NULL OR s.sembrado_at IS NOT NULL)`,
     [placa],
   );
   return fila || null;
 }
 
 async function dentroDeSede(ejecutor, sedeId) {
-  const [filas] = await ejecutor.query(
-    `SELECT ${COLUMNAS_EVENTO} ${DESDE_ULTIMO_EVENTO} WHERE s.sede_id = ? AND s.dentro = 1 ORDER BY e.registrado_at DESC`,
+  const [conEvento] = await ejecutor.query(
+    `SELECT ${COLUMNAS_EVENTO} ${DESDE_ULTIMO_EVENTO} WHERE s.sede_id = ? AND s.dentro = 1`, [sedeId],
+  );
+  const [sembrados] = await ejecutor.query(
+    `SELECT placa, sede_id, sembrado_at FROM por_estado_vehiculo
+      WHERE sede_id = ? AND dentro = 1 AND ultimo_evento_id IS NULL AND sembrado_at IS NOT NULL`,
     [sedeId],
   );
-  return filas.map(eventoPublico);
+  return [
+    ...conEvento.map((f) => ({ ...eventoPublico(f), carga_inicial: false })),
+    ...sembrados.map((s) => ({
+      id: null, placa: s.placa, tipo_vehiculo: 'PROPIO', sede_id: s.sede_id, sentido: null, motivo: null,
+      registrado_at: s.sembrado_at, carga_inicial: true,
+    })),
+  ].sort((a, b) => b.registrado_at - a.registrado_at);
 }
 
 /** Propios fuera (los que llevan más tiempo, primero). `sedeId` = sede por la que salieron; null = todas. */
@@ -59,4 +85,4 @@ async function propiosFuera(ejecutor, sedeId) {
   return filas.map(eventoPublico);
 }
 
-module.exports = { bloquear, guardar, borrar, obtener, dentroDeSede, propiosFuera };
+module.exports = { bloquear, guardar, borrar, sembrar, obtener, dentroDeSede, propiosFuera };

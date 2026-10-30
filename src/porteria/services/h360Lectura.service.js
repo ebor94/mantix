@@ -51,6 +51,12 @@ function crearH360Lectura(bd) {
       return filas.map(conPlacaNormalizada);
     },
 
+    /** Todos los propios activos (para la siembra de la puesta en marcha). */
+    async listarVehiculosPropios() {
+      const filas = await consultar(`SELECT ${COLUMNAS_VEHICULO} FROM vehiculos WHERE activo = 1 ORDER BY placa, id`);
+      return filas.map(conPlacaNormalizada);
+    },
+
     async obtenerVehiculoPropioPorPlaca(placa) {
       const buscada = normalizarPlaca(placa);
       if (!buscada) return null;

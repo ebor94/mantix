@@ -94,7 +94,7 @@ describe('estado', () => {
     const fila = await repoEstado.bloquear(conn, 'R2E001');
     await conn.commit();
     expect(fila).toEqual({
-      placa: 'R2E001', tipo_vehiculo: null, sede_id: null, dentro: 0, ultimo_evento_id: null, salida_abierta_id: null,
+      placa: 'R2E001', tipo_vehiculo: null, sede_id: null, dentro: 0, ultimo_evento_id: null, salida_abierta_id: null, sembrado_at: null,
     });
     expect(await repoEstado.obtener(conn, 'R2E001')).toBeNull();
   });
