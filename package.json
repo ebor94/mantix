@@ -19,7 +19,8 @@
     "test:porteria": "jest src/porteria",
     "test:porteria:int": "jest -c jest.porteria-int.config.js --runInBand",
     "porteria:db:test": "docker compose -f src/porteria/testing/docker-compose.yml up -d --wait",
-    "porteria:migrate": "node src/porteria/scripts/migrar.js"
+    "porteria:migrate": "node src/porteria/scripts/migrar.js",
+    "porteria:sembrar": "node src/porteria/scripts/sembrar.js"
   },
   "jest": {
     "testEnvironment": "node",

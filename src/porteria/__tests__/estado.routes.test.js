@@ -22,10 +22,14 @@ test('dentro: el guarda consulta su sede; el admin pide una', async () => {
   expect(sinSede.status).toBe(400);
 });
 
-test('fuera: el admin sin sede ve todas', async () => {
+test('fuera: el guarda ve toda la flota; el admin puede filtrar por sede', async () => {
   const prueba = crearAppPrueba();
+  await get(prueba, '/fuera?sede_id=9', tokenDe({ sede: { id: 3, nombre: 'N' } }));
+  expect(prueba.deps.estado.fuera).toHaveBeenLastCalledWith(null);
   await get(prueba, '/fuera', tokenDe({ rol: 'admin_porteria' }));
   expect(prueba.deps.estado.fuera).toHaveBeenLastCalledWith(null);
+  await get(prueba, '/fuera?sede_id=9', tokenDe({ rol: 'admin_porteria' }));
+  expect(prueba.deps.estado.fuera).toHaveBeenLastCalledWith(9);
 });
 
 test('placa: sugerencia', async () => {
