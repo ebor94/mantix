@@ -26,6 +26,30 @@ function malaPeticion(mensaje) {
 }
 
 /**
+ * El valor acordado con el proveedor, en pesos.
+ *
+ * Vacío, cero o cualquier cosa que no sea un número positivo quedan en null:
+ * el formato imprime ese renglón en blanco para escribirlo a mano. Se topa en
+ * 99.999.999 porque es una orden a un proveedor por un servicio de un
+ * homenaje, y un dedazo de un cero de más no debe quedar firmado.
+ */
+function valorPesos(v) {
+  if (v === null || v === undefined || v === '') return null
+  let t = String(v).trim().replace(/[^\d.,-]/g, '')
+  // Acá el punto es ambiguo: en Colombia separa los miles, pero del formulario
+  // llega un número plano de JavaScript, donde es el decimal. Se distingue por
+  // la forma, no por el origen, porque a este endpoint también se le puede
+  // pegar un valor copiado de la pantalla: "173.706" son ciento setenta y tres
+  // mil, y leerlo como 173,71 dejaría ese número firmado por el proveedor.
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '')
+  const n = Number(t)
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (n > 99999999) throw malaPeticion('El valor del servicio no parece correcto: revisa los ceros')
+  return Math.round(n * 100) / 100
+}
+
+/**
  * Observación sugerida para el R-34 agrupado.
  *
  * Con una sola línea se respeta lo que diga el ERP. Con varias se antepone la
@@ -85,6 +109,11 @@ function agrupar(items) {
     ...g,
     items: g.lineas.map(l => l.item),
     cantidad: g.lineas.reduce((s, l) => s + Number(l.cantidad || 1), 0),
+    // La suma de las líneas, no el costo unitario: los tres ramos del mismo
+    // proveedor salen en un R-34 y lo que se le pacta es el total. Cero pasa a
+    // null para que el formato deje el renglón en blanco en vez de imprimir
+    // "$ 0" en una orden; el ERP trae 0 en buena parte de las líneas.
+    costo: g.lineas.reduce((s, l) => s + Number(l.costo || 0), 0) || null,
     observacion_sugerida: observacionSugerida(g.lineas),
     alertas: [...new Set(g.lineas.flatMap(l => [l.alerta_proveedor, l.alerta_costo].filter(Boolean)))],
     lineas: undefined,
@@ -121,7 +150,7 @@ async function porContrato(req, res, next) {
     }
 
     const [emitidos] = await db.query(
-      `SELECT id, consecutivo, grupo, proveedor_nit, proveedor_nombre, item,
+      `SELECT id, consecutivo, grupo, proveedor_nit, proveedor_nombre, item, costo,
               fecha_entrega, hora_prestacion, observaciones, enviado_at, enviado_a, created_at,
               autoriza_nombre, autoriza_usuario
          FROM h360_r34 WHERE contrato = ? ORDER BY consecutivo_num DESC`, [contrato])
@@ -194,6 +223,7 @@ async function crear(req, res, next) {
       grupo,
       servicio_desc: texto(b.servicio_desc, 200) || null,
       cantidad: b.cantidad != null ? Number(b.cantidad) : null,
+      costo: valorPesos(b.costo),
       proveedor_nit: texto(b.proveedor_nit, 30) || null,
       proveedor_nombre: texto(b.proveedor_nombre, 200),
       proveedor_email: texto(b.proveedor_email, 200) || null,
@@ -297,7 +327,7 @@ async function listar(req, res, next) {
     const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''
     const [rows] = await db.query(
       `SELECT id, consecutivo, contrato, grupo, servicio_desc, proveedor_nombre, proveedor_email,
-              ser_querido, fecha_entrega, hora_prestacion, observaciones,
+              ser_querido, fecha_entrega, hora_prestacion, observaciones, costo,
               autoriza_nombre, autoriza_usuario, enviado_at, enviado_a, created_at
          FROM h360_r34 ${where}
         ORDER BY consecutivo_num DESC LIMIT 200`, params)

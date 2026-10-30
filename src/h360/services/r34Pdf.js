@@ -59,6 +59,24 @@ const texto = v => {
   return s || '—'
 }
 
+/**
+ * Pesos con separador de miles: 173706 → "$ 173.706".
+ *
+ * Sin costo va BLANCO y no "—": el renglón queda para escribirlo a mano, como
+ * el resto de los campos que se llenan en el sitio. El ERP trae costo 0 en
+ * buena parte de las líneas y un "$ 0" impreso en una orden a un proveedor
+ * sería peor que un espacio vacío.
+ *
+ * El separador se pone a mano y no con toLocaleString: así el formato sale
+ * igual en cualquier servidor, sin depender de los datos de idioma que tenga
+ * instalado Node.
+ */
+const moneda = v => {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n) || n <= 0) return BLANCO
+  return '$ ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
 /** "2026-10-08" o un Date → "8 de octubre de 2026". */
 const MESES = ['enero','febrero','marzo','abril','mayo','junio',
                'julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -187,8 +205,12 @@ function generarR34Pdf(r34) {
     doc.restore()
     y += altoRejilla
 
+    // El valor va en la fila del proveedor y no en una propia: la hoja es media
+    // carta y entre las firmas y el pie quedan 32 puntos, así que una fila más
+    // de 23 empujaría el pie fuera de la página.
     fila([['Proveedor', r34.proveedor_nombre, 3],
-          ['NIT / CC', r34.proveedor_nit, 1]])
+          ['NIT / CC', r34.proveedor_nit, 1],
+          ['Valor acordado', moneda(r34.costo), 1]])
 
     fila([['Dirección para la prestación del homenaje', r34.direccion_homenaje, 3],
           ['Hora', r34.hora_prestacion, 1]])
