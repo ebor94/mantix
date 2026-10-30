@@ -23,9 +23,16 @@ function texto(valor, max, campo) {
   return recortado === '' ? null : recortado;
 }
 
-/** Entero opcional en [min, max]; acepta '12'. */
+/** Entero opcional en [min, max]; acepta 12 o '12'. Vacío o solo espacios → null; otro tipo → 400. */
 function entero(valor, campo, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
-  if (valor === undefined || valor === null || valor === '') return null;
+  if (valor === undefined || valor === null) return null;
+  if (typeof valor === 'string') {
+    const recortado = valor.trim();
+    if (recortado === '') return null;
+    valor = recortado;
+  } else if (typeof valor !== 'number') {
+    throw formato(`Valor inválido en ${campo}`);
+  }
   const n = Number(valor);
   if (!Number.isInteger(n) || n < min || n > max) throw formato(`Valor inválido en ${campo}`);
   return n;
@@ -55,7 +62,8 @@ function leerEntradaRegistro(body) {
   if (!esObjeto(body)) throw formato('Datos inválidos');
   if (!SENTIDOS.includes(body.sentido)) throw formato('Indica si es ingreso o salida');
   const placa = typeof body.placa === 'string' ? normalizarPlaca(body.placa) : '';
-  if (!placa || placa.length > 20) throw formato('Indica la placa');
+  if (!placa) throw formato('Indica la placa');
+  if (placa.length > 20) throw formato('La placa es demasiado larga');
   const tipo = body.tipo_vehiculo === undefined || body.tipo_vehiculo === null || body.tipo_vehiculo === '' ? null : body.tipo_vehiculo;
   if (tipo !== null && !TIPOS.includes(tipo)) throw formato('Tipo de vehículo inválido');
   const detalle = leerDetalle(body);
@@ -143,7 +151,8 @@ function crearResolutorDetalle({ h360, conductores, motivos }) {
       return { conductor_usuario: conductor.usuario, conductor_nombre: conductor.nombre, conductor_documento: null, conductor_otro: false, empresa: null };
     }
     // Con el AD sin responder del todo no se bloquea la portería: se acepta el usuario con el nombre del front.
-    if (listaCompleta || !datos.conductor_nombre) throw regla('El conductor no está en la lista. Elige "otro" y escribe el nombre.');
+    if (!listaCompleta && !datos.conductor_nombre) throw regla('No se pudo verificar el conductor. Escribe su nombre o elige "otro".');
+    if (listaCompleta) throw regla('El conductor no está en la lista. Elige "otro" y escribe el nombre.');
     return { conductor_usuario: datos.conductor_usuario, conductor_nombre: datos.conductor_nombre, conductor_documento: null, conductor_otro: false, empresa: null };
   }
 
@@ -155,7 +164,8 @@ function crearResolutorDetalle({ h360, conductores, motivos }) {
    */
   async function resolver({ tipo, sentido, datos, conservar = {} }) {
     const motivo = await motivos.obtener(datos.motivo_id);
-    if (!conservar.referencia && (!motivo || !motivo.activo || !aplica(motivo, tipo, sentido))) {
+    if (!motivo) throw regla('El motivo no aplica a este vehículo o sentido');
+    if (!conservar.referencia && (!motivo.activo || !aplica(motivo, tipo, sentido))) {
       throw regla('El motivo no aplica a este vehículo o sentido');
     }
     const referencia = conservar.referencia

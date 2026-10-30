@@ -45,9 +45,16 @@ describe('leerEntradaRegistro', () => {
     [{ ...valida, motivo_id: 'x' }, 'Valor inválido en motivo'],
     [{ ...valida, tipo_vehiculo: 'CAMION' }, 'Tipo de vehículo inválido'],
     [{ ...valida, kilometraje: -1 }, 'Valor inválido en kilometraje'],
+    [{ ...valida, motivo_id: true }, 'Valor inválido en motivo'],
+    [{ ...valida, kilometraje: [5] }, 'Valor inválido en kilometraje'],
+    [{ ...valida, placa: 'A'.repeat(21) }, 'La placa es demasiado larga'],
     [{ ...valida, observaciones: 'x'.repeat(501) }, 'Texto demasiado largo en observaciones'],
   ])('%p → 400 %s', (body, message) => {
     expect(errorSync(() => leerEntradaRegistro(body))).toMatchObject({ statusCode: 400, motivo: 'VALIDACION', message });
+  });
+
+  test('entero en blanco (solo espacios) → null', () => {
+    expect(leerEntradaRegistro({ ...valida, kilometraje: ' ' }).kilometraje).toBeNull();
   });
 });
 
@@ -90,6 +97,25 @@ describe('resolver', () => {
         statusCode: 422, motivo: 'VALIDACION', message: 'El motivo no aplica a este vehículo o sentido',
       });
     }
+  });
+
+  test('conservar.referencia con motivo inexistente → 422 con el mensaje de motivo', async () => {
+    const { r } = resolutor();
+    const datos = { motivo_id: 99, conductor_usuario: 'jperez' };
+    expect(await errorDe(() => r.resolver({ tipo: 'PROPIO', sentido: 'SALIDA', datos, conservar: { referencia: true, conductor: true } }))).toMatchObject({
+      statusCode: 422, motivo: 'VALIDACION', message: 'El motivo no aplica a este vehículo o sentido',
+    });
+  });
+
+  test('conservar.referencia con motivo inactivo se resuelve y copia la referencia', async () => {
+    const { r } = resolutor();
+    const datos = {
+      motivo_id: 5, asistencia_id: 11, exequia_id: null, referencia_texto: null, referencia_snapshot: { codigo: 'VIEJA' },
+      conductor_usuario: 'jperez', conductor_nombre: 'Juan Pérez', conductor_documento: null, conductor_otro: false, empresa: null,
+      kilometraje: null, observaciones: null,
+    };
+    const { columnas } = await r.resolver({ tipo: 'PROPIO', sentido: 'SALIDA', datos, conservar: { referencia: true, conductor: true } });
+    expect(columnas).toMatchObject({ motivo_id: 5, asistencia_id: 11, referencia_snapshot: { codigo: 'VIEJA' } });
   });
 
   test('asistencia: obligatoria, vigente y con snapshot', async () => {
@@ -142,7 +168,9 @@ describe('resolver', () => {
     });
     expect(await errorDe(() => resolutor().r.resolver(propio({ conductor_usuario: null })))).toMatchObject({ message: 'Selecciona el conductor' });
     const { r } = resolutor({ listaCompleta: false });
-    expect(await errorDe(() => r.resolver(propio({ conductor_usuario: 'nadie' })))).toMatchObject({ statusCode: 422 });
+    expect(await errorDe(() => r.resolver(propio({ conductor_usuario: 'nadie' })))).toMatchObject({
+      statusCode: 422, message: 'No se pudo verificar el conductor. Escribe su nombre o elige "otro".',
+    });
     const { columnas } = await r.resolver(propio({ conductor_usuario: 'nadie', conductor_nombre: 'Nadie N' }));
     expect(columnas).toMatchObject({ conductor_usuario: 'nadie', conductor_nombre: 'Nadie N', conductor_otro: false });
   });
