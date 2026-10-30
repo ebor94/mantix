@@ -42,6 +42,7 @@ describe('crear', () => {
 
   test.each([
     [{ placa: '-', tipo: 'PROVEEDOR', empresa: 'X' }, 'Indica la placa'],
+    [{ placa: 'A'.repeat(21), tipo: 'PROVEEDOR', empresa: 'X' }, 'La placa es demasiado larga'],
     [{ placa: 'A1', tipo: 'PROPIO', empresa: 'X' }, 'Tipo de vehículo inválido'],
     [{ placa: 'A1', tipo: 'PROVEEDOR', empresa: ' ' }, 'Indica la empresa'],
   ])('%p → 400 %s', async (cuerpo, message) => {

@@ -28,7 +28,8 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
   router.post('/', apiCodigo('POR-VEX-002'), autenticar, aw(async (req, res) => {
     const body = req.body || {};
     const placa = typeof body.placa === 'string' ? normalizarPlaca(body.placa) : '';
-    if (!placa || placa.length > 20) throw invalido('Indica la placa');
+    if (!placa) throw invalido('Indica la placa');
+    if (placa.length > 20) throw invalido('La placa es demasiado larga');
     if (!TIPOS_EXTERNOS.includes(body.tipo)) throw invalido('Tipo de vehículo inválido');
     const empresa = textoCampo(body.empresa, 150, 'Indica la empresa');
     if (!empresa) throw invalido('Indica la empresa');
@@ -42,8 +43,8 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
 
   router.patch('/:id', apiCodigo('POR-VEX-003'), autenticar, requiereRol(ROLES.ADMIN), aw(async (req, res) => {
     const id = Number(req.params.id);
-    const noExiste = new PorteriaError(404, 'NO_ENCONTRADO', 'El vehículo no existe');
-    if (!Number.isInteger(id) || id <= 0) throw noExiste;
+    const noExiste = () => new PorteriaError(404, 'NO_ENCONTRADO', 'El vehículo no existe');
+    if (!Number.isInteger(id) || id <= 0) throw noExiste();
     const body = req.body || {};
     const cambios = {};
     if ('tipo' in body) {
@@ -60,7 +61,7 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
       cambios.activo = body.activo;
     }
     if (Object.keys(cambios).length === 0) throw invalido('No hay cambios');
-    if (!(await vehiculosExternos.actualizar(id, cambios, req.porUsuario.usuario))) throw noExiste;
+    if (!(await vehiculosExternos.actualizar(id, cambios, req.porUsuario.usuario))) throw noExiste();
     res.json({ success: true, data: await vehiculosExternos.obtenerPorId(id) });
   }));
 

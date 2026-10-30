@@ -12,27 +12,34 @@ const { TIPOS } = require('../services/detalleEvento');
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const invalido = (message) => new PorteriaError(400, 'VALIDACION', message);
 const noExiste = () => new PorteriaError(404, 'NO_ENCONTRADO', 'El registro no existe');
+const ENTERO = /^\d{1,9}$/;
 const vacio = (v) => v === undefined || v === '';
 
 function leerFiltros(query) {
   const fecha = (v) => {
     if (vacio(v)) return undefined;
     if (typeof v !== 'string' || !FECHA.test(v)) throw invalido('Fecha inválida (usa AAAA-MM-DD)');
+    const [a, m, d] = v.split('-').map(Number);
+    const f = new Date(Date.UTC(a, m - 1, d));
+    if (f.getUTCFullYear() !== a || f.getUTCMonth() !== m - 1 || f.getUTCDate() !== d) throw invalido('Fecha inválida (usa AAAA-MM-DD)');
     return v;
   };
   const positivo = (v, mensaje) => {
     if (vacio(v)) return undefined;
-    const n = Number(v);
-    if (!Number.isInteger(n) || n <= 0) throw invalido(mensaje);
-    return n;
+    if (typeof v !== 'string' || !ENTERO.test(v) || Number(v) <= 0) throw invalido(mensaje);
+    return Number(v);
   };
   const tipo = vacio(query.tipo_vehiculo) ? undefined : query.tipo_vehiculo;
   if (tipo !== undefined && !TIPOS.includes(tipo)) throw invalido('Tipo de vehículo inválido');
+  const desde = fecha(query.desde);
+  const hasta = fecha(query.hasta);
+  if (desde && hasta && desde > hasta) throw invalido('La fecha inicial es posterior a la final');
+  if (query.placa !== undefined && typeof query.placa !== 'string') throw invalido('Placa inválida');
   return {
     filtros: {
-      desde: fecha(query.desde),
-      hasta: fecha(query.hasta),
-      placa: typeof query.placa === 'string' ? normalizarPlaca(query.placa) || undefined : undefined,
+      desde,
+      hasta,
+      placa: normalizarPlaca(query.placa) || undefined,
       tipoVehiculo: tipo,
       motivoId: positivo(query.motivo_id, 'Motivo inválido'),
       inconsistente: vacio(query.inconsistente) ? undefined : ['1', 'true'].includes(query.inconsistente),

@@ -14,7 +14,7 @@ function crearAppPrueba(deps = {}) {
     bd: { ping: async () => {} },
     obtenerConfig: () => CONFIG,
     directorio: { validarCredenciales: jest.fn() },
-    conductores: { listar: jest.fn(async () => []), existe: jest.fn(async () => false) },
+    conductores: { listar: jest.fn(async () => []), buscar: jest.fn(async () => ({ conductor: null, listaCompleta: true })) },
     h360: {
       listarSedes: jest.fn(async () => []),
       obtenerSede: jest.fn(async () => null),

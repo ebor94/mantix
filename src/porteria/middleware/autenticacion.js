@@ -40,9 +40,10 @@ function sedeDeConsulta(req, { todasParaAdmin = false } = {}) {
   }
   const pedida = req.query && req.query.sede_id;
   if (pedida !== undefined && pedida !== '') {
-    const id = Number(pedida);
-    if (!Number.isInteger(id) || id <= 0) throw new PorteriaError(400, 'VALIDACION', 'Sede inválida');
-    return id;
+    if (typeof pedida !== 'string' || !/^\d{1,9}$/.test(pedida) || Number(pedida) <= 0) {
+      throw new PorteriaError(400, 'VALIDACION', 'Sede inválida');
+    }
+    return Number(pedida);
   }
   if (usuario.sede_id) return usuario.sede_id;
   if (todasParaAdmin) return null;

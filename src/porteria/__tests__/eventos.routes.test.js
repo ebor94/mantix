@@ -68,10 +68,41 @@ describe('GET /eventos', () => {
     ['?tipo_vehiculo=CAMION', 'Tipo de vehículo inválido'],
     ['?motivo_id=x', 'Motivo inválido'],
     ['?pagina=0', 'Página inválida'],
+    ['?pagina=1e21', 'Página inválida'],
+    ['?pagina=0x10', 'Página inválida'],
+    ['?pagina=1e1', 'Página inválida'],
+    ['?pagina=-1', 'Página inválida'],
+    ['?pagina=%205%20', 'Página inválida'],
+    ['?pagina=1234567890', 'Página inválida'],
+    ['?pagina[]=2', 'Página inválida'],
+    ['?pagina[a]=2', 'Página inválida'],
+    ['?motivo_id=1e1', 'Motivo inválido'],
+    ['?motivo_id[]=2', 'Motivo inválido'],
+    ['?desde=2026-02-31', 'Fecha inválida (usa AAAA-MM-DD)'],
+    ['?hasta=2026-13-01', 'Fecha inválida (usa AAAA-MM-DD)'],
+    ['?desde=2026-02-29', 'Fecha inválida (usa AAAA-MM-DD)'],
+    ['?desde=2026-10-31&hasta=2026-10-01', 'La fecha inicial es posterior a la final'],
+    ['?placa[]=x', 'Placa inválida'],
+    ['?placa[a]=x', 'Placa inválida'],
   ])('%s → 400', async (query, message) => {
     const { res } = await llamar('get', query);
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: 'POR-EVT-002', motivo: 'VALIDACION', message });
+  });
+});
+
+describe('GET /eventos (casos límite)', () => {
+  test('fecha bisiesta válida y rango ordenado se aceptan', async () => {
+    const prueba = crearAppPrueba();
+    const { res } = await llamar('get', '?desde=2028-02-29&hasta=2028-02-29&pagina=3', { prueba });
+    expect(res.status).toBe(200);
+    expect(prueba.deps.eventos.listar).toHaveBeenCalledWith(expect.objectContaining({ desde: '2028-02-29', hasta: '2028-02-29' }), { pagina: 3 });
+  });
+
+  test('guarda sin sede → 403 SEDE_REQUERIDA', async () => {
+    const { res } = await llamar('get', '', { token: tokenDe() });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ error: 'POR-EVT-002', motivo: 'SEDE_REQUERIDA' });
   });
 });
 
@@ -103,4 +134,13 @@ test('PATCH y anular delegan en el servicio', async () => {
   const anular = await llamar('post', '/5/anular', { cuerpo: { motivo: 'error' }, prueba });
   expect(anular.res.body.data).toEqual({ id: 5, anulado: true });
   expect(prueba.deps.eventos.anular).toHaveBeenCalledWith(5, { motivo: 'error' }, expect.objectContaining({ usuario: 'guarda1' }), { ip: expect.any(String), apiCodigo: 'POR-EVT-005' });
+});
+
+test('un SIN_PERMISO de eventos.anular sale con POR-EVT-005', async () => {
+  const PorteriaError = require('../utils/PorteriaError');
+  const prueba = crearAppPrueba();
+  prueba.deps.eventos.anular.mockRejectedValue(new PorteriaError(403, 'SIN_PERMISO', 'Solo el admin anula'));
+  const { res } = await llamar('post', '/5/anular', { cuerpo: { motivo: 'x' }, prueba });
+  expect(res.status).toBe(403);
+  expect(res.body).toMatchObject({ error: 'POR-EVT-005', motivo: 'SIN_PERMISO', message: 'Solo el admin anula' });
 });
