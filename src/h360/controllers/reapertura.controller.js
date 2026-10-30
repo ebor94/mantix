@@ -138,15 +138,26 @@ async function validar(req, res, next) {
     }
 
     // Historial (para que el coordinador vea la reapertura)
+    //
+    // estado_hasta lleva 'REAPERTURA' y no NULL: la columna es NOT NULL y este
+    // INSERT venía fallando desde septiembre, atrapado por el catch de abajo,
+    // así que ninguna de las reaperturas quedó registrada. Una reapertura no
+    // es un cambio de estado de la asistencia sino un evento, y por eso
+    // estado_desde sí queda en NULL —igual que en las filas de creación— y la
+    // pantalla le pone su propia etiqueta.
     try {
       await db.query(
         `INSERT INTO asistencia_historial
           (asistencia_id, estado_desde, estado_hasta, usuario_id, nombre_usuario, comentario)
-         VALUES (?, NULL, NULL, ?, ?, ?)`,
+         VALUES (?, NULL, 'REAPERTURA', ?, ?, ?)`,
         [id, usuario, req.user.nombre || null,
          `REAPERTURA ${etapa}: ${t.motivo} (autorizado por token, solicitado por ${t.solicitado_por_nombre || t.solicitado_por})`]
       )
-    } catch (e) { console.warn('[reapertura hist]', e.message) }
+    } catch (e) {
+      // No se bloquea la reapertura si el historial falla, pero el aviso lleva
+      // la asistencia: sin ella el log no sirve para encontrar cuál se perdió.
+      console.warn(`[reapertura hist] asistencia ${id}:`, e.message)
+    }
 
     res.json({
       ok: true,
