@@ -17,11 +17,15 @@ function rolDesdeGrupos(memberOf, grupos) {
   return null;
 }
 
-function firmarToken({ usuario, nombre, rol, sede }, { jwtSecret, jwtExpires }) {
+// Con `exp` (segundos) el token nuevo vence cuando el anterior: cambiar de sede no extiende la sesión.
+function firmarToken({ usuario, nombre, rol, sede }, { jwtSecret, jwtExpires }, { exp } = {}) {
   return jwt.sign(
-    { scope: SCOPE, nombre, rol, sede_id: sede ? sede.id : null, sede_nombre: sede ? sede.nombre : null },
+    {
+      scope: SCOPE, nombre, rol, sede_id: sede ? sede.id : null, sede_nombre: sede ? sede.nombre : null,
+      ...(exp ? { exp } : {}),
+    },
     jwtSecret,
-    { subject: usuario, expiresIn: jwtExpires, algorithm: 'HS256' },
+    { subject: usuario, algorithm: 'HS256', ...(exp ? {} : { expiresIn: jwtExpires }) },
   );
 }
 
@@ -34,8 +38,8 @@ function verificarToken(token, jwtSecret) {
   } catch {
     throw sesionInvalida();
   }
-  if (p.scope !== SCOPE || !p.sub || !Object.values(ROLES).includes(p.rol)) throw sesionInvalida();
-  return { usuario: p.sub, nombre: p.nombre, rol: p.rol, sede_id: p.sede_id ?? null, sede_nombre: p.sede_nombre ?? null };
+  if (p.scope !== SCOPE || !p.sub || !Number.isInteger(p.exp) || !Object.values(ROLES).includes(p.rol)) throw sesionInvalida();
+  return { usuario: p.sub, nombre: p.nombre, rol: p.rol, sede_id: p.sede_id ?? null, sede_nombre: p.sede_nombre ?? null, exp: p.exp };
 }
 
 /** Lo que el front recibe del usuario en sesión. */

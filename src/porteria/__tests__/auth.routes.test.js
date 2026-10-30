@@ -1,7 +1,8 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const { crearAppPrueba, tokenDe, CONFIG } = require('../testing/appPrueba');
-const { verificarToken } = require('../services/auth.service');
+const { verificarToken, firmarToken } = require('../services/auth.service');
 
 afterEach(cerrarServidores);
 
@@ -115,6 +116,25 @@ describe('POST /auth/sede', () => {
     expect(r.body.data.user).toEqual({ usuario: 'guarda1', nombre: 'Guarda Uno', rol: 'guarda', sede: { id: 1, nombre: 'Norte' } });
     expect(verificarToken(r.body.data.token, CONFIG.jwtSecret)).toMatchObject({ sede_id: 1, sede_nombre: 'Norte' });
     expect(deps.h360.obtenerSede).toHaveBeenCalledWith(1);
+  });
+
+  test('el token nuevo conserva el exp del recibido (no extiende la sesión)', async () => {
+    const { app: a, deps } = app();
+    deps.h360.obtenerSede.mockResolvedValue({ id: 1, codigo: 'S1', nombre: 'Norte', ciudad: 'Cúcuta' });
+    const exp = Math.floor(Date.now() / 1000) + 600;
+    const viejo = firmarToken({ usuario: 'guarda1', nombre: 'Guarda Uno', rol: 'guarda', sede: null }, CONFIG, { exp });
+    const r = await request(await servir(a)).post('/api/porteria/v1/auth/sede')
+      .set('Authorization', `Bearer ${viejo}`).send({ sede_id: 1 });
+    expect(verificarToken(r.body.data.token, CONFIG.jwtSecret).exp).toBe(exp);
+    expect(r.body.data.user).not.toHaveProperty('exp');
+  });
+
+  test('token sin exp → 401', async () => {
+    const { app: a } = app();
+    const sinExp = jwt.sign({ scope: 'porteria', rol: 'guarda', nombre: 'G' }, CONFIG.jwtSecret, { subject: 'g', algorithm: 'HS256' });
+    const r = await request(await servir(a)).post('/api/porteria/v1/auth/sede')
+      .set('Authorization', `Bearer ${sinExp}`).send({ sede_id: 1 });
+    expect(r.status).toBe(401);
   });
 
   test.each([[{}], [{ sede_id: 'abc' }], [{ sede_id: 0 }], [{ sede_id: 1.5 }]])('sede_id inválido %p → 400', async (cuerpo) => {

@@ -40,7 +40,7 @@ test('token de otro secreto → 401', async () => {
 test('token válido deja el usuario en req.porUsuario', async () => {
   const r = await request(await servir(app())).get('/abierta').set('Authorization', `Bearer ${token()}`);
   expect(r.status).toBe(200);
-  expect(r.body.data).toEqual({ usuario: 'jperez', nombre: 'Juan', rol: 'guarda', sede_id: null, sede_nombre: null });
+  expect(r.body.data).toEqual({ usuario: 'jperez', nombre: 'Juan', rol: 'guarda', sede_id: null, sede_nombre: null, exp: expect.any(Number) });
 });
 
 test('requiereRol: un guarda no entra a una ruta de admin', async () => {

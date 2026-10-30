@@ -61,8 +61,8 @@ function crearRouterAuth({ obtenerConfig, directorio, h360, autenticar }) {
     const sede = await h360.obtenerSede(sedeId);
     if (!sede) throw new PorteriaError(404, 'SEDE_NO_ENCONTRADA', 'La sede no existe o está inactiva');
 
-    const { usuario, nombre, rol } = req.porUsuario;
-    const token = firmarToken({ usuario, nombre, rol, sede: { id: sede.id, nombre: sede.nombre } }, obtenerConfig());
+    const { usuario, nombre, rol, exp } = req.porUsuario;
+    const token = firmarToken({ usuario, nombre, rol, sede: { id: sede.id, nombre: sede.nombre } }, obtenerConfig(), { exp });
     res.json({
       success: true,
       data: { token, user: usuarioPublico({ usuario, nombre, rol, sede_id: sede.id, sede_nombre: sede.nombre }) },
