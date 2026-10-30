@@ -5,10 +5,10 @@ let conn;
 beforeAll(async () => { conn = await abrirConexion(); });
 afterAll(async () => { await conn.end(); });
 
-test('las tres migraciones quedan registradas y un segundo intento no aplica nada', async () => {
+test('las cuatro migraciones quedan registradas y un segundo intento no aplica nada', async () => {
   const [filas] = await conn.query('SELECT nombre FROM por_migraciones ORDER BY nombre');
   expect(filas.map((f) => f.nombre)).toEqual([
-    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql',
+    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql',
   ]);
   expect(await aplicarMigraciones(conn)).toEqual([]);
 });
@@ -65,4 +65,17 @@ test('por_estado_vehiculo tiene la placa como clave primaria', async () => {
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'por_estado_vehiculo' AND CONSTRAINT_NAME = 'PRIMARY'`,
   );
   expect(pk.columnas).toBe('placa');
+});
+
+test('por_estado_vehiculo admite la fila provisional (sin eventos)', async () => {
+  const [columnas] = await conn.query(
+    `SELECT COLUMN_NAME AS columna, IS_NULLABLE AS nula FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'por_estado_vehiculo'
+        AND COLUMN_NAME IN ('tipo_vehiculo', 'sede_id', 'ultimo_evento_id') ORDER BY COLUMN_NAME`,
+  );
+  expect(columnas).toEqual([
+    { columna: 'sede_id', nula: 'YES' },
+    { columna: 'tipo_vehiculo', nula: 'YES' },
+    { columna: 'ultimo_evento_id', nula: 'YES' },
+  ]);
 });
