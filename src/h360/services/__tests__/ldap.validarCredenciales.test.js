@@ -63,14 +63,29 @@ describe('validarCredenciales', () => {
       email: 'jperez@olivos.local',
       memberOf: ['CN=PorteriaGuardas,OU=Grupos,DC=olivos,DC=local'],
     });
-    expect(usuario.bind).toHaveBeenCalledWith('jperez@olivos.local', 'clave', expect.any(Function));
+    expect(usuario.bind).toHaveBeenCalledTimes(1);
+    expect(usuario.bind).toHaveBeenCalledWith('CN=Juan Pérez,OU=Usuarios,DC=olivos,DC=local', 'clave', expect.any(Function));
   });
 
-  test('contraseña incorrecta → CREDENCIALES_INVALIDAS', async () => {
-    directorio({ usuario: cliente({ bind: (dn, pw, cb) => cb(new Error('49 invalid credentials')) }) });
+  test('contraseña incorrecta → CREDENCIALES_INVALIDAS con un solo bind del usuario', async () => {
+    // Como lo produce ldapjs v3 para el código LDAP 49 (el módulo está mockeado: sin instanceof).
+    const invalida = Object.assign(new Error('80090308: LdapErr: DSID-0C09044E, data 52e'), {
+      name: 'InvalidCredentialsError', code: 49,
+    });
+    const { usuario } = directorio({ usuario: cliente({ bind: (dn, pw, cb) => cb(invalida) }) });
     await expect(validarCredenciales('jperez', 'mala')).rejects.toMatchObject({
       codigo: 'CREDENCIALES_INVALIDAS', message: 'Usuario o contraseña incorrectos',
     });
+    expect(usuario.bind).toHaveBeenCalledTimes(1);
+  });
+
+  test('error de red en el bind del usuario → AD_NO_DISPONIBLE', async () => {
+    const { usuario } = directorio({ usuario: cliente({ bind: (dn, pw, cb) => cb(new Error('ECONNRESET')) }) });
+    const err = await validarCredenciales('jperez', 'clave').catch((e) => e);
+    expect(err.codigo).toBe('AD_NO_DISPONIBLE');
+    expect(err.message).toMatch(/^No se pudo conectar al directorio activo/);
+    expect(err.message).toContain('ECONNRESET');
+    expect(usuario.bind).toHaveBeenCalledTimes(1);
   });
 
   test('usuario inexistente → CREDENCIALES_INVALIDAS', async () => {

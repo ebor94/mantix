@@ -247,20 +247,17 @@ async function validarCredenciales(usuarioRaw, password) {
   const { dn: userDN, sam, displayName, mail, memberOf } = extraerAtributos(entries[0])
   console.log(`[LDAP] Usuario: ${sam}, DN: ${userDN}`)
 
-  // --- Paso 3: re-bind con credenciales del usuario (verifica contraseña) ---
-  const upn        = sam ? `${sam}@olivos.local` : `${usuario}@olivos.local`
+  // --- Paso 3: re-bind con el DN del usuario (verifica contraseña; un solo intento por login) ---
   const userClient = createClient()
   try {
-    try {
-      await bindAsync(userClient, upn, password)
-      console.log(`[LDAP] Paso 3 OK — bind usuario con UPN: ${upn}`)
-    } catch (e1) {
-      console.log(`[LDAP] UPN bind falló (${e1.message}), intentando DN`)
-      await bindAsync(userClient, userDN, password)
-      console.log('[LDAP] Paso 3 OK — bind usuario con DN')
+    await bindAsync(userClient, userDN, password)
+    console.log('[LDAP] Paso 3 OK — bind usuario con DN')
+  } catch (err) {
+    // ldapjs: LDAP 49 llega como InvalidCredentialsError con code 49. Se detecta por name/code, no por instanceof.
+    if (err?.name === 'InvalidCredentialsError' || err?.code === 49) {
+      throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
     }
-  } catch {
-    throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
+    throw errorDirectorio('No se pudo conectar al directorio activo: ' + err.message, 'AD_NO_DISPONIBLE')
   } finally {
     userClient.destroy()
   }
