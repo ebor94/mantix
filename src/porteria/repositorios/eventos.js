@@ -60,10 +60,12 @@ async function antiguedadSegundos(ejecutor, id) {
   return fila ? Number(fila.segundos) : null;
 }
 
+// Llamar solo después de estado.bloquear en la misma transacción: las escrituras de una placa están
+// serializadas por ese bloqueo, así que el id más alto es el más reciente.
 async function ultimoVigente(ejecutor, placa) {
   const [[fila]] = await ejecutor.query(
     `SELECT id, sede_id, sentido, tipo_vehiculo, registrado_at FROM por_eventos
-      WHERE placa = ? AND anulado = 0 ORDER BY registrado_at DESC, id DESC LIMIT 1`,
+      WHERE placa = ? AND anulado = 0 ORDER BY id DESC LIMIT 1`,
     [placa],
   );
   return fila || null;

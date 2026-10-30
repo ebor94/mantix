@@ -10,6 +10,7 @@ let conn;
 let bd;
 let eventos;
 const m = {};
+let alResolverMotivo = null; // gancho de prueba: corre una vez, justo después de leer el registro y antes de la transacción
 const guarda1 = { usuario: 'guarda1', nombre: 'G1', rol: 'guarda', sede_id: 2601, sede_nombre: 'E6' };
 const guarda2 = { ...guarda1, usuario: 'guarda2' };
 const admin = { usuario: 'admin1', nombre: 'A', rol: 'admin_porteria', sede_id: 2601, sede_nombre: 'E6' };
@@ -26,13 +27,23 @@ beforeAll(async () => {
   for (const t of ['por_eventos', 'por_estado_vehiculo', 'por_vehiculos_externos']) await conn.query(`DELETE FROM ${t} WHERE placa LIKE 'E6%'`);
   for (const t of ['asistencias', 'vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 2600 AND 2699`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2601, 'E6', 'E6', 'Cúcuta', 1)");
-  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2601, 'E6P001', 'F', 'F', 'CARROZA', 1), (2602, 'E6P002', 'F', 'F', 'CARROZA', 1)");
+  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2601, 'E6P001', 'F', 'F', 'CARROZA', 1), (2602, 'E6P002', 'F', 'F', 'CARROZA', 1), (2603, 'E6P003', 'F', 'F', 'CARROZA', 1), (2604, 'E6P004', 'F', 'F', 'CARROZA', 1)");
   await conn.query("INSERT INTO asistencias (id, codigo, nombre_ser_querido, contrato, estado) VALUES (2601, 'H360-E6-2601', 'Luis', 'C-6', 'NUEVO')");
   const [motivos] = await conn.query('SELECT id, codigo FROM por_motivos');
   for (const { id, codigo } of motivos) m[codigo] = id;
   const conductores = { buscar: async (u) => ({ conductor: u === 'jperez' ? { usuario: 'jperez', nombre: 'Juan Pérez' } : null, listaCompleta: true }) };
+  const motivosBase = crearRepositorioMotivos(bd);
+  const motivosConGancho = {
+    ...motivosBase,
+    obtener: async (id) => {
+      const gancho = alResolverMotivo;
+      alResolverMotivo = null;
+      if (gancho) await gancho();
+      return motivosBase.obtener(id);
+    },
+  };
   eventos = crearServicioEventos({
-    bd, h360: crearH360Lectura(bd), conductores, motivos: crearRepositorioMotivos(bd), vehiculosExternos: crearRepositorioVehiculosExternos(bd),
+    bd, h360: crearH360Lectura(bd), conductores, motivos: motivosConGancho, vehiculosExternos: crearRepositorioVehiculosExternos(bd),
   });
 });
 afterAll(async () => {
@@ -87,6 +98,43 @@ describe('corregir', () => {
   });
 });
 
+describe('correcciones concurrentes', () => {
+  // Determinista: el gancho deja que el admin corrija el mismo registro después de que el guarda lo leyó
+  // y antes de que abra su transacción (la ventana exacta de la carrera), sin depender de tiempos.
+  test('si otro corrige entre la lectura y la transacción → 409 MODIFICADO y no se pisa su cambio', async () => {
+    const ev = await eventos.registrar(salidaPropia('E6P003', { kilometraje: 10 }), guarda1);
+    alResolverMotivo = () => eventos.corregir(ev.id, { observaciones: 'del admin' }, admin);
+    const err = await errorDe(eventos.corregir(ev.id, { kilometraje: 50 }, guarda1));
+    expect(err).toMatchObject({ statusCode: 409, motivo: 'MODIFICADO', message: 'El registro cambió mientras lo editabas. Vuelve a abrirlo.' });
+    expect(await eventos.obtener(ev.id)).toMatchObject({ kilometraje: 10, observaciones: 'del admin', corregido_por: 'admin1' });
+  });
+
+  test('dos correcciones seguidas (cada una leyendo lo vigente) sí se aplican', async () => {
+    const ev = await eventos.registrar(salidaPropia('E6P004', { kilometraje: 1 }), guarda1);
+    await eventos.corregir(ev.id, { kilometraje: 2 }, guarda1);
+    expect(await eventos.corregir(ev.id, { observaciones: 'ok' }, admin)).toMatchObject({ kilometraje: 2, observaciones: 'ok' });
+  });
+});
+
+describe('cambio de conductor', () => {
+  test('al cambiar el conductor no se heredan los datos del anterior', async () => {
+    const ev = await eventos.registrar(salidaPropia('E6P003', { sentido: 'INGRESO', conductor_usuario: undefined, conductor_otro: true, conductor_nombre: 'Pedro', conductor_documento: '99' }), guarda1);
+    expect(ev).toMatchObject({ conductor_otro: true, conductor_usuario: null, conductor_nombre: 'Pedro' });
+    expect(await eventos.corregir(ev.id, { conductor_usuario: 'jperez' }, guarda1))
+      .toMatchObject({ conductor_usuario: 'jperez', conductor_nombre: 'Juan Pérez', conductor_documento: null, conductor_otro: false });
+  });
+
+  test('proveedor: si cambia la empresa o el conductor deben venir empresa, nombre y documento', async () => {
+    const ev = await eventos.registrar({
+      sentido: 'INGRESO', placa: 'E6V003', tipo_vehiculo: 'PROVEEDOR', motivo_id: m.ENTREGA_MERCANCIA, empresa: 'X', conductor_nombre: 'Y', conductor_documento: '1',
+    }, guarda1);
+    expect(await errorDe(eventos.corregir(ev.id, { conductor_nombre: 'Z' }, guarda1)))
+      .toMatchObject({ statusCode: 422, message: 'Escribe la empresa, el nombre y el documento del conductor' });
+    expect(await eventos.corregir(ev.id, { empresa: 'W', conductor_nombre: 'Z', conductor_documento: '2' }, guarda1))
+      .toMatchObject({ empresa: 'W', conductor_nombre: 'Z', conductor_documento: '2' });
+  });
+});
+
 describe('anular', () => {
   test('anular el ingreso que cerraba el viaje reabre la salida', async () => {
     const salida = await eventos.registrar(salidaPropia('E6P002'), guarda1);
@@ -118,6 +166,14 @@ describe('anular', () => {
     }, guarda1);
     await eventos.anular(ev.id, { motivo: 'Placa equivocada' }, guarda1);
     expect(await estadoDe('E6V001')).toBeUndefined();
+  });
+
+  test('motivo de más de 255 caracteres → 400', async () => {
+    const ev = await eventos.registrar({
+      sentido: 'INGRESO', placa: 'E6V004', tipo_vehiculo: 'PROVEEDOR', motivo_id: m.ENTREGA_MERCANCIA, empresa: 'X', conductor_nombre: 'Y', conductor_documento: '1',
+    }, guarda1);
+    expect(await errorDe(eventos.anular(ev.id, { motivo: 'x'.repeat(256) }, guarda1)))
+      .toMatchObject({ statusCode: 400, message: 'El motivo de la anulación es demasiado largo' });
   });
 
   test('sin motivo → 400; de otro guarda → 403', async () => {

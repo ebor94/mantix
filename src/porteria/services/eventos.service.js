@@ -65,7 +65,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
           dentro
             ? 'Este vehículo figura dentro. Para registrar el ingreso igual, confírmalo y escribe una observación.'
             : 'Este vehículo figura fuera. Para registrar la salida igual, confírmalo y escribe una observación.',
-          { estado: { dentro, sede_id: estado.sede_id, desde: ultimo ? ultimo.registrado_at : null } },
+          { estado: { dentro, sede_id: estado.sede_id, desde: ultimo ? ultimo.registrado_at : null, sin_historial: !conHistoria } },
         );
       }
       if (incoherente && !columnas.observaciones) throw regla('Escribe una observación para registrar igual');
@@ -80,7 +80,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
         vehiculo_externo_id: vehiculoExternoId,
         ...columnas,
         // Solo los propios dejan salida abierta: su ingreso cierra el viaje, sin importar la sede.
-        evento_par_id: esIngreso ? estado.salida_abierta_id : null,
+        evento_par_id: esIngreso && tipo === 'PROPIO' ? estado.salida_abierta_id : null,
         inconsistente: incoherente ? 1 : 0,
         inconsistencia_tipo: incoherente ? (esIngreso ? 'INGRESO_ESTANDO_DENTRO' : 'SALIDA_ESTANDO_FUERA') : null,
         registrado_por: sesion.usuario,
@@ -105,7 +105,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
   async function verificarPermisoEdicion(evento, sesion) {
     if (sesion.rol === ROLES.ADMIN) return;
     const segundos = await repoEventos.antiguedadSegundos(bd.obtener(), evento.id);
-    if (evento.registrado_por !== sesion.usuario || segundos > QUINCE_MINUTOS) {
+    if (evento.registrado_por !== sesion.usuario || segundos === null || segundos > QUINCE_MINUTOS) {
       throw new PorteriaError(403, 'SIN_PERMISO', 'Solo puedes corregir o anular tus registros de los últimos 15 minutos');
     }
   }
@@ -130,10 +130,13 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
     const cambios = leerCambiosCorreccion(body);
     const actual = await cargarEditable(id, sesion, 'El registro está anulado');
     const cambia = (campos) => campos.some((c) => c in cambios);
+    // Si cambia algún dato del conductor, los del conductor salen solo de `cambios`: nada se hereda del anterior.
+    const base = datosDe(actual);
+    if (cambia(CAMPOS_CONDUCTOR)) for (const c of CAMPOS_CONDUCTOR) base[c] = null;
     const { columnas } = await resolutor.resolver({
       tipo: actual.tipo_vehiculo,
       sentido: actual.sentido,
-      datos: { ...datosDe(actual), ...cambios },
+      datos: { ...base, ...cambios },
       conservar: { referencia: !cambia(CAMPOS_REFERENCIA), conductor: !cambia(CAMPOS_CONDUCTOR) },
     });
     if (actual.inconsistente && !columnas.observaciones) throw regla('El registro forzado necesita una observación');
@@ -141,6 +144,10 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
     return conTransaccion(bd, async (conn) => {
       const antes = await repoEventos.obtener(conn, id, { bloquear: true });
       if (antes.anulado) throw new PorteriaError(409, 'ANULADO', 'El registro está anulado');
+      // Otra corrección pudo guardarse entre la lectura y este bloqueo: no se pisa a ciegas.
+      if (String(antes.corregido_at) !== String(actual.corregido_at) || JSON.stringify(datosDe(antes)) !== JSON.stringify(datosDe(actual))) {
+        throw new PorteriaError(409, 'MODIFICADO', 'El registro cambió mientras lo editabas. Vuelve a abrirlo.');
+      }
       await repoEventos.actualizar(conn, id, columnas, sesion.usuario);
       const despues = await repoEventos.obtener(conn, id);
       await registrarAuditoria(conn, {
@@ -166,7 +173,8 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
 
   async function anular(id, body, sesion, ctx = {}) {
     const motivo = typeof (body && body.motivo) === 'string' ? body.motivo.trim() : '';
-    if (!motivo || motivo.length > 255) throw new PorteriaError(400, 'VALIDACION', 'Escribe el motivo de la anulación');
+    if (!motivo) throw new PorteriaError(400, 'VALIDACION', 'Escribe el motivo de la anulación');
+    if (motivo.length > 255) throw new PorteriaError(400, 'VALIDACION', 'El motivo de la anulación es demasiado largo');
     const actual = await cargarEditable(id, sesion, 'El registro ya está anulado');
 
     return conTransaccion(bd, async (conn) => {

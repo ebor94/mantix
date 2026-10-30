@@ -22,7 +22,7 @@ beforeAll(async () => {
   for (const t of ['por_eventos', 'por_estado_vehiculo', 'por_vehiculos_externos']) await conn.query(`DELETE FROM ${t} WHERE placa LIKE 'E5%'`);
   for (const t of ['asistencias', 'vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 2500 AND 2599`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2501, 'E5N', 'E5 Norte', 'Cúcuta', 1), (2502, 'E5S', 'E5 Sur', 'Cúcuta', 1)");
-  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2501, 'E5P-001', 'Ford', 'F', 'CARROZA', 1), (2502, 'E5P 002', 'Kia', 'K', 'CARROZA', 1), (2503, 'E5P003', 'Kia', 'K', 'CARROZA', 1)");
+  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2501, 'E5P-001', 'Ford', 'F', 'CARROZA', 1), (2502, 'E5P 002', 'Kia', 'K', 'CARROZA', 1), (2503, 'E5P003', 'Kia', 'K', 'CARROZA', 1), (2504, 'E5P004', 'Kia', 'K', 'CARROZA', 1)");
   await conn.query("INSERT INTO asistencias (id, codigo, nombre_ser_querido, contrato, estado) VALUES (2501, 'H360-E5-2501', 'María Gómez', 'C-1', 'NUEVO'), (2502, 'H360-E5-2502', 'Ana', 'C-2', 'CERRADO')");
   const [motivos] = await conn.query('SELECT id, codigo FROM por_motivos');
   for (const { id, codigo } of motivos) m[codigo] = id;
@@ -67,7 +67,7 @@ test('ingreso estando dentro: 409; forzar exige observación y queda inconsisten
   const err = await errorDe(eventos.registrar(cuerpo, sesionA));
   expect(err).toMatchObject({ statusCode: 409, motivo: 'SENTIDO_INCOHERENTE' });
   expect(err.message).toMatch(/figura dentro/);
-  expect(err.errors.estado).toMatchObject({ dentro: true, sede_id: 2502, desde: expect.any(Date) });
+  expect(err.errors.estado).toMatchObject({ dentro: true, sede_id: 2502, desde: expect.any(Date), sin_historial: false });
 
   expect(await errorDe(eventos.registrar({ ...cuerpo, forzar: true }, sesionA)))
     .toMatchObject({ statusCode: 422, message: 'Escribe una observación para registrar igual' });
@@ -96,7 +96,7 @@ test('proveedor sin historial: su salida es incoherente', async () => {
   const err = await errorDe(eventos.registrar({
     sentido: 'SALIDA', placa: 'E5V002', tipo_vehiculo: 'PROVEEDOR', motivo_id: m.ENTREGA_MERCANCIA, empresa: 'X', conductor_nombre: 'Y', conductor_documento: '1',
   }, sesionA));
-  expect(err).toMatchObject({ statusCode: 409, motivo: 'SENTIDO_INCOHERENTE', errors: { estado: { dentro: false, sede_id: null, desde: null } } });
+  expect(err).toMatchObject({ statusCode: 409, motivo: 'SENTIDO_INCOHERENTE', errors: { estado: { dentro: false, sede_id: null, desde: null, sin_historial: true } } });
   expect(await estadoDe('E5V002')).toBeUndefined();
 });
 
@@ -152,4 +152,18 @@ test('dos salidas simultáneas de una placa con historial: una pasa y la otra es
   await eventos.registrar({ sentido: 'INGRESO', placa: 'E5P003', motivo_id: m.LAVADO, conductor_usuario: 'jperez' }, sesionA);
   const resultados = await Promise.all([intento(), intento()]);
   expect(resultados.sort()).toEqual([409, 'ok']);
+});
+
+test('el ingreso de un proveedor no hereda la salida abierta de un propio con la misma placa', async () => {
+  await eventos.registrar({ sentido: 'SALIDA', placa: 'E5P004', motivo_id: m.LAVADO, conductor_usuario: 'jperez' }, sesionA);
+  expect((await estadoDe('E5P004')).salida_abierta_id).not.toBeNull();
+  await conn.query('UPDATE vehiculos SET activo = 0 WHERE id = 2504');
+  try {
+    const ev = await eventos.registrar({
+      sentido: 'INGRESO', placa: 'E5P004', tipo_vehiculo: 'PROVEEDOR', motivo_id: m.ENTREGA_MERCANCIA, empresa: 'X', conductor_nombre: 'Y', conductor_documento: '1',
+    }, sesionA);
+    expect(ev).toMatchObject({ tipo_vehiculo: 'PROVEEDOR', evento_par_id: null });
+  } finally {
+    await conn.query('UPDATE vehiculos SET activo = 1 WHERE id = 2504');
+  }
 });
