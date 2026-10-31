@@ -16,7 +16,7 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | 3 — Front del guarda | `2026-10-31-porteria-fase3-front-guarda.md` (repo `porteriasfn`, rama `feature/guarda`) | cerrada (revisión final + correcciones) | SPA pantallas 1–5 contra el backend de fases 1–2 |
 | 4a — Admin backend | `2026-10-31-porteria-fase4a-admin-backend.md` | cerrada (revisión final + correcciones) | `/admin/motivos`, Excel de movimientos, `?sede_id=todas`, auditoría de catálogos y del par, idempotencia (`clave_cliente`, migración 007), Swagger |
 | 4b — Admin front | `2026-10-31-porteria-fase4b-admin-front.md` (repo `porteriasfn`, rama `feature/admin`) | cerrada (revisión final + correcciones) | Pantallas 6–8, detalle con corrección completa, confirmación propia, autocompletar de proveedores, "cargar más", clave por registro |
-| 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
+| 5 — Despliegue | `2026-10-31-porteria-fase5-despliegue.md` | plan escrito | `srv-backend` + nginx, build del front, piloto en una sede |
 
 ## Alcance de las fases pendientes (para escribir sus planes)
 

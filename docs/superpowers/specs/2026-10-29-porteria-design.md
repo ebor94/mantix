@@ -258,3 +258,9 @@ Cada fase cierra con `requesting-code-review` y `verification-before-completion`
 - **Front del admin:** rutas `/admin/movimientos|motivos|proveedores` (`meta.requiereAdmin`); el admin sin sede entra por `/admin` y puede pasar a la caseta eligiendo sede. Consulta con filtros, "cargar más" y Excel; detalle con corrección completa (motivo y referencia, conductor completo, km, observaciones) y anulación; un 409 `MODIFICADO` recarga el evento.
 - **Pendientes heredados del guarda:** confirmaciones con un diálogo propio (no `window.confirm`), autocompletar de placas del catálogo de proveedores en el asistente y "cargar más" en los movimientos del día.
 - **Swagger:** todas las rutas del módulo en `src/porteria/docs/openapi.yaml`, incluido en `/api-docs`.
+
+## 14. Fase 5 (despliegue): decisiones
+
+- El controlador hace push directo a `main` de `ebor94/mantix` y de `ebor94/porteriasfn`. El backend llega a producción con el flujo existente (`scripts/deploy-mantix.sh`, PM2); sin las variables `PORTERIA_*` el módulo responde 503 y Mantix no cambia.
+- TI ejecuta lo que toca producción con el runbook `docs/porteria/despliegue.md`: grupos del AD (no existen), deploy, verificación de solo lectura de serfuweb, migraciones 001–007, siembra de la sede piloto, variables y reinicio. Nadie del equipo de desarrollo se conecta a serfuweb.
+- Front en `https://losolivoscucuta.com/porteria/`, servido por AppServ (Apache 2.2 en Windows) desde `smb://192.9.17.11/AppServ/www/porteria`; un `.htaccess` versionado en `public/` hace el fallback de la SPA y sirve `index.html` y `sw.js` sin caché. El front se copia después de que `/health` responda 200 en producción.
