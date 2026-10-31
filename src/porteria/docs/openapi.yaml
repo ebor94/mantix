@@ -1,0 +1,253 @@
+# Documentación del módulo Portería (/api/porteria/v1). Token propio del módulo: POST /auth/login.
+components:
+  schemas:
+    PorteriaError:
+      type: object
+      required: [success, error, motivo, message]
+      properties:
+        success: { type: boolean, example: false }
+        error: { type: string, example: POR-EVT-001, description: Código de la API que respondió }
+        motivo: { type: string, example: SENTIDO_INCOHERENTE }
+        message: { type: string }
+        errors: { type: object, nullable: true }
+    Ok:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: {}
+    Motivo:
+      type: object
+      properties:
+        id: { type: integer }
+        codigo: { type: string, example: LAVADO }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        aplica_propio: { type: boolean }
+        aplica_proveedor_asistencia: { type: boolean }
+        aplica_proveedor: { type: boolean }
+        aplica_ingreso: { type: boolean }
+        aplica_salida: { type: boolean }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO] }
+        referencia_obligatoria: { type: boolean }
+        orden: { type: integer, minimum: 0, maximum: 9999 }
+        activo: { type: boolean }
+        en_uso: { type: boolean, readOnly: true }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    SedeConsulta: { name: sede_id, in: query, schema: { type: string }, description: "Solo admin: id de sede o 'todas'" }
+    Desde: { name: desde, in: query, schema: { type: string, format: date } }
+    Hasta: { name: hasta, in: query, schema: { type: string, format: date } }
+    Placa: { name: placa, in: query, schema: { type: string } }
+    TipoVehiculo: { name: tipo_vehiculo, in: query, schema: { type: string, enum: [PROPIO, PROVEEDOR_ASISTENCIA, PROVEEDOR] } }
+    MotivoId: { name: motivo_id, in: query, schema: { type: integer } }
+    Inconsistente: { name: inconsistente, in: query, schema: { type: string, enum: ['1', '0', 'true', 'false'] } }
+    Q: { name: q, in: query, schema: { type: string } }
+  responses:
+    Ok: { description: Éxito, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+    Error: { description: Error con el contrato del módulo, content: { application/json: { schema: { $ref: '#/components/schemas/PorteriaError' } } } }
+
+paths:
+  /api/porteria/v1/health:
+    get:
+      tags: [Portería]
+      summary: POR-SIS-001 · Estado del módulo y de su base de datos
+      security: []
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '503': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/auth/login:
+    post:
+      tags: [Portería]
+      summary: POR-AUT-001 · Login con usuario del AD (grupos guarda / admin_porteria)
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [usuario, password], properties: { usuario: { type: string }, password: { type: string } } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '401': { $ref: '#/components/responses/Error' }, '429': { $ref: '#/components/responses/Error' }, '503': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/auth/sede:
+    post:
+      tags: [Portería]
+      summary: POR-AUT-002 · Elegir la sede del turno (devuelve un token nuevo con el mismo vencimiento)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [sede_id], properties: { sede_id: { type: integer } } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/auth/me:
+    get:
+      tags: [Portería]
+      summary: POR-AUT-003 · Perfil de la sesión
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '401': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/catalogos/sedes:
+    get: { tags: [Portería], summary: POR-CAT-001 · Sedes activas de H360, responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/catalogos/vehiculos-propios:
+    get: { tags: [Portería], summary: POR-CAT-002 · Buscar vehículos de la empresa, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/catalogos/conductores:
+    get: { tags: [Portería], summary: POR-CAT-003 · Conductores (grupos del AD), responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/catalogos/asistencias:
+    get: { tags: [Portería], summary: POR-CAT-004 · Buscar asistencias abiertas, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/catalogos/exequias:
+    get:
+      tags: [Portería]
+      summary: POR-CAT-005 · Buscar exequias (hoy ±1 día, primero las de la placa)
+      parameters: [{ $ref: '#/components/parameters/Q' }, { name: placa, in: query, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /api/porteria/v1/catalogos/motivos:
+    get:
+      tags: [Portería]
+      summary: POR-CAT-006 · Motivos activos por tipo de vehículo y sentido
+      parameters: [{ $ref: '#/components/parameters/TipoVehiculo' }, { name: sentido, in: query, schema: { type: string, enum: [INGRESO, SALIDA] } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/eventos:
+    post:
+      tags: [Portería]
+      summary: POR-EVT-001 · Registrar un ingreso o una salida (requiere sede)
+      description: >
+        Con `clave_cliente` un reintento devuelve el evento ya creado. Un sentido incoherente responde 409
+        SENTIDO_INCOHERENTE; con `forzar: true` y observación se guarda como inconsistente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sentido, placa, motivo_id]
+              properties:
+                sentido: { type: string, enum: [INGRESO, SALIDA] }
+                placa: { type: string }
+                tipo_vehiculo: { type: string, enum: [PROPIO, PROVEEDOR_ASISTENCIA, PROVEEDOR] }
+                motivo_id: { type: integer }
+                asistencia_id: { type: integer }
+                exequia_id: { type: integer }
+                referencia_texto: { type: string }
+                conductor_usuario: { type: string }
+                conductor_otro: { type: boolean }
+                conductor_nombre: { type: string }
+                conductor_documento: { type: string }
+                empresa: { type: string }
+                kilometraje: { type: integer }
+                observaciones: { type: string }
+                forzar: { type: boolean }
+                guardar_en_catalogo: { type: boolean }
+                clave_cliente: { type: string, pattern: '^[A-Za-z0-9-]{8,64}$' }
+      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Error' } }
+    get:
+      tags: [Portería]
+      summary: POR-EVT-002 · Consultar eventos (el guarda solo su sede), paginado de 50
+      parameters:
+        - { $ref: '#/components/parameters/SedeConsulta' }
+        - { $ref: '#/components/parameters/Desde' }
+        - { $ref: '#/components/parameters/Hasta' }
+        - { $ref: '#/components/parameters/Placa' }
+        - { $ref: '#/components/parameters/TipoVehiculo' }
+        - { $ref: '#/components/parameters/MotivoId' }
+        - { $ref: '#/components/parameters/Inconsistente' }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/eventos/{id}:
+    get:
+      tags: [Portería]
+      summary: POR-EVT-003 · Detalle de un evento
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' } }
+    patch:
+      tags: [Portería]
+      summary: POR-EVT-004 · Corregir (guarda, sus registros de los últimos 15 min; admin, cualquiera)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/eventos/{id}/anular:
+    post:
+      tags: [Portería]
+      summary: POR-EVT-005 · Anular con motivo
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [motivo], properties: { motivo: { type: string, maxLength: 255 } } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/estado/dentro:
+    get: { tags: [Portería], summary: POR-EST-001 · Vehículos dentro de la sede, parameters: [{ $ref: '#/components/parameters/SedeConsulta' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/estado/fuera:
+    get: { tags: [Portería], summary: POR-EST-002 · Vehículos propios fuera, responses: { '200': { $ref: '#/components/responses/Ok' } } }
+  /api/porteria/v1/estado/placa/{placa}:
+    get:
+      tags: [Portería]
+      summary: POR-EST-003 · Sugerencia de sentido y datos de una placa
+      parameters: [{ name: placa, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  /api/porteria/v1/vehiculos-externos:
+    get:
+      tags: [Portería]
+      summary: POR-VEX-001 · Buscar en el catálogo de proveedores (30 como máximo)
+      parameters:
+        - { $ref: '#/components/parameters/Q' }
+        - { name: incluir_inactivos, in: query, schema: { type: string, enum: ['1'] }, description: Solo admin }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [Portería]
+      summary: POR-VEX-002 · Agregar un vehículo de proveedor (auditado)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [placa, tipo, empresa]
+              properties:
+                placa: { type: string }
+                tipo: { type: string, enum: [PROVEEDOR_ASISTENCIA, PROVEEDOR] }
+                empresa: { type: string, maxLength: 150 }
+                descripcion: { type: string, maxLength: 255 }
+      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/vehiculos-externos/{id}:
+    patch:
+      tags: [Portería]
+      summary: POR-VEX-003 · Editar o inactivar (solo admin, auditado)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/admin/motivos:
+    get:
+      tags: [Portería]
+      summary: POR-ADM-001 · Todos los motivos, activos e inactivos (solo admin)
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' } }
+    post:
+      tags: [Portería]
+      summary: POR-ADM-002 · Crear motivo (solo admin, auditado)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Motivo' } } } }
+      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+  /api/porteria/v1/admin/motivos/{id}:
+    patch:
+      tags: [Portería]
+      summary: POR-ADM-003 · Editar motivo; el código no cambia (solo admin, auditado)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Motivo' } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
+    delete:
+      tags: [Portería]
+      summary: POR-ADM-004 · Borrar un motivo sin registros (con registros, 409 MOTIVO_EN_USO)
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+
+  /api/porteria/v1/admin/reportes/movimientos.xlsx:
+    get:
+      tags: [Portería]
+      summary: POR-ADM-005 · Excel de movimientos e inconsistencias (máx. 50.000 filas, solo admin)
+      parameters:
+        - { $ref: '#/components/parameters/SedeConsulta' }
+        - { $ref: '#/components/parameters/Desde' }
+        - { $ref: '#/components/parameters/Hasta' }
+        - { $ref: '#/components/parameters/Placa' }
+        - { $ref: '#/components/parameters/TipoVehiculo' }
+        - { $ref: '#/components/parameters/MotivoId' }
+        - { $ref: '#/components/parameters/Inconsistente' }
+      responses:
+        '200':
+          description: Archivo Excel
+          content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }

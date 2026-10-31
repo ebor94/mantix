@@ -49,7 +49,8 @@ const options = {
   apis: [
     './src/routes/*.js',
     './src/controllers/*.js',
-    './src/models/*.js'
+    './src/models/*.js',
+    './src/porteria/docs/*.yaml'
   ]
 };
 
