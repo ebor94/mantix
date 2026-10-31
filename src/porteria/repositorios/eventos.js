@@ -1,6 +1,9 @@
 // src/porteria/repositorios/eventos.js
 // por_eventos. Las escrituras reciben la conexión de la transacción; las columnas salen de listas cerradas.
 const { patronContiene } = require('../utils/texto');
+const PorteriaError = require('../utils/PorteriaError');
+
+const ER_NO_REFERENCED_ROW = 1452;
 
 const COLUMNAS_EVENTO = `e.id, e.sede_id, e.sentido, e.tipo_vehiculo, e.placa, e.vehiculo_id, e.vehiculo_externo_id,
   e.conductor_usuario, e.conductor_nombre, e.conductor_documento, e.conductor_otro, e.empresa,
@@ -38,11 +41,19 @@ function eventoPublico(fila) {
 }
 
 async function insertar(conn, evento) {
-  const [r] = await conn.query(
-    `INSERT INTO por_eventos (${AL_REGISTRAR.join(', ')}) VALUES (?)`,
-    [AL_REGISTRAR.map((c) => valorDe(c, evento[c]))],
-  );
-  return r.insertId;
+  try {
+    const [r] = await conn.query(
+      `INSERT INTO por_eventos (${AL_REGISTRAR.join(', ')}) VALUES (?)`,
+      [AL_REGISTRAR.map((c) => valorDe(c, evento[c]))],
+    );
+    return r.insertId;
+  } catch (err) {
+    // El motivo se borró entre validarlo y insertar (FK): mismo error que si no existiera.
+    if (err && err.errno === ER_NO_REFERENCED_ROW) {
+      throw new PorteriaError(422, 'VALIDACION', 'El motivo no aplica a este vehículo o sentido');
+    }
+    throw err;
+  }
 }
 
 // FOR UPDATE OF e: bloquea solo el evento, no la fila del motivo (que comparten muchos eventos).
