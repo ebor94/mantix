@@ -17,8 +17,9 @@ components:
         data: {}
     Motivo:
       type: object
+      description: Forma de respuesta (no se usa como cuerpo de entrada).
       properties:
-        id: { type: integer }
+        id: { type: integer, readOnly: true }
         codigo: { type: string, example: LAVADO }
         nombre: { type: string }
         descripcion: { type: string, nullable: true }
@@ -32,9 +33,67 @@ components:
         orden: { type: integer, minimum: 0, maximum: 9999 }
         activo: { type: boolean }
         en_uso: { type: boolean, readOnly: true }
+    MotivoNuevo:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo: { type: string, pattern: '^[A-Z0-9_]{2,40}$', description: Se guarda en mayúsculas y no se puede cambiar después, example: LAVADO }
+        nombre: { type: string, maxLength: 100 }
+        descripcion: { type: string, nullable: true, maxLength: 255, default: null }
+        aplica_propio: { type: boolean, default: false }
+        aplica_proveedor_asistencia: { type: boolean, default: false }
+        aplica_proveedor: { type: boolean, default: false }
+        aplica_ingreso: { type: boolean, default: true }
+        aplica_salida: { type: boolean, default: true }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO], default: NINGUNA }
+        referencia_obligatoria: { type: boolean, default: false, description: No puede ser true con tipo_referencia NINGUNA }
+        orden: { type: integer, minimum: 0, maximum: 9999, default: 0 }
+        activo: { type: boolean, default: true }
+      description: Debe marcar al menos un tipo de vehículo (aplica_propio, aplica_proveedor_asistencia, aplica_proveedor) y un sentido.
+    MotivoCambios:
+      type: object
+      minProperties: 1
+      description: Solo los campos a cambiar. No acepta `codigo` (400) ni `id`/`en_uso`.
+      properties:
+        nombre: { type: string, maxLength: 100 }
+        descripcion: { type: string, nullable: true, maxLength: 255 }
+        aplica_propio: { type: boolean }
+        aplica_proveedor_asistencia: { type: boolean }
+        aplica_proveedor: { type: boolean }
+        aplica_ingreso: { type: boolean }
+        aplica_salida: { type: boolean }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO] }
+        referencia_obligatoria: { type: boolean }
+        orden: { type: integer, minimum: 0, maximum: 9999 }
+        activo: { type: boolean }
+    EventoCambios:
+      type: object
+      minProperties: 1
+      description: Solo los campos a corregir. La placa, el sentido, el tipo de vehículo y la sede no se corrigen (400); se anula y se registra de nuevo.
+      properties:
+        motivo_id: { type: integer, minimum: 1 }
+        asistencia_id: { type: integer, minimum: 1, nullable: true }
+        exequia_id: { type: integer, minimum: 1, nullable: true }
+        referencia_texto: { type: string, maxLength: 255, nullable: true }
+        conductor_usuario: { type: string, maxLength: 100, nullable: true }
+        conductor_nombre: { type: string, maxLength: 150, nullable: true }
+        conductor_documento: { type: string, maxLength: 30, nullable: true }
+        conductor_otro: { type: boolean }
+        empresa: { type: string, maxLength: 150, nullable: true }
+        kilometraje: { type: integer, minimum: 0, maximum: 5000000, nullable: true }
+        observaciones: { type: string, maxLength: 500, nullable: true }
+    VehiculoExternoCambios:
+      type: object
+      minProperties: 1
+      properties:
+        tipo: { type: string, enum: [PROVEEDOR_ASISTENCIA, PROVEEDOR] }
+        empresa: { type: string, maxLength: 150 }
+        descripcion: { type: string, maxLength: 255, nullable: true }
+        activo: { type: boolean }
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
     SedeConsulta: { name: sede_id, in: query, schema: { type: string }, description: "Solo admin: id de sede o 'todas'" }
+    SedeId: { name: sede_id, in: query, schema: { type: integer, minimum: 1 }, description: "Solo admin: id de sede; sin él, la de su token" }
     Desde: { name: desde, in: query, schema: { type: string, format: date } }
     Hasta: { name: hasta, in: query, schema: { type: string, format: date } }
     Placa: { name: placa, in: query, schema: { type: string } }
@@ -43,6 +102,7 @@ components:
     Inconsistente: { name: inconsistente, in: query, schema: { type: string, enum: ['1', '0', 'true', 'false'] } }
     Q: { name: q, in: query, schema: { type: string } }
   responses:
+    NoAutenticado: { description: 'Sin sesión o sesión vencida (NO_AUTENTICADO)', content: { application/json: { schema: { $ref: '#/components/schemas/PorteriaError' } } } }
     Ok: { description: Éxito, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
     Error: { description: Error con el contrato del módulo, content: { application/json: { schema: { $ref: '#/components/schemas/PorteriaError' } } } }
 
@@ -62,7 +122,7 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [usuario, password], properties: { usuario: { type: string }, password: { type: string } } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '401': { $ref: '#/components/responses/Error' }, '429': { $ref: '#/components/responses/Error' }, '503': { $ref: '#/components/responses/Error' } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '429': { $ref: '#/components/responses/Error' }, '503': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/auth/sede:
     post:
       tags: [Portería]
@@ -70,33 +130,33 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [sede_id], properties: { sede_id: { type: integer } } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/Error' } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '401': { $ref: '#/components/responses/NoAutenticado' }, '404': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/auth/me:
     get:
       tags: [Portería]
       summary: POR-AUT-003 · Perfil de la sesión
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '401': { $ref: '#/components/responses/Error' } }
+      responses: { '200': { $ref: '#/components/responses/Ok' }, '401': { $ref: '#/components/responses/NoAutenticado' } }
 
   /api/porteria/v1/catalogos/sedes:
-    get: { tags: [Portería], summary: POR-CAT-001 · Sedes activas de H360, responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-CAT-001 · Sedes activas de H360, responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/vehiculos-propios:
-    get: { tags: [Portería], summary: POR-CAT-002 · Buscar vehículos de la empresa, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-CAT-002 · Buscar vehículos de la empresa, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/conductores:
-    get: { tags: [Portería], summary: POR-CAT-003 · Conductores (grupos del AD), responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-CAT-003 · Conductores (grupos del AD), responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/asistencias:
-    get: { tags: [Portería], summary: POR-CAT-004 · Buscar asistencias abiertas, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-CAT-004 · Buscar asistencias abiertas, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/exequias:
     get:
       tags: [Portería]
       summary: POR-CAT-005 · Buscar exequias (hoy ±1 día, primero las de la placa)
       parameters: [{ $ref: '#/components/parameters/Q' }, { name: placa, in: query, schema: { type: string } }]
-      responses: { '200': { $ref: '#/components/responses/Ok' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } }
   /api/porteria/v1/catalogos/motivos:
     get:
       tags: [Portería]
       summary: POR-CAT-006 · Motivos activos por tipo de vehículo y sentido
       parameters: [{ $ref: '#/components/parameters/TipoVehiculo' }, { name: sentido, in: query, schema: { type: string, enum: [INGRESO, SALIDA] } }]
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
 
   /api/porteria/v1/eventos:
     post:
@@ -130,7 +190,7 @@ paths:
                 forzar: { type: boolean }
                 guardar_en_catalogo: { type: boolean }
                 clave_cliente: { type: string, pattern: '^[A-Za-z0-9-]{8,64}$' }
-      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Error' } }
     get:
       tags: [Portería]
       summary: POR-EVT-002 · Consultar eventos (el guarda solo su sede), paginado de 50
@@ -143,19 +203,19 @@ paths:
         - { $ref: '#/components/parameters/MotivoId' }
         - { $ref: '#/components/parameters/Inconsistente' }
         - { name: pagina, in: query, schema: { type: integer, minimum: 1 } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/eventos/{id}:
     get:
       tags: [Portería]
       summary: POR-EVT-003 · Detalle de un evento
       parameters: [{ $ref: '#/components/parameters/Id' }]
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' } }
     patch:
       tags: [Portería]
       summary: POR-EVT-004 · Corregir (guarda, sus registros de los últimos 15 min; admin, cualquiera)
       parameters: [{ $ref: '#/components/parameters/Id' }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/EventoCambios' } } } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/eventos/{id}/anular:
     post:
       tags: [Portería]
@@ -164,18 +224,19 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [motivo], properties: { motivo: { type: string, maxLength: 255 } } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
 
   /api/porteria/v1/estado/dentro:
-    get: { tags: [Portería], summary: POR-EST-001 · Vehículos dentro de la sede, parameters: [{ $ref: '#/components/parameters/SedeConsulta' }], responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-EST-001 · Vehículos dentro de la sede, parameters: [{ $ref: '#/components/parameters/SedeId' }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' } } }
   /api/porteria/v1/estado/fuera:
-    get: { tags: [Portería], summary: POR-EST-002 · Vehículos propios fuera, responses: { '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-EST-002 · Vehículos propios fuera (el admin puede filtrar por sede de salida),
+      parameters: [{ $ref: '#/components/parameters/SedeConsulta' }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/estado/placa/{placa}:
     get:
       tags: [Portería]
       summary: POR-EST-003 · Sugerencia de sentido y datos de una placa
       parameters: [{ name: placa, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { $ref: '#/components/responses/Ok' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } }
 
   /api/porteria/v1/vehiculos-externos:
     get:
@@ -184,7 +245,7 @@ paths:
       parameters:
         - { $ref: '#/components/parameters/Q' }
         - { name: incluir_inactivos, in: query, schema: { type: string, enum: ['1'] }, description: Solo admin }
-      responses: { '200': { $ref: '#/components/responses/Ok' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } }
     post:
       tags: [Portería]
       summary: POR-VEX-002 · Agregar un vehículo de proveedor (auditado)
@@ -200,37 +261,37 @@ paths:
                 tipo: { type: string, enum: [PROVEEDOR_ASISTENCIA, PROVEEDOR] }
                 empresa: { type: string, maxLength: 150 }
                 descripcion: { type: string, maxLength: 255 }
-      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/vehiculos-externos/{id}:
     patch:
       tags: [Portería]
       summary: POR-VEX-003 · Editar o inactivar (solo admin, auditado)
       parameters: [{ $ref: '#/components/parameters/Id' }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VehiculoExternoCambios' } } } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
 
   /api/porteria/v1/admin/motivos:
     get:
       tags: [Portería]
       summary: POR-ADM-001 · Todos los motivos, activos e inactivos (solo admin)
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '403': { $ref: '#/components/responses/Error' } }
     post:
       tags: [Portería]
       summary: POR-ADM-002 · Crear motivo (solo admin, auditado)
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Motivo' } } } }
-      responses: { '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MotivoNuevo' } } } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '201': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
   /api/porteria/v1/admin/motivos/{id}:
     patch:
       tags: [Portería]
       summary: POR-ADM-003 · Editar motivo; el código no cambia (solo admin, auditado)
       parameters: [{ $ref: '#/components/parameters/Id' }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Motivo' } } } }
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MotivoCambios' } } } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '400': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
     delete:
       tags: [Portería]
       summary: POR-ADM-004 · Borrar un motivo sin registros (con registros, 409 MOTIVO_EN_USO)
       parameters: [{ $ref: '#/components/parameters/Id' }]
-      responses: { '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+      responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' }, '404': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
 
   /api/porteria/v1/admin/reportes/movimientos.xlsx:
     get:
@@ -245,6 +306,7 @@ paths:
         - { $ref: '#/components/parameters/MotivoId' }
         - { $ref: '#/components/parameters/Inconsistente' }
       responses:
+        '401': { $ref: '#/components/responses/NoAutenticado' }
         '200':
           description: Archivo Excel
           content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } }

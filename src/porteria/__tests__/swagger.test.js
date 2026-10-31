@@ -44,3 +44,31 @@ test('cada operación lleva tag, código de API y respuesta de error del módulo
   }
   expect(spec.components.schemas.PorteriaError.required).toEqual(['success', 'error', 'motivo', 'message']);
 });
+
+// Resuelve un $ref local ('#/components/...') para comparar contra lo que ve el lector del Swagger.
+const resolver = (nodo) => {
+  if (!nodo || !nodo.$ref) return nodo;
+  return nodo.$ref.replace('#/', '').split('/').reduce((acc, k) => acc[k], spec);
+};
+const cuerpo = (ruta, metodo) => resolver(spec.paths[ruta][metodo].requestBody.content['application/json'].schema);
+
+test('/estado/dentro no documenta la sede "todas" que la ruta rechaza', () => {
+  const params = spec.paths[`${P}/estado/dentro`].get.parameters || [];
+  expect(params.map((p) => p.$ref)).not.toContain('#/components/parameters/SedeConsulta');
+  expect(params.map((p) => p.$ref)).toContain('#/components/parameters/SedeId');
+  // /estado/fuera sí acepta sede_id (admin, con 'todas')
+  expect((spec.paths[`${P}/estado/fuera`].get.parameters || []).map((p) => p.$ref)).toContain('#/components/parameters/SedeConsulta');
+});
+
+test('los cuerpos de motivos reflejan lo que aceptan POST y PATCH', () => {
+  const crear = cuerpo(`${P}/admin/motivos`, 'post');
+  expect(crear.required).toEqual(expect.arrayContaining(['codigo', 'nombre']));
+  const cambiar = cuerpo(`${P}/admin/motivos/{id}`, 'patch');
+  expect(cambiar.properties).not.toHaveProperty('codigo');
+  expect(cambiar.properties).toHaveProperty('nombre');
+  expect(cambiar.minProperties).toBe(1);
+  for (const c of [crear, cambiar]) {
+    expect(c.properties).not.toHaveProperty('id');
+    expect(c.properties).not.toHaveProperty('en_uso');
+  }
+});
