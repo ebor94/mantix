@@ -14,8 +14,8 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 | 2 — Eventos | `2026-10-30-porteria-fase2-eventos.md` | cerrada (revisión final + correcciones) | Registro de ingreso/salida con todas las reglas, estado, corrección, anulación, auditoría |
 | 2b — Puesta en marcha | `2026-10-30-porteria-fase2b-arranque.md` | cerrada | Siembra de propios por sede, propios fuera para el guarda, salida por otra sede inconsistente |
 | 3 — Front del guarda | `2026-10-31-porteria-fase3-front-guarda.md` (repo `porteriasfn`, rama `feature/guarda`) | cerrada (revisión final + correcciones) | SPA pantallas 1–5 contra el backend de fases 1–2 |
-| 4a — Admin backend | `2026-10-31-porteria-fase4a-admin-backend.md` | plan escrito | `/admin/motivos`, Excel de movimientos, `?sede_id=todas`, auditoría de catálogos y del par, idempotencia (`clave_cliente`, migración 007), Swagger |
-| 4b — Admin front | `2026-10-31-porteria-fase4b-admin-front.md` (repo `porteriasfn`, rama `feature/admin`) | plan escrito | Pantallas 6–8, detalle con corrección completa, confirmación propia, autocompletar de proveedores, "cargar más", clave por registro |
+| 4a — Admin backend | `2026-10-31-porteria-fase4a-admin-backend.md` | cerrada (revisión final + correcciones) | `/admin/motivos`, Excel de movimientos, `?sede_id=todas`, auditoría de catálogos y del par, idempotencia (`clave_cliente`, migración 007), Swagger |
+| 4b — Admin front | `2026-10-31-porteria-fase4b-admin-front.md` (repo `porteriasfn`, rama `feature/admin`) | cerrada (revisión final + correcciones) | Pantallas 6–8, detalle con corrección completa, confirmación propia, autocompletar de proveedores, "cargar más", clave por registro |
 | 5 — Despliegue | por escribir | — | `srv-backend` + nginx, build del front, piloto en una sede |
 
 ## Alcance de las fases pendientes (para escribir sus planes)
@@ -67,6 +67,8 @@ son las que existen y no las supuestas. Cada fase termina en software que funcio
 - Front: pantallas 6–8 y store `motivos`.
 
 ### Fase 5 — Despliegue
+- Heredado de la Fase 4: descarga del Excel en una PWA de iOS instalada no es confiable (usar el admin desde escritorio o documentarlo); el admin sin sede que entra con un redirect a una ruta que exige sede termina en /sede; `GET /vehiculos-externos` del admin muestra 30 como máximo.
+- Front: integrar `feature/admin` (que parte de `feature/guarda`) antes del build.
 - Front: HTTPS obligatorio (sin él no hay service worker ni instalación), fallback de SPA para `/porteria/` y `no-cache` en `index.html`/`sw.js` (ver README de `porteriasfn`); íconos PNG 192/512 para instalar en Android; `npm audit` de dependencias de producción; checklist del piloto: recargar en una ruta profunda, instalar la PWA, recargar en modo avión, backend detenido (502), AD caído en el login, token que vence a mitad de turno.
 - Antes del piloto: `npm run porteria:migrate` (hasta 007) **antes de reiniciar el servicio**; luego, por sede, `npm run porteria:sembrar -- --sede <id> --placas … --simular` para revisar y después sin `--simular` (`--todos` siembra todos los propios activos sin estado en esa sede). El comando imprime la base y la sede antes de actuar, nunca pisa un estado existente, se puede repetir y sale con código 2 si una placa pedida no se reconoce. Para deshacer la siembra de una sede (solo filas sin eventos): `DELETE FROM por_estado_vehiculo WHERE sede_id = ? AND ultimo_evento_id IS NULL AND sembrado_at IS NOT NULL`.
 - `SELECT VERSION()` en serfuweb: `FOR UPDATE OF` exige MySQL ≥ 8.0.1 (MariaDB y 5.7 lo rechazan; corregir/anular fallarían con 500). Aplicar migraciones 001–007 en orden. La 007 hace dos ALTER sin atomicidad (DDL): si falla a la mitad, revisar `SHOW CREATE TABLE por_eventos` y `por_auditoria` antes de reintentar. El pool (10 conexiones) comparte esperas de bloqueo: revisar `innodb_lock_wait_timeout` frente al timeout de nginx.
