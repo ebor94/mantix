@@ -22,6 +22,14 @@ test('dentro: el guarda consulta su sede; el admin pide una', async () => {
   expect(sinSede.status).toBe(400);
 });
 
+test('dentro: ?sede_id=todas no vale (admin) → 400 Sede inválida', async () => {
+  const prueba = crearAppPrueba();
+  const r = await get(prueba, '/dentro?sede_id=todas', tokenDe({ rol: 'admin_porteria' }));
+  expect(r.status).toBe(400);
+  expect(r.body).toMatchObject({ motivo: 'VALIDACION', message: 'Sede inválida' });
+  expect(prueba.deps.estado.dentro).not.toHaveBeenCalled();
+});
+
 test('fuera: el guarda ve toda la flota; el admin puede filtrar por sede', async () => {
   const prueba = crearAppPrueba();
   await get(prueba, '/fuera?sede_id=9', tokenDe({ sede: { id: 3, nombre: 'N' } }));

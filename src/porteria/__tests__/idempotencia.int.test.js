@@ -24,7 +24,7 @@ beforeAll(async () => {
   for (const t of ['vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 3000 AND 3009`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (3001, 'A41S', 'A41', 'Cúcuta', 1)");
   await conn.query(
-    "INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (3001, 'A41P001', 'F', 'F', 'CARROZA', 1), (3002, 'A41P002', 'F', 'F', 'CARROZA', 1), (3003, 'A41P003', 'F', 'F', 'CARROZA', 1)",
+    "INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (3001, 'A41P001', 'F', 'F', 'CARROZA', 1), (3002, 'A41P002', 'F', 'F', 'CARROZA', 1), (3003, 'A41P003', 'F', 'F', 'CARROZA', 1), (3004, 'A41P004', 'F', 'F', 'CARROZA', 1), (3005, 'A41P005', 'F', 'F', 'CARROZA', 1)",
   );
   [[{ id: lavado }]] = await conn.query("SELECT id FROM por_motivos WHERE codigo = 'LAVADO'");
   const conductores = { buscar: async () => ({ conductor: null, listaCompleta: true }) };
@@ -56,11 +56,32 @@ test('dos envíos simultáneos con la misma clave crean un solo evento', async (
   expect(await contar('A41P002')).toBe(1);
 });
 
-test('la clave es por usuario y sin clave no hay deduplicación', async () => {
+test('la clave es por usuario', async () => {
   const clave = 'a41-0000-0000-0003';
   await eventos.registrar(salida('A41P003', clave), sesion);
   const error = await eventos.registrar(salida('A41P003', clave), otro).then(() => null, (e) => e);
   expect(error).toMatchObject({ statusCode: 409, motivo: 'SENTIDO_INCOHERENTE' });
   const [[fila]] = await conn.query("SELECT clave_cliente FROM por_eventos WHERE placa = 'A41P003'");
   expect(fila.clave_cliente).toBe(clave);
+});
+
+test('tres registros forzados simultáneos con la misma clave crean un solo evento', async () => {
+  const clave = 'a41-0000-0000-0004';
+  await eventos.registrar(salida('A41P004'), sesion); // ya figura fuera: otra salida es incoherente y se fuerza
+  const forzada = { ...salida('A41P004', clave), forzar: true, observaciones: 'Salida repetida' };
+  const resultados = await Promise.all([
+    eventos.registrar(forzada, sesion), eventos.registrar(forzada, sesion), eventos.registrar(forzada, sesion),
+  ]);
+  expect(new Set(resultados.map((r) => r.id)).size).toBe(1);
+  expect(await contar('A41P004')).toBe(2);
+  const [[{ n }]] = await conn.query("SELECT COUNT(*) AS n FROM por_eventos WHERE placa = 'A41P004' AND clave_cliente = ?", [clave]);
+  expect(n).toBe(1);
+});
+
+test('sin clave no hay deduplicación: dos registros forzados crean dos eventos', async () => {
+  await eventos.registrar(salida('A41P005'), sesion);
+  const forzada = { ...salida('A41P005'), forzar: true, observaciones: 'Salida repetida' };
+  await eventos.registrar(forzada, sesion);
+  await eventos.registrar(forzada, sesion);
+  expect(await contar('A41P005')).toBe(3);
 });

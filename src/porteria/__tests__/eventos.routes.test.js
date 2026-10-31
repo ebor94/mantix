@@ -63,6 +63,12 @@ describe('GET /eventos', () => {
     expect(prueba.deps.eventos.listar).toHaveBeenLastCalledWith(expect.objectContaining({ sedeId: 5, inconsistente: false }), { pagina: 1 });
   });
 
+  test('admin con sede en el token: ?sede_id=todas lista todas las sedes', async () => {
+    const prueba = crearAppPrueba();
+    await llamar('get', '?sede_id=todas', { token: tokenDe({ usuario: 'admin1', rol: 'admin_porteria', sede: { id: 3, nombre: 'Norte' } }), prueba });
+    expect(prueba.deps.eventos.listar).toHaveBeenLastCalledWith(expect.objectContaining({ sedeId: null }), { pagina: 1 });
+  });
+
   test.each([
     ['?desde=30-10-2026', 'Fecha inválida (usa AAAA-MM-DD)'],
     ['?tipo_vehiculo=CAMION', 'Tipo de vehículo inválido'],
