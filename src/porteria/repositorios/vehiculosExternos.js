@@ -3,8 +3,11 @@
 // Cada alta y cada cambio queda en por_auditoria en la misma transacción.
 const PorteriaError = require('../utils/PorteriaError');
 const { patronContiene } = require('../utils/texto');
-const { conTransaccion } = require('../utils/transaccion');
+const { conTransaccion: transaccion } = require('../utils/transaccion');
 const { registrarAuditoria } = require('./auditoria');
+
+const OCUPADO = 'Otro cambio de este registro está en curso. Intenta de nuevo.';
+const conTransaccion = (bd, fn) => transaccion(bd, fn, { mensajeOcupado: OCUPADO });
 
 const COLUMNAS = 'id, placa, tipo, empresa, descripcion, activo';
 const EDITABLES = ['tipo', 'empresa', 'descripcion', 'activo'];

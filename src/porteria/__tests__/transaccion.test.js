@@ -89,3 +89,10 @@ test('si el rollback falla, la conexión se destruye y no se libera', async () =
   expect(c.destroy).toHaveBeenCalled();
   expect(c.release).not.toHaveBeenCalled();
 });
+
+test('mensajeOcupado reemplaza el mensaje del 409 OCUPADO', async () => {
+  const bd = bdFalsa();
+  const err = await conTransaccion(bd, async () => { throw deadlock(); }, { mensajeOcupado: 'Otro cambio en curso.' })
+    .then(() => undefined, (e) => e);
+  expect(err).toMatchObject({ statusCode: 409, motivo: 'OCUPADO', message: 'Otro cambio en curso.' });
+});

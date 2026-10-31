@@ -7,9 +7,10 @@ const PorteriaError = require('./PorteriaError');
 const ER_LOCK_DEADLOCK = 1213;
 const ER_LOCK_WAIT_TIMEOUT = 1205;
 
-const ocupado = () => new PorteriaError(409, 'OCUPADO', 'Otro registro de esta placa está en curso. Intenta de nuevo.');
+const MENSAJE_OCUPADO = 'Otro registro de esta placa está en curso. Intenta de nuevo.';
+const ocupado = (mensaje) => new PorteriaError(409, 'OCUPADO', mensaje);
 
-async function conTransaccion(bd, fn, { reintentos = 1 } = {}) {
+async function conTransaccion(bd, fn, { reintentos = 1, mensajeOcupado = MENSAJE_OCUPADO } = {}) {
   for (let intento = 0; ; intento += 1) {
     const conn = await bd.obtener().getConnection();
     let descartar = false;
@@ -22,7 +23,7 @@ async function conTransaccion(bd, fn, { reintentos = 1 } = {}) {
       await conn.rollback().catch(() => { descartar = true; });
       const errno = err && err.errno;
       if (errno === ER_LOCK_DEADLOCK && intento < reintentos) continue;
-      if (errno === ER_LOCK_DEADLOCK || errno === ER_LOCK_WAIT_TIMEOUT) throw ocupado();
+      if (errno === ER_LOCK_DEADLOCK || errno === ER_LOCK_WAIT_TIMEOUT) throw ocupado(mensajeOcupado);
       throw err;
     } finally {
       // Una conexión que no pudo revertir queda en estado dudoso: no vuelve al pool.

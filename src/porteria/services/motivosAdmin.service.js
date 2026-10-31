@@ -2,9 +2,12 @@
 // Motivos desde la administración: validación, transacción y auditoría (entidad 'motivo').
 // El código no se cambia (lo usan los reportes); un motivo con registros no se borra, se inactiva.
 const PorteriaError = require('../utils/PorteriaError');
-const { conTransaccion } = require('../utils/transaccion');
+const { conTransaccion: transaccion } = require('../utils/transaccion');
 const { registrarAuditoria } = require('../repositorios/auditoria');
 const repo = require('../repositorios/motivos');
+
+const OCUPADO = 'Otro cambio de este registro está en curso. Intenta de nuevo.';
+const conTransaccion = (bd, fn) => transaccion(bd, fn, { mensajeOcupado: OCUPADO });
 
 const invalido = (message) => new PorteriaError(400, 'VALIDACION', message);
 const noExiste = () => new PorteriaError(404, 'NO_ENCONTRADO', 'El motivo no existe');
