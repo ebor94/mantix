@@ -16,6 +16,8 @@ const { crearRepositorioMotivos } = require('../repositorios/motivos');
 const { crearRepositorioVehiculosExternos } = require('../repositorios/vehiculosExternos');
 const { crearServicioEventos } = require('../services/eventos.service');
 const { crearServicioEstado } = require('../services/estado.service');
+const { crearServicioMotivosAdmin } = require('../services/motivosAdmin.service');
+const { crearRouterAdmin } = require('./admin.routes');
 const { crearRouterAuth } = require('./auth.routes');
 const { crearRouterCatalogos } = require('./catalogos.routes');
 const { crearRouterEventos } = require('./eventos.routes');
@@ -24,7 +26,8 @@ const { crearRouterVehiculosExternos } = require('./vehiculosExternos.routes');
 
 /**
  * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
- * `directorio` = { validarCredenciales }; `conductores` = { listar(), buscar() }. Lo demás se construye desde ahí.
+ * `directorio` = { validarCredenciales }; `conductores` = { listar(), buscar() }. Lo demás se construye desde ahí
+ * (`motivosAdmin` y `reportes` se construyen desde `bd`).
  */
 function crearRouterPorteria({
   bd, obtenerConfig, directorio, conductores,
@@ -33,6 +36,8 @@ function crearRouterPorteria({
   vehiculosExternos = crearRepositorioVehiculosExternos(bd),
   eventos = crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExternos }),
   estado = crearServicioEstado({ bd, h360, vehiculosExternos }),
+  motivosAdmin = crearServicioMotivosAdmin({ bd }),
+  reportes = null,
 }) {
   const router = express.Router();
   const autenticar = crearAutenticacion(obtenerConfig);
@@ -52,6 +57,7 @@ function crearRouterPorteria({
   router.use('/eventos', crearRouterEventos({ autenticar, eventos }));
   router.use('/estado', crearRouterEstado({ autenticar, estado }));
   router.use('/vehiculos-externos', crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }));
+  router.use('/admin', crearRouterAdmin({ autenticar, motivosAdmin, reportes }));
 
   router.use(apiCodigo('POR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 

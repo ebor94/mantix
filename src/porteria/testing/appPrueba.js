@@ -42,6 +42,13 @@ function crearAppPrueba(deps = {}) {
       dentro: jest.fn(async () => []),
       fuera: jest.fn(async () => []),
     },
+    motivosAdmin: {
+      listar: jest.fn(async () => []),
+      crear: jest.fn(async () => ({})),
+      actualizar: jest.fn(async () => ({})),
+      eliminar: jest.fn(async () => ({})),
+    },
+    reportes: { movimientos: jest.fn(async () => []) },
     ...deps,
   };
   const app = express();
