@@ -90,4 +90,4 @@ function crearRouterEventos({ autenticar, eventos }) {
   return router;
 }
 
-module.exports = { crearRouterEventos };
+module.exports = { crearRouterEventos, leerFiltros };

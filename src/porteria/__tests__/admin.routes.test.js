@@ -60,3 +60,47 @@ describe('motivos', () => {
     expect(prueba.deps.motivosAdmin.actualizar).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('reporte de movimientos', () => {
+  const PorteriaError = require('../utils/PorteriaError');
+  const RUTA = '/reportes/movimientos.xlsx';
+  const binario = (res, cb) => {
+    const partes = [];
+    res.on('data', (p) => partes.push(p));
+    res.on('end', () => cb(null, Buffer.concat(partes)));
+  };
+  const descargar = async (prueba, query, token = admin()) => request(await servir(prueba.app))
+    .get(`${BASE}${RUTA}`).query(query).set('Authorization', `Bearer ${token}`).buffer(true).parse(binario);
+
+  test('solo el admin', async () => {
+    const r = await descargar(crearAppPrueba(), {}, guarda());
+    expect(r.status).toBe(403);
+    expect(JSON.parse(r.body.toString())).toMatchObject({ error: 'POR-ADM-005', motivo: 'SIN_PERMISO' });
+  });
+
+  test('descarga el Excel con los filtros de /eventos y todas las sedes', async () => {
+    const prueba = crearAppPrueba();
+    prueba.deps.reportes.movimientos.mockResolvedValue([]);
+    const r = await descargar(prueba, { sede_id: 'todas', desde: '2026-10-01', hasta: '2026-10-31', placa: 'abc-1', inconsistente: '1' });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-type']).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(r.headers['content-disposition']).toBe('attachment; filename="movimientos_2026-10-01_2026-10-31.xlsx"');
+    expect(r.body.subarray(0, 2).toString()).toBe('PK');
+    expect(prueba.deps.reportes.movimientos).toHaveBeenCalledWith({
+      sedeId: null, desde: '2026-10-01', hasta: '2026-10-31', placa: 'ABC1', tipoVehiculo: undefined, motivoId: undefined, inconsistente: true,
+    });
+  });
+
+  test('sin fechas el nombre lo dice; un filtro inválido → 400; el tope → 413', async () => {
+    const prueba = crearAppPrueba();
+    expect((await descargar(prueba, { sede_id: '7' })).headers['content-disposition'])
+      .toBe('attachment; filename="movimientos_inicio_hoy.xlsx"');
+    expect(prueba.deps.reportes.movimientos).toHaveBeenLastCalledWith(expect.objectContaining({ sedeId: 7 }));
+    const malo = await descargar(prueba, { desde: '2026-13-01' });
+    expect(malo.status).toBe(400);
+    prueba.deps.reportes.movimientos.mockRejectedValue(new PorteriaError(413, 'DEMASIADOS_REGISTROS', 'El reporte supera 50000 movimientos. Acota las fechas o los filtros.'));
+    const grande = await descargar(prueba, {});
+    expect(grande.status).toBe(413);
+    expect(JSON.parse(grande.body.toString())).toMatchObject({ error: 'POR-ADM-005', motivo: 'DEMASIADOS_REGISTROS' });
+  });
+});

@@ -103,7 +103,8 @@ async function anular(conn, id, { usuario, motivo }) {
   await conn.query('UPDATE por_eventos SET evento_par_id = NULL WHERE evento_par_id = ?', [id]);
 }
 
-async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {}) {
+/** WHERE de la consulta de eventos (alias `e`). La comparten el listado y el reporte. */
+function condicionesListado(filtros = {}) {
   const condiciones = [];
   const params = [];
   const agregar = (sql, valor) => { condiciones.push(sql); params.push(valor); };
@@ -114,7 +115,11 @@ async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {
   if (filtros.tipoVehiculo) agregar('e.tipo_vehiculo = ?', filtros.tipoVehiculo);
   if (filtros.motivoId) agregar('e.motivo_id = ?', filtros.motivoId);
   if (filtros.inconsistente !== undefined) agregar('e.inconsistente = ?', filtros.inconsistente ? 1 : 0);
-  const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+  return { where: condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '', params };
+}
+
+async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {}) {
+  const { where, params } = condicionesListado(filtros);
 
   const [[{ total }]] = await ejecutor.query(`SELECT COUNT(*) AS total FROM por_eventos e ${where}`, params);
   const [filas] = await ejecutor.query(
@@ -126,5 +131,5 @@ async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {
 
 module.exports = {
   COLUMNAS_EVENTO, FROM_EVENTO, eventoPublico,
-  insertar, obtener, obtenerPorClave, pareadosCon, antiguedadSegundos, ultimoVigente, actualizar, anular, listar,
+  insertar, obtener, obtenerPorClave, pareadosCon, antiguedadSegundos, ultimoVigente, actualizar, anular, listar, condicionesListado,
 };

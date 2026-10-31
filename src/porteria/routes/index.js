@@ -16,6 +16,7 @@ const { crearRepositorioMotivos } = require('../repositorios/motivos');
 const { crearRepositorioVehiculosExternos } = require('../repositorios/vehiculosExternos');
 const { crearServicioEventos } = require('../services/eventos.service');
 const { crearServicioEstado } = require('../services/estado.service');
+const { crearServicioReportes } = require('../services/reportes.service');
 const { crearServicioMotivosAdmin } = require('../services/motivosAdmin.service');
 const { crearRouterAdmin } = require('./admin.routes');
 const { crearRouterAuth } = require('./auth.routes');
@@ -37,7 +38,7 @@ function crearRouterPorteria({
   eventos = crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExternos }),
   estado = crearServicioEstado({ bd, h360, vehiculosExternos }),
   motivosAdmin = crearServicioMotivosAdmin({ bd }),
-  reportes = null,
+  reportes = crearServicioReportes({ bd }),
 }) {
   const router = express.Router();
   const autenticar = crearAutenticacion(obtenerConfig);
