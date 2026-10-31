@@ -245,3 +245,16 @@ Se agrega el origen del front a `CORS_ORIGIN`. Front: `VITE_API_URL`.
 5. **Despliegue:** en `srv-backend` con Mantix, detrás de nginx; build del front; piloto en una sede.
 
 Cada fase cierra con `requesting-code-review` y `verification-before-completion`.
+
+## 13. Fase 4 (administración): decisiones
+
+- **Dos planes:** 4a backend (rama `feature/porteria`) y 4b front (`porteriasfn`, rama `feature/admin`). El front se prueba con la API simulada; la prueba manual completa necesita la 4a en un backend local.
+- **Motivos (`/admin/motivos`, solo admin, auditados como entidad `motivo`):** listar incluye inactivos y `en_uso`. Debe aplicar a al menos un tipo de vehículo y un sentido; `referencia_obligatoria` exige un tipo de referencia. El código no se cambia (lo usan los reportes y Superset). Un motivo con eventos no se borra: 409 `MOTIVO_EN_USO` ("inactívalo"). Acción de auditoría nueva `ELIMINAR` (migración 007).
+- **Reporte Excel (`GET /admin/reportes/movimientos.xlsx`):** mismos filtros que `GET /eventos`; lee `v_por_movimientos` (vigentes, con duración y km del viaje) más `observaciones`. Hojas "Movimientos" e "Inconsistencias", fechas como texto local `AAAA-MM-DD HH:mm`. Tope de 50.000 filas (413 `DEMASIADOS_REGISTROS`); se escribe con el escritor en streaming de ExcelJS.
+- **Todas las sedes:** el admin consulta con `?sede_id=todas` aunque su token tenga sede; donde no se admite, 400.
+- **Auditoría:** alta y cambios del catálogo de proveedores (entidad `vehiculo_externo`, también cuando se guarda desde el registro) y el ingreso que pierde su par al anular la salida (`CORREGIR`).
+- **Proveedores para el admin:** `GET /vehiculos-externos?incluir_inactivos=1` (al guarda se le ignora) para poder reactivar.
+- **Idempotencia del registro:** el front genera una clave por registro (`clave_cliente`, UUID) y la conserva en los reintentos y en el reenvío forzado; otra placa estrena clave. En el servidor la clave es única por usuario: si ya existe, se devuelve ese evento sin volver a validar el sentido; dos envíos simultáneos devuelven el mismo.
+- **Front del admin:** rutas `/admin/movimientos|motivos|proveedores` (`meta.requiereAdmin`); el admin sin sede entra por `/admin` y puede pasar a la caseta eligiendo sede. Consulta con filtros, "cargar más" y Excel; detalle con corrección completa (motivo y referencia, conductor completo, km, observaciones) y anulación; un 409 `MODIFICADO` recarga el evento.
+- **Pendientes heredados del guarda:** confirmaciones con un diálogo propio (no `window.confirm`), autocompletar de placas del catálogo de proveedores en el asistente y "cargar más" en los movimientos del día.
+- **Swagger:** todas las rutas del módulo en `src/porteria/docs/openapi.yaml`, incluido en `/api-docs`.
