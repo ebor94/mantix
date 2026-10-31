@@ -29,3 +29,13 @@ test.each(['abc', '0', '-1', '1.5', '1e1', '0x10', ' 5 ', '1234567890'])('?sede_
 test.each([[['2']], [['2', '3']], [{ a: '2' }]])('?sede_id no string (%j) → 400 Sede inválida', (pedida) => {
   expect(errorDe(() => sedeDeConsulta(req(admin(), { sede_id: pedida })))).toMatchObject({ statusCode: 400, message: 'Sede inválida' });
 });
+
+test('?sede_id=todas: el admin consulta todas aunque su token tenga sede', () => {
+  expect(sedeDeConsulta(req(admin(2), { sede_id: 'todas' }), { todasParaAdmin: true })).toBeNull();
+  expect(sedeDeConsulta(req(admin(), { sede_id: 'todas' }), { todasParaAdmin: true })).toBeNull();
+});
+
+test('?sede_id=todas donde no se admite → 400 Sede inválida; el guarda la ignora', () => {
+  expect(errorDe(() => sedeDeConsulta(req(admin(2), { sede_id: 'todas' })))).toMatchObject({ statusCode: 400, message: 'Sede inválida' });
+  expect(sedeDeConsulta(req(guarda(3), { sede_id: 'todas' }), { todasParaAdmin: true })).toBe(3);
+});

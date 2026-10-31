@@ -39,6 +39,7 @@ function sedeDeConsulta(req, { todasParaAdmin = false } = {}) {
     return usuario.sede_id;
   }
   const pedida = req.query && req.query.sede_id;
+  if (pedida === 'todas' && todasParaAdmin) return null;
   if (pedida !== undefined && pedida !== '') {
     if (typeof pedida !== 'string' || !/^\d{1,9}$/.test(pedida) || Number(pedida) <= 0) {
       throw new PorteriaError(400, 'VALIDACION', 'Sede inválida');
