@@ -30,6 +30,18 @@ function resolutor({ listaCompleta = true } = {}) {
 describe('leerEntradaRegistro', () => {
   const valida = { sentido: 'SALIDA', placa: ' abc-123 ', motivo_id: '1' };
 
+  test('clave_cliente: opcional y con formato', () => {
+    expect(leerEntradaRegistro(valida).clave_cliente).toBeNull();
+    expect(leerEntradaRegistro({ ...valida, clave_cliente: '' }).clave_cliente).toBeNull();
+    const uuid = '3f2c9a1e-7b4d-4c2a-9e1f-0a1b2c3d4e5f';
+    expect(leerEntradaRegistro({ ...valida, clave_cliente: uuid }).clave_cliente).toBe(uuid);
+    for (const mala of ['corta', 'a'.repeat(65), 'con espacio 1234', 12345678, { a: 1 }]) {
+      expect(errorSync(() => leerEntradaRegistro({ ...valida, clave_cliente: mala }))).toMatchObject({
+        statusCode: 400, motivo: 'VALIDACION', message: 'Clave de registro inválida',
+      });
+    }
+  });
+
   test('normaliza placa y números, booleanos por defecto en false', () => {
     expect(leerEntradaRegistro(valida)).toMatchObject({
       sentido: 'SALIDA', placa: 'ABC123', tipo_vehiculo: null, motivo_id: 1, forzar: false, guardar_en_catalogo: false,

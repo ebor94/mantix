@@ -8,7 +8,7 @@ afterAll(async () => { await conn.end(); });
 test('las migraciones quedan registradas y un segundo intento no aplica nada', async () => {
   const [filas] = await conn.query('SELECT nombre FROM por_migraciones ORDER BY nombre');
   expect(filas.map((f) => f.nombre)).toEqual([
-    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql', '005_siembra_y_otra_sede.sql', '006_sede_sembrada.sql',
+    '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql', '005_siembra_y_otra_sede.sql', '006_sede_sembrada.sql', '007_admin_e_idempotencia.sql',
   ]);
   expect(await aplicarMigraciones(conn)).toEqual([]);
 });
@@ -78,4 +78,23 @@ test('por_estado_vehiculo admite la fila provisional (sin eventos)', async () =>
     { columna: 'tipo_vehiculo', nula: 'YES' },
     { columna: 'ultimo_evento_id', nula: 'YES' },
   ]);
+});
+
+test('007: clave_cliente única por usuario y ELIMINAR en la auditoría', async () => {
+  const [[col]] = await conn.query(
+    `SELECT CHARACTER_MAXIMUM_LENGTH AS largo, IS_NULLABLE AS nulo FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'por_eventos' AND COLUMN_NAME = 'clave_cliente'`,
+  );
+  expect(col).toEqual({ largo: 64, nulo: 'YES' });
+  const [indice] = await conn.query(
+    `SELECT COLUMN_NAME AS columna, NON_UNIQUE AS noUnico FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'por_eventos' AND INDEX_NAME = 'uq_por_eventos_clave'
+      ORDER BY SEQ_IN_INDEX`,
+  );
+  expect(indice).toEqual([{ columna: 'registrado_por', noUnico: 0 }, { columna: 'clave_cliente', noUnico: 0 }]);
+  const [[accion]] = await conn.query(
+    `SELECT COLUMN_TYPE AS tipo FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'por_auditoria' AND COLUMN_NAME = 'accion'`,
+  );
+  expect(accion.tipo).toBe("enum('CREAR','CORREGIR','ANULAR','FORZAR','SEMBRAR','ELIMINAR')");
 });

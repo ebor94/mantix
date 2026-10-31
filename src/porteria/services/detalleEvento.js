@@ -58,6 +58,15 @@ function leerDetalle(body) {
 
 const esObjeto = (body) => body !== null && typeof body === 'object' && !Array.isArray(body);
 
+const CLAVE_CLIENTE = /^[A-Za-z0-9-]{8,64}$/;
+
+/** Clave que el front genera por registro para que un reintento no duplique el evento. */
+function claveCliente(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  if (typeof valor !== 'string' || !CLAVE_CLIENTE.test(valor)) throw formato('Clave de registro inválida');
+  return valor;
+}
+
 function leerEntradaRegistro(body) {
   if (!esObjeto(body)) throw formato('Datos inválidos');
   if (!SENTIDOS.includes(body.sentido)) throw formato('Indica si es ingreso o salida');
@@ -71,6 +80,7 @@ function leerEntradaRegistro(body) {
   return {
     sentido: body.sentido, placa, tipo_vehiculo: tipo, ...detalle,
     forzar: booleano(body.forzar), guardar_en_catalogo: booleano(body.guardar_en_catalogo),
+    clave_cliente: claveCliente(body.clave_cliente),
   };
 }
 

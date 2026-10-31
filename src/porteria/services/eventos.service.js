@@ -45,6 +45,26 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
 
   async function registrar(body, sesion, ctx = {}) {
     const entrada = leerEntradaRegistro(body);
+    const clave = entrada.clave_cliente;
+    // Un reintento de un registro que ya entró devuelve ese evento sin volver a validar el sentido.
+    const previo = clave && await repoEventos.obtenerPorClave(bd.obtener(), sesion.usuario, clave);
+    if (previo) return previo;
+    try {
+      return await registrarNuevo(entrada, sesion, ctx);
+    } catch (err) {
+      // Dos envíos simultáneos con la misma clave: el segundo espera el bloqueo de la placa y, al soltarlo,
+      // ve el estado ya actualizado (SENTIDO_INCOHERENTE) o choca con el índice único. En ambos casos
+      // devuelve el evento del primero.
+      const choque = err && (err.code === 'ER_DUP_ENTRY' || err.motivo === 'SENTIDO_INCOHERENTE');
+      if (clave && choque) {
+        const ganador = await repoEventos.obtenerPorClave(bd.obtener(), sesion.usuario, clave);
+        if (ganador) return ganador;
+      }
+      throw err;
+    }
+  }
+
+  async function registrarNuevo(entrada, sesion, ctx) {
     const { tipo, vehiculo, externo } = await resolverVehiculo(entrada);
     const { columnas } = await resolutor.resolver({
       tipo, sentido: entrada.sentido, datos: { ...entrada, empresa: entrada.empresa ?? (externo && externo.empresa) ?? null },
@@ -94,6 +114,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
           : otraSede ? 'SALIDA_OTRA_SEDE'
             : esIngreso ? 'INGRESO_ESTANDO_DENTRO' : 'SALIDA_ESTANDO_FUERA',
         registrado_por: sesion.usuario,
+        clave_cliente: entrada.clave_cliente,
       });
       await repoEstado.guardar(conn, {
         placa: entrada.placa,

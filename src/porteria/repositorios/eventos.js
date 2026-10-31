@@ -17,7 +17,7 @@ const EDITABLES = [
 ];
 const AL_REGISTRAR = [
   'sede_id', 'sentido', 'tipo_vehiculo', 'placa', 'vehiculo_id', 'vehiculo_externo_id', ...EDITABLES,
-  'evento_par_id', 'inconsistente', 'inconsistencia_tipo', 'registrado_por',
+  'evento_par_id', 'inconsistente', 'inconsistencia_tipo', 'registrado_por', 'clave_cliente',
 ];
 
 const valorDe = (columna, valor) => {
@@ -49,6 +49,13 @@ async function insertar(conn, evento) {
 async function obtener(ejecutor, id, { bloquear = false } = {}) {
   const [filas] = await ejecutor.query(
     `SELECT ${COLUMNAS_EVENTO} ${FROM_EVENTO} WHERE e.id = ?${bloquear ? ' FOR UPDATE OF e' : ''}`, [id],
+  );
+  return filas[0] ? eventoPublico(filas[0]) : null;
+}
+
+async function obtenerPorClave(ejecutor, usuario, clave) {
+  const [filas] = await ejecutor.query(
+    `SELECT ${COLUMNAS_EVENTO} ${FROM_EVENTO} WHERE e.registrado_por = ? AND e.clave_cliente = ?`, [usuario, clave],
   );
   return filas[0] ? eventoPublico(filas[0]) : null;
 }
@@ -113,5 +120,5 @@ async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {
 
 module.exports = {
   COLUMNAS_EVENTO, FROM_EVENTO, eventoPublico,
-  insertar, obtener, antiguedadSegundos, ultimoVigente, actualizar, anular, listar,
+  insertar, obtener, obtenerPorClave, antiguedadSegundos, ultimoVigente, actualizar, anular, listar,
 };
