@@ -11,6 +11,7 @@ const { ROLES } = require('../services/auth.service');
 
 const TIPOS_EXTERNOS = ['PROVEEDOR_ASISTENCIA', 'PROVEEDOR'];
 const invalido = (message) => new PorteriaError(400, 'VALIDACION', message);
+const ctx = (req) => ({ apiCodigo: req.porApiCodigo, ip: req.ip });
 
 function textoCampo(valor, max, mensaje) {
   if (valor === undefined || valor === null) return null;
@@ -22,7 +23,8 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
   const router = express.Router();
 
   router.get('/', apiCodigo('POR-VEX-001'), autenticar, aw(async (req, res) => {
-    res.json({ success: true, data: await vehiculosExternos.buscar(textoOpcional(req.query.q)) });
+    const incluirInactivos = req.porUsuario.rol === ROLES.ADMIN && req.query.incluir_inactivos === '1';
+    res.json({ success: true, data: await vehiculosExternos.buscar(textoOpcional(req.query.q), { incluirInactivos }) });
   }));
 
   router.post('/', apiCodigo('POR-VEX-002'), autenticar, aw(async (req, res) => {
@@ -37,7 +39,7 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
     if (await h360.obtenerVehiculoPropioPorPlaca(placa)) {
       throw new PorteriaError(409, 'PLACA_PROPIA', 'La placa es de un vehículo de la empresa');
     }
-    const id = await vehiculosExternos.crear({ placa, tipo: body.tipo, empresa, descripcion, usuario: req.porUsuario.usuario });
+    const id = await vehiculosExternos.crear({ placa, tipo: body.tipo, empresa, descripcion, usuario: req.porUsuario.usuario }, null, ctx(req));
     res.status(201).json({ success: true, data: await vehiculosExternos.obtenerPorId(id) });
   }));
 
@@ -61,7 +63,7 @@ function crearRouterVehiculosExternos({ autenticar, vehiculosExternos, h360 }) {
       cambios.activo = body.activo;
     }
     if (Object.keys(cambios).length === 0) throw invalido('No hay cambios');
-    if (!(await vehiculosExternos.actualizar(id, cambios, req.porUsuario.usuario))) throw noExiste();
+    if (!(await vehiculosExternos.actualizar(id, cambios, req.porUsuario.usuario, ctx(req)))) throw noExiste();
     res.json({ success: true, data: await vehiculosExternos.obtenerPorId(id) });
   }));
 

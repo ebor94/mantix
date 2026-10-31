@@ -60,6 +60,12 @@ async function obtenerPorClave(ejecutor, usuario, clave) {
   return filas[0] ? eventoPublico(filas[0]) : null;
 }
 
+/** Ingresos que cierran el viaje del evento `id`, bloqueados: al anularlo pierden el par. */
+async function pareadosCon(conn, id) {
+  const [filas] = await conn.query(`SELECT ${COLUMNAS_EVENTO} ${FROM_EVENTO} WHERE e.evento_par_id = ? FOR UPDATE OF e`, [id]);
+  return filas.map(eventoPublico);
+}
+
 async function antiguedadSegundos(ejecutor, id) {
   const [[fila]] = await ejecutor.query(
     'SELECT TIMESTAMPDIFF(SECOND, registrado_at, NOW()) AS segundos FROM por_eventos WHERE id = ?', [id],
@@ -120,5 +126,5 @@ async function listar(ejecutor, filtros = {}, { pagina = 1, porPagina = 50 } = {
 
 module.exports = {
   COLUMNAS_EVENTO, FROM_EVENTO, eventoPublico,
-  insertar, obtener, obtenerPorClave, antiguedadSegundos, ultimoVigente, actualizar, anular, listar,
+  insertar, obtener, obtenerPorClave, pareadosCon, antiguedadSegundos, ultimoVigente, actualizar, anular, listar,
 };

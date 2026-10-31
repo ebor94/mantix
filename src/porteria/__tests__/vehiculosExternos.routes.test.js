@@ -17,7 +17,16 @@ test('buscar', async () => {
   const r = await request(await servir(prueba.app)).get(`${BASE}?q=%20flor%20`).set('Authorization', `Bearer ${guarda()}`);
   expect(r.headers['x-por-api']).toBe('POR-VEX-001');
   expect(r.body.data).toEqual([{ placa: 'XYZ1' }]);
-  expect(prueba.deps.vehiculosExternos.buscar).toHaveBeenCalledWith('flor');
+  expect(prueba.deps.vehiculosExternos.buscar).toHaveBeenCalledWith('flor', { incluirInactivos: false });
+});
+
+test('incluir_inactivos solo vale para el admin', async () => {
+  const prueba = crearAppPrueba();
+  const buscar = async (token) => request(await servir(prueba.app)).get(`${BASE}?incluir_inactivos=1`).set('Authorization', `Bearer ${token}`);
+  await buscar(guarda());
+  expect(prueba.deps.vehiculosExternos.buscar).toHaveBeenLastCalledWith(undefined, { incluirInactivos: false });
+  await buscar(admin());
+  expect(prueba.deps.vehiculosExternos.buscar).toHaveBeenLastCalledWith(undefined, { incluirInactivos: true });
 });
 
 describe('crear', () => {
@@ -28,7 +37,11 @@ describe('crear', () => {
     const r = await enviar(prueba, 'post', '', guarda(), { placa: 'xyz-123', tipo: 'PROVEEDOR', empresa: ' Flores ', descripcion: '' });
     expect(r.status).toBe(201);
     expect(r.body.data).toEqual({ id: 12, placa: 'XYZ123' });
-    expect(prueba.deps.vehiculosExternos.crear).toHaveBeenCalledWith({ placa: 'XYZ123', tipo: 'PROVEEDOR', empresa: 'Flores', descripcion: null, usuario: 'guarda1' });
+    expect(prueba.deps.vehiculosExternos.crear).toHaveBeenCalledWith(
+      { placa: 'XYZ123', tipo: 'PROVEEDOR', empresa: 'Flores', descripcion: null, usuario: 'guarda1' },
+      null,
+      { apiCodigo: 'POR-VEX-002', ip: expect.any(String) },
+    );
   });
 
   test('una placa de la empresa no entra al catálogo', async () => {
@@ -65,7 +78,9 @@ describe('actualizar', () => {
     const r = await enviar(prueba, 'patch', '/3', admin(), { activo: false, empresa: 'Nueva' });
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ id: 3, activo: false });
-    expect(prueba.deps.vehiculosExternos.actualizar).toHaveBeenCalledWith(3, { activo: false, empresa: 'Nueva' }, 'admin1');
+    expect(prueba.deps.vehiculosExternos.actualizar).toHaveBeenCalledWith(
+      3, { activo: false, empresa: 'Nueva' }, 'admin1', { apiCodigo: 'POR-VEX-003', ip: expect.any(String) },
+    );
     prueba.deps.vehiculosExternos.actualizar.mockResolvedValue(false);
     expect((await enviar(prueba, 'patch', '/4', admin(), { activo: true })).status).toBe(404);
     expect((await enviar(prueba, 'patch', '/3', admin(), {})).status).toBe(400);

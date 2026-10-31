@@ -31,12 +31,12 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
   }
 
   /** El id del catálogo: el existente, o uno nuevo si el guarda pidió guardarlo (sin duplicar en carreras). */
-  async function idEnCatalogo(conn, { tipo, externo, entrada, empresa, usuario }) {
+  async function idEnCatalogo(conn, { tipo, externo, entrada, empresa, usuario, ctx }) {
     if (tipo === 'PROPIO') return null;
     if (externo) return externo.id;
     if (!entrada.guardar_en_catalogo) return null;
     try {
-      return await vehiculosExternos.crear({ placa: entrada.placa, tipo, empresa, descripcion: null, usuario }, conn);
+      return await vehiculosExternos.crear({ placa: entrada.placa, tipo, empresa, descripcion: null, usuario }, conn, ctx);
     } catch (err) {
       if (err.motivo !== 'PLACA_DUPLICADA') throw err;
       return (await vehiculosExternos.obtenerPorPlaca(entrada.placa, conn)).id;
@@ -98,7 +98,7 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
       }
       if (incoherente && !columnas.observaciones) throw regla('Escribe una observación para registrar igual');
 
-      const vehiculoExternoId = await idEnCatalogo(conn, { tipo, externo, entrada, empresa: columnas.empresa, usuario: sesion.usuario });
+      const vehiculoExternoId = await idEnCatalogo(conn, { tipo, externo, entrada, empresa: columnas.empresa, usuario: sesion.usuario, ctx });
       const id = await repoEventos.insertar(conn, {
         sede_id: sesion.sede_id,
         sentido: entrada.sentido,
@@ -219,12 +219,20 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
       const fila = await repoEstado.bloquear(conn, actual.placa);
       const antes = await repoEventos.obtener(conn, id, { bloquear: true });
       if (antes.anulado) throw new PorteriaError(409, 'ANULADO', 'El registro ya está anulado');
+      const pareados = await repoEventos.pareadosCon(conn, id);
       await repoEventos.anular(conn, id, { usuario: sesion.usuario, motivo });
       await recalcularEstado(conn, actual.placa, fila);
       const despues = await repoEventos.obtener(conn, id);
       await registrarAuditoria(conn, {
         usuario: sesion.usuario, apiCodigo: ctx.apiCodigo, entidad: 'evento', entidadId: id, accion: 'ANULAR', antes, despues, ip: ctx.ip,
       });
+      // El ingreso que cerraba este viaje queda sin par: también se audita.
+      for (const previo of pareados) {
+        await registrarAuditoria(conn, {
+          usuario: sesion.usuario, apiCodigo: ctx.apiCodigo, entidad: 'evento', entidadId: previo.id, accion: 'CORREGIR',
+          antes: previo, despues: await repoEventos.obtener(conn, previo.id), ip: ctx.ip,
+        });
+      }
       return despues;
     });
   }
