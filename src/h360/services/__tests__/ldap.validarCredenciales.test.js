@@ -116,13 +116,13 @@ describe('validarCredenciales', () => {
 
     test('el subcódigo queda en el log aunque la respuesta sea genérica', async () => {
       await fallar('52e');
-      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('data 52e'));
-      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('jperez'));
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('data 52e'));
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('jperez'));
     });
 
     test('al log nunca va la contraseña', async () => {
       await fallar('52e');
-      for (const [linea] of console.warn.mock.calls) expect(String(linea)).not.toContain('clave');
+      for (const [linea] of console.log.mock.calls) expect(String(linea)).not.toContain('clave');
     });
   });
 

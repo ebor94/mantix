@@ -325,7 +325,12 @@ async function validarCredenciales(usuarioRaw, password) {
       // Al log va siempre el subcódigo, aunque a la persona se le responda el
       // mensaje genérico: es lo que convierte "no puedo entrar" en un caso que
       // se resuelve en un minuto. Nunca lleva la contraseña.
-      console.warn(`[LDAP] Paso 3 FALLÓ — ${sam}: AD data ${data || '(sin subcódigo)'}`
+      //
+      // console.log y no console.warn aunque sea un fallo: warn sale por
+      // stderr y pm2 lo guarda en otro archivo, de modo que esta línea quedaría
+      // separada de los cuatro pasos anteriores del mismo intento. Quien
+      // rastrea un login quiere las cinco líneas juntas.
+      console.log(`[LDAP] Paso 3 FALLÓ — ${sam}: AD data ${data || '(sin subcódigo)'}`
         + (d ? ` (${d.causa})` : ''))
       throw errorDirectorio(d?.publico || 'Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
     }
