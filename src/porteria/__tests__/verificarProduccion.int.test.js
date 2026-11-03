@@ -23,6 +23,9 @@ test('corre completo y la versión del servidor de pruebas cumple', async () => 
   expect(chequeo('version')).toMatchObject({ ok: 'SI' });
   expect(chequeo('exequias.fecha')).toMatchObject({ valor: 'date', ok: 'SI' });
   expect(chequeo('placas_con_espacios_raros')).toMatchObject({ ok: 'SI' });
+  expect(filas.filter((f) => f.chequeo === 'exequias.fecha')).toHaveLength(1);
+  expect(filas.filter((f) => f.chequeo === 'collation_vehiculos.placa')).toHaveLength(1);
+  expect(chequeo('collation_vehiculos.placa').valor).not.toBe('NO EXISTE');
   for (const nombre of ['time_zone_global', 'innodb_lock_wait_timeout', 'collation_base', 'collation_vehiculos.placa']) {
     expect(chequeo(nombre)).toBeDefined();
   }

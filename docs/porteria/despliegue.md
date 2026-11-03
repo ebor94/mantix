@@ -11,7 +11,7 @@ Crear dos grupos de seguridad (nombres sugeridos; si se usan otros, ponerlos en 
 - `Porteria-Guardas`: guardas de las casetas.
 - `Porteria-Admin`: quienes administran motivos, proveedores y consultan reportes.
 
-Agregar los usuarios del piloto. El rol se decide por el CN exacto del grupo. Un usuario en los dos grupos entra como administrador.
+Agregar los usuarios del piloto. El rol se decide por el CN exacto del grupo y solo con la pertenencia directa (`memberOf` del usuario): un usuario que entra a `Porteria-Guardas` a través de otro grupo anidado no cuenta; hay que agregarlo directamente. Un usuario en los dos grupos entra como administrador. Los miembros del grupo de administración general que ya usa Mantix (`LDAP_GROUP_ADMIN`) también entran a Portería como administradores, sin estar en `Porteria-Admin`.
 
 Deshacer: borrar los grupos.
 
@@ -23,22 +23,24 @@ El código ya está en `origin/main` de `ebor94/mantix`. En srv-backend:
 bash ~/apps/mantix/mantix-backend/scripts/deploy-mantix.sh
 ```
 
+Si `HEAD` ya es igual a `origin/main`, el script imprime "sin cambios remotos … Salgo sin reiniciar." y termina sin tocar nada. El sha anterior (para un deshacer manual) queda en la línea `actualizando: <sha anterior> -> <sha nuevo>`.
+
 Comprobar: el script termina en "deploy exitoso"; `curl -s https://mantix-api.losolivoscucuta.com:8444/api/porteria/v1/health` responde **503** con `"motivo":"PORTERIA_DESHABILITADO"` (es lo esperado todavía) y las demás pantallas de Mantix funcionan.
 
-Deshacer: el script hace rollback solo si el health check de Mantix falla. A mano: `git reset --hard <sha anterior>` en `~/apps/mantix/mantix-backend` y `pm2 restart mantix-backend --update-env`.
+Deshacer: el script hace rollback solo si el health check de Mantix falla. A mano: `git reset --hard <sha anterior>` en `~/apps/mantix/mantix-backend`, `npm ci --omit=dev` si cambió `package.json` (o `package-lock.json`) entre los dos sha y `pm2 restart mantix-backend --update-env`.
 
 ## 3. Verificar la base (solo lectura)
 
 Desde `~/apps/mantix/mantix-backend`, con el usuario y la base de Mantix (los del `.env`):
 
 ```bash
-mysql -h <DB_HOST> -u <DB_USER> -p <DB_NAME> < src/porteria/scripts/verificarProduccion.sql
+mysql -h <DB_HOST> -P <DB_PORT> -u <DB_USER> -p <DB_NAME> < src/porteria/scripts/verificarProduccion.sql
 ```
 
 - `version` debe ser **SI** (MySQL ≥ 8.0.1). Si es **NO**, detener: corregir y anular registros fallarían.
 - `exequias.fecha` debe ser **SI**.
 - Anotar `time_zone_global`, `innodb_lock_wait_timeout`, las collations y `placas_con_espacios_raros` y enviarlos al equipo de desarrollo si alguno dice **REVISAR**.
-- En `SHOW GRANTS` el usuario debe tener `CREATE`, `ALTER`, `INDEX`, `REFERENCES` y `CREATE VIEW` sobre la base (o `ALL PRIVILEGES`).
+- En `SHOW GRANTS` el usuario debe tener `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `INDEX`, `DROP`, `REFERENCES` y `CREATE VIEW` sobre la base (o `ALL PRIVILEGES`). `DROP` lo necesitan la migración 003 (que reemplaza la vista) y los pasos de deshacer; `INSERT` las migraciones que cargan datos de fábrica; `SELECT` la vista, que lee `sedes` y `vehiculos`. Si los privilegios llegan por roles de MySQL, `SHOW GRANTS` solo muestra los roles: usar `SHOW GRANTS FOR CURRENT_USER USING <rol>;` para ver los privilegios efectivos.
 
 ## 4. Migraciones
 
@@ -58,13 +60,19 @@ Deshacer (solo si se abandona el módulo): `DROP VIEW v_por_movimientos;` y `DRO
 
 ## 5. Siembra de la sede piloto
 
-Marca como **dentro** de la sede a los vehículos de la empresa que están allí el día de arranque. Primero simular:
+Marca como **dentro** de la sede a los vehículos de la empresa que están allí el día de arranque. Primero obtener el id de la sede piloto:
+
+```sql
+SELECT id, nombre FROM sedes WHERE activo = 1;
+```
+
+Luego simular:
 
 ```bash
 npm run porteria:sembrar -- --sede <id_sede> --placas ABC123,XYZ789 --simular
 ```
 
-Revisar la salida: `Se sembrarían en la sede <id>: N (placas)` y una línea `Omitido <placa>: <razón>` por cada placa que no se sembraría; termina con `Simulación: no se escribió nada.` El comando imprime primero la base (`Base: host/base`) y la sede (`Sede: id — nombre`) y sale con código 2 si una placa no es un vehículo activo de la empresa. Luego, sin `--simular`:
+Revisar la salida: `Se sembrarían en la sede <id>: N (placas)` y una línea `Omitido <placa>: <razón>` por cada placa que no se sembraría; termina con `Simulación: no se escribió nada.` El comando imprime primero la base (`Base: host/base`) y la sede (`Sede: id — nombre`): comprobar que esa línea `Sede:` es la sede piloto antes de seguir. Sale con código 2 si una placa no es un vehículo activo de la empresa. Luego, sin `--simular`:
 
 ```bash
 npm run porteria:sembrar -- --sede <id_sede> --placas ABC123,XYZ789
@@ -100,7 +108,13 @@ pm2 restart mantix-backend --update-env
 curl -s https://mantix-api.losolivoscucuta.com:8444/api/porteria/v1/health
 ```
 
-Esperado: `{"success":true,"data":{"estado":"ok","bd":"ok"}}`. Si sigue el 503, `pm2 logs mantix-backend --lines 50` muestra `porteria deshabilitado: <motivo>` con la variable que falta.
+Esperado: `{"success":true,"data":{"estado":"ok","bd":"ok"}}`. Si sigue el 503, el motivo lo escribe `logger.error` como `porteria deshabilitado: <motivo>`, **una sola vez por arranque** y al llegar la primera petición al módulo (el `curl` de arriba la genera). Con `NODE_ENV=production` el logger no escribe en consola, solo en archivo; por eso buscar primero ahí (la ruta `logs/` es relativa a la carpeta desde la que corre pm2, normalmente la del backend):
+
+```bash
+grep "porteria deshabilitado" ~/apps/mantix/mantix-backend/logs/error.log
+```
+
+y en segundo lugar `pm2 logs mantix-backend --lines 50` (solo aparecerá si el proceso no corre con `NODE_ENV=production`). El motivo puede ser una variable faltante (`Faltan variables: …`), que `PORTERIA_JWT_SECRET` sea igual a `JWT_SECRET`, `IDENTIDAD_JWT_SECRET` o `TRK_JWT_SECRET`, o un `PORTERIA_JWT_EXPIRES` inválido (usar p. ej. `12h`).
 
 Swagger: `https://mantix-api.losolivoscucuta.com:8444/api-docs` muestra las rutas de Portería.
 
