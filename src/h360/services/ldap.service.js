@@ -125,6 +125,7 @@ function extraerAtributos(entry) {
     return {
       dn:          entry.dn?.toString() || entry.objectName?.toString() || '',
       sam:         get('sAMAccountName') || '',
+      upn:         get('userPrincipalName') || '',
       displayName: get('displayName')   || '',
       mail:        get('mail')          || '',
       // mobile es el campo de celular; telephoneNumber queda como respaldo
@@ -142,6 +143,7 @@ function extraerAtributos(entry) {
   return {
     dn:          entry.objectName?.toString() || '',
     sam:         attrs.sAMAccountName || '',
+    upn:         attrs.userPrincipalName || '',
     displayName: attrs.displayName   || '',
     mail:        attrs.mail          || '',
     telefono:    attrs.mobile || attrs.telephoneNumber || '',
@@ -297,7 +299,7 @@ async function validarCredenciales(usuarioRaw, password) {
   try {
     const filter = `(&${USER_FILTER}(sAMAccountName=${escapeFilter(usuario)}))`
     entries = await searchAsync(svcClient, process.env.LDAP_BASE_DN, filter,
-      ['dn', 'sAMAccountName', 'displayName', 'mail', 'memberOf'])
+      ['dn', 'sAMAccountName', 'userPrincipalName', 'displayName', 'mail', 'memberOf'])
     console.log(`[LDAP] Paso 2 OK — ${entries.length} resultado(s)`)
   } catch (err) {
     throw errorDirectorio('Error al buscar usuario en el directorio: ' + err.message, 'AD_NO_DISPONIBLE')
@@ -309,14 +311,34 @@ async function validarCredenciales(usuarioRaw, password) {
     throw errorDirectorio('Usuario no encontrado en el directorio', 'CREDENCIALES_INVALIDAS')
   }
 
-  const { dn: userDN, sam, displayName, mail, memberOf } = extraerAtributos(entries[0])
+  const { dn: userDN, sam, upn, displayName, mail, memberOf } = extraerAtributos(entries[0])
   console.log(`[LDAP] Usuario: ${sam}, DN: ${userDN}`)
 
-  // --- Paso 3: re-bind con el DN del usuario (verifica contraseña; un solo intento por login) ---
+  /**
+   * Con qué nombre se verifica la contraseña.
+   *
+   * Va el userPrincipalName y no el DN porque el DN no sobrevive el viaje de
+   * ida y vuelta cuando el nombre de la persona lleva una letra que no es
+   * ASCII: @ldapjs/dn convierte la Ñ de "CAMILO OMAÑA" en "\c3\91" al volverlo
+   * texto, y ese DN el directorio ya no lo reconoce. El bind falla con 52e
+   * —el mismo código de una contraseña equivocada— y la persona queda sin
+   * poder entrar aunque la escriba bien. Hoy hay nueve apellidos así.
+   *
+   * El UPN no es un DN válido, así que ldapjs lo manda tal cual y llega
+   * intacto. Se lee del directorio en vez de armarlo como `sam@olivos.local`
+   * porque hay tres cuentas donde los dos no coinciden (JCORTINA entra como
+   * JORGECORTINA@olivos.local) y a esas el nombre armado las dejaría afuera.
+   *
+   * El DN queda de respaldo por si alguna cuenta no tuviera UPN. Sigue siendo
+   * un solo bind por login: nunca se prueban los dos.
+   */
+  const nombreBind = upn || userDN
+
+  // --- Paso 3: re-bind con las credenciales del usuario (un solo intento por login) ---
   const userClient = createClient()
   try {
-    await bindAsync(userClient, userDN, password)
-    console.log('[LDAP] Paso 3 OK — bind usuario con DN')
+    await bindAsync(userClient, nombreBind, password)
+    console.log(`[LDAP] Paso 3 OK — bind usuario con ${upn ? 'UPN' : 'DN'}`)
   } catch (err) {
     // ldapjs: LDAP 49 llega como InvalidCredentialsError con code 49. Se detecta por name/code, no por instanceof.
     if (err?.name === 'InvalidCredentialsError' || err?.code === 49) {

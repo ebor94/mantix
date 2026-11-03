@@ -65,7 +65,51 @@ describe('validarCredenciales', () => {
       memberOf: ['CN=PorteriaGuardas,OU=Grupos,DC=olivos,DC=local'],
     });
     expect(usuario.bind).toHaveBeenCalledTimes(1);
+    // Sin userPrincipalName en el directorio, el DN sigue siendo el respaldo.
     expect(usuario.bind).toHaveBeenCalledWith('CN=Juan Pérez,OU=Usuarios,DC=olivos,DC=local', 'clave', expect.any(Function));
+  });
+
+  // Una Ñ en el nombre dejaba a la persona sin poder entrar: @ldapjs/dn
+  // convierte "CAMILO OMAÑA" en "CAMILO OMA\c3\91A" al volver el DN a texto y
+  // el directorio ya no lo reconoce, así que el bind falla con 52e, el mismo
+  // código de una contraseña equivocada. Pasó en producción con nueve
+  // apellidos. El UPN no es un DN, viaja intacto y por eso se usa.
+  describe('la contraseña se verifica con el userPrincipalName', () => {
+    const conUpn = (extra) => ({
+      ...ENTRADA,
+      ...extra,
+      attributes: [...ENTRADA.attributes, { type: 'userPrincipalName', values: [extra.upn] }],
+    });
+
+    test('se usa el UPN y no el DN', async () => {
+      const { usuario } = directorio({
+        svc: cliente({ entradas: [conUpn({ upn: 'jperez@olivos.local' })] }),
+      });
+      await validarCredenciales('jperez', 'clave');
+      expect(usuario.bind).toHaveBeenCalledWith('jperez@olivos.local', 'clave', expect.any(Function));
+    });
+
+    test('un apellido con Ñ ya no manda el DN escapado', async () => {
+      const { usuario } = directorio({
+        svc: cliente({ entradas: [conUpn({
+          dn: 'CN=CAMILO OMA\\c3\\91A,OU=Usuarios,DC=olivos,DC=local',
+          upn: 'CAMILOOMANA@olivos.local',
+        })] }),
+      });
+      await validarCredenciales('CAMILOOMANA', 'clave');
+      expect(usuario.bind).toHaveBeenCalledWith('CAMILOOMANA@olivos.local', 'clave', expect.any(Function));
+      expect(usuario.bind).toHaveBeenCalledTimes(1);
+    });
+
+    // Hay tres cuentas donde el UPN no se deriva del sAMAccountName, así que
+    // se lee del directorio en vez de armarlo pegando "@olivos.local".
+    test('se respeta un UPN que no coincide con el sAMAccountName', async () => {
+      const { usuario } = directorio({
+        svc: cliente({ entradas: [conUpn({ upn: 'JORGECORTINA@olivos.local' })] }),
+      });
+      await validarCredenciales('JCORTINA', 'clave');
+      expect(usuario.bind).toHaveBeenCalledWith('JORGECORTINA@olivos.local', 'clave', expect.any(Function));
+    });
   });
 
   test('contraseña incorrecta → CREDENCIALES_INVALIDAS con un solo bind del usuario', async () => {
