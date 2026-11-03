@@ -38,11 +38,11 @@ SELECT 'exequias.fecha' AS chequeo, COALESCE(MAX(DATA_TYPE), 'NO EXISTE') AS val
   FROM information_schema.COLUMNS
  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exequias' AND COLUMN_NAME = 'fecha';
 
--- (BINARY: con utf8mb4_unicode_ci un espacio normal coincide con el no separable y daría falsos positivos.)
+-- (CAST AS BINARY: con utf8mb4_unicode_ci un espacio normal coincide con el no separable y daría falsos positivos.)
 -- Placas con tabulaciones o espacios no separables: la normalización no las reconocería.
 SELECT 'placas_con_espacios_raros' AS chequeo, COUNT(*) AS valor, CASE WHEN COUNT(*) = 0 THEN 'SI' ELSE 'REVISAR' END AS ok
   FROM vehiculos
- WHERE BINARY placa LIKE CONCAT('%', CHAR(9), '%') OR BINARY placa LIKE CONCAT('%', UNHEX('C2A0'), '%');
+ WHERE CAST(placa AS BINARY) LIKE CONCAT('%', CHAR(9), '%') OR CAST(placa AS BINARY) LIKE CONCAT('%', UNHEX('C2A0'), '%');
 
 -- Permisos del usuario sobre la base: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES y
 -- CREATE VIEW (o ALL PRIVILEGES). DROP: la migración 003 reemplaza la vista y el deshacer borra tablas/vista.

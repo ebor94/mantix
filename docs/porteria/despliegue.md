@@ -38,7 +38,7 @@ mysql -h <DB_HOST> -P <DB_PORT> -u <DB_USER> -p <DB_NAME> < src/porteria/scripts
 ```
 
 - `version` debe ser **SI** (MySQL ≥ 8.0.1). Si es **NO**, detener: corregir y anular registros fallarían.
-- `exequias.fecha` debe ser **SI**.
+- `exequias.fecha` debe ser **SI**. Cualquier chequeo en **NO** (incluido `collation_vehiculos.placa` con `NO EXISTE`) detiene el despliegue.
 - Anotar `time_zone_global`, `innodb_lock_wait_timeout`, las collations y `placas_con_espacios_raros` y enviarlos al equipo de desarrollo si alguno dice **REVISAR**.
 - En `SHOW GRANTS` el usuario debe tener `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `INDEX`, `DROP`, `REFERENCES` y `CREATE VIEW` sobre la base (o `ALL PRIVILEGES`). `DROP` lo necesitan la migración 003 (que reemplaza la vista) y los pasos de deshacer; `INSERT` las migraciones que cargan datos de fábrica; `SELECT` la vista, que lee `sedes` y `vehiculos`. Si los privilegios llegan por roles de MySQL, `SHOW GRANTS` solo muestra los roles: usar `SHOW GRANTS FOR CURRENT_USER USING <rol>;` para ver los privilegios efectivos.
 
