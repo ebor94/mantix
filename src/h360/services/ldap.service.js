@@ -1,5 +1,33 @@
 const ldap = require('ldapjs')
 
+/**
+ * Le devuelve a los errores del directorio el diagnóstico que manda el AD.
+ *
+ * ldapjs 3.0.7 arma el error leyendo `res.errorMessage`, un nombre que
+ * @ldapjs/messages renombró a `diagnosticMessage` sin dejar el alias puesto en
+ * LDAPResult. Sin ese alias, TODO error del directorio llega con el texto
+ * genérico "Invalid Credentials" y se pierde el `data 52e` que viene adentro.
+ *
+ * Importa porque el AD distingue cosas que para nosotros eran una sola:
+ * contraseña equivocada, contraseña vencida, cambio obligatorio y cuenta
+ * bloqueada. Saber cuál de ellas le está pasando a una persona costó una tarde
+ * de rastreo; con el alias puesto, está en el log.
+ *
+ * Va en try/catch porque es una ruta interna de la librería: si una versión
+ * futura la mueve, se pierde el detalle pero el login sigue funcionando.
+ */
+try {
+  const { LDAPResult } = require('ldapjs/lib/messages')
+  if (!Object.getOwnPropertyDescriptor(LDAPResult.prototype, 'errorMessage')) {
+    Object.defineProperty(LDAPResult.prototype, 'errorMessage', {
+      get () { return this.diagnosticMessage },
+      configurable: true,
+    })
+  }
+} catch (err) {
+  console.warn('[LDAP] sin diagnóstico detallado del AD:', err.message)
+}
+
 const LDAP_TIMEOUT = 8000 // ms máximo por operación
 
 /**
@@ -196,6 +224,43 @@ function errorDirectorio(message, codigo) {
   return err
 }
 
+/**
+ * Los subcódigos que el AD manda dentro del error 49, y qué hacer con cada uno.
+ *
+ * `publico` es lo que ve la persona. Los dos primeros no lo llevan y se quedan
+ * con el mensaje de siempre: el AD responde 52e también cuando el usuario no
+ * existe —lo hace a propósito, para que nadie pueda averiguar qué cuentas hay—
+ * y no vale la pena afinar más de lo que el propio directorio distingue.
+ *
+ * Los demás no hablan de la contraseña sino del estado de la cuenta, y ahí
+ * callar es lo caro: la persona reintenta veinte veces una contraseña que está
+ * bien mientras lo que pasa es que venció o que la cuenta quedó bloqueada.
+ */
+const DIAGNOSTICO_AD = {
+  525: { causa: 'el usuario no existe' },
+  '52e': { causa: 'contraseña incorrecta' },
+  530: { causa: 'fuera del horario permitido',
+    publico: 'Tu cuenta no tiene permitido iniciar sesión a esta hora.' },
+  531: { causa: 'estación de trabajo no permitida',
+    publico: 'Tu cuenta no tiene permitido iniciar sesión desde este servidor. Contacta a TI.' },
+  532: { causa: 'contraseña vencida',
+    publico: 'Tu contraseña venció. Cámbiala en un computador del dominio y vuelve a entrar.' },
+  533: { causa: 'cuenta deshabilitada',
+    publico: 'Tu cuenta está deshabilitada en el directorio. Contacta a TI.' },
+  701: { causa: 'la cuenta venció',
+    publico: 'Tu cuenta venció en el directorio. Contacta a TI.' },
+  773: { causa: 'debe cambiar la contraseña',
+    publico: 'Tienes que cambiar tu contraseña. Hazlo en un computador del dominio y vuelve a entrar.' },
+  775: { causa: 'cuenta bloqueada',
+    publico: 'Tu cuenta está bloqueada en el directorio. Contacta a TI.' },
+}
+
+/** El "data 52e" que el AD mete en el texto del error 49; null si no vino. */
+function subcodigoAD(err) {
+  const m = String(err?.message ?? '').match(/data ([0-9a-f]{3,4})/i)
+  return m ? m[1].toLowerCase() : null
+}
+
 // Aceptar "bortega", "bortega@olivos.local" o "OLIVOS\bortega"
 function normalizarUsuario(usuarioRaw) {
   const usuario = String(usuarioRaw ?? '').trim()
@@ -255,7 +320,14 @@ async function validarCredenciales(usuarioRaw, password) {
   } catch (err) {
     // ldapjs: LDAP 49 llega como InvalidCredentialsError con code 49. Se detecta por name/code, no por instanceof.
     if (err?.name === 'InvalidCredentialsError' || err?.code === 49) {
-      throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
+      const data = subcodigoAD(err)
+      const d = DIAGNOSTICO_AD[data]
+      // Al log va siempre el subcódigo, aunque a la persona se le responda el
+      // mensaje genérico: es lo que convierte "no puedo entrar" en un caso que
+      // se resuelve en un minuto. Nunca lleva la contraseña.
+      console.warn(`[LDAP] Paso 3 FALLÓ — ${sam}: AD data ${data || '(sin subcódigo)'}`
+        + (d ? ` (${d.causa})` : ''))
+      throw errorDirectorio(d?.publico || 'Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
     }
     throw errorDirectorio('No se pudo conectar al directorio activo: ' + err.message, 'AD_NO_DISPONIBLE')
   } finally {

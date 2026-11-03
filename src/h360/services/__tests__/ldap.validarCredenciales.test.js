@@ -51,6 +51,7 @@ beforeEach(() => {
   for (const g of GRUPOS_H360) delete process.env[g];
   jest.spyOn(console, 'log').mockImplementation(() => {});
   jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -77,6 +78,52 @@ describe('validarCredenciales', () => {
       codigo: 'CREDENCIALES_INVALIDAS', message: 'Usuario o contraseña incorrectos',
     });
     expect(usuario.bind).toHaveBeenCalledTimes(1);
+  });
+
+  // El AD mete la causa real dentro del error 49. Lo que sigue verifica que
+  // deje de salir "usuario o contraseña incorrectos" cuando la contraseña no
+  // es el problema, porque esa frase manda a la persona a reintentar algo que
+  // nunca va a funcionar.
+  describe('el error 49 del AD se traduce por su subcódigo', () => {
+    const error49 = (data) => Object.assign(
+      new Error(`80090308: LdapErr: DSID-0C09044E, comment: AcceptSecurityContext error, data ${data}, v4f7c`),
+      { name: 'InvalidCredentialsError', code: 49 },
+    );
+    const fallar = (data) => {
+      directorio({ usuario: cliente({ bind: (dn, pw, cb) => cb(error49(data)) }) });
+      return validarCredenciales('jperez', 'clave').catch((e) => e);
+    };
+
+    test.each([
+      ['773', 'Tienes que cambiar tu contraseña. Hazlo en un computador del dominio y vuelve a entrar.'],
+      ['532', 'Tu contraseña venció. Cámbiala en un computador del dominio y vuelve a entrar.'],
+      ['775', 'Tu cuenta está bloqueada en el directorio. Contacta a TI.'],
+      ['533', 'Tu cuenta está deshabilitada en el directorio. Contacta a TI.'],
+    ])('data %s → dice qué pasa de verdad', async (data, mensaje) => {
+      await expect(fallar(data)).resolves.toMatchObject({ codigo: 'CREDENCIALES_INVALIDAS', message: mensaje });
+    });
+
+    // 52e es el único que el AD usa para dos cosas —contraseña mala y usuario
+    // inexistente—, así que ahí seguimos sin afinar: distinguirlas permitiría
+    // averiguar qué cuentas existen.
+    test.each(['52e', '525'])('data %s → se queda con el mensaje genérico', async (data) => {
+      await expect(fallar(data)).resolves.toHaveProperty('message', 'Usuario o contraseña incorrectos');
+    });
+
+    test('un subcódigo que no conocemos no rompe el login', async () => {
+      await expect(fallar('abcd')).resolves.toHaveProperty('message', 'Usuario o contraseña incorrectos');
+    });
+
+    test('el subcódigo queda en el log aunque la respuesta sea genérica', async () => {
+      await fallar('52e');
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('data 52e'));
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('jperez'));
+    });
+
+    test('al log nunca va la contraseña', async () => {
+      await fallar('52e');
+      for (const [linea] of console.warn.mock.calls) expect(String(linea)).not.toContain('clave');
+    });
   });
 
   test('error de red en el bind del usuario → AD_NO_DISPONIBLE', async () => {
