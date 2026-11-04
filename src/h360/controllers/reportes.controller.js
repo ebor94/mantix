@@ -64,12 +64,50 @@ SELECT h.id                              AS homenaje_id,
        /* Todas las visitas del homenaje, no solo las que caen en el rango:
           si no, un homenaje que arranca a fin de mes se ve sin visitar. */
        (SELECT COUNT(*) FROM homenaje_sala_visitas v2
-         WHERE v2.homenaje_sala_id = h.id) AS total_visitas
+         WHERE v2.homenaje_sala_id = h.id) AS total_visitas,
+       /* Van como texto ya formateado y no como DATE/TIME: mysql2 devolvería
+          un Date que Express serializa en UTC, y una fecha pelada se vuelve a
+          parsear como medianoche UTC —que en Bogotá es el día anterior—. Así
+          el reporte muestra el día que está guardado. */
+       DATE_FORMAT(ex.fecha, '%Y-%m-%d')  AS exequia_fecha,
+       TIME_FORMAT(ex.hora,  '%H:%i')     AS exequia_hora,
+       ex.estado                          AS exequia_estado,
+       DATE_FORMAT(ce.fecha, '%Y-%m-%d')  AS ceremonia_fecha,
+       TIME_FORMAT(ce.hora,  '%H:%i')     AS ceremonia_hora,
+       ce.estado                          AS ceremonia_estado
 FROM eventos e
 JOIN homenajes_sala h       ON h.id  = e.homenaje_id
 LEFT JOIN asistencias a     ON a.id  = h.asistencia_id
 LEFT JOIN salas_velacion sv ON sv.id = h.sala_id
 LEFT JOIN sedes sd          ON sd.id = sv.sede_id
+/* La exequia y la ceremonia vigentes más próximas del caso, cada una por su
+   lado: son dos eventos distintos y la cabecera muestra los dos.
+
+   Dos búsquedas y no una con el tipo aparte, porque un caso puede tener las
+   dos cosas y quedarse con la primera escondería la otra. Hoy no hay ninguno
+   con ambas —las 37 ceremonias están en casos sin exequia— pero el reporte no
+   tiene por qué romperse el día que aparezca.
+
+   Las canceladas no cuentan: el caso vuelve a quedar sin programar y poner su
+   fecha diría que hay un servicio que ya no existe.
+
+   Cada una se corta a una fila porque hay tres casos con dos exequias vigentes
+   —duplicados que nadie canceló, dos de ellos con la misma fecha y hora— y el
+   id desempata para que el reporte no cambie de valor entre consultas. */
+LEFT JOIN exequias ex ON ex.id = (
+  SELECT e2.id FROM exequias e2
+   WHERE e2.asistencia_id = h.asistencia_id
+     AND e2.estado <> 'CANCELADA' AND e2.tipo = 'EXEQUIA'
+   ORDER BY e2.fecha, e2.hora, e2.id
+   LIMIT 1
+)
+LEFT JOIN exequias ce ON ce.id = (
+  SELECT e3.id FROM exequias e3
+   WHERE e3.asistencia_id = h.asistencia_id
+     AND e3.estado <> 'CANCELADA' AND e3.tipo = 'CEREMONIA'
+   ORDER BY e3.fecha, e3.hora, e3.id
+   LIMIT 1
+)
 WHERE e.momento IS NOT NULL`
 
 // Rango por defecto: el mes corrido, que es como lo mira gerencia.
