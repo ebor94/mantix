@@ -9,6 +9,7 @@
 const db = require('../config/db')
 const { syncFromIngreso, syncFromVisita, syncFromSalida } = require('../services/sync_gestion.service')
 const { avanzarPorEvento } = require('./asistencias.controller')
+const { normalizarFechaHora } = require('../utils/fecha_hora')
 
 // ── Helpers de bloqueo por firma ────────────────────────────────────────────
 function parseJson(v) {
@@ -147,9 +148,20 @@ async function obtener(req, res, next) {
 async function crear(req, res, next) {
   try {
     const { usuario } = req.user
-    const { asistencia_id, sala_id, observaciones_generales } = req.body
+    const { asistencia_id, sala_id, observaciones_generales, fecha_hora_encuentro } = req.body
     if (!asistencia_id || !sala_id) {
       return res.status(400).json({ mensaje: 'asistencia_id y sala_id son obligatorios' })
+    }
+
+    // El encuentro se exige acá y no solo en la pantalla: el endpoint lo puede
+    // llamar cualquier cliente, y sin la cita el homenaje queda sin la hora a
+    // la que tiene que llegar la familia.
+    const encuentro = normalizarFechaHora(fecha_hora_encuentro)
+    if (!encuentro) {
+      return res.status(400).json({
+        mensaje: 'La fecha y hora de encuentro es obligatoria.',
+        campo: 'fecha_hora_encuentro',
+      })
     }
 
     // Verificar existencia
@@ -185,11 +197,33 @@ async function crear(req, res, next) {
       })
     }
 
-    const [r] = await db.query(
-      'INSERT INTO homenajes_sala (asistencia_id, sala_id, observaciones_generales, created_by) VALUES (?,?,?,?)',
-      [asistencia_id, sala_id, observaciones_generales || null, usuario]
-    )
-    const [nueva] = await db.query('SELECT * FROM homenajes_sala WHERE id = ?', [r.insertId])
+    // El homenaje y la fecha de encuentro van juntos o no van. Si el insert
+    // pasara y el update fallara, quedaría el homenaje registrado y el dato
+    // obligatorio perdido sin que nadie se enterara.
+    const conn = await db.getConnection()
+    let nueva
+    try {
+      await conn.beginTransaction()
+      const [r] = await conn.query(
+        'INSERT INTO homenajes_sala (asistencia_id, sala_id, observaciones_generales, created_by) VALUES (?,?,?,?)',
+        [asistencia_id, sala_id, observaciones_generales || null, usuario]
+      )
+      await conn.query(
+        'UPDATE asistencias SET fecha_hora_encuentro = ? WHERE id = ?',
+        [encuentro, asistencia_id]
+      )
+      const [filas] = await conn.query('SELECT * FROM homenajes_sala WHERE id = ?', [r.insertId])
+      await conn.commit()
+      nueva = filas
+    } catch (err) {
+      await conn.rollback().catch(() => {})
+      throw err
+    } finally {
+      conn.release()
+    }
+
+    // Después del commit: avanzarPorEvento trabaja con el pool, y antes de
+    // confirmar no vería la fila que acabamos de insertar.
 
     // Registrar la velación es lo que pone el caso en estado de velación. Si
     // todavía no está en encuentro, no se fuerza: se informa y ya.

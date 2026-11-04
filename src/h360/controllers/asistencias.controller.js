@@ -384,6 +384,9 @@ async function listar(req, res, next) {
       `SELECT id, codigo, estado, nombre_ser_querido, identificacion, contrato,
               nombre_contacto, telefono_contacto, lugar_asistencia, causa_fallecimiento,
               conductor, asesor_id, asistente_id, tanatologo_id,
+              -- La trae el listado porque los formularios de homenaje precargan
+              -- la cita ya registrada cuando el caso vela dos veces.
+              fecha_hora_encuentro,
               motivo_desistimiento, desistido_por, desistido_por_nombre, desistido_at,
               created_at, updated_at,
               sin_exequias_motivo, sin_exequias_por, sin_exequias_por_nombre, sin_exequias_at,

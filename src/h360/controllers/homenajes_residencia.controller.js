@@ -10,6 +10,7 @@
 const db = require('../config/db')
 const { sendOTP } = require('../../services/whatsappService')
 const { avanzarPorEvento } = require('./asistencias.controller')
+const { normalizarFechaHora } = require('../utils/fecha_hora')
 // Las novedades son iguales en residencia y en sala de velación: viven en el servicio.
 const novedadesSvc = require('../services/novedades.service')
 
@@ -133,9 +134,20 @@ const SALA_CERRADA = ['SALIDA_REGISTRADA', 'FINALIZADO']
 // POST /api/h360/homenajes-residencia
 async function crear(req, res, next) {
   try {
-    const { asistencia_id, observaciones_generales } = req.body
+    const { asistencia_id, observaciones_generales, fecha_hora_encuentro } = req.body
     const { usuario } = req.user
     if (!asistencia_id) return res.status(400).json({ mensaje: 'asistencia_id requerido' })
+
+    // El encuentro se exige acá y no solo en la pantalla: el endpoint lo puede
+    // llamar cualquier cliente, y sin la cita el homenaje queda sin la hora a
+    // la que tiene que llegar la familia.
+    const encuentro = normalizarFechaHora(fecha_hora_encuentro)
+    if (!encuentro) {
+      return res.status(400).json({
+        mensaje: 'La fecha y hora de encuentro es obligatoria.',
+        campo: 'fecha_hora_encuentro',
+      })
+    }
 
     // Una velación puede empezar en sala y terminar en residencia: pasa cuando
     // la familia solo usa la sala unas horas. Lo que no puede es estar en los
@@ -163,11 +175,33 @@ async function crear(req, res, next) {
       })
     }
 
-    const [r] = await db.query(
-      'INSERT INTO homenajes_residencia (asistencia_id, observaciones_generales, created_by) VALUES (?,?,?)',
-      [asistencia_id, observaciones_generales || null, usuario]
-    )
-    const [rows] = await db.query('SELECT * FROM homenajes_residencia WHERE id = ?', [r.insertId])
+    // El homenaje y la fecha de encuentro van juntos o no van. Si el insert
+    // pasara y el update fallara, quedaría el homenaje registrado y el dato
+    // obligatorio perdido sin que nadie se enterara.
+    const conn = await db.getConnection()
+    let rows
+    try {
+      await conn.beginTransaction()
+      const [r] = await conn.query(
+        'INSERT INTO homenajes_residencia (asistencia_id, observaciones_generales, created_by) VALUES (?,?,?)',
+        [asistencia_id, observaciones_generales || null, usuario]
+      )
+      await conn.query(
+        'UPDATE asistencias SET fecha_hora_encuentro = ? WHERE id = ?',
+        [encuentro, asistencia_id]
+      )
+      const [filas] = await conn.query('SELECT * FROM homenajes_residencia WHERE id = ?', [r.insertId])
+      await conn.commit()
+      rows = filas
+    } catch (err) {
+      await conn.rollback().catch(() => {})
+      throw err
+    } finally {
+      conn.release()
+    }
+
+    // Después del commit: avanzarPorEvento trabaja con el pool, y antes de
+    // confirmar no vería la fila que acabamos de insertar.
 
     // Registrar la velación es lo que pone el caso en estado de velación. Si
     // todavía no está en encuentro, no se fuerza: se informa y ya.

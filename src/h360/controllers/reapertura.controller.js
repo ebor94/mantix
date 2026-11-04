@@ -5,6 +5,7 @@
  */
 const db = require('../config/db')
 const { rolDelConductor } = require('./asistencias.controller')
+const { normalizarFechaHora } = require('../utils/fecha_hora')
 const { notificarAsignacion } = require('../services/asignacionExterna.service')
 const gchat = require('../services/googleChat.service')
 
@@ -177,7 +178,7 @@ const CAMPOS_F01 = [
   'lugar_asistencia', 'traslado_otra_ciudad', 'ciudad_destino', 'tipo_traslado',
   'destino_final_directo', 'viene_otra_ciudad',
   'nombre_contacto', 'telefono_contacto',
-  'conductor', 'conductor_id', 'fecha_contacto',
+  'conductor', 'conductor_id', 'fecha_contacto', 'fecha_hora_encuentro',
 ]
 async function actualizarF01(req, res, next) {
   try {
@@ -225,6 +226,27 @@ async function actualizarF01(req, res, next) {
       updates.destino_final_directo = updates.destino_final_directo ? 1 : 0
     if (updates.viene_otra_ciudad !== undefined)
       updates.viene_otra_ciudad = updates.viene_otra_ciudad ? 1 : 0
+
+    // El encuentro se corrige por acá, no se borra. La pantalla manda todos
+    // los campos del F-01 en cada guardado y los casos anteriores a esta
+    // función no tienen encuentro, así que un vacío significa «déjalo como
+    // está»: si significara «bórralo», editar cualquier otro campo de un caso
+    // viejo lo dejaría sin fecha. Un valor escrito pero imposible sí se
+    // rechaza, para que nadie guarde un 31 de febrero.
+    if (updates.fecha_hora_encuentro !== undefined) {
+      const crudo = String(updates.fecha_hora_encuentro ?? '').trim()
+      if (!crudo) {
+        delete updates.fecha_hora_encuentro
+      } else {
+        const normalizada = normalizarFechaHora(crudo)
+        if (!normalizada)
+          return res.status(400).json({
+            mensaje: 'La fecha y hora de encuentro no es válida.',
+            campo: 'fecha_hora_encuentro',
+          })
+        updates.fecha_hora_encuentro = normalizada
+      }
+    }
 
     // La ciudad solo tiene sentido si va a otra ciudad; y si va, hace falta.
     // Puede venir en este guardado o estar ya registrada.
