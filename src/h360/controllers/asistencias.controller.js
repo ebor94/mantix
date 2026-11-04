@@ -94,31 +94,52 @@ const ETIQUETA_ETAPA = {
 }
 
 /**
- * Requisitos efectivos para salir de `estado`, según quién quedó a cargo.
+ * Si hubo un vehículo nuestro que desinfectar.
+ *
+ * Son dos casos distintos los que dicen que no. Con un asistente externo sí
+ * hubo traslado, pero en un vehículo que no es de la empresa; su parte es el
+ * inventario. Y cuando el Ser Querido viene desde otra ciudad no hubo traslado
+ * nuestro en absoluto: llega al laboratorio por su cuenta.
+ *
+ * Sin conductor conocido se sigue exigiendo, que es lo que había antes: no
+ * saber quién condujo no significa que nadie haya conducido.
+ */
+function hayVehiculoQueDesinfectar(caso) {
+  if (caso?.viene_otra_ciudad) return false
+  if (caso?.conductor_rol === 'asistente') return false
+  return true
+}
+
+/**
+ * Requisitos efectivos para salir de `estado`, según cómo llegó el caso.
  *
  * La lista por rol sigue siendo idéntica para todos —es regla del proceso, no
- * permiso—; lo que cambia es el caso: la desinfección la registra quien
- * conduce, y a un asistente externo no se le pide, porque su parte es el
- * inventario. Sin conductor conocido se exige, que es lo que había antes.
+ * permiso—; lo que cambia es el caso concreto.
  */
-function requisitosEfectivos(requeridas, estado, conductorRol) {
-  if (estado === 'ASISTENCIA' && conductorRol === 'asistente')
+function requisitosEfectivos(requeridas, estado, caso) {
+  if (estado === 'ASISTENCIA' && !hayVehiculoQueDesinfectar(caso))
     return requeridas.filter(e => e !== 'F08_DESINFECCION')
   return requeridas
 }
 
 /**
- * Con conductor externo la desinfección no aplica: el vehículo no es de la
- * empresa. En vez de dejar la etapa fantasma —vacía y en solo lectura, como si
- * alguien la hubiera cerrado— se registra cerrada diciendo por qué.
+ * Cuando no hubo vehículo nuestro la desinfección no aplica. En vez de dejar
+ * la etapa fantasma —vacía y en solo lectura, como si alguien la hubiera
+ * cerrado— se registra cerrada diciendo por qué.
+ *
+ * El motivo se escribe distinto según el caso porque es lo que va a leer quien
+ * audite el expediente dentro de un año, y "vehículo externo" y "no hubo
+ * traslado nuestro" no son lo mismo.
  *
  * Si ya la diligenciaron, no se toca.
  */
-async function registrarDesinfeccionNoAplica(asistenciaId, conductorRol, usuario) {
-  if (conductorRol !== 'asistente') return
+async function registrarDesinfeccionNoAplica(asistenciaId, caso, usuario) {
+  if (hayVehiculoQueDesinfectar(caso)) return
   const datos = {
     no_aplica:     true,
-    observaciones: 'No aplica desinfección: la asistencia se realizó en un vehículo externo.',
+    observaciones: caso?.viene_otra_ciudad
+      ? 'No aplica desinfección: el Ser Querido llegó al laboratorio desde otra ciudad, sin traslado nuestro.'
+      : 'No aplica desinfección: la asistencia se realizó en un vehículo externo.',
   }
   await db.query(
     `INSERT INTO asistencia_etapas (asistencia_id, etapa, datos, usuario_id, completado)
@@ -131,9 +152,9 @@ async function registrarDesinfeccionNoAplica(asistenciaId, conductorRol, usuario
 // Devuelve las etapas que faltan por cerrar para poder salir de `estado`.
 async function etapasPendientesPara(asistenciaId, estado) {
   const [[caso]] = await db.query(
-    'SELECT conductor_rol FROM asistencias WHERE id = ?', [asistenciaId])
+    'SELECT conductor_rol, viene_otra_ciudad FROM asistencias WHERE id = ?', [asistenciaId])
   const requeridas = requisitosEfectivos(
-    REQUISITOS_CIERRE[estado] || [], estado, caso?.conductor_rol)
+    REQUISITOS_CIERRE[estado] || [], estado, caso)
   if (!requeridas.length) return []
   const [filas] = await db.query(
     `SELECT etapa FROM asistencia_etapas
@@ -485,11 +506,25 @@ async function crear(req, res, next) {
       nombre_contacto, telefono_contacto,
       lugar_asistencia, condiciones_logisticas, conductor, conductor_id, fecha_contacto,
       traslado_otra_ciudad, ciudad_destino, tipo_traslado, destino_final_directo,
+      viene_otra_ciudad,
     } = req.body
+
+    /**
+     * Cuando el Ser Querido viene desde otra ciudad llega al laboratorio por
+     * su cuenta: no hubo traslado nuestro y por lo tanto no hay conductor.
+     *
+     * Se limpia aquí y no solo en la pantalla porque dejar un conductor en un
+     * caso sin traslado no es un detalle cosmético: quien quede ahí pasa a
+     * estar a cargo del caso, lo ve en "Mis asistencias" y se le pide la
+     * desinfección de un vehículo que nunca usó.
+     */
+    const sinTrasladoNuestro = !!viene_otra_ciudad
+    const conductorNombre = sinTrasladoNuestro ? null : (conductor || null)
+    const conductorSam    = sinTrasladoNuestro ? null : (conductor_id || null)
 
     // El rol se resuelve aquí, una sola vez: de él depende si al cerrar la
     // asistencia se exige la desinfección.
-    const conductorRol = await rolDelConductor(conductor_id)
+    const conductorRol = sinTrasladoNuestro ? null : await rolDelConductor(conductor_id)
 
     // Si no se vela aquí, el destino es parte del servicio: hay que saberlo.
     if (traslado_otra_ciudad && !String(ciudad_destino ?? '').trim())
@@ -519,10 +554,10 @@ async function crear(req, res, next) {
             causa_fallecimiento, categoria_sanitaria,
             nombre_contacto, telefono_contacto,
             lugar_asistencia, traslado_otra_ciudad, ciudad_destino, tipo_traslado,
-            destino_final_directo,
+            destino_final_directo, viene_otra_ciudad,
             condiciones_logisticas, conductor, conductor_id, conductor_rol,
             fecha_contacto, asesor_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             codigo, normalizarNombre(nombre_ser_querido), identificacion, contrato, certificado_defuncion,
             peso_aproximado, edad || null, fecha_fallecimiento || null, hora_fallecimiento || null,
@@ -531,9 +566,9 @@ async function crear(req, res, next) {
             lugar_asistencia, traslado_otra_ciudad ? 1 : 0,
             traslado_otra_ciudad ? String(ciudad_destino).trim() : null,
             tipo_traslado,
-            destino_final_directo ? 1 : 0,
+            destino_final_directo ? 1 : 0, sinTrasladoNuestro ? 1 : 0,
             JSON.stringify(condiciones_logisticas || []),
-            conductor, conductor_id || null, conductorRol,
+            conductorNombre, conductorSam, conductorRol,
             fecha_contacto || null, usuario,
           ]
         )
@@ -557,7 +592,8 @@ async function crear(req, res, next) {
       identificacion ? `Identificación: ${identificacion}` : null,
       lugar_asistencia ? `Lugar: ${lugar_asistencia}` : null,
       nombre_contacto ? `Contacto: ${nombre_contacto}${telefono_contacto ? ' · ' + telefono_contacto : ''}` : null,
-      conductor ? `Conductor: ${conductor}` : null,
+      conductorNombre ? `Conductor: ${conductorNombre}` : null,
+      sinTrasladoNuestro ? 'Llega desde otra ciudad: sin traslado nuestro' : null,
       `Registró: ${nombre || usuario}`,
     ].filter(Boolean).join('\n')).catch(() => {})
 
@@ -570,7 +606,7 @@ async function crear(req, res, next) {
     // Si queda a cargo de un asistente externo se le avisa por WhatsApp. La
     // orden de servicio no sale aquí: espera a que él cierre el F-02. No
     // bloquea la creación: lo principal ya quedó guardado.
-    const notificacion = await notificarAsignacion(result.insertId, conductor_id)
+    const notificacion = await notificarAsignacion(result.insertId, conductorSam)
 
     const [nueva] = await db.query('SELECT * FROM asistencias WHERE id = ?', [result.insertId])
     res.status(201).json({ ...nueva[0], notificacion })
@@ -599,6 +635,18 @@ async function asignarActores(req, res, next) {
     if (tanatologo_id) updates.tanatologo_id = tanatologo_id
     const conductorNuevo = String(conductor ?? '').trim()
     const samNuevo = String(conductor_id ?? '').trim()
+
+    // Este es el otro sitio donde se puede nombrar conductor: al despachar,
+    // cuando el F-01 quedó sin él. No aplica si el Ser Querido viene desde
+    // otra ciudad, porque entonces no hay traslado que despachar. Se responde
+    // en vez de ignorarlo: alguien escribió un nombre y merece saber por qué
+    // no quedó guardado.
+    if (conductorNuevo && rows[0].viene_otra_ciudad)
+      return res.status(400).json({
+        mensaje: 'Esta asistencia no lleva conductor: el Ser Querido llega al laboratorio desde otra ciudad.',
+        campo: 'conductor',
+      })
+
     if (conductorNuevo) {
       updates.conductor = conductorNuevo
       if (samNuevo) {
@@ -668,7 +716,7 @@ async function cambiarEstado(req, res, next) {
     }
 
     if (asistencia.estado === 'ASISTENCIA')
-      await registrarDesinfeccionNoAplica(id, asistencia.conductor_rol, usuario)
+      await registrarDesinfeccionNoAplica(id, asistencia, usuario)
 
     const updates = { estado: nuevoEstado }
     if (nuevoEstado === 'CERRADO') updates.closed_at = new Date()
@@ -727,7 +775,8 @@ async function guardarEtapa(req, res, next) {
       return res.status(403).json({ mensaje: `Tu rol (${rol}) no puede guardar la etapa ${etapa}` })
 
     const [asist] = await db.query(
-      `SELECT estado, certificado_defuncion, contrato, conductor_rol, traslado_otra_ciudad, destino_final_directo
+      `SELECT estado, certificado_defuncion, contrato, conductor_rol,
+              traslado_otra_ciudad, destino_final_directo, viene_otra_ciudad
          FROM asistencias WHERE id = ?`, [id])
     if (!asist.length) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
 
@@ -871,7 +920,7 @@ async function guardarEtapa(req, res, next) {
       const transicion    = transicionDe(asist[0])
       const estadosPorRol = ESTADOS_POR_ROL[rol] || []
       const requeridas    = requisitosEfectivos(
-        (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || [], estadoActual, asist[0].conductor_rol)
+        (ETAPAS_PARA_CERRAR[rol] || {})[estadoActual] || [], estadoActual, asist[0])
 
       let puedeAvanzar = true
       if (requeridas.length > 0) {
@@ -896,7 +945,7 @@ async function guardarEtapa(req, res, next) {
 
       if (esDelEstadoActual && puedeAvanzar && transicion && estadosPorRol.includes(estadoActual) && transicion.roles.includes(rol)) {
         if (estadoActual === 'ASISTENCIA')
-          await registrarDesinfeccionNoAplica(id, asist[0].conductor_rol, usuario)
+          await registrarDesinfeccionNoAplica(id, asist[0], usuario)
         await db.query('UPDATE asistencias SET estado=? WHERE id=?', [transicion.siguiente, id])
         await insertarHistorial(id, estadoActual, transicion.siguiente, usuario, nombre)
         glpi.notificarTransicion && glpi.notificarTransicion(null, transicion.siguiente, asist[0])
@@ -1058,4 +1107,7 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { ordenServicioErp, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento }
+module.exports = { ordenServicioErp, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento,
+  // Se exportan para probarlos: de ellos depende que un caso pueda avanzar, y
+  // equivocarse deja a alguien pidiendo un formato que no puede llenar.
+  hayVehiculoQueDesinfectar, requisitosEfectivos }

@@ -175,7 +175,7 @@ const CAMPOS_F01 = [
   'peso_aproximado', 'edad', 'fecha_fallecimiento', 'hora_fallecimiento',
   'causa_fallecimiento', 'categoria_sanitaria',
   'lugar_asistencia', 'traslado_otra_ciudad', 'ciudad_destino', 'tipo_traslado',
-  'destino_final_directo',
+  'destino_final_directo', 'viene_otra_ciudad',
   'nombre_contacto', 'telefono_contacto',
   'conductor', 'conductor_id', 'fecha_contacto',
 ]
@@ -223,6 +223,8 @@ async function actualizarF01(req, res, next) {
       updates.traslado_otra_ciudad = updates.traslado_otra_ciudad ? 1 : 0
     if (updates.destino_final_directo !== undefined)
       updates.destino_final_directo = updates.destino_final_directo ? 1 : 0
+    if (updates.viene_otra_ciudad !== undefined)
+      updates.viene_otra_ciudad = updates.viene_otra_ciudad ? 1 : 0
 
     // La ciudad solo tiene sentido si va a otra ciudad; y si va, hace falta.
     // Puede venir en este guardado o estar ya registrada.
@@ -238,9 +240,28 @@ async function actualizarF01(req, res, next) {
       updates.ciudad_destino = null
     }
 
-    // Cambiar de conductor cambia quién queda a cargo del caso, así que se
-    // vuelve a resolver su rol: de él depende si se exige la desinfección.
-    if (updates.conductor_id !== undefined) {
+    // Marcar que viene de otra ciudad borra el conductor que hubiera: no hubo
+    // traslado nuestro, así que no hay a quién dejar a cargo. Se mira el valor
+    // que queda tras este guardado, no solo el que llega, porque puede venir
+    // marcado de antes.
+    const vieneDeOtraCiudad = updates.viene_otra_ciudad !== undefined
+      ? updates.viene_otra_ciudad === 1
+      : !!previa.viene_otra_ciudad
+    if (vieneDeOtraCiudad) {
+      // Lo que llegue de conductor se descarta, y el que hubiera guardado se
+      // borra. Se pregunta antes de escribir para no inventar un cambio donde
+      // no lo hay: un PATCH que no toca nada debe seguir respondiendo que no
+      // hay nada que actualizar.
+      delete updates.conductor
+      delete updates.conductor_id
+      if (previa.conductor || previa.conductor_id) {
+        updates.conductor     = null
+        updates.conductor_id  = null
+        updates.conductor_rol = null
+      }
+    } else if (updates.conductor_id !== undefined) {
+      // Cambiar de conductor cambia quién queda a cargo del caso, así que se
+      // vuelve a resolver su rol: de él depende si se exige la desinfección.
       const sam = String(updates.conductor_id ?? '').trim()
       updates.conductor_id  = sam || null
       updates.conductor_rol = sam ? await rolDelConductor(sam) : null
