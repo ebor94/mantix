@@ -4,7 +4,7 @@
 // =============================================================
 const crypto = require('crypto');
 
-const TOKEN_VALIDO_DIAS = 15; // tiempo tras fecha_programada
+const TOKEN_VALIDO_DIAS = 365; // tiempo tras fecha_programada (1 año — práctico para auditoría histórica)
 
 function generarToken() {
   // 32 bytes → 64 hex chars (coincide con VARCHAR(64) de la columna)
