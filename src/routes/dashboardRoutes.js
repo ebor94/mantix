@@ -680,4 +680,43 @@ router.get('/cumplimiento-trimestres', dashboardController.getCumplimientoTrimes
  */
 router.get('/cumplimiento-trimestres/categorias', dashboardController.getDesgloseTrimestreCategorias);
 
+/**
+ * @swagger
+ * /api/dashboard/cierres-trimestre:
+ *   get:
+ *     summary: Análisis oficial del cierre de los 4 trimestres de un año.
+ *     tags: [Dashboard]
+ *     parameters:
+ *       - in: query
+ *         name: anio
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Array de 4 slots (uno por trimestre, con placeholder si no existe).
+ */
+router.get('/cierres-trimestre', dashboardController.getCierresTrimestre);
+
+/**
+ * @swagger
+ * /api/dashboard/cierres-trimestre:
+ *   put:
+ *     summary: Crear o actualizar el análisis de un trimestre.
+ *     tags: [Dashboard]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [anio, trimestre, analisis]
+ *             properties:
+ *               anio: { type: integer }
+ *               trimestre: { type: integer, minimum: 1, maximum: 4 }
+ *               analisis: { type: string, maxLength: 5000 }
+ *               cumplimiento_registrado: { type: number }
+ *     responses:
+ *       200: { description: Análisis guardado }
+ */
+router.put('/cierres-trimestre', dashboardController.upsertCierreTrimestre);
+
 module.exports = router;

@@ -1,7 +1,7 @@
 // ============================================
 // src/controllers/dashboardController.js
 // ============================================
-const { 
+const {
   MantenimientoProgramado,
   MantenimientoEjecutado,
   SolicitudAdicional,
@@ -10,6 +10,7 @@ const {
   CategoriaMantenimiento,
   Sede,
   Usuario,
+  CierreTrimestre,
   sequelize
 } = require('../models');
 const { QueryTypes } = require('sequelize');
@@ -769,6 +770,104 @@ async getDesgloseTrimestreCategorias(req, res, next) {
     });
   } catch (error) {
     console.error('Error al obtener desglose por categoría del trimestre:', error);
+    next(error);
+  }
+},
+
+// Listar análisis de cierre de todos los trimestres de un año
+async getCierresTrimestre(req, res, next) {
+  try {
+    const anio = parseInt(req.query.anio, 10) || new Date().getFullYear();
+    const cierres = await CierreTrimestre.findAll({
+      where: { anio },
+      include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido', 'email'] }],
+      order: [['trimestre', 'ASC']]
+    });
+    // Devolver un array fijo de 4 slots (uno por trimestre) para que el frontend
+    // tenga placeholders aunque no exista registro todavía.
+    const porTrimestre = new Map(cierres.map(c => [c.trimestre, c]));
+    const data = [1, 2, 3, 4].map(t => {
+      const c = porTrimestre.get(t);
+      if (!c) {
+        return {
+          anio, trimestre: t, analisis: null,
+          cumplimiento_registrado: null,
+          usuario: null, updated_at: null
+        };
+      }
+      return {
+        anio: c.anio,
+        trimestre: c.trimestre,
+        analisis: c.analisis,
+        cumplimiento_registrado: c.cumplimiento_registrado,
+        usuario: c.usuario ? {
+          id: c.usuario.id,
+          nombre_completo: [c.usuario.nombre, c.usuario.apellido].filter(Boolean).join(' ')
+        } : null,
+        updated_at: c.updated_at
+      };
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error al obtener cierres de trimestre:', error);
+    next(error);
+  }
+},
+
+// Upsert del análisis de un trimestre
+async upsertCierreTrimestre(req, res, next) {
+  try {
+    const { anio, trimestre, analisis, cumplimiento_registrado } = req.body || {};
+    if (!Number.isInteger(anio) || !Number.isInteger(trimestre) || trimestre < 1 || trimestre > 4) {
+      return res.status(400).json({ success: false, message: 'anio/trimestre inválidos' });
+    }
+    const textoAnalisis = (analisis || '').toString().trim();
+    if (!textoAnalisis) {
+      return res.status(400).json({ success: false, message: 'El análisis no puede estar vacío' });
+    }
+    if (textoAnalisis.length > 5000) {
+      return res.status(400).json({ success: false, message: 'El análisis supera 5000 caracteres' });
+    }
+
+    const usuarioId = req.usuario?.id || null;
+    const [registro, creado] = await CierreTrimestre.findOrCreate({
+      where: { anio, trimestre },
+      defaults: {
+        anio, trimestre,
+        analisis: textoAnalisis,
+        cumplimiento_registrado: cumplimiento_registrado ?? null,
+        usuario_id: usuarioId
+      }
+    });
+    if (!creado) {
+      await registro.update({
+        analisis: textoAnalisis,
+        cumplimiento_registrado: cumplimiento_registrado ?? registro.cumplimiento_registrado,
+        usuario_id: usuarioId
+      });
+    }
+
+    const full = await CierreTrimestre.findByPk(registro.id, {
+      include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido'] }]
+    });
+
+    res.json({
+      success: true,
+      message: creado ? 'Análisis creado' : 'Análisis actualizado',
+      data: {
+        anio: full.anio,
+        trimestre: full.trimestre,
+        analisis: full.analisis,
+        cumplimiento_registrado: full.cumplimiento_registrado,
+        usuario: full.usuario ? {
+          id: full.usuario.id,
+          nombre_completo: [full.usuario.nombre, full.usuario.apellido].filter(Boolean).join(' ')
+        } : null,
+        updated_at: full.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error al guardar cierre de trimestre:', error);
     next(error);
   }
 }
