@@ -47,6 +47,7 @@ const db = {
   EjecucionEvidencia: require('./EjecucionEvidencia')(sequelize, Sequelize.DataTypes),
   SolicitudAdicional: require('./SolicitudAdicional')(sequelize, Sequelize.DataTypes),
   Dependencia: require('./Dependencia')(sequelize, Sequelize.DataTypes),
+  CierreTrimestre: require('./CierreTrimestre')(sequelize, Sequelize.DataTypes),
 
   Requisito: require('./Requisito')(sequelize, Sequelize.DataTypes),  
   RequisitoCategoria: require('./RequisitoCategoria')(sequelize, Sequelize.DataTypes),
