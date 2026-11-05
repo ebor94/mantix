@@ -47,6 +47,8 @@ const identidadRoutes = require('../identity/routes');    // ← Módulo SSO (id
 const trkRoutes    = require('../trk/routes').router;   // ← Módulo TRIKIPELUDOS
 const bigdayRoutes = require('../bigday/routes').router; // ← Módulo October Big Day
 const porteriaRoutes = require('../porteria/routes').router; // ← Módulo Portería
+const rutinasRoutes = require('./rutinasRoutes'); // Rutinas ejecución por QR (internas)
+const publicRutinasRoutes = require('./publicRoutinasRoutes'); // Rutinas público (sin auth)
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -55,6 +57,8 @@ router.use('/roles', rolesRoutes);
 router.use('/sedes', sedesRoutes);
 router.use('/equipos', equiposRoutes);
 router.use('/mantenimientos', mantenimientosRoutes);
+router.use('/rutinas', rutinasRoutes);
+router.use('/public/rutina', publicRutinasRoutes);
 router.use('/solicitudes', solicitudesRoutes);
 router.use('/reportes', reportesRoutes);
 router.use('/dashboard', dashboardRoutes);

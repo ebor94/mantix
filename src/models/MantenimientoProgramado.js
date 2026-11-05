@@ -17,6 +17,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       unique: true
     },
+    token_qr: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+      unique: true
+    },
     fecha_programada: {
       type: DataTypes.DATEONLY,
       allowNull: false
