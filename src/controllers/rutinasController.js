@@ -299,12 +299,20 @@ const rutinasController = {
   // MNT programados sin pre-ejecución registrada (listos para imprimir QR)
   async listarPendientesDePreEjecucion(req, res, next) {
     try {
-      const { desde, hasta, categoria_id } = req.query;
+      const { desde, hasta, categoria_id, estado_tiempo, con_token } = req.query;
       const where = {};
       if (desde || hasta) {
         where.fecha_programada = {};
         if (desde) where.fecha_programada[Op.gte] = desde;
         if (hasta) where.fecha_programada[Op.lte] = hasta;
+      }
+
+      // Filtro por "estado" según fecha vs hoy
+      const hoy = new Date().toISOString().slice(0, 10);
+      if (estado_tiempo === 'atrasado') {
+        where.fecha_programada = { ...(where.fecha_programada || {}), [Op.lt]: hoy };
+      } else if (estado_tiempo === 'pendiente') {
+        where.fecha_programada = { ...(where.fecha_programada || {}), [Op.gte]: hoy };
       }
 
       // IDs de programados que YA tienen pre-ejecución pendiente/aprobada
@@ -331,12 +339,20 @@ const rutinasController = {
         order: [['fecha_programada', 'ASC']]
       });
 
+      // Si piden con_token=1, aseguramos que cada MNT tenga token generado
+      if (con_token === '1' || con_token === 'true') {
+        for (const m of list) {
+          if (!m.token_qr) await rutinas.obtenerOGenerarToken(m);
+        }
+      }
+
       return res.json({
         success: true,
         data: list.map(m => ({
           ...resumenProgramado(m),
           token_qr: m.token_qr,
-          url_publica: m.token_qr ? rutinas.urlPublicaRutina(null, m.token_qr) : null
+          url_publica: m.token_qr ? rutinas.urlPublicaRutina(null, m.token_qr) : null,
+          esta_atrasado: new Date(m.fecha_programada).toISOString().slice(0, 10) < hoy
         }))
       });
     } catch (error) {
