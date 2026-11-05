@@ -281,6 +281,7 @@ const rutinasController = {
           trabajo_realizado: p.trabajo_realizado,
           observaciones: p.observaciones,
           firma_tecnico: p.firma_tecnico,
+          fotos_urls: p.fotos_urls,
           motivo_rechazo: p.motivo_rechazo,
           created_at: p.created_at,
           aprobador: p.aprobador ? [p.aprobador.nombre, p.aprobador.apellido].filter(Boolean).join(' ') : null,
@@ -410,6 +411,7 @@ const rutinasController = {
       const estadoEjecutado = await Estado.findOne({ where: { nombre: 'ejecutado' } });
 
       // Crear la ejecución oficial copiando los datos
+      const fotosUrls = preejec.fotos_urls || {};
       const ejecutado = await MantenimientoEjecutado.create({
         mantenimiento_programado_id: preejec.mantenimiento_programado_id,
         fecha_ejecucion: preejec.fecha_ejecucion,
@@ -418,7 +420,9 @@ const rutinasController = {
         nombre_recibe: preejec.nombre_recibe,
         trabajo_realizado: preejec.trabajo_realizado,
         observaciones: preejec.observaciones,
-        usuario_ejecutor_id: req.usuario?.id || null
+        usuario_ejecutor_id: req.usuario?.id || null,
+        drive_jornada_url: fotosUrls.drive_jornada_url || null,
+        drive_jornada_folder_id: fotosUrls.drive_jornada_folder_id || null
       }, { transaction: t });
 
       if (estadoEjecutado) {
