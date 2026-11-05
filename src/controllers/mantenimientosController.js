@@ -1248,3 +1248,4 @@ async function armarPayloadEvidenciasLote({ mantenimientoIds, fecha_ejecucion, h
 
 
 module.exports = mantenimientosController;
+module.exports.armarPayloadEvidenciasIndividual = armarPayloadEvidenciasIndividual;

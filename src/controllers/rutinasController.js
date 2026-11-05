@@ -17,6 +17,7 @@ const {
 } = require('../models');
 const rutinas = require('../services/rutinasService');
 const driveEvidencias = require('../services/driveEvidenciasService');
+const { armarPayloadEvidenciasIndividual } = require('./mantenimientosController');
 
 const includeProgramado = () => ([{
   model: PlanActividad,
@@ -115,9 +116,10 @@ const rutinasController = {
       }
 
       const {
-        hora_inicio, hora_fin,
+        hora_inicio,
         nombre_recibe, cedula_recibe,
-        trabajo_realizado, observaciones, firma_tecnico
+        trabajo_realizado, observaciones, firma_tecnico,
+        archivos
       } = req.body || {};
 
       if (!nombre_recibe || !trabajo_realizado) {
@@ -128,6 +130,9 @@ const rutinasController = {
       }
       if (String(trabajo_realizado).length > 5000) {
         return res.status(400).json({ success: false, message: 'trabajo_realizado supera 5000 caracteres' });
+      }
+      if (archivos && (!Array.isArray(archivos) || archivos.length > 10)) {
+        return res.status(400).json({ success: false, message: 'Máximo 10 fotos por carga' });
       }
 
       const mnt = await MantenimientoProgramado.findOne({ where: { token_qr: token } });
@@ -150,17 +155,59 @@ const rutinasController = {
         });
       }
 
+      // hora_fin = momento del registro
+      const ahora = new Date();
+      const horaFinAuto = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+      // Subir fotos a Drive si vienen archivos
+      let fotosUrls = null;
+      if (Array.isArray(archivos) && archivos.length > 0) {
+        try {
+          // Asegurar que exista la carpeta de jornada antes de subir
+          const MantenimientoEjecutadoMdl = require('../models').MantenimientoEjecutado;
+          let ejec = await MantenimientoEjecutadoMdl.findOne({
+            where: { mantenimiento_programado_id: mnt.id }
+          });
+          let folderId = ejec?.drive_jornada_folder_id || null;
+          if (!folderId) {
+            const payload = await armarPayloadEvidenciasIndividual({
+              mantenimientoId: mnt.id,
+              fecha_ejecucion: new Date().toISOString().slice(0, 10),
+              hora_inicio: hora_inicio || null,
+              hora_fin: horaFinAuto,
+              nombre_recibe,
+              observaciones,
+              req
+            });
+            const drive = await driveEvidencias.crearCarpetaJornada(payload);
+            folderId = drive?.drive_jornada_folder_id || null;
+            // Si aún no existe MantenimientoEjecutado, no persistimos acá: al aprobar se crea
+            // y hay que copiar folderId/url. Lo guardamos en fotos_urls como referencia.
+            if (folderId) {
+              fotosUrls = { drive_jornada_folder_id: folderId, drive_jornada_url: drive?.drive_jornada_url };
+            }
+          }
+          if (folderId) {
+            const subida = await driveEvidencias.subirArchivosJornada({ folderId, archivos });
+            fotosUrls = { ...(fotosUrls || {}), archivos: subida?.archivos || [] };
+          }
+        } catch (e) {
+          console.warn('[rutinas] no se pudo subir a Drive, continúo sin fotos:', e.message);
+        }
+      }
+
       const creada = await MantenimientoPreEjecucion.create({
         mantenimiento_programado_id: mnt.id,
         token_usado: token,
         fecha_ejecucion: new Date().toISOString().slice(0, 10),
         hora_inicio: hora_inicio || null,
-        hora_fin: hora_fin || null,
+        hora_fin: horaFinAuto,
         nombre_recibe: String(nombre_recibe).slice(0, 150),
         cedula_recibe: cedula_recibe ? String(cedula_recibe).slice(0, 30) : null,
         trabajo_realizado: String(trabajo_realizado).slice(0, 5000),
         observaciones: observaciones ? String(observaciones).slice(0, 2000) : null,
-        firma_tecnico: firma_tecnico ? String(firma_tecnico).slice(0, 200) : null,
+        firma_tecnico: firma_tecnico || null,
+        fotos_urls: fotosUrls,
         estado: 'pendiente',
         ip_origen: (req.headers['x-forwarded-for'] || req.ip || '').toString().slice(0, 45),
         user_agent: (req.headers['user-agent'] || '').toString().slice(0, 500)
@@ -169,7 +216,7 @@ const rutinasController = {
       return res.json({
         success: true,
         message: 'Pre-ejecución registrada. El coordinador la revisará y aprobará.',
-        data: { id: creada.id, estado: creada.estado }
+        data: { id: creada.id, estado: creada.estado, fotos: fotosUrls?.archivos?.length || 0 }
       });
     } catch (error) {
       console.error('Error registrarPreEjecucion:', error);
@@ -182,7 +229,7 @@ const rutinasController = {
   // ============================================
   async listarRutinas(req, res, next) {
     try {
-      const { desde, hasta, estado } = req.query;
+      const { desde, hasta, estado, categoria_id } = req.query;
       const whereProg = {};
       if (desde || hasta) {
         whereProg.fecha_programada = {};
@@ -194,15 +241,28 @@ const rutinasController = {
       const wherePreejec = {};
       if (estado) wherePreejec.estado = estado;
 
+      // Filtro por categoría: aplicar al include de PlanActividad
+      const includeMNTProg = {
+        model: MantenimientoProgramado,
+        as: 'mantenimiento_programado',
+        where: Object.keys(whereProg).length ? whereProg : undefined,
+        include: [{
+          ...includeProgramado()[0],
+          required: !!categoria_id
+        }]
+      };
+      if (categoria_id) {
+        includeMNTProg.required = true;
+        includeMNTProg.include[0].include = includeMNTProg.include[0].include.map(inc => {
+          if (inc.as === 'categoria') return { ...inc, where: { id: categoria_id }, required: true };
+          return inc;
+        });
+      }
+
       const preEjecuciones = await MantenimientoPreEjecucion.findAll({
         where: wherePreejec,
         include: [
-          {
-            model: MantenimientoProgramado,
-            as: 'mantenimiento_programado',
-            where: Object.keys(whereProg).length ? whereProg : undefined,
-            include: includeProgramado()[0].include ? [includeProgramado()[0]] : []
-          },
+          includeMNTProg,
           { model: Usuario, as: 'aprobador', attributes: ['id', 'nombre', 'apellido'], required: false }
         ],
         order: [['created_at', 'DESC']]
@@ -238,7 +298,7 @@ const rutinasController = {
   // MNT programados sin pre-ejecución registrada (listos para imprimir QR)
   async listarPendientesDePreEjecucion(req, res, next) {
     try {
-      const { desde, hasta } = req.query;
+      const { desde, hasta, categoria_id } = req.query;
       const where = {};
       if (desde || hasta) {
         where.fecha_programada = {};
@@ -254,9 +314,19 @@ const rutinasController = {
       const excluirIds = yaConPreejec.map(x => x.mantenimiento_programado_id);
       if (excluirIds.length) where.id = { [Op.notIn]: excluirIds };
 
+      // Aplicar filtro por categoría al include de PlanActividad
+      const includes = includeProgramado();
+      if (categoria_id) {
+        includes[0].required = true;
+        includes[0].include = includes[0].include.map(inc => {
+          if (inc.as === 'categoria') return { ...inc, where: { id: categoria_id }, required: true };
+          return inc;
+        });
+      }
+
       const list = await MantenimientoProgramado.findAll({
         where,
-        include: includeProgramado(),
+        include: includes,
         order: [['fecha_programada', 'ASC']]
       });
 

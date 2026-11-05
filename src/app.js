@@ -91,6 +91,8 @@ app.use('/api/bigday', express.json({ limit: '10kb' }));
 app.use('/api/bigday', express.urlencoded({ limit: '10kb', extended: false })); // tampoco urlencoded llega al límite de 10 MB
 // Mantix evidencias: upload de archivos en base64 puede llegar a ~55 MB (25 MB binario x 2 archivos + overhead base64)
 app.use(/^\/api\/mantenimientos\/\d+\/upload-evidencias$/, express.json({ limit: '60mb' }));
+// Mantix rutinas: pre-ejecución pública puede traer fotos y firma en base64 (hasta 10 fotos x ~1.5MB cada una + firma)
+app.use(/^\/api\/public\/rutina\/[a-f0-9]+$/, express.json({ limit: '60mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // TRIKIPELUDOS: errores del body parser en /api/trk/* con el contrato TRK (solo maneja errores)

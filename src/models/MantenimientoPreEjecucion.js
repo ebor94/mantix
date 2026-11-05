@@ -16,7 +16,8 @@ module.exports = (sequelize, DataTypes) => {
     cedula_recibe: { type: DataTypes.STRING(30), allowNull: true },
     trabajo_realizado: { type: DataTypes.TEXT, allowNull: false },
     observaciones: { type: DataTypes.TEXT, allowNull: true },
-    firma_tecnico: { type: DataTypes.STRING(200), allowNull: true },
+    firma_tecnico: { type: DataTypes.TEXT('medium'), allowNull: true },
+    fotos_urls: { type: DataTypes.JSON, allowNull: true },
     estado: {
       type: DataTypes.ENUM('pendiente', 'aprobada', 'rechazada'),
       allowNull: false,
