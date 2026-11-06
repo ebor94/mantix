@@ -346,32 +346,43 @@ Agregar al final de `src/h360/services/__tests__/ldap.validarCredenciales.test.j
 
 ```js
 describe('el rol de psicología sale de su grupo del directorio', () => {
-  test('quien está en el grupo de psicología entra con ese rol', async () => {
+  const DN_PSICOLOGIA = ['CN=Psicologia_360,OU=Grupos,DC=olivos,DC=local']
+
+  test('quien está en el grupo de psicología entra con ese rol', () => {
     process.env.LDAP_GROUP_PSICOLOGIA = 'Psicologia_360'
-    const { rolesDeGrupos } = require('../ldap.service')
-    expect(rolesDeGrupos(['CN=Psicologia_360,OU=Grupos,DC=olivos,DC=local']))
-      .toContain('psicologia')
+    expect(detectarRoles(DN_PSICOLOGIA)).toContain('psicologia')
   })
 
-  // Sin la variable de entorno el grupo no entra al mapa. Es el modo de falla
-  // que dejó a recepción sin poder entrar: el rol existía en el código.
-  test('sin la variable de entorno el rol no existe', async () => {
+  // Sin la variable de entorno el grupo no entra al mapa y detectarRoles
+  // devuelve []. Es el modo de falla que dejó a recepción sin poder entrar: el
+  // rol existía en el código y nadie avisaba de que faltaba la variable.
+  test('sin la variable de entorno el rol no existe', () => {
     delete process.env.LDAP_GROUP_PSICOLOGIA
-    const { rolesDeGrupos } = require('../ldap.service')
-    expect(rolesDeGrupos(['CN=Psicologia_360,OU=Grupos,DC=olivos,DC=local']))
-      .not.toContain('psicologia')
+    expect(detectarRoles(DN_PSICOLOGIA)).not.toContain('psicologia')
+  })
+
+  // El tramitador va último a propósito en ROLES_POR_GRUPO. Psicología se
+  // agrega antes que él, así que quien esté en los dos grupos entra con el rol
+  // de más alcance y no con el de tramitador.
+  test('no desplaza al tramitador del último lugar', () => {
+    process.env.LDAP_GROUP_PSICOLOGIA = 'Psicologia_360'
+    process.env.LDAP_GROUP_TRAMITADOR = 'Tramitador_360'
+    const roles = detectarRoles([...DN_PSICOLOGIA, 'CN=Tramitador_360,OU=Grupos,DC=olivos,DC=local'])
+    expect(roles.indexOf('psicologia')).toBeLessThan(roles.indexOf('tramitador'))
   })
 })
 ```
 
-> Si `ldap.service.js` no exporta todavía una función que traduzca grupos a
-> roles, extraerla en este paso con el nombre `rolesDeGrupos(memberOf)` y
-> exportarla, sin cambiar su comportamiento. Es la unidad que hace falta probar.
+> `detectarRoles(memberOf)` ya existe y ya está exportada en `ldap.service.js`
+> (devuelve todos los roles que le dan sus grupos, en orden de prioridad, o
+> `[]`). Asegurarse de que el `require` del archivo de prueba la incluya; no
+> hay que extraer ni renombrar nada.
 
 - [ ] **Paso 2: Correr la prueba y verificar que falla**
 
 Correr: `npx jest src/h360/services/__tests__/ldap.validarCredenciales.test.js -t "psicología"`
-Esperado: FAIL — el rol no está en el mapa
+Esperado: FAIL — `detectarRoles` no devuelve `'psicologia'` porque el par
+`['LDAP_GROUP_PSICOLOGIA', 'psicologia']` todavía no está en `ROLES_POR_GRUPO`
 
 - [ ] **Paso 3: Agregar el rol al mapa**
 
@@ -386,7 +397,7 @@ la entrada de `LDAP_GROUP_TRAMITADOR` (que va última a propósito):
 - [ ] **Paso 4: Correr la prueba y verificar que pasa**
 
 Correr: `npx jest src/h360/services/__tests__/ldap.validarCredenciales.test.js`
-Esperado: PASS, incluidas las 20 que ya existían
+Esperado: PASS — las 3 nuevas más las 20 que ya existían
 
 - [ ] **Paso 5: Etiqueta en el frontend**
 
