@@ -4,7 +4,7 @@
 -- Prefijo h360_ obligatorio: serfuweb es compartida con el core de Mantix.
 -- Nada del ERP se copia acá; el contrato se lee en vivo de Karingsoft.
 
-CREATE TABLE h360_duelo_gestion (
+CREATE TABLE IF NOT EXISTS h360_duelo_gestion (
   id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
   orden_servicio        VARCHAR(20)  NOT NULL
                           COMMENT 'Contrato en Karingsoft. Es el vínculo entre los dos sistemas',
@@ -36,11 +36,11 @@ CREATE TABLE h360_duelo_gestion (
   UNIQUE KEY uk_orden (orden_servicio),
   KEY idx_estado (estado),
   KEY idx_asistencia (asistencia_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Los intentos llegan a 17 en el Excel, con mediana 1 y 469 casos por encima
 -- de 3. Un contador y un campo de texto no alcanzan.
-CREATE TABLE h360_duelo_intentos (
+CREATE TABLE IF NOT EXISTS h360_duelo_intentos (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   gestion_id  INT UNSIGNED NOT NULL,
   momento     DATETIME     NOT NULL COMMENT 'Reemplaza la hora escrita dentro de la observación',
@@ -53,9 +53,9 @@ CREATE TABLE h360_duelo_intentos (
   KEY idx_gestion (gestion_id, momento),
   CONSTRAINT fk_intento_gestion FOREIGN KEY (gestion_id)
     REFERENCES h360_duelo_gestion (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE h360_duelo_servicios (
+CREATE TABLE IF NOT EXISTS h360_duelo_servicios (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   gestion_id  INT UNSIGNED NOT NULL,
   servicio    ENUM('CARTILLA_RENACER','CONFERENCIA_RENACER','MISA_DE_MES',
@@ -71,12 +71,12 @@ CREATE TABLE h360_duelo_servicios (
   UNIQUE KEY uk_gestion_servicio (gestion_id, servicio),
   CONSTRAINT fk_servicio_gestion FOREIGN KEY (gestion_id)
     REFERENCES h360_duelo_gestion (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dato de salud de un tercero. Tabla aparte para que el permiso sea a nivel de
 -- tabla y para poder excluirla de consultas generales sin acordarse de filtrar
 -- columnas. Ley 1581 de 2012: dato sensible.
-CREATE TABLE h360_duelo_atenciones (
+CREATE TABLE IF NOT EXISTS h360_duelo_atenciones (
   id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
   gestion_id          INT UNSIGNED NOT NULL,
   momento             DATETIME     NOT NULL,
@@ -92,6 +92,8 @@ CREATE TABLE h360_duelo_atenciones (
   updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_gestion (gestion_id, momento),
+  -- RESTRICT y no CASCADE: las notas son dato sensible (Ley 1581 de 2012).
+  -- Borrar una gestión no debe llevarse la historia clínica sin dejar rastro.
   CONSTRAINT fk_atencion_gestion FOREIGN KEY (gestion_id)
-    REFERENCES h360_duelo_gestion (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    REFERENCES h360_duelo_gestion (id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
