@@ -8,6 +8,8 @@
  * El pool se crea una vez y se reutiliza; si la conexión se cae, el siguiente
  * llamado la rehace en vez de dejar el servicio inservible hasta reiniciar.
  */
+const { malUso } = require('../utils/errores')
+
 /**
  * El driver se carga al usarlo, no al arrancar: si el servidor se despliega sin
  * haber corrido npm install, un require arriba tumbaría todo el backend por una
@@ -535,47 +537,84 @@ const escaparLike = texto => texto.replace(/[\\%_[]/g, coincidencia => ESCAPE_LI
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
 
-/* Error por entrada inválida de quien llama. Lleva status = 400 para que el
-   controlador (que mira err.status === 400) responda 400 con el mensaje en vez
-   de un 500 genérico; es el mismo patrón que malUso en duelo.service. Los
-   parámetros de la petición llegan aquí sin tocar, así que esto es alcanzable
-   desde la API y no solo un error de programación. */
-function malUso(mensaje) {
-  const e = new Error(mensaje)
-  e.status = 400
-  return e
-}
-
-/* Una fecha que excede el VarChar(10) declarado revienta en el driver con un
-   error de TDS que no dice nada a quien lo lee en un log. Una fecha malformada
-   se lanza con un mensaje claro que nombra el campo y muestra lo que llegó; no
-   se devuelve vacío, porque vacío lo esconde. «funcion» es la que se nombra en
-   el mensaje, para que el log diga cuál de las dos falló. */
+/* Una fecha malformada se lanza con un mensaje claro que nombra el campo y
+   muestra lo que llegó; no se devuelve vacío, porque vacío lo esconde. Esto
+   valida la FORMA; que el valor quepa en el VarChar lo valida parametrosDe, por
+   donde pasa toda fecha. «funcion» es la que se nombra en el mensaje, para que
+   el log diga cuál de las dos falló. */
 function exigirFechaIso(valor, nombre, funcion) {
   if (typeof valor === 'string' && FECHA_ISO.test(valor)) return
   const recibido = typeof valor === 'string' ? JSON.stringify(valor) : String(valor)
   throw malUso(`${funcion}: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${recibido}`)
 }
 
+/* Tamaños declarados de los VarChar que se atan en las búsquedas. Cada uno se
+   declara aquí una sola vez: parametrosDe usa el mismo número para validar y
+   para decirle al driver el tipo, así que no pueden divergir. */
+const MAX_FECHA = 10          // 'YYYY-MM-DD'
+const MAX_CONTRATO = 20       // orden_servicio
+
 /* Tamaño declarado de p_nombre (VarChar). Es el tope del PATRÓN que se ata, no
    del texto que escribió la persona: ver la medición en buscarOrdenes. */
 const MAX_PATRON_NOMBRE = 200
+
+/* Parámetros de texto de una consulta de búsqueda, atados a un VarChar(n).
+   Un valor más largo que n revienta en el driver con un error de TDS ("Data
+   type 0xA7 has an invalid data length or metadata length") que no dice qué
+   campo falló ni qué hacer, y desde la API es un 500. Para que eso no pueda
+   pasar con ningún parámetro, estas consultas NO llaman a .input() por su
+   cuenta: cada valor entra por texto() o fecha(), que lo miden contra el mismo
+   n con que se declara el tipo, y todos se atan juntos con atarA(). Un
+   parámetro nuevo hereda la validación por el solo hecho de agregarse así; no
+   hay una segunda lista que recordar. length cuenta unidades UTF-16; con la
+   página de códigos del ERP (CP1252, un byte por carácter) no subestima bytes.
+
+   «funcion» es la que se nombra en los mensajes. Si algo no cabe, lanza malUso
+   (400) y no se ata nada: no se trunca, porque truncar cambiaría la búsqueda
+   que la persona pidió sin avisarle. */
+function parametrosDe(funcion) {
+  const atados = []
+
+  /* param: nombre del parámetro SQL; campo: cómo lo conoce quien llama (sale en
+     el mensaje); max: el n del VarChar. «exceso» (opcional) arma un mensaje a
+     medida a partir del largo que llegó, para cuando el genérico no explica el
+     tope (como el del nombre, que se mide sobre el patrón escapado). El mensaje
+     genérico dice cuánto llegó pero no repite el valor: puede ser enorme. */
+  function texto(param, campo, max, valor, exceso) {
+    const t = String(valor)
+    if (t.length > max)
+      throw malUso(exceso ? exceso(t.length)
+        : `${funcion}: "${campo}" es demasiado largo: admite como máximo ${max} caracteres y llegó con ${t.length}`)
+    atados.push({ param, max, valor: t })
+  }
+
+  return {
+    texto,
+    fecha(param, campo, valor) {
+      exigirFechaIso(valor, campo, funcion)
+      texto(param, campo, MAX_FECHA, valor)
+    },
+    atarA(peticion) {
+      const d = driver()
+      return atados.reduce((r, a) => r.input(a.param, d.VarChar(a.max), a.valor), peticion)
+    },
+  }
+}
 
 /**
  * Órdenes creadas entre dos fechas. El defecto del módulo es ayer y hoy, que
  * es como las psicólogas trabajan hoy sobre el ERP.
  *
- * Las dos fechas deben ser texto YYYY-MM-DD; si no, lanza un Error (antes de
- * pedir la conexión, para que el problema real no quede tapado por otro).
+ * Las dos fechas deben ser texto YYYY-MM-DD; si no, lanza un Error con status
+ * 400 (antes de pedir la conexión, para que el problema real no quede tapado
+ * por otro).
  */
 async function ordenesDelRango(desde, hasta) {
-  exigirFechaIso(desde, 'desde', 'ordenesDelRango')
-  exigirFechaIso(hasta, 'hasta', 'ordenesDelRango')
+  const p = parametrosDe('ordenesDelRango')
+  p.fecha('p_desde', 'desde', desde)
+  p.fecha('p_hasta', 'hasta', hasta)
   const pool = await obtenerPool()
-  const r = await pool.request()
-    .input('p_desde', driver().VarChar(10), String(desde))
-    .input('p_hasta', driver().VarChar(10), String(hasta))
-    .query(`
+  const r = await p.atarA(pool.request()).query(`
       SELECT ${CAMPOS_DUELO}
         FROM salas_ordenes_view o
        WHERE o.tipo_documento = 50
@@ -592,18 +631,22 @@ async function ordenesDelRango(desde, hasta) {
  * tabla de producción de otro sistema no es algo que se dispare por descuido.
  *
  * Las fechas, si vienen, deben ser texto YYYY-MM-DD (se recortan los espacios
- * alrededor, como siempre), y el nombre debe caber en el patrón de VarChar(200).
- * Si no, lanza un Error con status 400 y mensaje en español, antes de pedir la
- * conexión y sin consultar. No se trunca nada en silencio: truncar cambiaría la
- * búsqueda que la persona pidió sin avisarle.
+ * alrededor, como siempre), el contrato debe caber en VarChar(20) y el nombre
+ * en el patrón de VarChar(200). Si no, lanza un Error con status 400 y mensaje
+ * en español, antes de pedir la conexión y sin consultar. No se trunca nada en
+ * silencio: truncar cambiaría la búsqueda que la persona pidió sin avisarle.
+ *
+ * Todo valor que se ata entra por parametrosDe: no se agrega un parámetro
+ * llamando a .input() directo.
  */
 async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) {
   const cond = []
-  const req = []
+  const p = parametrosDe('buscarOrdenes')
 
-  if (String(contrato ?? '').trim()) {
+  const numero = String(contrato ?? '').trim()
+  if (numero) {
     cond.push('o.orden_servicio = @p_contrato')
-    req.push(['p_contrato', driver().VarChar(20), String(contrato).trim()])
+    p.texto('p_contrato', 'contrato', MAX_CONTRATO, numero)
   }
   if (String(nombre ?? '').trim()) {
     cond.push(`LTRIM(RTRIM(
@@ -622,32 +665,25 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
        lo alarga hasta el doble (cada %, _, [ y \ pasa a ser dos caracteres), y
        toUpperCase también ('ß' pasa a 'SS'). Con la medida cruda, 150 símbolos %
        parecerían caber y al escapar serían 302. Medir lo que se ata es la única
-       forma de que nunca exceda. length cuenta unidades UTF-16; con la página de
-       códigos del ERP (CP1252, un byte por carácter) eso no subestima los bytes. */
-    if (patron.length > MAX_PATRON_NOMBRE)
-      throw malUso(`buscarOrdenes: el nombre es demasiado largo: el patrón de búsqueda admite como máximo ${MAX_PATRON_NOMBRE} caracteres (cada %, _, [ y \\ del nombre cuenta doble porque se escapa, y se suman 2 de los extremos) y este llega a ${patron.length}`)
-    req.push(['p_nombre', driver().VarChar(MAX_PATRON_NOMBRE), patron])
+       forma de que nunca exceda. */
+    p.texto('p_nombre', 'nombre', MAX_PATRON_NOMBRE, patron, largo =>
+      `buscarOrdenes: el nombre es demasiado largo: el patrón de búsqueda admite como máximo ${MAX_PATRON_NOMBRE} caracteres (cada %, _, [ y \\ del nombre cuenta doble porque se escapa, y se suman 2 de los extremos) y este llega a ${largo}`)
   }
   const desde = String(fechaDesde ?? '').trim()
   if (desde) {
-    exigirFechaIso(desde, 'fechaDesde', 'buscarOrdenes')
     cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) >= @p_f_desde')
-    req.push(['p_f_desde', driver().VarChar(10), desde])
+    p.fecha('p_f_desde', 'fechaDesde', desde)
   }
   const hasta = String(fechaHasta ?? '').trim()
   if (hasta) {
-    exigirFechaIso(hasta, 'fechaHasta', 'buscarOrdenes')
     cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) <= @p_f_hasta')
-    req.push(['p_f_hasta', driver().VarChar(10), hasta])
+    p.fecha('p_f_hasta', 'fechaHasta', hasta)
   }
 
   if (!cond.length) return []
 
   const pool = await obtenerPool()
-  let peticion = pool.request()
-  for (const [n, t, v] of req) peticion = peticion.input(n, t, v)
-
-  const r = await peticion.query(`
+  const r = await p.atarA(pool.request()).query(`
     SELECT TOP 200 ${CAMPOS_DUELO}
       FROM salas_ordenes_view o
      WHERE o.tipo_documento = 50

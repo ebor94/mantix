@@ -4,16 +4,27 @@
 
 const consultas = []
 let filas = []
+// El doble reproduce lo que el driver real hace con un parámetro que no cabe en
+// el VarChar(n) que se le declaró: la consulta falla con el error de TDS. Así,
+// un parámetro que alguien ate sin validar rompe la prueba que lo ejercite, en
+// vez de pasar en silencio porque el doble aceptaba cualquier largo.
 const requestDoble = () => {
-  const r = { params: {} }
-  r.input = (nombre, _tipo, valor) => { r.params[nombre] = valor; return r }
-  r.query = sql => { consultas.push({ sql, params: r.params }); return { recordset: filas } }
+  const r = { params: {}, tipos: {} }
+  r.input = (nombre, tipo, valor) => { r.params[nombre] = valor; r.tipos[nombre] = tipo; return r }
+  r.query = sql => {
+    for (const [nombre, tipo] of Object.entries(r.tipos)) {
+      if (tipo.max !== undefined && String(r.params[nombre]).length > tipo.max)
+        throw new Error(`Parameter ("@${nombre}"): Data type 0xA7 has an invalid data length or metadata length.`)
+    }
+    consultas.push({ sql, params: r.params })
+    return { recordset: filas }
+  }
   return r
 }
 
 jest.mock('mssql', () => ({
   connect: jest.fn(async () => ({ request: requestDoble })),
-  VarChar: () => 'VarChar', Date: 'Date', NVarChar: () => 'NVarChar',
+  VarChar: max => ({ nombre: 'VarChar', max }), Date: 'Date', NVarChar: () => ({ nombre: 'NVarChar' }),
 }))
 
 const ks = require('../karingsoft.service')
@@ -231,6 +242,57 @@ describe('buscarOrdenes', () => {
     expect(consultas[0].sql).toMatch(/@p_nombre(\s+COLLATE\s+\S+)?\s+ESCAPE\s+'\\'/)
   })
 
+  // p_contrato es VarChar(20): uno más largo revienta en el driver con el mismo
+  // error de TDS. Es alcanzable desde la API (?contrato= llega tal cual), así que
+  // debe ser un 400 que diga qué campo y cuál es el máximo, no un 500.
+  describe('con un contrato que no cabe en VarChar(20)', () => {
+    test('21 caracteres lanza un Error 400 que nombra el campo, dice que es demasiado largo y cuál es el máximo, y no consulta', async () => {
+      const err = await rechazo(ks.buscarOrdenes({ contrato: 'A'.repeat(21) }))
+      expect(err).toBeInstanceOf(Error)
+      expect(err.status).toBe(400)
+      expect(err.message).toMatch(/^buscarOrdenes:/)
+      expect(err.message).toContain('"contrato"')
+      expect(err.message).toMatch(/demasiado largo/)
+      expect(err.message).toContain('20')
+      expect(consultas).toHaveLength(0)
+    })
+
+    test('el límite exacto: 20 caracteres caben y 21 no', async () => {
+      await ks.buscarOrdenes({ contrato: 'A'.repeat(20) })
+      expect(consultas[0].params.p_contrato).toHaveLength(20)
+      const err = await rechazo(ks.buscarOrdenes({ contrato: 'A'.repeat(21) }))
+      expect(err.status).toBe(400)
+      expect(consultas).toHaveLength(1)
+    })
+
+    // Lo que cuenta es lo que se ata: el contrato se recorta antes de atarlo.
+    test('se mide después de recortar: 20 caracteres con espacios alrededor caben', async () => {
+      await ks.buscarOrdenes({ contrato: '  ' + 'A'.repeat(20) + '\n' })
+      expect(consultas[0].params.p_contrato).toBe('A'.repeat(20))
+    })
+
+    test('el mensaje dice cuánto llegó pero no repite el contrato entero', async () => {
+      const err = await rechazo(ks.buscarOrdenes({ contrato: 'B'.repeat(5000) }))
+      expect(err.message).toContain('5000')
+      expect(err.message.length).toBeLessThan(300)
+    })
+
+    test('se valida antes de pedir la conexión', async () => {
+      delete process.env.KS_HOST
+      const err = await rechazo(ks.buscarOrdenes({ contrato: 'A'.repeat(21) }))
+      expect(err.status).toBe(400)
+      expect(err.message).toMatch(/demasiado largo/)
+    })
+
+    // Un contrato largo junto a criterios válidos no los deja pasar a medias.
+    test('con los demás criterios bien, igual lanza y no consulta', async () => {
+      const err = await rechazo(ks.buscarOrdenes({
+        contrato: 'A'.repeat(21), nombre: 'prada', fechaDesde: '2026-11-01', fechaHasta: '2026-11-05' }))
+      expect(err.status).toBe(400)
+      expect(consultas).toHaveLength(0)
+    })
+  })
+
   // Una fecha que excede el VarChar(10) declarado revienta en el driver con el
   // mismo error de TDS que en ordenesDelRango, y aquí es alcanzable desde la API:
   // el controlador pasa ?fecha_fallecimiento= y ?fecha_hasta= tal cual. Debe ser
@@ -363,5 +425,28 @@ describe('buscarOrdenes', () => {
         }
       }
     })
+  })
+})
+
+// La clase de defecto, no una instancia: cada valor que se ata a un VarChar(n)
+// debe caber en n, venga lo que venga. Se prueba criterio por criterio con un
+// valor absurdamente largo; el doble de arriba hace fallar cualquier parámetro
+// que llegue a la consulta con un largo mayor que el declarado. Si mañana se
+// agrega un parámetro de texto, su fila va aquí.
+describe('ningún parámetro atado excede su longitud declarada', () => {
+  const enorme = n => 'Z'.repeat(n)
+
+  test.each([
+    ['buscarOrdenes: contrato',    () => ks.buscarOrdenes({ contrato: enorme(10000) })],
+    ['buscarOrdenes: nombre',      () => ks.buscarOrdenes({ nombre: enorme(10000) })],
+    ['buscarOrdenes: fechaDesde',  () => ks.buscarOrdenes({ fechaDesde: enorme(10000) })],
+    ['buscarOrdenes: fechaHasta',  () => ks.buscarOrdenes({ fechaHasta: enorme(10000) })],
+    ['ordenesDelRango: desde',     () => ks.ordenesDelRango(enorme(10000), '2026-11-05')],
+    ['ordenesDelRango: hasta',     () => ks.ordenesDelRango('2026-11-04', enorme(10000))],
+  ])('%s: con 10000 caracteres lanza 400 y no llega a la consulta', async (_caso, llamar) => {
+    const err = await rechazo(llamar())
+    expect(err).toBeInstanceOf(Error)
+    expect(err.status).toBe(400)
+    expect(consultas).toHaveLength(0)
   })
 })
