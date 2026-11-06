@@ -98,29 +98,71 @@ Tres criterios, como se pidió:
 
 Se derivan de los datos, no se eligen a mano:
 
-Cada fila de la bandeja dice además **si la rama está confirmada o es una
-suposición**. Está confirmada cuando sale de la ubicación de la asistencia de
-H360 o cuando hay una señal que dice que el servicio es de otra ciudad —el
-convenio `OLIVOS <ciudad>` o una sede foránea conocida—; no lo está cuando es el
-valor por defecto —que es casi la mitad de las filas, y justo las más
-recientes—. Sin esa distinción la pantalla afirmaba «Residencia» como hecho y
-una psicóloga podía planificar una visita a domicilio para un caso donde
-todavía nadie sabe dónde va a ser la velación.
-
-Una sede que **no** es local y que tampoco se reconoce como foránea se gestiona
-como otra ciudad, pero **sin confirmar**: una sede desconocida no es un dato,
-es la ausencia de uno. Si el ERP gana un centro de costo o renombra uno local,
-esas familias caen en la rama telefónica, y afirmarlo las dejaría con la
-insignia plena de «otra ciudad» sin que nadie las visite ni las llame como
-locales. La lista de sedes foráneas conocidas vive en el controlador y hoy está
-**vacía**: no hay centros de costo foráneos medidos, y el convenio sigue siendo
-la señal que confirma.
-
 | Rama | Cómo se detecta | Gestión |
 |---|---|---|
 | **Sala de velación** | H360 tiene homenaje en sala → sede y sala conocidas | Visita presencial. Gran Colombia concentra 239 de 336; San José solo 7 |
 | **Residencia** | H360 tiene homenaje en residencia | Gestión telefónica o visita a la dirección (`direccion_fallecido` del ERP) |
-| **Otra ciudad** | El convenio es de otra sucursal de Olivos (`OLIVOS <ciudad>`: Bucaramanga, Bogotá, Barrancabermeja…) o la sede es una foránea conocida (hoy ninguna): rama **confirmada**. Una sede que no es local y que nadie reconoce también cae aquí, pero **sin confirmar**. Que no haya caso en 360 no la decide: con sede local (o sin sede) la orden es Residencia sin confirmar | Solo gestión telefónica. Los servicios presenciales quedan `FUERA_DE_CIUDAD` |
+| **Otra ciudad** | El centro de costo del ERP (la sede) es una de las **sedes foráneas conocidas** —Pamplona, Saravena, Arauca y Tame—: rama **confirmada**. Una sede que no es local y que nadie reconoce también cae aquí, pero **sin confirmar**. Ni el convenio ni la entidad deciden la rama (ver más abajo). Que no haya caso en 360 no la decide: con sede local (o sin sede) la orden es Residencia sin confirmar | Solo gestión telefónica. Los servicios presenciales quedan `FUERA_DE_CIUDAD` |
+
+Cada fila de la bandeja dice además **si la rama está confirmada o es una
+suposición** (`rama_confirmada`). Está confirmada cuando sale de la ubicación
+de la asistencia de H360 —que manda sobre todo lo demás— o cuando la sede es
+una de las foráneas conocidas; no lo está cuando es el valor por defecto —que
+es casi la mitad de las filas, y justo las más recientes—. Sin esa distinción
+la pantalla afirmaba «Residencia» como hecho y una psicóloga podía planificar
+una visita a domicilio para un caso donde todavía nadie sabe dónde va a ser la
+velación. `rama` y `rama_confirmada` salen del mismo `return` de `decidirRama`,
+así que no pueden desfasarse.
+
+**La rama de otra ciudad sale del centro de costo y de nada más**, contra una
+lista explícita de sedes foráneas conocidas que vive en el controlador
+(`SEDES_FORANEAS_CONOCIDAS`). La sede se compara completa y normalizada (sin
+distinguir mayúsculas ni espacios repetidos: el ERP escribe «Sede  Arauca» con
+dos espacios), y las sedes locales ganan siempre.
+
+Una sede que **no** es local y que tampoco está en esa lista se gestiona como
+otra ciudad, pero **sin confirmar**: una sede desconocida no es un dato, es la
+ausencia de uno. Si el ERP gana un centro de costo o renombra uno local, esas
+familias caen en la rama telefónica, y afirmarlo las dejaría con la insignia
+plena de «otra ciudad» sin que nadie las visite ni las llame como locales. Una
+sede nueva queda «sin confirmar» hasta que alguien la agregue a la lista a
+conciencia: es el diseño, no un olvido.
+
+**La lista sale de una medición (2026-11-06).** Sobre `salas_ordenes_view` con
+`tipo_documento = 50`: **3975 órdenes de servicio de los últimos 365 días**.
+Es el universo completo de centros de costo, no una muestra:
+
+| Órdenes | Centro de costo (`descripcion_centro_costo`) | Tratamiento |
+|---:|---|---|
+| 2888 | `Sede Gran Colombia` | Local |
+| 422 | `Mascotas` | Local |
+| 107 | `Sede San José` | Local |
+| 95 | `Cristo Rey Cucuta` | Local |
+| 288 | `Sede Pamplona` | **Foránea conocida** |
+| 128 | `Sede Saravena` | **Foránea conocida** |
+| 36 | `Sede  Arauca` (dos espacios en el ERP) | **Foránea conocida** |
+| 10 | `Sede Tame` | **Foránea conocida** |
+| 1 | *(vacío)* | Sin sede: no se adivina, Residencia sin confirmar |
+
+Son 3512 órdenes locales y **462 foráneas al año (11,6 %)**: el caso en que más
+se sabe, porque el ERP dice el municipio por su propio centro de costo. La
+medición deja de valer cuando el ERP gane, renombre o retire un centro de
+costo; la señal para volver a medir es ver aparecer en la bandeja una rama de
+otra ciudad «sin confirmar».
+
+**Lo que no es señal.** Hasta esta medición, el módulo también trataba como
+otra ciudad un convenio que empezara por `OLIVOS <ciudad>`. Se quitó:
+
+1. Era código muerto: **0 de 3975** órdenes de un año traen un
+   `descripcion_convenio` así.
+2. El patrón `OLIVOS <ciudad>` sí existe en el ERP, pero en
+   `descripcion_entidad`: **328 órdenes** (Bogotá 95, Bucaramanga 68, Cali 37,
+   Barrancabermeja 26, Villavicencio 16 y nueve ciudades más).
+3. Pero `entidad` es la **sucursal que vendió el plan, no dónde es el
+   homenaje** (lo resolvió el dueño del sistema): el homenaje de esas 328 es en
+   Cúcuta. Mirarla mandaría a gestión telefónica a **264 familias que están en
+   Cúcuta**. Por eso `entidad` no es señal de rama, y el comentario que lo deja
+   escrito está en `duelo.controller.js`, junto a `SEDES_FORANEAS_CONOCIDAS`.
 
 ## 5. Modelo de datos
 
