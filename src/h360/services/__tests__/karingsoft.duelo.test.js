@@ -61,6 +61,43 @@ describe('ordenesDelRango', () => {
     expect(consultas[0].sql).not.toMatch(/INSERT|UPDATE|DELETE|MERGE/i)
     expect(consultas[0].sql).toMatch(/^\s*SELECT\b/i)
   })
+
+  // Una fecha que excede el VarChar(10) declarado revienta en el driver con un
+  // error de TDS que nadie sabe leer en un log. Una fecha malformada es un error
+  // de programación: se lanza, no se devuelve vacío, porque vacío lo esconde.
+  describe('con una fecha malformada', () => {
+    const casos = [
+      { caso: 'ambas texto libre',          desde: 'no-es-fecha',         hasta: 'tampoco',    malo: 'desde' },
+      { caso: 'solo desde mal',             desde: 'no-es-fecha',         hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'solo hasta mal',             desde: '2026-11-04',          hasta: 'tampoco',    malo: 'hasta' },
+      { caso: 'formato dd/mm/aaaa',         desde: '4/11/2026',           hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'mes y día sin cero',         desde: '2026-11-04',          hasta: '2026-1-5',   malo: 'hasta' },
+      { caso: 'con hora',                   desde: '2026-11-04T00:00:00', hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'con espacio al inicio',      desde: ' 2026-11-04',         hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'con salto de línea al final', desde: '2026-11-04',         hasta: '2026-11-05\n', malo: 'hasta' },
+      { caso: 'vacía',                      desde: '',                    hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'undefined',                  desde: undefined,             hasta: '2026-11-05', malo: 'desde' },
+      { caso: 'null',                       desde: '2026-11-04',          hasta: null,         malo: 'hasta' },
+      { caso: 'número',                     desde: 20261104,              hasta: '2026-11-05', malo: 'desde' },
+    ]
+
+    test.each(casos)('$caso: lanza un Error en español que dice qué se esperaba y no consulta', async ({ desde, hasta, malo }) => {
+      const promesa = ks.ordenesDelRango(desde, hasta)
+      await expect(promesa).rejects.toBeInstanceOf(Error)
+      await expect(promesa).rejects.toThrow(/YYYY-MM-DD/)
+      await expect(promesa).rejects.toThrow(/debe ser una fecha/)
+      // nombra el parámetro culpable, para no tener que adivinar cuál de los dos
+      await expect(promesa).rejects.toThrow(new RegExp(`"${malo}"`))
+      expect(consultas).toHaveLength(0)
+    })
+
+    // Si la validación viniera después de pedir la conexión, sin ERP configurado
+    // el error sería el de la conexión y el verdadero problema quedaría tapado.
+    test('se valida antes de pedir la conexión', async () => {
+      delete process.env.KS_HOST
+      await expect(ks.ordenesDelRango('no-es-fecha', 'tampoco')).rejects.toThrow(/YYYY-MM-DD/)
+    })
+  })
 })
 
 describe('buscarOrdenes', () => {
@@ -122,5 +159,59 @@ describe('buscarOrdenes', () => {
     expect(await ks.buscarOrdenes()).toEqual([])
     expect(await ks.buscarOrdenes({ contrato: '  ', nombre: '', fechaDesde: null, fechaHasta: undefined })).toEqual([])
     expect(consultas).toHaveLength(0)
+  })
+
+  // Defecto 1. La columna y el servidor usan SQL_Latin1_General_CP1_CI_AS:
+  // ignora mayúsculas pero distingue tildes, y los datos están guardados sin
+  // tildes pero con Ñ. Resultado medido en producción: 'rodríguez' daba 0 y
+  // 'rodriguez' daba 2130. El COLLATE va en los dos lados para no depender de
+  // las reglas de precedencia de colaciones.
+  test('por nombre compara sin distinguir tildes: COLLATE SQL_Latin1_General_CP1_CI_AI en los dos lados', async () => {
+    await ks.buscarOrdenes({ nombre: 'rodríguez' })
+    const { sql } = consultas[0]
+    const colacion = 'SQL_Latin1_General_CP1_CI_AI'
+    // lado izquierdo: la expresión concatenada completa (cierra con paréntesis)
+    expect(sql).toMatch(new RegExp(`\\)\\s*COLLATE\\s+${colacion}\\s+LIKE\\s+@p_nombre`))
+    // lado derecho: el parámetro
+    expect(sql).toMatch(new RegExp(`@p_nombre\\s+COLLATE\\s+${colacion}\\s+ESCAPE`))
+    // ni de más ni de menos: exactamente esos dos
+    expect(sql.match(/COLLATE/g)).toHaveLength(2)
+    // la sensible a tildes es la que no queremos; la española trata la Ñ como
+    // letra aparte de la N y rompe 'munoz'
+    expect(sql).not.toMatch(/Modern_Spanish|CI_AS\b/)
+  })
+
+  // Guarda contra el «arreglo» equivocado. Quitar diacríticos en JavaScript
+  // (normalize('NFD')) convierte la Ñ en N: 'muñoz' dejaría de encontrar los
+  // 262 MUÑOZ que hoy sí encuentra. Esta prueba pasa también sin el defecto 1
+  // arreglado, a propósito: protege lo que ya funciona, no mide el defecto.
+  test('no normaliza el término en JavaScript: la Ñ y las tildes llegan tal cual a la base', async () => {
+    await ks.buscarOrdenes({ nombre: 'muñoz' })
+    await ks.buscarOrdenes({ nombre: 'rodríguez' })
+    expect(consultas[0].params.p_nombre).toBe('%MUÑOZ%')
+    expect(consultas[1].params.p_nombre).toBe('%RODRÍGUEZ%')
+  })
+
+  // Defecto 2. Los parámetros van atados, así que no es inyección, pero un %,
+  // un _ o un [ que escriba la psicóloga actuaba como comodín de LIKE: '%'
+  // devolvía el tope de 200 en vez de nada.
+  test.each([
+    ['%',        '%\\%%'],
+    ['_a',       '%\\_A%'],
+    ['[ab]',     '%\\[AB]%'],
+    ['100%',     '%100\\%%'],
+    ['a_b%c[d',  '%A\\_B\\%C\\[D%'],
+    // el propio carácter de escape también se escapa: si no, un término que
+    // termine en \ escaparía el % de cierre y buscaría un % literal
+    ['a\\b',     '%A\\\\B%'],
+    ['ab\\',     '%AB\\\\%'],
+  ])('escapa los comodines de LIKE en el término %j', async (nombre, esperado) => {
+    await ks.buscarOrdenes({ nombre })
+    expect(consultas[0].params.p_nombre).toBe(esperado)
+  })
+
+  test('el SQL declara el carácter de escape con ESCAPE', async () => {
+    await ks.buscarOrdenes({ nombre: '50%' })
+    expect(consultas[0].sql).toMatch(/@p_nombre(\s+COLLATE\s+\S+)?\s+ESCAPE\s+'\\'/)
   })
 })

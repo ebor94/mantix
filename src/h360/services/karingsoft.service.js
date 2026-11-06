@@ -507,11 +507,55 @@ const CAMPOS_DUELO = `
          LTRIM(RTRIM(ISNULL(o.descripcion_centro_costo,''))) AS sede,
          LTRIM(RTRIM(ISNULL(o.descripcion_tipos_servicio,''))) AS tipo_servicio`
 
+/* Colación de la búsqueda por nombre.
+   La columna y el servidor usan SQL_Latin1_General_CP1_CI_AS: ignora
+   mayúsculas pero DISTINGUE tildes, y los datos están guardados sin tildes
+   pero con Ñ. Así, 'rodriguez' encontraba 2130 órdenes y 'rodríguez' ninguna:
+   la psicóloga tenía que escribir el nombre exactamente como está almacenado.
+
+   Se usa SQL_Latin1_General_CP1_CI_AI: la misma familia que la del servidor,
+   cambiando solo AS por AI, que es la desviación mínima. NO se cambia por
+   Modern_Spanish_CI_AI aunque parezca la «correcta» para un ERP colombiano:
+   esa trata la Ñ como una letra distinta de la N, y 'munoz' dejaría de
+   encontrar a MUÑOZ (medido contra el ERP real: 0 resultados, contra 262 con
+   esta). Tampoco se quitan las tildes en JavaScript con normalize('NFD'): con
+   la colación AI es redundante, y sin ella convertiría la Ñ en N y 'muñoz'
+   dejaría de encontrar los MUÑOZ almacenados. El término viaja tal cual. */
+const COLACION_NOMBRE = 'SQL_Latin1_General_CP1_CI_AI'
+
+/* Carácter de escape de LIKE, declarado en el SQL con ESCAPE. Si lo cambias,
+   cambia también la clase de caracteres de escaparLike. */
+const ESCAPE_LIKE = '\\'
+
+/* El término va atado (no hay inyección), pero dentro de un patrón de LIKE los
+   caracteres %, _ y [ siguen siendo comodines: «%» devolvía el tope de 200 en
+   vez de nada. Se escapan esos tres y el propio carácter de escape (si no, un
+   término que terminara en \ escaparía el % de cierre y buscaría un % literal). */
+const escaparLike = texto => texto.replace(/[\\%_[]/g, coincidencia => ESCAPE_LIKE + coincidencia)
+
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+/* Una fecha que excede el VarChar(10) declarado revienta en el driver con un
+   error de TDS que no dice nada a quien lo lee en un log. Una fecha malformada
+   es un error de programación: se lanza con un mensaje claro y no se devuelve
+   vacío, porque vacío lo esconde. El controlador ya valida con una expresión
+   regular antes de llamar; esto es defensa en profundidad. */
+function exigirFechaIso(valor, nombre) {
+  if (typeof valor === 'string' && FECHA_ISO.test(valor)) return
+  const recibido = typeof valor === 'string' ? JSON.stringify(valor) : String(valor)
+  throw new Error(`ordenesDelRango: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${recibido}`)
+}
+
 /**
  * Órdenes creadas entre dos fechas. El defecto del módulo es ayer y hoy, que
  * es como las psicólogas trabajan hoy sobre el ERP.
+ *
+ * Las dos fechas deben ser texto YYYY-MM-DD; si no, lanza un Error (antes de
+ * pedir la conexión, para que el problema real no quede tapado por otro).
  */
 async function ordenesDelRango(desde, hasta) {
+  exigirFechaIso(desde, 'desde')
+  exigirFechaIso(hasta, 'hasta')
   const pool = await obtenerPool()
   const r = await pool.request()
     .input('p_desde', driver().VarChar(10), String(desde))
@@ -544,9 +588,13 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
     cond.push(`LTRIM(RTRIM(
         LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
         LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
-        LTRIM(RTRIM(ISNULL(o.nombres_fallecido,''))))) LIKE @p_nombre`)
+        LTRIM(RTRIM(ISNULL(o.nombres_fallecido,''))))) COLLATE ${COLACION_NOMBRE}
+        LIKE @p_nombre COLLATE ${COLACION_NOMBRE} ESCAPE '${ESCAPE_LIKE}'`)
+    // Que 'rodriguez' encuentre RODRÍGUEZ y 'munoz' encuentre MUÑOZ lo resuelve
+    // la colación (ver COLACION_NOMBRE); aquí el término solo se limpia y se
+    // escapa, sin quitarle tildes ni Ñ.
     const limpio = String(nombre).trim().toUpperCase().replace(/\s+/g, ' ')
-    req.push(['p_nombre', driver().VarChar(200), `%${limpio}%`])
+    req.push(['p_nombre', driver().VarChar(200), `%${escaparLike(limpio)}%`])
   }
   if (String(fechaDesde ?? '').trim()) {
     cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) >= @p_f_desde')
