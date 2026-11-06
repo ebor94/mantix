@@ -69,6 +69,8 @@ async function crearEmpresa(payload) {
       slug: payload.slug || null,
       asesorId: payload.asesorId != null ? payload.asesorId : null,
       publicoActivo: payload.publicoActivo != null ? payload.publicoActivo : 0,
+      emiteCertificadoFirma: payload.emiteCertificadoFirma != null ? payload.emiteCertificadoFirma : 0,
+      interesadosActivo: payload.interesadosActivo != null ? payload.interesadosActivo : 0,
       activo: 1
     }, { transaction: t });
 

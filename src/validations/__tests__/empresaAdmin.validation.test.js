@@ -38,6 +38,22 @@ describe('crearEmpresaAdminSchema', () => {
     });
     expect(error).toBeTruthy();
   });
+  test('emiteCertificadoFirma/interesadosActivo válidos', () => {
+    const { error } = crearEmpresaAdminSchema.validate({
+      nit: '900123456', nombre: 'ACME SAS', rangoAfiliados: 'R7',
+      vigenciaInicio: '2026-01-01', vigenciaCierre: '2027-01-01',
+      emiteCertificadoFirma: 1, interesadosActivo: 1
+    });
+    expect(error).toBeUndefined();
+  });
+  test('emiteCertificadoFirma/interesadosActivo inválidos', () => {
+    const base = {
+      nit: '900123456', nombre: 'ACME SAS', rangoAfiliados: 'R7',
+      vigenciaInicio: '2026-01-01', vigenciaCierre: '2027-01-01'
+    };
+    expect(crearEmpresaAdminSchema.validate({ ...base, emiteCertificadoFirma: 2 }).error).toBeTruthy();
+    expect(crearEmpresaAdminSchema.validate({ ...base, interesadosActivo: 2 }).error).toBeTruthy();
+  });
 });
 
 describe('editarEmpresaAdminSchema', () => {
