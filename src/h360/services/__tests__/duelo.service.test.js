@@ -94,6 +94,47 @@ describe('crearGestion', () => {
       orden_servicio: 'A-1', ubicacion_tipo: 'LUNA', psicologa: 'x', created_by: 'x',
     })).rejects.toMatchObject({ status: 400 })
   })
+
+  // gestionPorOrden recorta al buscar: si aquí se guardara con los espacios, la
+  // clave única los conservaría y la gestión recién creada no se volvería a
+  // encontrar.
+  test("crear con ' A-1 ' guarda 'A-1', el mismo valor que después busca gestionPorOrden", async () => {
+    db.query = jest.fn(async () => [{ insertId: 40 }])
+    await svc.crearGestion({
+      orden_servicio: ' A-1 ', ubicacion_tipo: 'SALA', psicologa: 'x', created_by: 'x',
+    })
+    expect(db.query.mock.calls[0][1][0]).toBe('A-1')
+  })
+
+  test('rechaza un estado que no está en el catálogo, con status 400, y no escribe', async () => {
+    await expect(svc.crearGestion({
+      orden_servicio: 'A-1', ubicacion_tipo: 'SALA', estado: 'ENOJADA',
+      psicologa: 'x', created_by: 'x',
+    })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/estado/i) })
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  // Guarda: con o sin la validación, un estado del catálogo se guarda tal cual.
+  // Se pondría en rojo si la validación rechazara todo o ignorara `datos.estado`.
+  test('un estado válido del catálogo se guarda tal cual', async () => {
+    db.query = jest.fn(async () => [{ insertId: 41 }])
+    await svc.crearGestion({
+      orden_servicio: 'A-2', ubicacion_tipo: 'SALA', estado: 'PENDIENTE',
+      psicologa: 'x', created_by: 'x',
+    })
+    expect(db.query.mock.calls[0][1][8]).toBe('PENDIENTE')
+  })
+
+  // Sin esta guarda el recorte convertiría una orden ausente o en blanco en ''
+  // y la clave única la dejaría pasar como si fuera una orden.
+  test('una orden vacía o solo con espacios se rechaza con status 400 y no escribe', async () => {
+    for (const orden of [undefined, null, '', '   ']) {
+      await expect(svc.crearGestion({
+        orden_servicio: orden, ubicacion_tipo: 'SALA', psicologa: 'x', created_by: 'x',
+      })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/orden/i) })
+    }
+    expect(db.query).not.toHaveBeenCalled()
+  })
 })
 
 describe('actualizarGestion', () => {
@@ -194,6 +235,50 @@ describe('intentosDeGestion', () => {
     expect(sql).toContain('ORDER BY momento ASC, id ASC')
     expect(params).toEqual([5])
   })
+
+  // El pool de h360 no define dateStrings: un DATETIME vuelve como Date y
+  // Express lo serializa en UTC (14:30 en Cúcuta llegaría como 19:30Z). Por eso
+  // la hora se formatea en SQL y viaja como texto.
+  test('no usa SELECT * y nombra las columnas que devuelve', async () => {
+    await svc.intentosDeGestion(5)
+    const sql = db.query.mock.calls[0][0]
+    expect(sql).not.toMatch(/SELECT\s+\*/i)
+    const lista = sql.match(/SELECT([\s\S]*?)\sFROM\s/i)[1]
+    const sinMomento = lista.replace(/DATE_FORMAT\([^)]*\)\s+AS\s+momento/i, '')
+    const columnas = sinMomento.split(',').map(c => c.trim()).filter(Boolean).sort()
+    expect(columnas).toEqual(
+      ['canal', 'created_at', 'gestion_id', 'id', 'observacion', 'resultado', 'usuario'])
+  })
+
+  test('pide momento formateado en SQL como texto, con el mismo nombre', async () => {
+    await svc.intentosDeGestion(5)
+    const sql = db.query.mock.calls[0][0]
+    expect(sql).toMatch(/DATE_FORMAT\(\s*momento\s*,\s*'[^']*'\s*\)\s+AS\s+momento\b/i)
+  })
+
+  // Se aplica el formato pedido a una hora de pared conocida: el resultado es el
+  // mismo texto, sin T, sin Z y sin desplazamiento. Una pieza desconocida del
+  // formato (%T, %r, etc.) hace fallar la prueba en vez de adivinar.
+  test('el formato de momento es hora de pared: sin Z ni desplazamiento', async () => {
+    await svc.intentosDeGestion(5)
+    const sql = db.query.mock.calls[0][0]
+    const m = sql.match(/DATE_FORMAT\(\s*momento\s*,\s*'([^']*)'\s*\)\s+AS\s+momento\b/i)
+    expect(m).not.toBeNull()
+    const pieza = { Y: '2026', m: '11', d: '05', H: '14', i: '30' }
+    const texto = m[1].replace(/%(.)/g, (_, c) => {
+      if (!(c in pieza)) throw new Error(`Pieza de formato no prevista: %${c}`)
+      return pieza[c]
+    })
+    expect(texto).toBe('2026-11-05 14:30')
+    expect(texto).not.toMatch(/[TZ+]/)
+  })
+
+  // Guarda: el servicio no debe volver a tocar el texto que entrega MySQL.
+  test('entrega momento tal como lo devuelve la base, sin convertirlo', async () => {
+    db.query = jest.fn(async () => [[{ id: 1, momento: '2026-11-05 14:30' }]])
+    const f = await svc.intentosDeGestion(5)
+    expect(f[0].momento).toBe('2026-11-05 14:30')
+  })
 })
 
 describe('guardarServicios', () => {
@@ -240,6 +325,56 @@ describe('guardarServicios', () => {
     await svc.guardarServicios(5, [])
     await svc.guardarServicios(5, undefined)
     expect(db.query).not.toHaveBeenCalled()
+  })
+
+  // En MISA_DE_MES el detalle es la religión: el R-56 solo registra las cinco
+  // del catálogo.
+  describe('detalle de la misa de mes', () => {
+    test('rechaza una religión fuera del catálogo, con status 400, y no escribe', async () => {
+      await expect(svc.guardarServicios(5, [
+        { servicio: 'MISA_DE_MES', estado: 'ACEPTA', detalle: 'BUDISTA' },
+      ])).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/religi/i) })
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    test('una religión inválida en la lista no deja escribir los demás servicios', async () => {
+      await expect(svc.guardarServicios(5, [
+        { servicio: 'TALLER_NINOS', estado: 'ACEPTA' },
+        { servicio: 'MISA_DE_MES', estado: 'ACEPTA', detalle: 'BUDISTA' },
+      ])).rejects.toMatchObject({ status: 400 })
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    // Guarda: las cinco religiones del R-56 pasan. Se pondría en rojo si la
+    // validación usara una lista incompleta o comparara en otra capitalización.
+    test.each(['CATOLICA', 'CRISTIANA', 'MIXTA', 'MUSULMANA', 'TESTIGOS_JEHOVA'])(
+      'acepta %s', async (religion) => {
+        await svc.guardarServicios(5, [
+          { servicio: 'MISA_DE_MES', estado: 'ACEPTA', detalle: religion },
+        ])
+        expect(db.query.mock.calls[0][1][0][0][4]).toBe(religion)
+      })
+
+    // Guarda: puede no haberse preguntado todavía. Se pondría en rojo si la
+    // validación exigiera una religión siempre.
+    test.each([[null], [undefined], ['']])('un detalle vacío (%p) es válido', async (vacio) => {
+      await svc.guardarServicios(5, [
+        { servicio: 'MISA_DE_MES', estado: 'OFRECIDO_SIN_RESPUESTA', detalle: vacio },
+      ])
+      expect(db.query).toHaveBeenCalledTimes(1)
+    })
+
+    // Guarda: el detalle solo es la religión en la misa. Se pondría en rojo si
+    // la validación se aplicara sin mirar el servicio.
+    test.each([
+      'CARTILLA_RENACER', 'CONFERENCIA_RENACER', 'TALLER_NINOS',
+      'GRUPO_APOYO_HIJOS', 'TALLER_JOVENES',
+    ])('en %s el detalle no se valida', async (servicio) => {
+      await svc.guardarServicios(5, [
+        { servicio, estado: 'ACEPTA', detalle: 'lo que escriba la psicóloga' },
+      ])
+      expect(db.query.mock.calls[0][1][0][0][4]).toBe('lo que escriba la psicóloga')
+    })
   })
 })
 

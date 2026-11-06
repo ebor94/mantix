@@ -25,17 +25,24 @@ async function gestionesPorOrdenes(ordenes) {
 }
 
 async function crearGestion(datos) {
+  // Se recorta igual que en gestionPorOrden: si se guardara con espacios, la
+  // clave única los conservaría y la gestión no se volvería a encontrar.
+  const orden = String(datos.orden_servicio ?? '').trim()
+  if (!orden) throw malUso('El número de orden es obligatorio')
   if (!cat.UBICACIONES.includes(datos.ubicacion_tipo))
     throw malUso('La ubicación del homenaje no es válida')
+  const estado = datos.estado ?? 'EN_GESTION'
+  if (!cat.ESTADOS_GESTION.includes(estado))
+    throw malUso('El estado de la gestión no es válido')
   const [r] = await db.query(
     `INSERT INTO h360_duelo_gestion
        (orden_servicio, asistencia_id, ubicacion_tipo, ubicacion_detalle, es_mascota,
         titular_nombre, titular_parentesco, telefonos, estado, psicologa, created_by)
      VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [datos.orden_servicio, datos.asistencia_id ?? null, datos.ubicacion_tipo,
+    [orden, datos.asistencia_id ?? null, datos.ubicacion_tipo,
      datos.ubicacion_detalle ?? null, datos.es_mascota ? 1 : 0,
      datos.titular_nombre ?? null, datos.titular_parentesco ?? null,
-     datos.telefonos ?? null, datos.estado ?? 'EN_GESTION',
+     datos.telefonos ?? null, estado,
      datos.psicologa, datos.created_by])
   return r.insertId
 }
@@ -78,16 +85,26 @@ async function agregarIntento(gestionId, { momento, canal, resultado, observacio
 }
 
 async function intentosDeGestion(gestionId) {
+  // `momento` se formatea en SQL y viaja como texto de hora de pared. El pool no
+  // define dateStrings, así que un DATETIME llegaría como Date y Express lo
+  // serializaría en UTC: un intento de las 14:30 en Cúcuta (UTC-5) saldría como
+  // 19:30Z. Con el texto ya armado, ningún consumidor hace aritmética de zonas.
+  // Ojo: el ORDER BY momento resuelve al alias (texto al minuto, que ordena igual
+  // que la hora); dentro de un mismo minuto desempata por id.
   const [f] = await db.query(
-    'SELECT * FROM h360_duelo_intentos WHERE gestion_id = ? ORDER BY momento ASC, id ASC',
+    `SELECT id, gestion_id, DATE_FORMAT(momento, '%Y-%m-%d %H:%i') AS momento,
+            canal, resultado, observacion, usuario, created_at
+       FROM h360_duelo_intentos WHERE gestion_id = ? ORDER BY momento ASC, id ASC`,
     [gestionId])
   return f
 }
 
 /**
- * Guarda los seis servicios de una vez. Es un reemplazo completo del estado de
- * la gestión: así la pantalla manda lo que tiene y no hay que llevar la cuenta
- * de qué cambió.
+ * Guarda de una vez los servicios que vengan en la lista. Es un upsert por
+ * (gestión, servicio): los que vienen se insertan o se actualizan, y un
+ * servicio que NO viene conserva lo que tenía. Por eso no hay forma de volver
+ * un servicio a «sin registrar» mandando una lista más corta: solo se puede
+ * cambiar su estado.
  */
 async function guardarServicios(gestionId, lista) {
   for (const s of lista || []) {
@@ -97,6 +114,11 @@ async function guardarServicios(gestionId, lista) {
       throw malUso(`El estado ${s.estado} no es válido para un servicio`)
     if (s.modalidad != null && !cat.MODALIDADES.includes(s.modalidad))
       throw malUso(`La modalidad ${s.modalidad} no es válida`)
+    // En la misa de mes el detalle es la religión. Vacío es válido: puede no
+    // haberse preguntado todavía. En los otros cinco servicios no se valida.
+    if (s.servicio === 'MISA_DE_MES' && s.detalle != null && s.detalle !== ''
+        && !cat.RELIGIONES_MISA.includes(s.detalle))
+      throw malUso(`La religión ${s.detalle} no es válida para la misa de mes`)
   }
   if (!lista?.length) return
 
