@@ -799,9 +799,10 @@ function leerPsicologa(valor) {
  * `observaciones` es TEXT y su tope son BYTES, no caracteres: una tilde ocupa
  * dos y un emoji cuatro. Las VARCHAR cuentan caracteres.
  *
- * `identificador: true` marca el campo cuyo valor es un nombre de usuario y no
- * lo que una familia contó: es el único caso en que el 400 puede citar lo que
- * llegó (ver acotar). Por defecto se asume contenido, que es el lado seguro.
+ * `identificador: true` marca el campo cuyo valor es un identificador (un nombre
+ * de usuario, el contrato) y no lo que una familia contó: es el único caso en
+ * que el 400 puede citar lo que llegó (ver acotar). Por defecto se asume
+ * contenido, que es el lado seguro.
  */
 const TOPES_GESTION = Object.freeze({
   ubicacion_detalle:     { tope: 120,   unidad: 'caracteres' },
