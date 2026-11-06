@@ -119,9 +119,9 @@ describe('bandeja', () => {
   // dependían de qué fila devolvía el motor primero: la bandeja podía decir
   // «sala» cuando el homenaje fue en residencia y mandar a alguien al lugar
   // equivocado. La elección es una decisión visible, no el azar del motor: la
-  // consulta ordena (primero la asistencia que tiene un homenaje registrado y,
-  // entre las que empatan, la más reciente) y el cruce se queda con la PRIMERA
-  // fila de cada contrato.
+  // consulta ordena (primero la asistencia que no está en un estado terminal,
+  // luego la que tiene un homenaje registrado y, entre las que empatan, la más
+  // reciente) y el cruce se queda con la PRIMERA fila de cada contrato.
   describe('un contrato con más de una asistencia en H360', () => {
     // Un unit test no ejecuta el ORDER BY (db.query es un doble): lo que se puede
     // fijar es lo que se le pide al motor y qué se hace con las filas que vuelven.
@@ -138,16 +138,20 @@ describe('bandeja', () => {
       sala_codigo: null, sede_nombre: null, residencia_id: 9,
     }
 
-    test('la consulta ordena: con homenaje registrado primero y, después, la más reciente', async () => {
+    test('la consulta ordena: no terminal primero, luego con homenaje registrado y, después, la más reciente', async () => {
       await llamar(ctrl.bandeja)
       const sql = db.query.mock.calls[0][0].replace(/\s+/g, ' ').trim()
       const orden = /ORDER BY (.+)$/i.exec(sql)?.[1]
       expect(orden).toBeDefined()
-      // 1.º las asistencias con homenaje (sala o residencia) antes que las que no
+      // 1.º las asistencias que NO están en un estado terminal (CERRADO,
+      //     DESISTIDO, RECHAZADO): una viva dice dónde está la familia hoy; una
+      //     cerrada, dónde estuvo.
+      // 2.º las que tienen homenaje (sala o residencia) antes que las que no
       //     tienen ninguno: sin homenaje no aportan lo único que H360 le agrega a
       //     la bandeja, que es dónde es el homenaje.
-      // 2.º la más reciente (id más alto): la posterior reemplaza a la anterior.
-      expect(orden).toMatch(/^\(hs\.id IS NULL AND hr\.id IS NULL\), a\.id DESC\b/)
+      // 3.º la más reciente (id más alto): la posterior reemplaza a la anterior.
+      expect(orden).toMatch(
+        /^\(a\.estado IN \('CERRADO', ?'DESISTIDO', ?'RECHAZADO'\)\), \(hs\.id IS NULL AND hr\.id IS NULL\), a\.id DESC\b/)
     })
 
     test('se queda con la primera fila del contrato, que es la preferida, y no con la última', async () => {
@@ -185,6 +189,152 @@ describe('bandeja', () => {
       expect(fila(res, 'A-1').asistencia.id).toBe(77)
       expect(fila(res, 'A-3').asistencia.id).toBe(82)
       expect(fila(res, 'MAS-9').asistencia).toBeNull()
+    })
+
+    // Las pruebas de arriba le dan al cruce las filas YA ordenadas, así que
+    // pasarían con cualquier ORDER BY. Estas no: el doble de la base ordena las
+    // filas con el ORDER BY que la consulta pide de verdad, y el cruce se queda
+    // con la primera. Si el orden pedido es el equivocado, gana la asistencia
+    // equivocada.
+    describe('el orden de preferencia, ejecutado de verdad', () => {
+      // Lo mínimo de MySQL que usa la consulta: términos separados por comas de
+      // primer nivel, cada uno `col [ASC|DESC]` o una condición con IS NULL, IN,
+      // AND y OR. Lo que no entienda, lo rechaza: que un ORDER BY nuevo no se
+      // evalúe en silencio como si no existiera.
+      const COLUMNAS = {
+        'a.id':     f => f.id,
+        'a.estado': f => f.estado,
+        'hs.id':    f => (f.sala_codigo ? 1 : null), // hs.id no se selecciona: la sala lo delata
+        'hr.id':    f => f.residencia_id,
+      }
+      function terminos(orden) {
+        const out = []
+        let nivel = 0, comillas = false, desde = 0
+        for (let i = 0; i < orden.length; i++) {
+          const c = orden[i]
+          if (c === "'") comillas = !comillas
+          else if (!comillas && c === '(') nivel++
+          else if (!comillas && c === ')') nivel--
+          else if (!comillas && nivel === 0 && c === ',') { out.push(orden.slice(desde, i)); desde = i + 1 }
+        }
+        out.push(orden.slice(desde))
+        return out.map(t => t.trim())
+      }
+      function evaluador(termino) {
+        const [, expr, dir] = /^(.*?)(?:\s+(ASC|DESC))?$/i.exec(termino)
+        const js = expr
+          .replace(/\b(a|hs|hr)\.(\w+)\b/g, (m) => {
+            if (!COLUMNAS[m]) throw new Error(`columna sin simular: ${m}`)
+            return `col("${m}")`
+          })
+          .replace(/(col\("[^"]+"\)) IS NULL/g, '($1 == null)')
+          .replace(/(col\("[^"]+"\)) IN \(([^)]*)\)/g, '[$2].includes($1)')
+          .replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||')
+        if (/[^\w\s().,'"=&|[\]]/.test(js)) throw new Error(`ORDER BY sin simular: ${termino}`)
+        const fn = new Function('col', `return Number(${js})`)
+        return { fn, desc: /^DESC$/i.test(dir || '') }
+      }
+      function ordenar(sql, filas) {
+        const orden = /ORDER BY (.+)$/i.exec(sql.replace(/\s+/g, ' ').trim())?.[1]
+        if (!orden) throw new Error('la consulta no pide ningún ORDER BY')
+        const evals = terminos(orden).map(evaluador)
+        return [...filas].sort((x, y) => {
+          for (const { fn, desc } of evals) {
+            const d = fn(c => COLUMNAS[c](x)) - fn(c => COLUMNAS[c](y))
+            if (d) return desc ? -d : d
+          }
+          return 0
+        })
+      }
+      // El motor devuelve las filas de la tabla en cualquier orden: aquí, de la
+      // más vieja a la más nueva, que es el contrario de la preferencia por recencia.
+      const motor = filas => { db.query = jest.fn(async sql => [ordenar(sql, filas)]) }
+
+      const viva = (extra = {}) => ({
+        id: 100, codigo: 'H360-2026-0325', contrato: 'A-1', estado: 'SALA',
+        sala_codigo: 'SALGC04', sede_nombre: 'Gran Colombia', residencia_id: null, ...extra,
+      })
+      const terminal = (estado, extra = {}) => ({
+        id: 200, codigo: 'H360-2026-0326', contrato: 'A-1', estado,
+        sala_codigo: null, sede_nombre: null, residencia_id: 9, ...extra,
+      })
+
+      test('entre una activa en sala y una cerrada en residencia más reciente gana la activa (el caso del contrato 42492)', async () => {
+        motor([viva(), terminal('CERRADO')])
+        const { res } = await llamar(ctrl.bandeja)
+        const a = fila(res, 'A-1')
+        expect(a.asistencia.codigo).toBe('H360-2026-0325')
+        expect(a.asistencia.ubicacion_tipo).toBe('SALA')
+        expect(a.rama).toBe('SALA')
+      })
+
+      test('una activa SIN homenaje gana a una cerrada CON homenaje más reciente', async () => {
+        // «Sin confirmar» es algo que la pantalla sabe decir; no sabe avisar que
+        // la ubicación que muestra es de un caso cerrado.
+        motor([viva({ id: 90, estado: 'ASISTENCIA', sala_codigo: null, sede_nombre: null }),
+               terminal('CERRADO', { id: 95 })])
+        const { res } = await llamar(ctrl.bandeja)
+        const a = fila(res, 'A-1')
+        expect(a.asistencia.id).toBe(90)
+        expect(a.asistencia.estado).toBe('ASISTENCIA')
+        expect(a.asistencia.ubicacion_tipo).toBeNull()
+      })
+
+      test.each(['CERRADO', 'DESISTIDO', 'RECHAZADO'])(
+        'una asistencia %s más reciente y con homenaje no tapa a la activa', async estado => {
+          motor([viva(), terminal(estado)])
+          const { res } = await llamar(ctrl.bandeja)
+          expect(fila(res, 'A-1').asistencia.id).toBe(100)
+        })
+
+      test.each(['NUEVO', 'ASISTENCIA', 'PRESERVACION', 'ENCOFRADO', 'ENCUENTRO', 'SALA', 'APROBACION'])(
+        '%s cuenta como activa: gana a una cerrada más reciente con homenaje', async estado => {
+          motor([viva({ estado }), terminal('CERRADO')])
+          const { res } = await llamar(ctrl.bandeja)
+          expect(fila(res, 'A-1').asistencia.id).toBe(100)
+        })
+
+      // GUARDA: pasa también sin el criterio nuevo (la que tiene homenaje ya
+      // ganaba antes). Se pone en rojo si se quita o se pospone el criterio de
+      // «con homenaje» (p. ej. dejando solo «no terminal» y «más reciente»).
+      // Es el caso del contrato 03237, con la descartada MÁS RECIENTE que la
+      // ganadora: en producción es al revés y entonces la prueba no discriminaría.
+      test('entre dos terminales sigue ganando la que tiene homenaje, aunque la otra sea más reciente', async () => {
+        motor([terminal('CERRADO', { id: 150, residencia_id: null, sala_codigo: 'SALSJ02', sede_nombre: 'San José' }),
+               terminal('DESISTIDO', { id: 160, residencia_id: null })])
+        const { res } = await llamar(ctrl.bandeja)
+        const a = fila(res, 'A-1')
+        expect(a.asistencia.id).toBe(150)
+        expect(a.asistencia.estado).toBe('CERRADO')
+        expect(a.rama).toBe('SALA')
+      })
+
+      // GUARDA: entre dos activas rige lo de siempre. Pasa también sin el criterio
+      // nuevo; se pone en rojo si la recencia se antepone al homenaje o si este
+      // se quita.
+      test('entre dos activas rige lo de siempre: con homenaje primero y, si empatan, la más reciente', async () => {
+        motor([viva({ id: 50 }),
+               viva({ id: 60, codigo: 'H360-2026-0330', estado: 'ASISTENCIA', sala_codigo: null, sede_nombre: null }),
+               viva({ id: 55, codigo: 'H360-2026-0328', sala_codigo: 'SALGC06' })])
+        const { res } = await llamar(ctrl.bandeja)
+        expect(fila(res, 'A-1').asistencia.id).toBe(55)
+      })
+
+      // GUARDA: pasa también sin el criterio nuevo. Un estado terminal baja a una
+      // asistencia en la preferencia, no la excluye: si «terminal» se resolviera
+      // filtrando en el WHERE, un contrato cuya única asistencia está cerrada se
+      // quedaría sin ubicación. El doble de la base no ejecuta el WHERE, por eso
+      // además de las filas se mira que el WHERE no hable del estado.
+      test.each(['CERRADO', 'DESISTIDO', 'RECHAZADO', 'SALA'])(
+        'con una sola asistencia (%s) el resultado no cambia', async estado => {
+          motor([estado === 'SALA' ? viva() : terminal(estado)])
+          const { res } = await llamar(ctrl.bandeja)
+          const a = fila(res, 'A-1')
+          expect(a.asistencia.estado).toBe(estado)
+          expect(a.asistencia.ubicacion_tipo).toBe(estado === 'SALA' ? 'SALA' : 'RESIDENCIA')
+          const sql = db.query.mock.calls[0][0].replace(/\s+/g, ' ')
+          expect(/WHERE (.+?) ORDER BY/i.exec(sql)?.[1]).not.toMatch(/estado/i)
+        })
     })
   })
 
@@ -974,8 +1124,8 @@ describe('buscar', () => {
     expect(JSON.stringify(res.cuerpo)).not.toContain('PRIVADO')
   })
 
-  // La búsqueda arma las filas con la misma función que la bandeja, y la
-  // pantalla de búsqueda pinta la misma insignia: el campo tiene que estar.
+  // La búsqueda arma las filas con la misma función que la bandeja (armarFilas):
+  // el campo viaja en las dos respuestas y no puede quedar solo en una.
   test('cada fila trae rama_confirmada, igual que en la bandeja', async () => {
     db.query = jest.fn(async () => [[ASISTENCIA_A1]])
     const { res } = await llamar(ctrl.buscar, { nombre: 'perez' })

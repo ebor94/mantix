@@ -127,13 +127,29 @@ const claveContrato = c => String(c ?? '').trim().toUpperCase()
  * residencia y mandar a alguien al lugar equivocado. La elección es esta, a la
  * vista, y la consulta la hace llegar primera:
  *
- *   1. Primero la asistencia con homenaje registrado (sala o residencia). Sin
+ *   1. Primero la que NO está en un estado terminal (CERRADO, DESISTIDO,
+ *      RECHAZADO). Una asistencia viva dice dónde está la familia HOY; una
+ *      cerrada dice dónde estuvo. Va antes que «tiene homenaje» a propósito: una
+ *      activa que aún no registró el homenaje es mejor candidata que una cerrada
+ *      que sí lo tiene, porque la pantalla ya sabe decir «sin confirmar» cuando
+ *      no hay ubicación (rama_confirmada) y, en cambio, no tiene cómo avisar que
+ *      la ubicación que muestra es la de un caso cerrado: mandaría a la
+ *      psicóloga al lugar equivocado. (Medido en producción: el contrato 42492
+ *      tiene una cerrada en residencia, más reciente, y una activa en sala; sin
+ *      este criterio ganaba la cerrada.)
+ *   2. Entre esas, la que tiene homenaje registrado (sala o residencia). Sin
  *      homenaje una asistencia no aporta lo único que H360 le agrega a la
  *      bandeja, que es DÓNDE es el homenaje; no debe tapar a una que sí lo sabe.
- *   2. Entre las que empatan, la más reciente (id más alto, que crece con cada
+ *   3. Entre las que empatan, la más reciente (id más alto, que crece con cada
  *      asistencia nueva): la posterior reemplaza a la anterior.
- *   3. Dentro de una misma asistencia, el último homenaje de sala y, luego, el
+ *   4. Dentro de una misma asistencia, el último homenaje de sala y, luego, el
  *      último de residencia: que ni el desempate quede al motor.
+ *
+ * Todo esto solo importa cuando un contrato tiene más de una asistencia, que hoy
+ * son 2 casos y probablemente sean duplicados de carga. Con una sola asistencia
+ * el orden no cambia nada: un estado terminal la baja de preferencia, no la
+ * excluye, así que un contrato con una única asistencia cerrada sigue mostrando
+ * su ubicación.
  *
  * El cruce se queda con la PRIMERA fila de cada contrato.
  */
@@ -150,7 +166,8 @@ async function asistenciasPorContrato(contratos) {
        LEFT JOIN sedes sd           ON sd.id = sv.sede_id
        LEFT JOIN homenajes_residencia hr ON hr.asistencia_id = a.id
       WHERE a.contrato IN (${lista.map(() => '?').join(',')})
-      ORDER BY (hs.id IS NULL AND hr.id IS NULL), a.id DESC, hs.id DESC, hr.id DESC`,
+      ORDER BY (a.estado IN ('CERRADO', 'DESISTIDO', 'RECHAZADO')),
+               (hs.id IS NULL AND hr.id IS NULL), a.id DESC, hs.id DESC, hr.id DESC`,
     lista)
 
   const m = new Map()
