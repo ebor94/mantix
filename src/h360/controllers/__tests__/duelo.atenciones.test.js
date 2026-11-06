@@ -6,6 +6,8 @@
 // Todo se simula: no hay conexión a MySQL. El servicio es el de verdad; lo que
 // se reemplaza es el pool.
 
+const fs = require('fs')
+const path = require('path')
 const util = require('util')
 const winston = require('winston')
 
@@ -296,11 +298,100 @@ describe('listar', () => {
 
   // Si el filtro por gestión se pierde, la respuesta mezcla las notas de otras
   // familias en la ficha de esta.
+  //
+  // `momento` sale formateado como texto (alias `momento`), y un ORDER BY sin
+  // calificar se resolvería a ese alias, que llega solo hasta el minuto: dos
+  // atenciones del mismo minuto quedarían ordenadas por id y no por su hora real.
+  // Por eso el ORDER BY nombra la tabla y ordena por el DATETIME.
   test('pide solo las atenciones de la gestión de la ruta, de la más antigua a la más nueva', async () => {
     await ctrl.listar({ params: { id: '5' }, user: PSICOLOGA }, resDoble(), jest.fn())
     const [sql, params] = db.query.mock.calls[0]
     expect(params).toEqual(['5'])
-    expect(sql.replace(/\s+/g, ' ')).toMatch(/WHERE gestion_id = \? ORDER BY momento ASC, id ASC/)
+    expect(sql.replace(/\s+/g, ' ')).toMatch(
+      /WHERE gestion_id = \? ORDER BY h360_duelo_atenciones\.momento ASC, id ASC/)
+  })
+
+  describe('la lista de columnas que sale', () => {
+    // Lo que el SELECT entrega, columna por columna. Es la lista cerrada de una
+    // tabla de historia clínica: agregar una columna a la respuesta tiene que
+    // ser una decisión que se vea acá, no un efecto de `SELECT *`.
+    const COLUMNAS_QUE_SALEN = [
+      'id', 'gestion_id', 'momento', 'modalidad', 'psicologa', 'acompanante',
+      'atendido_nombre', 'atendido_parentesco', 'motivo', 'notas', 'created_by',
+      'created_at', 'updated_at',
+    ]
+    // Las columnas de la tabla que a propósito NO salen. Hoy ninguna.
+    const COLUMNAS_QUE_NO_SALEN = []
+    // Las DATETIME: salen como texto de hora de pared, formateadas en SQL.
+    const COLUMNAS_FECHA = ['momento', 'created_at', 'updated_at']
+
+    // Parte la lista del SELECT por las comas que no están dentro de un paréntesis
+    // (el DATE_FORMAT lleva una coma adentro).
+    function columnasDelSelect(sql) {
+      const plano = sql.replace(/\s+/g, ' ').trim()
+      const dentro = plano.match(/^SELECT (.+?) FROM h360_duelo_atenciones /)
+      expect(dentro).not.toBeNull() // si no, el SELECT ya no tiene la forma que esta prueba entiende
+      const items = []
+      let actual = '', hondo = 0
+      for (const ch of dentro[1]) {
+        if (ch === '(') hondo++
+        if (ch === ')') hondo--
+        if (ch === ',' && hondo === 0) { items.push(actual.trim()); actual = '' } else actual += ch
+      }
+      items.push(actual.trim())
+      return items
+    }
+
+    // El nombre con el que la columna sale en la respuesta: el alias si lo hay.
+    const nombreDe = item => (item.match(/ AS (\w+)$/) || [null, item])[1]
+
+    async function sqlDeListar() {
+      await ctrl.listar({ params: { id: '5' }, user: PSICOLOGA }, resDoble(), jest.fn())
+      return db.query.mock.calls[0][0]
+    }
+
+    test('nombra cada columna: no hay SELECT *', async () => {
+      const items = columnasDelSelect(await sqlDeListar())
+      expect(items.some(i => i.includes('*'))).toBe(false)
+      expect(items.map(nombreDe).sort()).toEqual([...COLUMNAS_QUE_SALEN].sort())
+    })
+
+    // El resto de las pruebas simulan la base: si la lista dejara fuera las
+    // notas, ninguna lo notaría y la psicóloga dejaría de ver su propia historia.
+    test('incluye las notas, que es lo que la psicóloga viene a leer', async () => {
+      const items = columnasDelSelect(await sqlDeListar())
+      expect(items).toContain('notas')
+    })
+
+    // Un DATETIME sin formatear llegaría como Date y Express lo serializaría en
+    // UTC: la hora de la atención dependería de la zona del proceso del servidor.
+    test.each(COLUMNAS_FECHA)('%s sale formateada en SQL como hora de pared, sin pasar por Date', async columna => {
+      const items = columnasDelSelect(await sqlDeListar())
+      const item = items.find(i => nombreDe(i) === columna)
+      expect(item).toMatch(
+        new RegExp(`^DATE_FORMAT\\((?:h360_duelo_atenciones\\.)?${columna}, '%Y-%m-%d %H:%i'\\) AS ${columna}$`))
+    })
+
+    test('las demás columnas salen tal cual, sin transformar', async () => {
+      const items = columnasDelSelect(await sqlDeListar())
+      const otras = items.filter(i => !COLUMNAS_FECHA.includes(nombreDe(i)))
+      expect(otras).toEqual(COLUMNAS_QUE_SALEN.filter(c => !COLUMNAS_FECHA.includes(c)))
+    })
+
+    // Si alguien agrega una columna a la tabla y no decide si sale, esto se pone
+    // rojo. Una columna nueva va a COLUMNAS_QUE_SALEN (y al SELECT, y a SENSIBLES
+    // si es dato de salud) o a COLUMNAS_QUE_NO_SALEN.
+    test('toda columna de la tabla sale o está excluida a propósito', () => {
+      const sql = fs.readFileSync(
+        path.join(__dirname, '../../../scripts/h360_duelo_tablas.sql'), 'utf8')
+      const bloque = sql.match(/CREATE TABLE IF NOT EXISTS h360_duelo_atenciones \(([\s\S]*?)\n\) ENGINE/)
+      expect(bloque).not.toBeNull()
+      const enLaTabla = bloque[1].split('\n')
+        .map(l => l.match(/^\s{2}([a-z_]+)\s+(?:INT|DATETIME|ENUM|VARCHAR|TEXT)\b/i))
+        .filter(Boolean).map(m => m[1])
+      expect(enLaTabla.length).toBeGreaterThan(0)
+      expect(enLaTabla.sort()).toEqual([...COLUMNAS_QUE_SALEN, ...COLUMNAS_QUE_NO_SALEN].sort())
+    })
   })
 
   test('si la base falla, pasa el error a next y no responde con datos', async () => {

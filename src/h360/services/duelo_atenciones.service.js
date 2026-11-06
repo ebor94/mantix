@@ -14,8 +14,34 @@ const { malUso } = require('../utils/errores')
 const MODALIDADES_ATENCION = ['PRESENCIAL', 'TELEFONICA', 'VIRTUAL']
 
 async function atencionesDeGestion(gestionId) {
+  // Las tres columnas DATETIME se formatean en SQL y viajan como texto de hora de
+  // pared. El pool no define dateStrings, así que un DATETIME llegaría como Date y
+  // Express lo serializaría en UTC: una atención de las 14:30 saldría como 19:30Z,
+  // y el frontend solo recupera la hora guardada si el proceso corre en UTC-5.
+  // Hoy lo hace, por herencia del entorno; si eso cambiara, la hora a la que se
+  // atendió a una familia en duelo se correría en silencio. Con el texto ya
+  // armado, ningún consumidor hace aritmética de zonas.
+  //
+  // La lista de columnas es explícita a propósito (nada de `SELECT *`): esta tabla
+  // guarda historia clínica, y que una columna nueva salga en la respuesta tiene
+  // que ser una decisión que se vea en el código y en las pruebas, no algo que
+  // pase solo. Quien agregue una columna a la tabla decide aquí si sale; la prueba
+  // de la lista (duelo.atenciones.test.js) se pone roja hasta que lo decida.
+  //
+  // El ORDER BY califica `momento` con la tabla: sin el nombre de la tabla MySQL
+  // lo resuelve al alias de texto del SELECT, que llega solo hasta el minuto y
+  // perdería los segundos. Dos atenciones del mismo minuto quedarían ordenadas por
+  // id y no por su hora real. Calificada, ordena por el DATETIME y puede usar el
+  // índice idx_gestion (gestion_id, momento).
   const [f] = await db.query(
-    'SELECT * FROM h360_duelo_atenciones WHERE gestion_id = ? ORDER BY momento ASC, id ASC',
+    `SELECT id, gestion_id,
+            DATE_FORMAT(momento, '%Y-%m-%d %H:%i') AS momento,
+            modalidad, psicologa, acompanante,
+            atendido_nombre, atendido_parentesco, motivo, notas, created_by,
+            DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at,
+            DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
+       FROM h360_duelo_atenciones WHERE gestion_id = ?
+      ORDER BY h360_duelo_atenciones.momento ASC, id ASC`,
     [gestionId])
   return f
 }
