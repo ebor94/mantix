@@ -120,7 +120,7 @@ la señal que confirma.
 |---|---|---|
 | **Sala de velación** | H360 tiene homenaje en sala → sede y sala conocidas | Visita presencial. Gran Colombia concentra 239 de 336; San José solo 7 |
 | **Residencia** | H360 tiene homenaje en residencia | Gestión telefónica o visita a la dirección (`direccion_fallecido` del ERP) |
-| **Otra ciudad** | El convenio o la entidad es otra sede de Olivos (Bucaramanga, Bogotá, Barrancabermeja…), o no hay caso en 360 | Solo gestión telefónica. Los servicios presenciales quedan `FUERA_DE_CIUDAD` |
+| **Otra ciudad** | El convenio es de otra sucursal de Olivos (`OLIVOS <ciudad>`: Bucaramanga, Bogotá, Barrancabermeja…) o la sede es una foránea conocida (hoy ninguna): rama **confirmada**. Una sede que no es local y que nadie reconoce también cae aquí, pero **sin confirmar**. Que no haya caso en 360 no la decide: con sede local (o sin sede) la orden es Residencia sin confirmar | Solo gestión telefónica. Los servicios presenciales quedan `FUERA_DE_CIUDAD` |
 
 ## 5. Modelo de datos
 
