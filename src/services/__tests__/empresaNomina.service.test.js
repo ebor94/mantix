@@ -3,7 +3,7 @@ jest.mock('../../models', () => ({
     findOne: jest.fn(),
     findAll: jest.fn(),
     bulkCreate: jest.fn(),
-    upsert: jest.fn()
+    findOrCreate: jest.fn()
   }
 }));
 
@@ -82,13 +82,22 @@ describe('listarNomina', () => {
 });
 
 describe('crearInteresado', () => {
-  test('hace upsert de una fila con empresaId, documento recortado y activo=1', async () => {
+  test('usa findOrCreate (no sobrescribe) con empresaId, documento recortado y activo=1', async () => {
     const fila = { id: 1 };
-    EmpresaNomina.upsert.mockResolvedValue([fila, true]);
+    EmpresaNomina.findOrCreate.mockResolvedValue([fila, true]);
     const r = await svc.crearInteresado(5, { numeroDocumento: ' 123 ', primerNombre: 'Eva', celular: '300' });
     expect(r).toBe(fila);
-    expect(EmpresaNomina.upsert).toHaveBeenCalledWith({
-      empresaId: 5, numeroDocumento: '123', primerNombre: 'Eva', celular: '300', activo: 1
+    expect(EmpresaNomina.findOrCreate).toHaveBeenCalledWith({
+      where: { empresaId: 5, numeroDocumento: '123' },
+      defaults: { empresaId: 5, numeroDocumento: '123', primerNombre: 'Eva', celular: '300', activo: 1 }
     });
+  });
+
+  test('un empresaId enviado por el llamador no cambia el where', async () => {
+    EmpresaNomina.findOrCreate.mockResolvedValue([{ id: 2 }, false]);
+    await svc.crearInteresado(5, { numeroDocumento: '9', empresaId: 99 });
+    const arg = EmpresaNomina.findOrCreate.mock.calls[0][0];
+    expect(arg.where.empresaId).toBe(5);
+    expect(arg.defaults.empresaId).toBe(5);
   });
 });

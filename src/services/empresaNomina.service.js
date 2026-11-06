@@ -48,9 +48,15 @@ async function listarNomina(empresaId) {
   return EmpresaNomina.findAll({ where: { empresaId }, order: [['primerApellido','ASC'], ['primerNombre','ASC']] });
 }
 
-// Upsert de una sola fila (link público de interesado).
+// Alta de un interesado desde el link público. Crea la fila solo si no existe
+// (findOrCreate): un llamador anónimo NO puede sobrescribir ni reactivar una
+// fila ya cargada por el asesor (misma clave única empresa_id + numero_documento).
 async function crearInteresado(empresaId, datos) {
-  const [fila] = await EmpresaNomina.upsert({ ...datos, empresaId, numeroDocumento: String(datos.numeroDocumento).trim(), activo: 1 });
+  const numeroDocumento = String(datos.numeroDocumento).trim();
+  const [fila] = await EmpresaNomina.findOrCreate({
+    where: { empresaId, numeroDocumento },
+    defaults: { ...datos, empresaId, numeroDocumento, activo: 1 }
+  });
   return fila;
 }
 
