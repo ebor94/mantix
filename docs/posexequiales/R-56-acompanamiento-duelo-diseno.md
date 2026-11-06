@@ -277,8 +277,8 @@ Todo bajo `/api/h360/duelo`, rol `psicologia` o `admin`.
 | `GET /bandeja?desde=&hasta=&sede=&estado=&incluir_mascotas=` | Órdenes del ERP del rango, enriquecidas con H360 y con el estado de gestión. Defecto: ayer y hoy. Máximo **90 días** por consulta: un año son ~3008 órdenes y la petición se queda sin responder en vez de tardar |
 | `GET /buscar?contrato=&nombre=&fecha_fallecimiento=&fecha_hasta=` | Los tres criterios de búsqueda |
 | `GET /gestion/:orden_servicio` | Ficha: contrato en vivo del ERP + datos de 360 + gestión + intentos + servicios. La asistencia de H360 trae `nombre_contacto` y `telefono_contacto` (§11) |
-| `POST /gestion` | Abre la gestión de una orden. El cuerpo manda `sede` (del ERP) y **no** `es_mascota`: eso lo calcula el servidor con el mismo criterio de la bandeja |
-| `PATCH /gestion/:id` | Ubicación, titular, teléfonos, tipificación, estado, observaciones. Un id que no existe es 404; un texto más largo que su columna, 400 |
+| `POST /gestion` | Abre la gestión de una orden. El cuerpo manda `sede` (del ERP) y **no** `es_mascota`: eso lo calcula el servidor con el mismo criterio de la bandeja. Un texto más largo que su columna, una orden de más de 20 caracteres o un `asistencia_id` que no es un número, 400 |
+| `PATCH /gestion/:id` | Ubicación, titular, teléfonos, tipificación, estado, observaciones. Un id que no existe es 404; un texto más largo que su columna o un `asistencia_id` que no es un número (`null` lo desvincula), 400. El 400 dice el campo, el tope y el largo que llegó, nunca el texto: son cosas que contó una familia |
 | `POST /gestion/:id/intentos` | Registra un intento |
 | `PUT /gestion/:id/servicios` | Guarda de una vez el estado de los 6 servicios |
 | `GET /gestion/:id/atenciones` | **Restringido.** Las atenciones con sus notas |
