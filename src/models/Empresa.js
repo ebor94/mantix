@@ -59,6 +59,18 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 0,
       field: 'publico_activo'
     },
+    emiteCertificadoFirma: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 0,
+      field: 'emite_certificado_firma'
+    },
+    interesadosActivo: {
+      type: DataTypes.TINYINT(1),
+      allowNull: false,
+      defaultValue: 0,
+      field: 'interesados_activo'
+    },
   }, {
     tableName: 'empresas',
     timestamps: true
