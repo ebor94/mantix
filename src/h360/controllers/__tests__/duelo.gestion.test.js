@@ -90,6 +90,13 @@ const errorDuplicado = () => Object.assign(
   new Error("Duplicate entry 'A-9' for key 'h360_duelo_gestion.uk_orden'"),
   { code: 'ER_DUP_ENTRY', errno: 1062 })
 
+// Lo que NO es el número de una asistencia. Los usan crear y actualizar: el
+// campo es el mismo y debe contestar lo mismo en los dos.
+const ASISTENCIA_ID_INVALIDOS = [
+  'abc', '5a', '-1', '1.5', '1e3', '', '   ', -1, 1.5, true, [], [77], {}, { id: 77 },
+  4294967296, // más que el INT UNSIGNED de la columna
+]
+
 let advertencias
 beforeEach(() => {
   jest.clearAllMocks()
@@ -557,6 +564,97 @@ describe('crear', () => {
     })
   })
 
+  // `crear` pasaba estos cuatro textos a MySQL tal como llegaban: uno más largo
+  // que su columna salía como ER_DATA_TOO_LONG y desde la API era un 500, el mismo
+  // defecto que el PATCH ya tenía cerrado. Hoy el formulario de abrir gestión no
+  // los escribe a mano (salen todos del ERP o de H360), pero la ficha sí edita
+  // estos mismos campos por PATCH: el día que el formulario gane uno, el 500
+  // volvía sin que nadie lo notara.
+  describe('un texto más largo que su columna es 400 y no abre nada', () => {
+    const CAMPOS_AL_ABRIR = [
+      ['ubicacion_detalle', 120], ['titular_nombre', 160], ['titular_parentesco', 40], ['telefonos', 120],
+    ]
+    const abrir = body => {
+      svc.gestionPorOrden = jest.fn(async () => null)
+      return llamar(ctrl.crear, { body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA', ...body } })
+    }
+
+    test.each(CAMPOS_AL_ABRIR)('%s: un carácter más que %i es 400, nombra el campo y no escribe',
+      async (campo, tope) => {
+        const r = await abrir({ [campo]: 'x'.repeat(tope + 1) })
+        expectRechazo(r, new RegExp(campo))
+        expect(r.res.cuerpo.mensaje).toContain(String(tope))
+        expect(svc.crearGestion).not.toHaveBeenCalled()
+      })
+
+    test.each(CAMPOS_AL_ABRIR)('%s: el largo exacto de la columna (%i) sí cabe y pasa tal cual',
+      async (campo, tope) => {
+        const { res } = await abrir({ [campo]: 'x'.repeat(tope) })
+        expect(res.codigo).toBe(201)
+        expect(svc.crearGestion.mock.calls[0][0][campo]).toBe('x'.repeat(tope))
+      })
+
+    // orden_servicio no está en TOPES_GESTION (la gestión no la edita): es la
+    // clave única VARCHAR(20), y en el POST no pasa por el ERP, que en la ficha
+    // sí la frena con un 400 cuando no cabe. Se mide ya recortada, que es como
+    // se guarda.
+    test('orden_servicio: 21 caracteres es 400, nombra el campo y no escribe', async () => {
+      const r = await abrir({ orden_servicio: 'A-'.padEnd(21, '1') })
+      expectRechazo(r, /orden_servicio/)
+      expect(r.res.cuerpo.mensaje).toContain('20')
+      expect(svc.crearGestion).not.toHaveBeenCalled()
+    })
+
+    test('orden_servicio: 20 caracteres caben, aunque lleguen con espacios alrededor', async () => {
+      const orden = 'A-'.padEnd(20, '1')
+      const { res } = await abrir({ orden_servicio: `  ${orden}  ` })
+      expect(res.codigo).toBe(201)
+      expect(svc.crearGestion.mock.calls[0][0].orden_servicio).toBe(orden)
+    })
+
+    // Un valor ausente o nulo no es un largo inválido (queda nulo, como siempre).
+    test.each(CAMPOS_AL_ABRIR)('%s ausente o nulo no es un texto demasiado largo', async campo => {
+      expect((await abrir({})).res.codigo).toBe(201)
+      expect((await abrir({ [campo]: null })).res.codigo).toBe(201)
+    })
+
+    // El 400 se decide antes de preguntar si la orden ya existe: un cuerpo que no
+    // puede dar un resultado correcto no merece un viaje a la base.
+    test('un texto largo se rechaza sin consultar la base', async () => {
+      const r = await abrir({ telefonos: 'x'.repeat(121) })
+      expectRechazo(r, /telefonos/)
+      expect(svc.gestionPorOrden).not.toHaveBeenCalled()
+    })
+  })
+
+  // `asistencia_id` es INT UNSIGNED. Uno no numérico entraba al INSERT tal cual y
+  // MySQL en modo estricto cortaba la sentencia (ER_TRUNCATED_WRONG_VALUE): un 500
+  // que no dice nada. Se valida igual que en el PATCH (ver más abajo).
+  describe('asistencia_id se valida antes del SQL', () => {
+    const abrir = body => {
+      svc.gestionPorOrden = jest.fn(async () => null)
+      return llamar(ctrl.crear, { body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA', ...body } })
+    }
+
+    test.each(ASISTENCIA_ID_INVALIDOS)('asistencia_id %j: 400 que lo nombra y no abre nada', async valor => {
+      const r = await abrir({ asistencia_id: valor })
+      expectRechazo(r, /asistencia_id/)
+      expect(svc.crearGestion).not.toHaveBeenCalled()
+    })
+
+    test.each([[77], ['77'], [0]])('asistencia_id %j pasa al servicio tal cual', async valor => {
+      const { res } = await abrir({ asistencia_id: valor })
+      expect(res.codigo).toBe(201)
+      expect(svc.crearGestion.mock.calls[0][0].asistencia_id).toBe(valor)
+    })
+
+    test.each([[null], [undefined]])('asistencia_id %p: la gestión nace sin asistencia', async valor => {
+      const { res } = await abrir({ asistencia_id: valor })
+      expect(res.codigo).toBe(201)
+      expect(svc.crearGestion.mock.calls[0][0].asistencia_id).toBeNull()
+    })
+  })
+
   test('lo que no llegó queda nulo y la ubicación cae en OTRO', async () => {
     svc.gestionPorOrden = jest.fn(async () => null)
     await llamar(ctrl.crear, { body: { orden_servicio: 'A-9' } })
@@ -931,6 +1029,31 @@ describe('actualizar', () => {
     })
   })
 
+  // `asistencia_id` era el único campo editable sin validar: `{asistencia_id:
+  // 'abc'}` llegaba al UPDATE tal cual y MySQL en modo estricto lo cortaba
+  // (ER_TRUNCATED_WRONG_VALUE), un 500 mudo. Es INT UNSIGNED y acepta null:
+  // desvincular la asistencia es válido.
+  describe('asistencia_id se valida antes del SQL', () => {
+    test.each(ASISTENCIA_ID_INVALIDOS)('asistencia_id %j: 400 que lo nombra y no escribe', async valor => {
+      const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { asistencia_id: valor } })
+      expectRechazo(r, /asistencia_id/)
+      expect(svc.actualizarGestion).not.toHaveBeenCalled()
+    })
+
+    test.each([[77], ['77'], [0], [null]])('asistencia_id %j pasa al servicio tal cual', async valor => {
+      const { res } = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { asistencia_id: valor } })
+      expect(res.codigo).toBe(200)
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { asistencia_id: valor })
+    })
+
+    // Ausente no es null: no se toca la columna.
+    test('sin asistencia_id en el cuerpo no se valida ni se manda nada', async () => {
+      const { res } = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { estado: 'EN_GESTION' } })
+      expect(res.codigo).toBe(200)
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { estado: 'EN_GESTION' })
+    })
+  })
+
   // Los campos de texto de la ficha tienen el ancho de su columna. Un texto más
   // largo reventaba en MySQL con ER_DATA_TOO_LONG y desde la API era un 500: la
   // psicóloga perdía lo que acababa de escribir sin saber qué recortar.
@@ -978,13 +1101,75 @@ describe('actualizar', () => {
       expect(svc.actualizarGestion).not.toHaveBeenCalled()
     })
 
-    // El mensaje no repite el texto entero: puede traer miles de caracteres y va
-    // al log y al cuerpo de la respuesta.
-    test('el mensaje no repite el texto completo', async () => {
-      const largo = 'B'.repeat(500)
-      const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { telefonos: largo } })
-      expectRechazo(r, /telefonos/)
-      expect(r.res.cuerpo.mensaje.length).toBeLessThan(400)
+    // Lo que la familia dijo no viaja de vuelta en un 400. Estos campos son
+    // contenido de una familia en duelo —lo que la psicóloga anotó, con quién
+    // habló, a qué número—, y una respuesta de error termina en la pantalla, en
+    // el log del proxy y en lo que la gente pega al pedir ayuda. El mensaje dice
+    // el campo, el tope y el largo que llegó: lo justo para saber cuánto
+    // recortar, sin el texto.
+    describe('el mensaje no cita el contenido de la familia', () => {
+      const SECRETO = 'LA_HIJA_PIDE_QUE_NO_LA_LLAMEN_'
+      const LIBRES = [
+        ['observaciones', 65535], ['titular_nombre', 160], ['telefonos', 120],
+        ['ubicacion_detalle', 120], ['titular_parentesco', 40],
+      ]
+
+      test.each(LIBRES)('%s (PATCH): dice campo, tope y largo, no el texto', async (campo, tope) => {
+        const valor = SECRETO + 'x'.repeat(tope)
+        const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { [campo]: valor } })
+        expectRechazo(r, new RegExp(campo))
+        const { mensaje } = r.res.cuerpo
+        expect(mensaje).toContain(String(tope))
+        expect(mensaje).toContain(String(valor.length))
+        expect(mensaje).toMatch(/acorta/i) // sigue diciendo qué hacer
+        expect(mensaje).not.toContain('LA_HIJA')
+        expect(mensaje).not.toContain('xxxx')
+      })
+
+      test.each(LIBRES.filter(([campo]) => campo !== 'observaciones'))(
+        '%s (POST): lo mismo al abrir la gestión', async (campo, tope) => {
+          svc.gestionPorOrden = jest.fn(async () => null)
+          const valor = SECRETO + 'x'.repeat(tope)
+          const r = await llamar(ctrl.crear, {
+            body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA', [campo]: valor },
+          })
+          expectRechazo(r, new RegExp(campo))
+          expect(r.res.cuerpo.mensaje).toContain(String(valor.length))
+          expect(r.res.cuerpo.mensaje).not.toContain('LA_HIJA')
+          expect(r.res.cuerpo.mensaje).not.toContain('xxxx')
+        })
+
+      // Una tilde pesa dos bytes: el largo que se dice es el que se midió, y el
+      // que se mide en observaciones son bytes.
+      test('observaciones dice el largo en bytes, y tampoco cita el texto', async () => {
+        const valor = 'ñ'.repeat(40000) // 40000 caracteres, 80000 bytes
+        const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { observaciones: valor } })
+        expectRechazo(r, /observaciones/)
+        expect(r.res.cuerpo.mensaje).toContain('80000')
+        expect(r.res.cuerpo.mensaje).toContain('bytes')
+        expect(r.res.cuerpo.mensaje).not.toContain('ññ')
+      })
+
+      // Lo contrario también se fija: donde el valor es un identificador y no
+      // contenido, citarlo sigue ayudando a quien depura (el precedente es
+      // leerPsicologa, que cita el usuario). Sin esto, alguien que aplicara la
+      // regla a todo dejaría a quien depura sin saber qué valor rechazó.
+      test('psicologa_acompanante (un usuario) sí se cita', async () => {
+        const r = await llamar(ctrl.actualizar, {
+          params: { id: '5' }, body: { psicologa_acompanante: 'U'.repeat(51) },
+        })
+        expectRechazo(r, /psicologa_acompanante/)
+        expect(r.res.cuerpo.mensaje).toContain('U'.repeat(40))
+      })
+
+      test('orden_servicio (el contrato) sí se cita', async () => {
+        svc.gestionPorOrden = jest.fn(async () => null)
+        const r = await llamar(ctrl.crear, {
+          body: { orden_servicio: 'A-'.padEnd(21, '1'), ubicacion_tipo: 'SALA' },
+        })
+        expectRechazo(r, /orden_servicio/)
+        expect(r.res.cuerpo.mensaje).toContain('A-111')
+      })
     })
 
     // Un campo vacío o nulo es cómo se limpia un dato de la ficha: no es un largo
@@ -1011,6 +1196,9 @@ describe('actualizar', () => {
           anchos[linea.match(/^\s{2}([a-z_]+)/)[1]] = 65535 // el tope de TEXT, en bytes
       }
       for (const [campo, tope] of CAMPOS) expect([campo, anchos[campo]]).toEqual([campo, tope])
+      // La orden no se edita, así que no está en TOPES_GESTION: tiene su tope y
+      // sale de la misma tabla.
+      expect(ctrl.TOPE_ORDEN.tope).toBe(anchos.orden_servicio)
       // Y es la misma tabla que usa el controlador, no una copia de esta prueba.
       expect(Object.fromEntries(
         Object.entries(ctrl.TOPES_GESTION).map(([c, t]) => [c, t.tope])))

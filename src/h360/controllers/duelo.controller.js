@@ -17,7 +17,7 @@ const { normalizarFechaHora } = require('../utils/fecha_hora')
 // Quién manda la petición y sobre qué gestión: las mismas guardas que usa el
 // controlador de atenciones (ver duelo.peticion.js). `eco` también vive ahí: es
 // cómo se cita en un mensaje lo que llegó.
-const { eco, usuarioDelLogin, sinUsuario, leerId } = require('../utils/duelo.peticion')
+const { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo } = require('../utils/duelo.peticion')
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -714,6 +714,23 @@ async function crear(req, res, next) {
     const orden = String(req.body?.orden_servicio ?? '').trim()
     if (!orden) return res.status(400).json({ mensaje: 'Falta el número de orden' })
 
+    // Lo que cabe en cada columna y que el id sea un id, ANTES de preguntarle a
+    // la base por nada: un texto más largo que su columna salía como
+    // ER_DATA_TOO_LONG y desde la API era un 500, igual que en el PATCH, que ya lo
+    // cierra con los mismos topes (TOPES_GESTION, TOPE_ORDEN y acotar están más
+    // abajo, junto a leerPsicologa). Hoy el formulario no escribe a mano ninguno
+    // de estos campos; la ficha sí los edita por PATCH, y el día que el formulario
+    // gane uno el 500 volvía sin que nadie lo notara. `orden_servicio` se mide ya
+    // recortada, que es como se guarda; en la ficha la frena el ERP con un 400,
+    // pero aquí no pasa por el ERP. Solo los campos que `crear` guarda:
+    // `observaciones` y `psicologa_acompanante` no entran por acá.
+    acotar('orden_servicio', orden, TOPE_ORDEN)
+    const cuerpo = { ...req.body }
+    for (const campo of TEXTOS_AL_ABRIR)
+      if (cuerpo[campo] !== undefined) cuerpo[campo] = acotar(campo, cuerpo[campo], TOPES_GESTION[campo])
+    if (cuerpo.asistencia_id !== undefined)
+      cuerpo.asistencia_id = leerIdDeCuerpo(cuerpo.asistencia_id, 'asistencia_id')
+
     const ya = await svc.gestionPorOrden(orden)
     if (ya) return res.status(409).json({
       mensaje: 'Esta orden ya tiene una gestión abierta.', gestion_id: ya.id,
@@ -725,9 +742,9 @@ async function crear(req, res, next) {
     // `actualizar`.
     const datos = {
       orden_servicio:     orden,
-      asistencia_id:      req.body.asistencia_id ?? null,
-      ubicacion_tipo:     req.body.ubicacion_tipo ?? 'OTRO',
-      ubicacion_detalle:  req.body.ubicacion_detalle ?? null,
+      asistencia_id:      cuerpo.asistencia_id ?? null,
+      ubicacion_tipo:     cuerpo.ubicacion_tipo ?? 'OTRO',
+      ubicacion_detalle:  cuerpo.ubicacion_detalle ?? null,
       // Lo decide el servidor con el MISMO esMascota() con que la bandeja pinta
       // la insignia, y no `req.body.es_mascota`. Con el cliente decidiendo, los
       // dos podían desfasarse: la insignia decía «Mascota» y la fila guardaba un
@@ -736,10 +753,10 @@ async function crear(req, res, next) {
       // nuestra; viaja en la fila de la bandeja desde donde se abre la gestión).
       // Si no llega, el prefijo MAS- del número sigue reconociéndolas: es la
       // degradación aceptada mientras el frontend no la manda todavía.
-      es_mascota:         esMascota({ orden_servicio: orden, sede: req.body.sede }),
-      titular_nombre:     req.body.titular_nombre ?? null,
-      titular_parentesco: req.body.titular_parentesco ?? null,
-      telefonos:          req.body.telefonos ?? null,
+      es_mascota:         esMascota({ orden_servicio: orden, sede: cuerpo.sede }),
+      titular_nombre:     cuerpo.titular_nombre ?? null,
+      titular_parentesco: cuerpo.titular_parentesco ?? null,
+      telefonos:          cuerpo.telefonos ?? null,
       estado:             'EN_GESTION',
       psicologa:          usuario,
       created_by:         usuario,
@@ -799,15 +816,30 @@ function leerPsicologa(valor) {
  *
  * `observaciones` es TEXT y su tope son BYTES, no caracteres: una tilde ocupa
  * dos y un emoji cuatro. Las VARCHAR cuentan caracteres.
+ *
+ * `identificador: true` marca el campo cuyo valor es un nombre de usuario y no
+ * lo que una familia contó: es el único caso en que el 400 puede citar lo que
+ * llegó (ver acotar). Por defecto se asume contenido, que es el lado seguro.
  */
 const TOPES_GESTION = Object.freeze({
   ubicacion_detalle:     { tope: 120,   unidad: 'caracteres' },
   titular_nombre:        { tope: 160,   unidad: 'caracteres' },
   titular_parentesco:    { tope: 40,    unidad: 'caracteres' },
   telefonos:             { tope: 120,   unidad: 'caracteres' },
-  psicologa_acompanante: { tope: 50,    unidad: 'caracteres' },
+  psicologa_acompanante: { tope: 50,    unidad: 'caracteres', identificador: true },
   observaciones:         { tope: 65535, unidad: 'bytes' },
 })
+
+/**
+ * El tope de `orden_servicio` (VARCHAR(20), la clave única de la gestión). No
+ * está en TOPES_GESTION porque la gestión no la edita —no es un campo del PATCH
+ * y el bucle de `actualizar` la rechazaría sin motivo—, solo se escribe al
+ * abrirla. Es el contrato del ERP: un identificador, así que se puede citar.
+ */
+const TOPE_ORDEN = Object.freeze({ tope: 20, unidad: 'caracteres', identificador: true })
+
+/** Los textos que `crear` guarda y que el PATCH también edita: los mismos topes. */
+const TEXTOS_AL_ABRIR = ['ubicacion_detalle', 'titular_nombre', 'titular_parentesco', 'telefonos']
 
 /**
  * El valor si cabe en su columna; si no, 400. Es UNA función para los seis
@@ -818,14 +850,24 @@ const TOPES_GESTION = Object.freeze({
  * parte de lo que alguien escribió. El tipo tampoco se restringe acá —un número
  * en `telefonos` lo guarda MySQL como texto y eso ya funciona así—; lo que se
  * mide es el largo de lo que se va a escribir.
+ *
+ * El mensaje dice el campo, el tope, el largo que llegó y cuánto sobra, que es
+ * lo que hace falta para recortar. NO cita el valor, salvo en los campos marcados
+ * `identificador` (un usuario, el contrato): observaciones, el nombre de quien
+ * atendió, los teléfonos y la ubicación son lo que una familia en duelo contó, y
+ * un 400 termina en la pantalla, en el log del proxy y en lo que la gente pega
+ * al pedir ayuda. Es el mismo criterio con que el módulo mantiene esos textos
+ * fuera de sus logs; el precedente de citar un identificador es leerPsicologa.
  */
-function acotar(campo, valor, { tope, unidad }) {
+function acotar(campo, valor, { tope, unidad, identificador = false }) {
   if (valor === null || valor === undefined) return valor
   const texto = String(valor)
   const largo = unidad === 'bytes' ? Buffer.byteLength(texto, 'utf8') : texto.length
-  if (largo > tope)
-    throw malUso(`«${campo}» no puede pasar de ${tope} ${unidad} y llegó con ${largo}: `
-      + `${eco(valor)}. Es el ancho de la columna en la base; acorta el texto y vuelve a guardar.`)
+  if (largo > tope) {
+    const cita = identificador ? ` (${eco(valor)})` : ''
+    throw malUso(`«${campo}» no puede pasar de ${tope} ${unidad} y llegó con ${largo}${cita}: `
+      + `sobran ${largo - tope}. Es el ancho de la columna en la base; acorta el texto y vuelve a guardar.`)
+  }
   return valor
 }
 
@@ -847,6 +889,9 @@ async function actualizar(req, res, next) {
     // Copia: lo que venga después en la cadena de middlewares ve el cuerpo completo.
     const cambios = { ...req.body }
     if (cambios.psicologa !== undefined) cambios.psicologa = leerPsicologa(cambios.psicologa)
+    // INT UNSIGNED, y null es válido: desvincular la asistencia.
+    if (cambios.asistencia_id !== undefined)
+      cambios.asistencia_id = leerIdDeCuerpo(cambios.asistencia_id, 'asistencia_id')
     for (const [campo, limite] of Object.entries(TOPES_GESTION))
       if (cambios[campo] !== undefined) cambios[campo] = acotar(campo, cambios[campo], limite)
 
@@ -895,4 +940,4 @@ async function guardarServicios(req, res, next) {
 module.exports = { bandeja, buscar, ficha, crear, actualizar, agregarIntento,
   guardarServicios, esOtraCiudad, otraCiudadReconocida, normalizarSede, ramaDe,
   rangoPorDefecto, horaDePared, FILTROS_BANDEJA, SEDES_FORANEAS_CONOCIDAS,
-  TOPES_GESTION, TOPE_BUSQUEDA, MAX_DIAS_RANGO, verificarFiltros }
+  TOPES_GESTION, TOPE_ORDEN, TOPE_BUSQUEDA, MAX_DIAS_RANGO, verificarFiltros }

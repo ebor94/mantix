@@ -1,6 +1,6 @@
 /**
  * duelo.peticion.js — lo que los controladores del R-56 leen de una petición:
- * quién la manda y sobre qué gestión actúa.
+ * quién la manda, sobre qué gestión actúa y qué ids trae el cuerpo.
  *
  * Vive acá porque son DOS controladores hermanos sobre las mismas tablas
  * (duelo.controller.js y duelo_atenciones.controller.js). Con una copia en cada
@@ -78,4 +78,36 @@ function leerId(valor) {
   return v
 }
 
-module.exports = { eco, usuarioDelLogin, sinUsuario, leerId }
+/** Lo más grande que cabe en una columna INT UNSIGNED. */
+const MAX_ID = 4294967295
+
+/**
+ * Un id que viaja en el CUERPO (hoy `asistencia_id`), ya validado. Devuelve null
+ * si llegó null: desvincular es válido.
+ *
+ * Es el hermano de leerId para el cuerpo, y difiere en lo que el cuerpo tiene de
+ * distinto a la ruta: el JSON trae el id como NÚMERO (77) y no como texto, y
+ * null es un valor con significado. Sin esto, `{asistencia_id: 'abc'}` entraba
+ * al UPDATE tal cual y MySQL en modo estricto cortaba la sentencia
+ * (ER_TRUNCATED_WRONG_VALUE): un 500 mudo, como el que ya se cerró en los
+ * campos de texto. El tope es el de la columna (INT UNSIGNED): un número más
+ * grande sale como ER_WARN_DATA_OUT_OF_RANGE, otro 500 igual de mudo.
+ *
+ * Cita lo que llegó (eco) porque es un identificador, no contenido de una
+ * familia: ahí sí ayuda a quien depura. Devuelve el valor tal como llegó
+ * (recortado si era texto): ya está comprobado que es un entero, y así el
+ * servicio recibe lo mismo que mandó el navegador.
+ */
+function leerIdDeCuerpo(valor, campo) {
+  if (valor === null) return null
+  const v = typeof valor === 'string' ? valor.trim() : valor
+  const cabe = typeof v === 'number'
+    ? Number.isSafeInteger(v) && v >= 0 && v <= MAX_ID
+    : typeof v === 'string' && ES_ID.test(v) && Number(v) <= MAX_ID
+  if (!cabe)
+    throw malUso(`«${campo}» debe ser el número del registro (solo dígitos, hasta ${MAX_ID}) o null `
+      + `para dejarlo sin vincular; llegó ${eco(valor)}.`)
+  return v
+}
+
+module.exports = { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo }
