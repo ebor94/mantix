@@ -535,16 +535,31 @@ const escaparLike = texto => texto.replace(/[\\%_[]/g, coincidencia => ESCAPE_LI
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
 
+/* Error por entrada inválida de quien llama. Lleva status = 400 para que el
+   controlador (que mira err.status === 400) responda 400 con el mensaje en vez
+   de un 500 genérico; es el mismo patrón que malUso en duelo.service. Los
+   parámetros de la petición llegan aquí sin tocar, así que esto es alcanzable
+   desde la API y no solo un error de programación. */
+function malUso(mensaje) {
+  const e = new Error(mensaje)
+  e.status = 400
+  return e
+}
+
 /* Una fecha que excede el VarChar(10) declarado revienta en el driver con un
    error de TDS que no dice nada a quien lo lee en un log. Una fecha malformada
-   es un error de programación: se lanza con un mensaje claro y no se devuelve
-   vacío, porque vacío lo esconde. El controlador ya valida con una expresión
-   regular antes de llamar; esto es defensa en profundidad. */
-function exigirFechaIso(valor, nombre) {
+   se lanza con un mensaje claro que nombra el campo y muestra lo que llegó; no
+   se devuelve vacío, porque vacío lo esconde. «funcion» es la que se nombra en
+   el mensaje, para que el log diga cuál de las dos falló. */
+function exigirFechaIso(valor, nombre, funcion) {
   if (typeof valor === 'string' && FECHA_ISO.test(valor)) return
   const recibido = typeof valor === 'string' ? JSON.stringify(valor) : String(valor)
-  throw new Error(`ordenesDelRango: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${recibido}`)
+  throw malUso(`${funcion}: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${recibido}`)
 }
+
+/* Tamaño declarado de p_nombre (VarChar). Es el tope del PATRÓN que se ata, no
+   del texto que escribió la persona: ver la medición en buscarOrdenes. */
+const MAX_PATRON_NOMBRE = 200
 
 /**
  * Órdenes creadas entre dos fechas. El defecto del módulo es ayer y hoy, que
@@ -554,8 +569,8 @@ function exigirFechaIso(valor, nombre) {
  * pedir la conexión, para que el problema real no quede tapado por otro).
  */
 async function ordenesDelRango(desde, hasta) {
-  exigirFechaIso(desde, 'desde')
-  exigirFechaIso(hasta, 'hasta')
+  exigirFechaIso(desde, 'desde', 'ordenesDelRango')
+  exigirFechaIso(hasta, 'hasta', 'ordenesDelRango')
   const pool = await obtenerPool()
   const r = await pool.request()
     .input('p_desde', driver().VarChar(10), String(desde))
@@ -575,6 +590,12 @@ async function ordenesDelRango(desde, hasta) {
  *
  * Sin criterios devuelve vacío y no consulta: un SELECT sin WHERE sobre una
  * tabla de producción de otro sistema no es algo que se dispare por descuido.
+ *
+ * Las fechas, si vienen, deben ser texto YYYY-MM-DD (se recortan los espacios
+ * alrededor, como siempre), y el nombre debe caber en el patrón de VarChar(200).
+ * Si no, lanza un Error con status 400 y mensaje en español, antes de pedir la
+ * conexión y sin consultar. No se trunca nada en silencio: truncar cambiaría la
+ * búsqueda que la persona pidió sin avisarle.
  */
 async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) {
   const cond = []
@@ -594,15 +615,30 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
     // la colación (ver COLACION_NOMBRE); aquí el término solo se limpia y se
     // escapa, sin quitarle tildes ni Ñ.
     const limpio = String(nombre).trim().toUpperCase().replace(/\s+/g, ' ')
-    req.push(['p_nombre', driver().VarChar(200), `%${escaparLike(limpio)}%`])
+    const patron = `%${escaparLike(limpio)}%`
+    /* El largo se mide DESPUÉS de limpiar y escapar, sobre el patrón completo
+       (los dos % de los extremos incluidos), porque es exactamente el valor que
+       se ata a un VarChar(200). Medir el texto crudo no garantiza nada: escapar
+       lo alarga hasta el doble (cada %, _, [ y \ pasa a ser dos caracteres), y
+       toUpperCase también ('ß' pasa a 'SS'). Con la medida cruda, 150 símbolos %
+       parecerían caber y al escapar serían 302. Medir lo que se ata es la única
+       forma de que nunca exceda. length cuenta unidades UTF-16; con la página de
+       códigos del ERP (CP1252, un byte por carácter) eso no subestima los bytes. */
+    if (patron.length > MAX_PATRON_NOMBRE)
+      throw malUso(`buscarOrdenes: el nombre es demasiado largo: el patrón de búsqueda admite como máximo ${MAX_PATRON_NOMBRE} caracteres (cada %, _, [ y \\ del nombre cuenta doble porque se escapa, y se suman 2 de los extremos) y este llega a ${patron.length}`)
+    req.push(['p_nombre', driver().VarChar(MAX_PATRON_NOMBRE), patron])
   }
-  if (String(fechaDesde ?? '').trim()) {
+  const desde = String(fechaDesde ?? '').trim()
+  if (desde) {
+    exigirFechaIso(desde, 'fechaDesde', 'buscarOrdenes')
     cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) >= @p_f_desde')
-    req.push(['p_f_desde', driver().VarChar(10), String(fechaDesde).trim()])
+    req.push(['p_f_desde', driver().VarChar(10), desde])
   }
-  if (String(fechaHasta ?? '').trim()) {
+  const hasta = String(fechaHasta ?? '').trim()
+  if (hasta) {
+    exigirFechaIso(hasta, 'fechaHasta', 'buscarOrdenes')
     cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) <= @p_f_hasta')
-    req.push(['p_f_hasta', driver().VarChar(10), String(fechaHasta).trim()])
+    req.push(['p_f_hasta', driver().VarChar(10), hasta])
   }
 
   if (!cond.length) return []
