@@ -94,6 +94,7 @@ const limitePublicoEmpresa = rateLimit({
 router.get('/publico/empresa/:slug', limitePublicoEmpresa, controller.getPublicoEmpresa);
 router.post('/publico/empresa/:slug/cotizar', limitePublicoEmpresa, controller.cotizarPublicoEmpresa);
 router.post('/publico/empresa/:slug/registrar', limitePublicoEmpresa, validate(createAfiliadoSchema), controller.createPublicoEmpresa);
+router.post('/publico/interesados/:slug', limitePublicoEmpresa, nominaCtrl.crearInteresado);
 
 // ── POST /afiliados/convenio/invitacion/:token — autoafiliación por invitación ─
 // Sin autenticación, igual que /convenio/:slug. El convenio y la identidad del
@@ -262,6 +263,19 @@ router.get('/nomina-empresa/:empresaId/:cedula',
   auth,
   requirePermiso('afiliaciones', 'crear'),
   nominaCtrl.buscar
+);
+
+// ── Nómina de empresa: listar e importar (autenticadas) ────────────────────
+//    Un solo segmento / sufijo /importar: no colisionan con /:empresaId/:cedula.
+router.get('/nomina-empresa/:empresaId',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  nominaCtrl.listar
+);
+router.post('/nomina-empresa/:empresaId/importar',
+  auth,
+  requirePermiso('afiliaciones', 'crear'),
+  nominaCtrl.importar
 );
 
 // ── GET /afiliados/:id — autenticado; el servicio/controller valida pertenencia
