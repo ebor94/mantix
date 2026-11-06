@@ -125,7 +125,7 @@ vivo al mostrar la ficha. Acá vive solo lo que es nuestro.
 | `titular_nombre` | VARCHAR(160) NULL | Con quién se habló |
 | `titular_parentesco` | VARCHAR(40) NULL | Catálogo `parentesco` del ERP |
 | `telefonos` | VARCHAR(120) NULL | El o los que sirvieron. El Excel guarda dos separados por guion |
-| `tipificacion` | ENUM NOT NULL | Vocabulario del R-56, para el reporte: `OFRECIDO_EN_HOMENAJE`, `ATENCION_EN_HOMENAJE`, `OFRECIDO_POR_LLAMADA`, `ATENCION_POR_LLAMADA`, `OFRECIDO_POR_MENSAJE`, `COORDINA_ASISTENCIA`, `NO_CONTESTO`, `REPETIDO` |
+| `tipificacion` | ENUM NULL | Nula mientras no se haya trabajado la gestión: nace `PENDIENTE` y todavía no hay nada que tipificar. Vocabulario del R-56, para el reporte: `OFRECIDO_EN_HOMENAJE`, `ATENCION_EN_HOMENAJE`, `OFRECIDO_POR_LLAMADA`, `ATENCION_POR_LLAMADA`, `OFRECIDO_POR_MENSAJE`, `COORDINA_ASISTENCIA`, `NO_CONTESTO`, `REPETIDO` |
 | `estado` | ENUM NOT NULL DEFAULT 'PENDIENTE' | Para la bandeja: `PENDIENTE`, `EN_GESTION`, `GESTIONADA`, `NO_LOGRADA`, `NO_APLICA`, `REPETIDA` |
 | `observaciones` | TEXT NULL | |
 | `psicologa` | VARCHAR(50) NOT NULL | `sAMAccountName`, del login |
