@@ -1135,6 +1135,14 @@ function rangoPorDefecto() {
 }
 
 /**
+ * OBSOLETO (2026-11-06): la parte del CONVENIO no quedó así. Se midió contra el
+ * ERP y `descripcion_convenio` no coincide nunca (0 de 3975 órdenes de un año),
+ * así que la comprobación se quitó del código. El patrón «OLIVOS <ciudad>» vive
+ * en `descripcion_entidad`, que es la sucursal que VENDIÓ el plan y no dónde es
+ * el homenaje: mirarla mandaría a gestión telefónica a 264 familias que están en
+ * Cúcuta. Antes de reponerla, lee el comentario de SEDES_FORANEAS_CONOCIDAS en
+ * duelo.controller.js. Lo que sí funciona es el centro de costo.
+ *
  * Las sedes de otras ciudades se reconocen por el centro de costo o porque el
  * convenio es otra sucursal de Olivos. No se adivina por el municipio: el
  * municipio es donde falleció, no donde es el homenaje.

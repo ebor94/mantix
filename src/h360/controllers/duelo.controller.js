@@ -132,7 +132,9 @@ const SEDES_FORANEAS_CONOCIDAS = Object.freeze(['SEDE PAMPLONA', 'SEDE SARAVENA'
  *   3. Pero `entidad` es la sucursal que VENDIÓ el plan, NO dónde es el
  *      homenaje (lo resolvió el dueño del sistema). El homenaje de esas 328
  *      órdenes es en Cúcuta. Mirarla mandaría a gestión telefónica a 264
- *      familias que están en Cúcuta.
+ *      familias que están en Cúcuta. (El 264 son las que de esas 328 tienen
+ *      sede LOCAL, que es donde el cambio haría daño; las otras 64 ya salen como
+ *      otra ciudad por su propio centro de costo, así que para ésas da igual.)
  *
  * La única señal que funciona es el centro de costo: la sede.
  */
@@ -659,6 +661,14 @@ const dosDigitos = n => String(n).padStart(2, '0')
  * Depende de que el pool de config/db.js no defina `timezone` (por defecto es
  * 'local', que es lo que hace que los getters locales devuelvan los dígitos de la
  * base). Si algún día se define, esta lectura debe cambiar con él.
+ *
+ * CUIDADO, y no es hipotético: hay DOS pools en este repositorio y el OTRO sí lo
+ * define. `src/config/database.js` (el de Sequelize) pone `timezone: '-05:00'`;
+ * el de h360 es `src/h360/config/db.js` y no lo pone. Quien «unifique la
+ * configuración de la base» rompería esta lectura sin que ninguna prueba lo vea,
+ * porque en las pruebas el servicio está simulado y nunca pasa por mysql2.
+ * Medido el 2026-11-06 contra la base real, con el pool de h360: un DATETIME de
+ * 14:30 devuelve getHours() = 14 tanto con TZ=America/Bogota como con TZ=UTC.
  */
 function horaDePared(d) {
   return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(d.getDate())}`

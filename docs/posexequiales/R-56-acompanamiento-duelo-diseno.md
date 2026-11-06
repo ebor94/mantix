@@ -161,7 +161,8 @@ otra ciudad un convenio que empezara por `OLIVOS <ciudad>`. Se quitó:
 3. Pero `entidad` es la **sucursal que vendió el plan, no dónde es el
    homenaje** (lo resolvió el dueño del sistema): el homenaje de esas 328 es en
    Cúcuta. Mirarla mandaría a gestión telefónica a **264 familias que están en
-   Cúcuta**. Por eso `entidad` no es señal de rama, y el comentario que lo deja
+   Cúcuta** (las que de esas 328 tienen sede local; las otras 64 ya salen como
+   otra ciudad por su propio centro de costo). Por eso `entidad` no es señal de rama, y el comentario que lo deja
    escrito está en `duelo.controller.js`, junto a `SEDES_FORANEAS_CONOCIDAS`.
 
 ## 5. Modelo de datos
