@@ -2,6 +2,7 @@
 jest.mock('../../config/db')
 const db = require('../../config/db')
 const svc = require('../duelo.service')
+const cat = require('../../utils/duelo.catalogos')
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -138,16 +139,18 @@ describe('crearGestion', () => {
 })
 
 describe('actualizarGestion', () => {
+  // Sin `estado` a propósito: un estado que cierra o reabre la gestión agrega
+  // cerrada_at a la escritura (ver el bloque «cerrada_at» más abajo).
   test('solo escribe los campos editables y descarta el resto', async () => {
     db.query = jest.fn(async () => [{ affectedRows: 1 }])
     const ok = await svc.actualizarGestion(8, {
-      estado: 'GESTIONADA', observaciones: 'listo',
+      observaciones: 'listo', psicologa: 'jazmin',
       orden_servicio: 'OTRA-9', created_by: 'intruso', id: 99,
     })
     expect(ok).toBe(true)
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toContain('UPDATE h360_duelo_gestion SET ? WHERE id = ?')
-    expect(params[0]).toEqual({ estado: 'GESTIONADA', observaciones: 'listo' })
+    expect(params[0]).toEqual({ observaciones: 'listo', psicologa: 'jazmin' })
     expect(params[1]).toBe(8)
   })
 
@@ -181,6 +184,67 @@ describe('actualizarGestion', () => {
     db.query = jest.fn(async () => [{ affectedRows: 1 }])
     await svc.actualizarGestion(8, { tipificacion: null })
     expect(db.query.mock.calls[0][1][0]).toEqual({ tipificacion: null })
+  })
+
+  // cerrada_at lo pone el servidor con el reloj de la base: el cliente no lo
+  // manda. NOW() va en el SQL y nunca en el objeto del `SET ?`, donde se
+  // escaparía como texto.
+  describe('cerrada_at', () => {
+    const CIERRAN = ['GESTIONADA', 'NO_LOGRADA', 'NO_APLICA', 'REPETIDA']
+    const REABREN = ['PENDIENTE', 'EN_GESTION']
+
+    beforeEach(() => { db.query = jest.fn(async () => [{ affectedRows: 1 }]) })
+
+    // Guarda: el servicio trata como «abierto» todo estado que no cierra. Si el
+    // catálogo gana un estado, esta prueba obliga a decidir de qué lado cae.
+    test('los estados que cierran y los que reabren cubren todo el catálogo', () => {
+      expect([...CIERRAN, ...REABREN].sort()).toEqual([...cat.ESTADOS_GESTION].sort())
+    })
+
+    test('un cliente no puede mandar cerrada_at: el valor no entra a la escritura', async () => {
+      await svc.actualizarGestion(8, { observaciones: 'x', cerrada_at: '2020-01-01 00:00:00' })
+      const [sql, params] = db.query.mock.calls[0]
+      expect(params[0]).toEqual({ observaciones: 'x' })
+      expect(sql).not.toMatch(/cerrada_at/)
+      expect(JSON.stringify(params)).not.toContain('2020-01-01')
+    })
+
+    test('si solo manda cerrada_at no hay nada que escribir', async () => {
+      const ok = await svc.actualizarGestion(8, { cerrada_at: '2020-01-01 00:00:00' })
+      expect(ok).toBe(false)
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    test('un cliente no puede fijar la hora de cierre aunque cierre la gestión', async () => {
+      await svc.actualizarGestion(8, { estado: 'GESTIONADA', cerrada_at: '2020-01-01 00:00:00' })
+      const params = db.query.mock.calls[0][1]
+      expect(JSON.stringify(params)).not.toContain('2020-01-01')
+      expect(params[0]).toEqual({ estado: 'GESTIONADA' })
+    })
+
+    test.each(CIERRAN)('%s pone cerrada_at = NOW() en la misma escritura', async (estado) => {
+      await svc.actualizarGestion(8, { estado })
+      expect(db.query).toHaveBeenCalledTimes(1)
+      const [sql, params] = db.query.mock.calls[0]
+      expect(sql).toMatch(/SET\s+\?,\s*cerrada_at\s*=\s*NOW\(\)\s+WHERE\s+id\s*=\s*\?/)
+      // NOW() no viaja como valor: el objeto lleva solo el estado.
+      expect(params).toEqual([{ estado }, 8])
+    })
+
+    test.each(REABREN)('%s deja cerrada_at en NULL: una gestión reabierta no está cerrada', async (estado) => {
+      await svc.actualizarGestion(8, { estado })
+      expect(db.query).toHaveBeenCalledTimes(1)
+      const [sql, params] = db.query.mock.calls[0]
+      expect(sql).toMatch(/SET\s+\?,\s*cerrada_at\s*=\s*NULL\s+WHERE\s+id\s*=\s*\?/)
+      expect(params).toEqual([{ estado }, 8])
+    })
+
+    // Guarda: sin cambio de estado no hay razón para tocar cerrada_at. Se
+    // pondría en rojo si se agregara cerrada_at a toda escritura.
+    test('si el estado no cambia, la escritura no menciona cerrada_at', async () => {
+      await svc.actualizarGestion(8, { observaciones: 'x', tipificacion: 'NO_CONTESTO' })
+      expect(db.query.mock.calls[0][0]).not.toMatch(/cerrada_at/)
+    })
   })
 })
 
@@ -227,12 +291,21 @@ describe('agregarIntento', () => {
 })
 
 describe('intentosDeGestion', () => {
-  test('pide los intentos en orden cronológico', async () => {
+  // El doble de la base no ejecuta SQL, así que no puede mostrar qué orden
+  // devolvería MySQL: simularlo sería codificar acá la misma regla que se quiere
+  // probar. Lo que sí se puede fijar es el SQL: `momento` sin calificar resuelve
+  // al alias de texto (al minuto) y dos intentos del mismo minuto con segundos
+  // distintos quedarían ordenados por id. Calificada con la tabla, ordena por el
+  // DATETIME real.
+  test('pide los intentos en orden cronológico: por el DATETIME real, no por el alias de minuto', async () => {
     db.query = jest.fn(async () => [[{ id: 1 }, { id: 2 }]])
     const f = await svc.intentosDeGestion(5)
     expect(f).toHaveLength(2)
     const [sql, params] = db.query.mock.calls[0]
-    expect(sql).toContain('ORDER BY momento ASC, id ASC')
+    const orden = sql.match(/ORDER BY([\s\S]*)$/i)
+    expect(orden).not.toBeNull()
+    expect(orden[1].split(',').map(t => t.trim()))
+      .toEqual(['h360_duelo_intentos.momento ASC', 'id ASC'])
     expect(params).toEqual([5])
   })
 
@@ -247,7 +320,17 @@ describe('intentosDeGestion', () => {
     const sinMomento = lista.replace(/DATE_FORMAT\([^)]*\)\s+AS\s+momento/i, '')
     const columnas = sinMomento.split(',').map(c => c.trim()).filter(Boolean).sort()
     expect(columnas).toEqual(
-      ['canal', 'created_at', 'gestion_id', 'id', 'observacion', 'resultado', 'usuario'])
+      ['canal', 'gestion_id', 'id', 'observacion', 'resultado', 'usuario'])
+  })
+
+  // created_at saldría como Date junto a momento como texto: la misma fila con
+  // dos formatos de fecha. Ninguna pantalla lo usa. Si se necesita, se agrega
+  // con el mismo formateo que momento.
+  test('no devuelve created_at', async () => {
+    await svc.intentosDeGestion(5)
+    const sql = db.query.mock.calls[0][0]
+    const lista = sql.match(/SELECT([\s\S]*?)\sFROM\s/i)[1]
+    expect(lista).not.toMatch(/created_at/i)
   })
 
   test('pide momento formateado en SQL como texto, con el mismo nombre', async () => {

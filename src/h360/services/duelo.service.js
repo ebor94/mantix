@@ -47,11 +47,20 @@ async function crearGestion(datos) {
   return r.insertId
 }
 
+// cerrada_at NO es editable: lo pone el servidor, no el cliente. Una gestión se
+// cierra *ahora*, cuando alguien la cierra; el cliente no tiene por qué elegir
+// esa hora. Además, un valor que entrara por acá sin pasar por
+// normalizarFechaHora repetiría la trampa de UTC: una gestión cerrada a las
+// 14:30 quedaría guardada a las 19:30. La fija actualizarGestion según el estado.
 const CAMPOS_EDITABLES = [
   'asistencia_id', 'ubicacion_tipo', 'ubicacion_detalle', 'titular_nombre',
   'titular_parentesco', 'telefonos', 'tipificacion', 'estado', 'observaciones',
-  'psicologa', 'psicologa_acompanante', 'cerrada_at',
+  'psicologa', 'psicologa_acompanante',
 ]
+
+// Estados que cierran la gestión. Cualquier otro estado del catálogo
+// (PENDIENTE, EN_GESTION) la deja abierta.
+const ESTADOS_QUE_CIERRAN = ['GESTIONADA', 'NO_LOGRADA', 'NO_APLICA', 'REPETIDA']
 
 async function actualizarGestion(id, cambios) {
   const set = {}
@@ -65,7 +74,20 @@ async function actualizarGestion(id, cambios) {
     throw malUso('El estado de la gestión no es válido')
 
   if (!Object.keys(set).length) return false
-  const [r] = await db.query('UPDATE h360_duelo_gestion SET ? WHERE id = ?', [set, id])
+
+  // cerrada_at va como fragmento fijo del SQL y no dentro de `set`: en el objeto
+  // del `SET ?` NOW() se escaparía como texto ('NOW()') y la columna no
+  // quedaría con la hora. Así se usa el reloj de la base y la gestión se cierra
+  // (o se reabre) en la misma escritura que cambia el estado. Los fragmentos son
+  // constantes: nada que venga del cliente se concatena al SQL.
+  let cierre = ''
+  if (set.estado !== undefined)
+    cierre = ESTADOS_QUE_CIERRAN.includes(set.estado)
+      ? ', cerrada_at = NOW()'
+      : ', cerrada_at = NULL'
+
+  const [r] = await db.query(
+    `UPDATE h360_duelo_gestion SET ?${cierre} WHERE id = ?`, [set, id])
   return r.affectedRows > 0
 }
 
@@ -89,12 +111,19 @@ async function intentosDeGestion(gestionId) {
   // define dateStrings, así que un DATETIME llegaría como Date y Express lo
   // serializaría en UTC: un intento de las 14:30 en Cúcuta (UTC-5) saldría como
   // 19:30Z. Con el texto ya armado, ningún consumidor hace aritmética de zonas.
-  // Ojo: el ORDER BY momento resuelve al alias (texto al minuto, que ordena igual
-  // que la hora); dentro de un mismo minuto desempata por id.
+  // El ORDER BY califica `momento` con la tabla a propósito: sin el nombre de la
+  // tabla, MySQL resuelve `momento` al alias de texto del SELECT, que llega solo
+  // hasta el minuto y pierde los segundos. Dos intentos del mismo minuto
+  // quedarían ordenados por id y no por su hora real, y como la respuesta ya no
+  // muestra los segundos, nadie vería el desorden. Calificada, ordena por el
+  // DATETIME real (y puede usar el índice idx_gestion (gestion_id, momento)).
+  // No se devuelve created_at: saldría como Date junto a momento como texto, y
+  // ninguna pantalla lo usa. Si se necesita, se agrega con el mismo formateo.
   const [f] = await db.query(
     `SELECT id, gestion_id, DATE_FORMAT(momento, '%Y-%m-%d %H:%i') AS momento,
-            canal, resultado, observacion, usuario, created_at
-       FROM h360_duelo_intentos WHERE gestion_id = ? ORDER BY momento ASC, id ASC`,
+            canal, resultado, observacion, usuario
+       FROM h360_duelo_intentos WHERE gestion_id = ?
+      ORDER BY h360_duelo_intentos.momento ASC, id ASC`,
     [gestionId])
   return f
 }
