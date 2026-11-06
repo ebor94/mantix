@@ -11,7 +11,7 @@ const { notificarCertificadoAfiliacion, notificarFirma, notificarValidacionFirma
 const pdfService   = require('../services/pdfService');
 const excelService = require('../services/excelService');
 const { sincronizarAfiliado } = require('../services/crmSync.service');
-const { Afiliado, ReciboCaja, Usuario, Trazabilidad, Beneficiario } = require('../models');
+const { Afiliado, ReciboCaja, Usuario, Trazabilidad, Beneficiario, Empresa } = require('../models');
 const { Op } = require('sequelize');
 const otpStore  = require('../utils/otpStore');
 const { encodeId, decodeId } = require('../utils/hashId');
@@ -234,6 +234,14 @@ async function emitirPdfYEnviarWhatsapp(afiliadoId) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// true si la empresa de la afiliación está marcada para emitir certificado + firma
+// (excepción por empresa a la exclusión del canal empresarial). empresaId null → false.
+async function empresaEmiteCertificadoFirma(empresaId) {
+  if (!empresaId) return false;
+  const emp = await Empresa.findByPk(empresaId, { attributes: ['emiteCertificadoFirma'] });
+  return emp?.emiteCertificadoFirma === 1;
+}
+
 function extractFiles(req, body) {
   if (req.files?.soporte?.[0])             body.soportePago          = req.files.soporte[0].filename;
   if (req.files?.cedulaFrontal?.[0])       body.cedulaFrontal        = req.files.cedulaFrontal[0].filename;
@@ -304,7 +312,11 @@ async function create(req, res, next) {
     // Fire-and-forget: solicitar envío de la firma electrónica via n8n
     // (solo canal ASESOR estándar; createPublico/Veolia NO debe disparar esto.
     // Tampoco aplica a EMPRESARIAL: ese canal no usa el flujo de firma).
-    if (body.canal !== 'EMPRESARIAL') {
+    // Canal asesor estándar SIEMPRE dispara firma. El canal empresarial solo
+    // si la empresa está marcada (flag por empresa) — así COOHEM firma como el
+    // asesor sin afectar a Veolia (que entra por createPublico, no por aquí).
+    // Se usa result.empresaId: la empresa se resuelve por NIT en el servicio.
+    if (body.canal !== 'EMPRESARIAL' || await empresaEmiteCertificadoFirma(result.empresaId)) {
       notificarFirma(result.id).catch(() => {});
     }
 
@@ -692,7 +704,7 @@ async function reenviarFirma(req, res, next) {
     if (afiliado.origen !== 'ASESOR') {
       throw new AppError('El reenvío de firma solo aplica a afiliaciones del canal asesor', 400);
     }
-    if (afiliado.canal === 'EMPRESARIAL') {
+    if (afiliado.canal === 'EMPRESARIAL' && !(await empresaEmiteCertificadoFirma(afiliado.empresaId))) {
       throw new AppError('El reenvío de firma no aplica al canal empresarial', 400);
     }
 
@@ -727,7 +739,7 @@ async function validarFirma(req, res, next) {
     if (afiliado.origen !== 'ASESOR') {
       throw new AppError('La validación de firma solo aplica a afiliaciones del canal asesor', 400);
     }
-    if (afiliado.canal === 'EMPRESARIAL') {
+    if (afiliado.canal === 'EMPRESARIAL' && !(await empresaEmiteCertificadoFirma(afiliado.empresaId))) {
       throw new AppError('La validación de firma no aplica al canal empresarial', 400);
     }
     if (afiliado.fechaFirmaAdobe) {
@@ -780,7 +792,8 @@ async function aprobar(req, res, next) {
     // OJO: Veolia usa canal='EMPRESARIAL' de forma histórica pero NO es el canal
     // empresarial real (ese es origen ASESOR/CONVENIO_PUBLICO). Veolia debe
     // seguir el flujo normal (certificado + aprobación pública), no la bienvenida.
-    if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA') {
+    const emiteCertFirma = await empresaEmiteCertificadoFirma(afiliado.empresaId);
+    if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA' && !emiteCertFirma) {
       // Canal empresarial: NO lleva certificado ni carné por WhatsApp. En su
       // lugar se dispara el workflow de bienvenida (correo al afiliado + copia
       // al correo matriculado en la empresa). Fire-and-forget.
