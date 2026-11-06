@@ -7,7 +7,10 @@
  * requireRol, el dato sigue protegido. Son 941 atenciones al año sobre
  * familias en duelo; el costo de un `if` de más es nada.
  *
- * Nada de lo que hay en `notas` se escribe a un log.
+ * Nada de lo que viaja en el cuerpo de una atención se escribe a un log: ni
+ * `notas` ni `motivo`, y tampoco quién fue atendido (`atendido_nombre`,
+ * `atendido_parentesco`) ni `acompanante`, que ligados a una atención
+ * psicológica también son dato de salud.
  */
 const svc = require('../services/duelo_atenciones.service')
 
@@ -29,9 +32,15 @@ function denegar(res) {
 // tenía el Excel, donde ese nombre se escribía a mano. Solo vale un texto con
 // contenido; cualquier otra cosa (ausente, null, vacío, solo espacios, número,
 // objeto, arreglo) se trata como «no hay usuario».
+//
+// Se devuelve el valor RECORTADO, el mismo que se validó: `psicologa` y
+// `created_by` son los campos de auditoría, y guardar `' JAZMIN '` con los
+// espacios dejaría dos nombres distintos para la misma persona.
 function usuarioDelLogin(req) {
   const u = req.user.usuario
-  return typeof u === 'string' && u.trim() !== '' ? u : null
+  if (typeof u !== 'string') return null
+  const limpio = u.trim()
+  return limpio !== '' ? limpio : null
 }
 
 function sinUsuario(res) {
