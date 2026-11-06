@@ -270,6 +270,78 @@ describe('bandeja', () => {
     expect(fila(res, 'A-3').rama).toBe('OTRA_CIUDAD')
   })
 
+  // `rama` por sí sola no distingue lo que se sabe de lo que se supone: sin esta
+  // marca la pantalla pinta «Residencia» igual para un homenaje registrado que
+  // para una orden de ayer de la que nadie sabe aún dónde será la velación.
+  // Es un campo aparte y aditivo: `rama` y el filtro no cambian.
+  describe('rama_confirmada: lo que se sabe frente a lo que se supone', () => {
+    test('confirmada cuando sale de la ubicación de la asistencia en H360 (sala)', async () => {
+      db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').rama).toBe('SALA')
+      expect(fila(res, 'A-1').rama_confirmada).toBe(true)
+    })
+
+    test('confirmada cuando sale del homenaje en residencia registrado en H360', async () => {
+      db.query = jest.fn(async () => [[{
+        id: 80, codigo: 'H360-2026-0400', contrato: 'A-1', estado: 'RESIDENCIA',
+        sala_codigo: null, sede_nombre: null, residencia_id: 9,
+      }]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').rama).toBe('RESIDENCIA')
+      expect(fila(res, 'A-1').rama_confirmada).toBe(true)
+    })
+
+    test('confirmada cuando la sede del ERP dice que es otra ciudad', async () => {
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-3').rama).toBe('OTRA_CIUDAD')
+      expect(fila(res, 'A-3').rama_confirmada).toBe(true)
+    })
+
+    test('NO confirmada cuando la rama es el valor por defecto (sede local, sin asistencia)', async () => {
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').rama).toBe('RESIDENCIA')
+      expect(fila(res, 'A-1').rama_confirmada).toBe(false)
+    })
+
+    test('NO confirmada si hay asistencia pero aún sin homenaje: no sabe dónde será', async () => {
+      db.query = jest.fn(async () => [[{
+        id: 81, codigo: 'H360-2026-0401', contrato: 'A-1', estado: 'ASISTENCIA',
+        sala_codigo: null, sede_nombre: null, residencia_id: null,
+      }]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia).not.toBeNull()
+      expect(fila(res, 'A-1').rama).toBe('RESIDENCIA')
+      expect(fila(res, 'A-1').rama_confirmada).toBe(false)
+    })
+
+    test('NO confirmada en una orden sin sede ni convenio', async () => {
+      ks.ordenesDelRango = jest.fn(async () => [{ orden_servicio: 'X-2', nombre_ser_querido: 'SIN CAMPOS' }])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'X-2').rama).toBe('RESIDENCIA')
+      expect(fila(res, 'X-2').rama_confirmada).toBe(false)
+    })
+
+    test('es siempre un booleano, en todas las filas', async () => {
+      db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(res.cuerpo.data.length).toBeGreaterThan(0)
+      for (const f of res.cuerpo.data) expect(typeof f.rama_confirmada).toBe('boolean')
+    })
+
+    test('no cambia el filtro por rama: una rama supuesta sigue entrando en su filtro', async () => {
+      const { res } = await llamar(ctrl.bandeja, { rama: 'RESIDENCIA' })
+      expect(res.codigo).toBe(200)
+      expect(fila(res, 'A-1').rama_confirmada).toBe(false)
+    })
+
+    test('ramaDe sigue devolviendo solo el texto de la rama', () => {
+      expect(ctrl.ramaDe(ORDENES[0], null)).toBe('RESIDENCIA')
+      expect(ctrl.ramaDe(ORDENES[2], null)).toBe('OTRA_CIUDAD')
+      expect(ctrl.ramaDe(ORDENES[0], { ubicacion_tipo: 'SALA' })).toBe('SALA')
+    })
+  })
+
   test('dice qué ya se gestionó', async () => {
     svc.gestionesPorOrdenes = jest.fn(async () => new Map([
       ['A-1', { id: 5, estado: 'GESTIONADA', tipificacion: 'OFRECIDO_EN_HOMENAJE' }],
@@ -900,6 +972,17 @@ describe('buscar', () => {
     expect(fila(res, 'MAS-9').es_mascota).toBe(true)
     expect(fila(res, 'A-3').asistencia).toBeNull()
     expect(JSON.stringify(res.cuerpo)).not.toContain('PRIVADO')
+  })
+
+  // La búsqueda arma las filas con la misma función que la bandeja, y la
+  // pantalla de búsqueda pinta la misma insignia: el campo tiene que estar.
+  test('cada fila trae rama_confirmada, igual que en la bandeja', async () => {
+    db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+    const { res } = await llamar(ctrl.buscar, { nombre: 'perez' })
+    expect(fila(res, 'A-1').rama_confirmada).toBe(true)   // homenaje en H360
+    expect(fila(res, 'A-3').rama_confirmada).toBe(true)   // sede de otra ciudad
+    expect(fila(res, 'MAS-9').rama).toBe('RESIDENCIA')
+    expect(fila(res, 'MAS-9').rama_confirmada).toBe(false) // valor por defecto
   })
 
   test('una búsqueda sin coincidencias responde vacío, que es distinto de un fallo', async () => {

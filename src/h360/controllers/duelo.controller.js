@@ -84,11 +84,27 @@ function esOtraCiudad(orden) {
  */
 const RAMA = Object.freeze({ SALA: 'SALA', RESIDENCIA: 'RESIDENCIA', OTRA_CIUDAD: 'OTRA_CIUDAD' })
 
-function ramaDe(orden, asistencia) {
-  if (asistencia?.ubicacion_tipo) return asistencia.ubicacion_tipo
-  if (esOtraCiudad(orden)) return RAMA.OTRA_CIUDAD
-  return RAMA.RESIDENCIA
+/**
+ * La rama de una orden y si esa rama es un dato o una suposición.
+ *
+ * Hay tres orígenes y solo el último es una suposición:
+ *   1. La ubicación del homenaje que H360 ya registró (sala o residencia): dato.
+ *   2. La sede del ERP, cuando dice que es de otra ciudad: dato.
+ *   3. Ninguno de los dos: se devuelve RESIDENCIA POR DEFECTO. Nadie sabe aún
+ *      dónde será la velación (casi la mitad de las filas, y justo las más
+ *      recientes: las órdenes de ayer y hoy, que todavía no tienen homenaje).
+ *
+ * Es la única función que decide las dos cosas a la vez, para que `rama` y
+ * `confirmada` no puedan desfasarse: salen del mismo `if`.
+ */
+function decidirRama(orden, asistencia) {
+  if (asistencia?.ubicacion_tipo) return { rama: asistencia.ubicacion_tipo, confirmada: true }
+  if (esOtraCiudad(orden)) return { rama: RAMA.OTRA_CIUDAD, confirmada: true }
+  return { rama: RAMA.RESIDENCIA, confirmada: false }
 }
+
+/** Solo el texto de la rama. Se conserva porque el módulo la exporta y sus pruebas la llaman. */
+const ramaDe = (orden, asistencia) => decidirRama(orden, asistencia).rama
 
 /**
  * La clave con que se cruzan los contratos entre sistemas: recortada y en
@@ -166,11 +182,18 @@ async function armarFilas(ordenes) {
     const clave = claveContrato(o.orden_servicio)
     const asistencia = asistencias.get(clave) || null
     const g = gestiones.get(clave) || null
+    const { rama, confirmada } = decidirRama(o, asistencia)
     return {
       ...o,
       es_mascota: esMascota(o),
       asistencia,
-      rama: ramaDe(o, asistencia),
+      rama,
+      // Existe porque `rama` sola afirma como hecho lo que a veces es una
+      // suposición: sin esta marca la pantalla muestra «Residencia» idéntica
+      // para un homenaje registrado y para una orden de la que nadie sabe aún
+      // dónde será la velación, y una psicóloga planificaría una visita a
+      // domicilio sin base. false = RESIDENCIA por defecto, no confirmada.
+      rama_confirmada: confirmada,
       // Solo lo que la bandeja necesita: nunca el contenido de una atención.
       gestion: g ? { id: g.id, estado: g.estado, tipificacion: g.tipificacion } : null,
     }
