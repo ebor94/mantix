@@ -271,8 +271,11 @@ Cada uno es una decisión pendiente, no un olvido:
    talleres y el grupo de apoyo, con sus listas y asistentes. Son los procesos
    siguientes. El próximo a especificar es la **programación personalizada de
    asistencia**.
-2. **Exporte del R-56 con su formato exacto.** Sin él, el Excel se mantendría
-   en paralelo y el módulo no reemplazaría nada. Debería entrar pronto.
+2. **Informe e indicadores de posexequiales.** Decidido: no se hace exporte del
+   R-56 con su formato. El informe y los indicadores se construyen después, como
+   pieza propia, sobre los datos que este módulo ya deja estructurados.
+   Consecuencia asumida: hasta entonces el Excel sigue siendo el registro formal
+   que se entrega, y el módulo convive con él en vez de reemplazarlo.
 3. **Migración de los 3008 casos de 2026.** Es viable —los valores están
    medidos y se pueden mapear— pero hay 340 ubicaciones distintas y valores
    mezclados que exigen criterio caso por caso.
