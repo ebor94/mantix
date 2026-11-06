@@ -51,6 +51,14 @@ const tieneClave = (valor, clave) =>
   && (Object.keys(valor).includes(clave)
       || Object.values(valor).some(v => tieneClave(v, clave)))
 
+// ¿Queda un objeto Date en cualquier nivel de la respuesta? Express lo
+// serializaría en UTC (toISOString): una gestión cerrada a las 16:05 en Cúcuta
+// saldría como 21:05Z. Se busca el tipo y no el texto, para que valga igual en
+// cualquier zona en que corra la prueba.
+const contieneDate = valor =>
+  valor instanceof Date
+  || (valor !== null && typeof valor === 'object' && Object.values(valor).some(contieneDate))
+
 const CONTRATO = {
   orden_servicio: 'A-1', sede: 'Sede Gran Colombia',
   nombre_ser_querido: 'JUAN PEREZ', fecha_fallecimiento: '2026-11-04',
@@ -69,7 +77,7 @@ const SERVICIOS = [
 ]
 // La fila que asistenciasPorContrato lee de MySQL para el contrato A-1.
 const FILA_ASISTENCIA = {
-  id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA', viene_otra_ciudad: 0,
+  id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA',
   sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia', residencia_id: null,
 }
 // Lo que un error de MySQL trae cuando el índice único rechaza la inserción.
@@ -154,6 +162,16 @@ describe('ficha', () => {
       id: 77, codigo: 'H360-2026-0315', estado: 'SALA',
       ubicacion_tipo: 'SALA', ubicacion_detalle: 'Gran Colombia · SALGC06',
     })
+  })
+
+  // El IN de MySQL no distingue mayúsculas y Map.get sí: con el número escrito a
+  // mano en la URL en minúsculas, la consulta encontraba la asistencia y la
+  // ficha decía que no había.
+  test('encuentra la asistencia aunque el número de orden llegue en otra capitalización', async () => {
+    db.query = jest.fn(async () => [[FILA_ASISTENCIA]])
+    const { res } = await llamar(ctrl.ficha, { params: { orden: 'a-1' } })
+    expect(db.query.mock.calls[0][1]).toEqual(['a-1'])
+    expect(res.cuerpo.asistencia.id).toBe(77)
   })
 
   test('recorta el número de orden antes de buscar', async () => {
@@ -260,6 +278,125 @@ describe('ficha', () => {
     expect(res.cuerpo).toBeNull()
   })
 
+  // La gestión llega del servicio con un SELECT *: lo que la tabla gane mañana
+  // saldría en la ficha sin que nadie lo decidiera, y como el servicio está
+  // simulado ninguna prueba lo vería. Por eso la ficha PROYECTA: devuelve las
+  // columnas de esta lista y no otras, y agregar una es una decisión explícita
+  // (se toca el controlador y esta lista, a la vista de quien revisa).
+  describe('la gestión de la ficha sale proyectada y con las fechas como texto', () => {
+    // Escrita a mano a propósito: no se deriva del controlador, para que la
+    // prueba diga qué columnas se decidió servir.
+    const COLUMNAS_DE_LA_FICHA = [
+      'id', 'orden_servicio', 'asistencia_id', 'ubicacion_tipo', 'ubicacion_detalle',
+      'es_mascota', 'titular_nombre', 'titular_parentesco', 'telefonos', 'tipificacion',
+      'estado', 'observaciones', 'psicologa', 'psicologa_acompanante', 'cerrada_at',
+      'created_by', 'created_at', 'updated_at',
+    ]
+    // Las columnas DATETIME llegan como Date: mysql2 los arma con los dígitos de la
+    // base interpretados en la zona del proceso, que es lo que hace new Date(a, m, d, h, mi).
+    const FILA_GESTION = {
+      id: 5, orden_servicio: 'A-1', asistencia_id: 77, ubicacion_tipo: 'SALA',
+      ubicacion_detalle: 'Gran Colombia · SALGC06', es_mascota: 0,
+      titular_nombre: 'ANA PEREZ', titular_parentesco: 'HIJA', telefonos: '3001234567',
+      tipificacion: 'ATENCION_POR_LLAMADA', estado: 'GESTIONADA', observaciones: 'llamar en la tarde',
+      psicologa: 'MARIA', psicologa_acompanante: 'JAZMIN',
+      cerrada_at: new Date(2026, 10, 5, 16, 5, 30), created_by: 'JAZMIN',
+      created_at: new Date(2026, 10, 5, 9, 0, 0), updated_at: new Date(2026, 10, 5, 16, 5, 31),
+    }
+
+    test('devuelve solo las columnas declaradas: una columna nueva de la tabla no se sirve sola', async () => {
+      svc.gestionPorOrden = jest.fn(async () => (
+        { ...FILA_GESTION, columna_nueva: 'LO QUE SEA', notas: 'CONTENIDO CLINICO' }))
+      const { res, next } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(next).not.toHaveBeenCalled()
+      expect(Object.keys(res.cuerpo.gestion).sort()).toEqual([...COLUMNAS_DE_LA_FICHA].sort())
+      expect(tieneClave(res.cuerpo, 'columna_nueva')).toBe(false)
+      expect(tieneClave(res.cuerpo, 'notas')).toBe(false)
+      expect(JSON.stringify(res.cuerpo)).not.toContain('CONTENIDO CLINICO')
+    })
+
+    test('los valores de las columnas servidas salen tal cual, salvo las fechas', async () => {
+      svc.gestionPorOrden = jest.fn(async () => FILA_GESTION)
+      const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(res.cuerpo.gestion).toEqual({
+        ...FILA_GESTION,
+        cerrada_at: '2026-11-05 16:05', created_at: '2026-11-05 09:00', updated_at: '2026-11-05 16:05',
+      })
+    })
+
+    // Una cerrada_at de las 16:05 sale 16:05, como `momento` de los intentos, y no
+    // como 21:05Z. Es la hora de pared que escribió la base, sin aritmética de zonas.
+    test('las fechas DATETIME salen como texto de hora de pared, igual que `momento`', async () => {
+      svc.gestionPorOrden = jest.fn(async () => FILA_GESTION)
+      svc.intentosDeGestion = jest.fn(async () => INTENTOS)
+      const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(res.cuerpo.gestion.cerrada_at).toBe('2026-11-05 16:05')
+      expect(res.cuerpo.gestion.created_at).toBe('2026-11-05 09:00')
+      expect(res.cuerpo.gestion.updated_at).toBe('2026-11-05 16:05')
+      // El mismo formato que ya traen los intentos en la misma respuesta.
+      expect(res.cuerpo.intentos[0].momento).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+      expect(res.cuerpo.gestion.cerrada_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+    })
+
+    // Lo anterior solo distingue «hora de pared» de «hora UTC» cuando la máquina
+    // que corre las pruebas NO está en UTC (en un proceso en UTC los dos getters
+    // coinciden y todo pasaría igual). Esta prueba no depende de dónde se corra: lee
+    // la fecha en procesos de Node con otras zonas, armándola como la arma mysql2
+    // (con los dígitos de la base en la zona del proceso).
+    test('la hora de pared sale igual en procesos que corren en cualquier zona horaria', () => {
+      const { execFileSync } = require('child_process')
+      const ZONAS = ['UTC', 'America/Bogota', 'Asia/Tokyo', 'Pacific/Auckland', 'America/Los_Angeles']
+      const script = `
+        const c = require(${JSON.stringify(require.resolve('../duelo.controller'))})
+        const salida = {}
+        for (const tz of ${JSON.stringify(ZONAS)}) {
+          process.env.TZ = tz
+          salida[tz] = [
+            c.horaDePared(new Date(2026, 10, 5, 16, 5, 30)),
+            c.horaDePared(new Date(2026, 0, 1, 0, 0, 0)),
+            c.horaDePared(new Date(2026, 11, 31, 23, 59, 59)),
+          ]
+        }
+        console.log(JSON.stringify(salida))`
+      // El proceso hijo arranca sin TZ y la fija él mismo en cada vuelta.
+      const entorno = { ...process.env }
+      delete entorno.TZ
+      const salida = JSON.parse(execFileSync(process.execPath, ['-e', script],
+        { env: entorno, encoding: 'utf8', timeout: 20000 }))
+      for (const tz of ZONAS)
+        expect([tz, salida[tz]]).toEqual([tz, ['2026-11-05 16:05', '2026-01-01 00:00', '2026-12-31 23:59']])
+    })
+
+    test('una gestión abierta (cerrada_at nulo) conserva el nulo', async () => {
+      svc.gestionPorOrden = jest.fn(async () => ({ ...FILA_GESTION, estado: 'EN_GESTION', cerrada_at: null }))
+      const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(res.cuerpo.gestion.cerrada_at).toBeNull()
+    })
+
+    test('una orden sin gestión sigue dando gestion nulo', async () => {
+      svc.gestionPorOrden = jest.fn(async () => null)
+      const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(res.cuerpo.gestion).toBeNull()
+    })
+
+    // La misma trampa estaba en los servicios (SELECT * con created_at y
+    // updated_at): la regla es de la respuesta entera, no de un campo.
+    test('ninguna fecha de la respuesta sale como Date: ni en la gestión, ni en los intentos, ni en los servicios', async () => {
+      svc.gestionPorOrden = jest.fn(async () => FILA_GESTION)
+      svc.intentosDeGestion = jest.fn(async () => (
+        INTENTOS.map(i => ({ ...i, created_at: new Date(2026, 10, 5, 14, 31, 0) }))))
+      svc.serviciosDeGestion = jest.fn(async () => (
+        SERVICIOS.map(s => ({ ...s, created_at: new Date(2026, 10, 5, 9, 1, 0), updated_at: new Date(2026, 10, 5, 9, 2, 0) }))))
+      const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+      expect(contieneDate(res.cuerpo)).toBe(false)
+      expect(res.cuerpo.servicios[0].created_at).toBe('2026-11-05 09:01')
+      expect(res.cuerpo.servicios[0].updated_at).toBe('2026-11-05 09:02')
+      expect(res.cuerpo.intentos[0].created_at).toBe('2026-11-05 14:31')
+      // Y serializada no queda ningún instante en UTC.
+      expect(JSON.stringify(res.cuerpo)).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
+    })
+  })
+
   // Ley 1581 de 2012: las notas de una atención son dato de salud de un tercero
   // y solo salen por su propia ruta. La ficha no debe tocar esa tabla ni traer
   // la propiedad, ni siquiera para quien sí puede leerla.
@@ -269,7 +406,12 @@ describe('ficha', () => {
       : [[FILA_ASISTENCIA]]))
     svc.intentosDeGestion = jest.fn(async () => INTENTOS)
     svc.serviciosDeGestion = jest.fn(async () => SERVICIOS)
-    const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+    const { res, next } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+    // El doble de respuesta arranca en 200 y con cuerpo nulo: sin estas dos
+    // líneas, un manejador que terminara en `next` también pasaría (sin
+    // respuesta no hay nada que filtrar, pero tampoco se comprobó nada).
+    expect(next).not.toHaveBeenCalled()
+    expect(res.cuerpo).not.toBeNull()
     expect(res.codigo).toBe(200)
     expect(tieneClave(res.cuerpo, 'notas')).toBe(false)
     expect(JSON.stringify(res.cuerpo)).not.toContain('CONTENIDO CLINICO')
@@ -434,23 +576,79 @@ describe('actualizar', () => {
     expect(svc.actualizarGestion).toHaveBeenCalledWith('5', {})
   })
 
-  // Es la misma regla que al abrir la gestión: quién atendió sale del login. Si
-  // el PATCH aceptara `psicologa`, cualquiera podría reescribir quién la atendió
-  // y la auditoría que se buscaba se perdería por la puerta de al lado.
-  test('quién atendió no se reescribe desde la petición', async () => {
-    const body = { psicologa: 'OTRA_PERSONA', estado: 'GESTIONADA' }
-    await llamar(ctrl.actualizar, { params: { id: '5' }, body })
-    expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { estado: 'GESTIONADA' })
-    // Se descarta del objeto que va al servicio, no de la petición: lo que
-    // venga después en la cadena de middlewares la ve completa.
-    expect(body).toEqual({ psicologa: 'OTRA_PERSONA', estado: 'GESTIONADA' })
-  })
+  // Decisión del dueño del sistema: la psicóloga SÍ se puede reasignar. Una
+  // psicóloga sale de turno, se incapacita o entra a vacaciones y la otra
+  // continúa el caso. La auditoría no se pierde por eso, porque la fila dice dos
+  // cosas distintas: `created_by` (quién la ABRIÓ: sale del login al crearla y
+  // ningún PATCH lo toca) y `psicologa` (quién la TIENE ahora: es la que cambia).
+  // Esta prueba fija las dos mitades.
+  describe('reasignar la gestión a otra psicóloga', () => {
+    test('psicologa se puede cambiar: llega al servicio tal como la mandaron', async () => {
+      const { res, next } = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { psicologa: 'MARIA', estado: 'EN_GESTION' },
+      })
+      expect(next).not.toHaveBeenCalled()
+      expect(res.codigo).toBe(200)
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { psicologa: 'MARIA', estado: 'EN_GESTION' })
+    })
 
-  test('mandar solo la psicóloga no cuenta como un cambio', async () => {
-    svc.actualizarGestion = jest.fn(async () => false)
-    const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { psicologa: 'OTRA_PERSONA' } })
-    expectRechazo(r, /No hay cambios/)
-    expect(svc.actualizarGestion).toHaveBeenCalledWith('5', {})
+    test('mandar solo la psicóloga es un cambio como cualquier otro', async () => {
+      const { res } = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { psicologa: 'MARIA' } })
+      expect(res.codigo).toBe(200)
+      expect(res.cuerpo).toEqual({ ok: true })
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { psicologa: 'MARIA' })
+    })
+
+    // Las dos mitades juntas y de punta a punta: aquí el servicio NO está
+    // simulado (sí la base), así que lo que se mira es lo que de verdad se
+    // escribiría en la fila. Un `created_by` que llegara en el cuerpo y entrara
+    // al UPDATE borraría la huella de quién abrió la gestión.
+    test('se cambia quién la tiene (psicologa) y no quién la abrió (created_by)', async () => {
+      svc.actualizarGestion = jest.requireActual('../../services/duelo.service').actualizarGestion
+      db.query = jest.fn(async () => [{ affectedRows: 1 }])
+      const { res } = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { psicologa: 'MARIA', created_by: 'OTRA_PERSONA' },
+      })
+      expect(res.codigo).toBe(200)
+      expect(db.query).toHaveBeenCalledTimes(1)
+      const [sql, params] = db.query.mock.calls[0]
+      expect(params[0]).toEqual({ psicologa: 'MARIA' })
+      expect(params[1]).toBe('5')
+      expect(sql).not.toMatch(/created_by/)
+    })
+
+    test('quien abrió la gestión sale del login al crearla', async () => {
+      svc.gestionPorOrden = jest.fn(async () => null)
+      await llamar(ctrl.crear, { body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA', created_by: 'OTRA_PERSONA' } })
+      expect(svc.crearGestion.mock.calls[0][0].created_by).toBe('JAZMIN')
+    })
+
+    test('no toca el cuerpo de la petición', async () => {
+      const body = { psicologa: ' MARIA ', estado: 'GESTIONADA' }
+      await llamar(ctrl.actualizar, { params: { id: '5' }, body })
+      expect(body).toEqual({ psicologa: ' MARIA ', estado: 'GESTIONADA' })
+    })
+
+    // Ahora que el campo es escribible, un valor que no es una psicóloga no puede
+    // dejar el caso sin responsable (un texto en blanco cumple el NOT NULL de la
+    // tabla y aun así no es nadie) ni reventar la base con un 500.
+    test.each([
+      ['en blanco', '   '], ['vacía', ''], ['nula', null], ['un número', 7],
+      ['una lista', ['ANA', 'MARIA']], ['más larga que la columna (50)', 'x'.repeat(51)],
+    ])('una psicóloga %s es 400 y no se guarda nada', async (_, psicologa) => {
+      const r = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { psicologa, estado: 'GESTIONADA' },
+      })
+      expectRechazo(r, /psicóloga/)
+      expect(svc.actualizarGestion).not.toHaveBeenCalled()
+    })
+
+    test('la psicóloga llega recortada, y de 50 caracteres exactos cabe', async () => {
+      await llamar(ctrl.actualizar, { params: { id: '5' }, body: { psicologa: '  MARIA ' } })
+      expect(svc.actualizarGestion).toHaveBeenLastCalledWith('5', { psicologa: 'MARIA' })
+      await llamar(ctrl.actualizar, { params: { id: '5' }, body: { psicologa: 'x'.repeat(50) } })
+      expect(svc.actualizarGestion).toHaveBeenLastCalledWith('5', { psicologa: 'x'.repeat(50) })
+    })
   })
 
   test('el resto de los campos de la ficha pasan, incluida la acompañante', async () => {
@@ -570,6 +768,22 @@ describe('guardarServicios', () => {
     // Leer antes de guardar devolvería la lista vieja.
     expect(svc.guardarServicios.mock.invocationCallOrder[0])
       .toBeLessThan(svc.serviciosDeGestion.mock.invocationCallOrder[0])
+  })
+
+  // La misma regla que en la ficha: los servicios traen created_at y updated_at
+  // (DATETIME) y no pueden salir como Date, que Express serializaría en UTC.
+  test('lo que devuelve lleva las fechas como texto de hora de pared y no como Date', async () => {
+    svc.serviciosDeGestion = jest.fn(async () => [{
+      id: 1, gestion_id: 5, servicio: 'MISA_DE_MES', estado: 'ACEPTA', modalidad: 'PRESENCIAL',
+      detalle: 'CATOLICA', observacion: null,
+      created_at: new Date(2026, 10, 5, 9, 1, 0), updated_at: new Date(2026, 10, 5, 16, 5, 40),
+    }])
+    const { res } = await llamar(ctrl.guardarServicios, {
+      params: { id: '5' }, body: { servicios: [{ servicio: 'MISA_DE_MES', estado: 'ACEPTA' }] },
+    })
+    expect(contieneDate(res.cuerpo)).toBe(false)
+    expect(res.cuerpo.data[0].created_at).toBe('2026-11-05 09:01')
+    expect(res.cuerpo.data[0].updated_at).toBe('2026-11-05 16:05')
   })
 
   test('una lista vacía es válida: no guarda nada y devuelve lo que hay', async () => {

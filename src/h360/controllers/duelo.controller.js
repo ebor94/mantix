@@ -15,16 +15,52 @@ const { esMascota, ESTADOS_GESTION } = require('../utils/duelo.catalogos')
 const { malUso } = require('../utils/errores')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
 
-const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  + `-${String(d.getDate()).padStart(2, '0')}`
-
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
-/** Ayer y hoy: es como trabajan hoy sobre el ERP. */
-function rangoPorDefecto() {
-  const hoy = new Date()
-  const ayer = new Date(hoy.getTime() - 86400000)
-  return { desde: iso(ayer), hasta: iso(hoy) }
+/**
+ * La zona del negocio. El día de la bandeja es el de Bogotá (Cúcuta está en la
+ * misma zona: UTC-5, sin horario de verano), y se dice aquí, a propósito.
+ *
+ * NO se hereda de la zona del proceso. El servidor hoy corre en America/Bogota
+ * porque la máquina está configurada así, no porque el código lo decida: no hay
+ * TZ fijada en ningún lado del repo. Si el backend se muda a un contenedor, lo
+ * normal es que corra en UTC, y entonces entre las 19:00 y la medianoche de
+ * Cúcuta el reloj del proceso ya marca el día siguiente: la bandeja abriría con
+ * un día corrido y sin avisar, y las psicólogas perderían una jornada de casos.
+ * Con la hora local ese error no avisa; con la zona explícita no puede ocurrir.
+ */
+const ZONA_NEGOCIO = 'America/Bogota'
+
+// formatToParts y no el texto ya formateado: así el resultado no depende de cómo
+// ordene la fecha un idioma. 'en-US' y no 'es-CO' por la misma razón de ir sobre
+// seguro: cualquier ICU trae el inglés.
+const PARTES_DEL_DIA = new Intl.DateTimeFormat('en-US', {
+  timeZone: ZONA_NEGOCIO, year: 'numeric', month: '2-digit', day: '2-digit',
+})
+
+/** El día calendario de Bogotá (AAAA-MM-DD) en que cae un instante. */
+function diaEnBogota(instante) {
+  const p = Object.fromEntries(PARTES_DEL_DIA.formatToParts(instante).map(x => [x.type, x.value]))
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+/**
+ * El día anterior a una fecha AAAA-MM-DD, por aritmética de calendario (en UTC,
+ * donde no hay horario de verano que mueva el día): no se resta un día en
+ * milisegundos a un instante, que dependería de la zona en que se lea.
+ */
+function diaAnterior(dia) {
+  const [anio, mes, d] = dia.split('-').map(Number)
+  return new Date(Date.UTC(anio, mes - 1, d - 1)).toISOString().slice(0, 10)
+}
+
+/**
+ * Ayer y hoy, en Bogotá: es como trabajan hoy sobre el ERP. El parámetro es el
+ * instante de «ahora» (solo se pasa en las pruebas).
+ */
+function rangoPorDefecto(ahora = new Date()) {
+  const hoy = diaEnBogota(ahora)
+  return { desde: diaAnterior(hoy), hasta: hoy }
 }
 
 /**
@@ -54,12 +90,42 @@ function ramaDe(orden, asistencia) {
   return RAMA.RESIDENCIA
 }
 
-/** Asistencias de H360 para un grupo de contratos, con su sala y sede. */
+/**
+ * La clave con que se cruzan los contratos entre sistemas: recortada y en
+ * mayúsculas. El IN de MySQL no distingue mayúsculas pero un Map sí, así que un
+ * contrato guardado con otra capitalización llegaba en las filas y no se
+ * enriquecía. (Hoy no es alcanzable en producción: ningún contrato difiere solo
+ * en mayúsculas. Se cierra porque cuesta una línea y el día que ocurra nadie lo
+ * vería.) Todo lo que se escribe o se lee en esos Map pasa por aquí.
+ */
+const claveContrato = c => String(c ?? '').trim().toUpperCase()
+
+/**
+ * Asistencias de H360 para un grupo de contratos, con su sala y sede. El Map sale
+ * indexado por claveContrato.
+ *
+ * Un contrato puede tener MÁS DE UNA asistencia (medido en producción: dos
+ * contratos tienen dos), y los LEFT JOIN de los homenajes pueden multiplicar las
+ * filas de una misma asistencia. Sin ORDER BY, cuál quedaba dependía de qué fila
+ * devolvía el motor, y la bandeja podía decir «sala» cuando el homenaje fue en
+ * residencia y mandar a alguien al lugar equivocado. La elección es esta, a la
+ * vista, y la consulta la hace llegar primera:
+ *
+ *   1. Primero la asistencia con homenaje registrado (sala o residencia). Sin
+ *      homenaje una asistencia no aporta lo único que H360 le agrega a la
+ *      bandeja, que es DÓNDE es el homenaje; no debe tapar a una que sí lo sabe.
+ *   2. Entre las que empatan, la más reciente (id más alto, que crece con cada
+ *      asistencia nueva): la posterior reemplaza a la anterior.
+ *   3. Dentro de una misma asistencia, el último homenaje de sala y, luego, el
+ *      último de residencia: que ni el desempate quede al motor.
+ *
+ * El cruce se queda con la PRIMERA fila de cada contrato.
+ */
 async function asistenciasPorContrato(contratos) {
   const lista = contratos.map(c => String(c).trim()).filter(Boolean)
   if (!lista.length) return new Map()
   const [filas] = await db.query(
-    `SELECT a.id, a.codigo, a.contrato, a.estado, a.viene_otra_ciudad,
+    `SELECT a.id, a.codigo, a.contrato, a.estado,
             sv.codigo AS sala_codigo, sd.nombre AS sede_nombre,
             hr.id AS residencia_id
        FROM asistencias a
@@ -67,13 +133,16 @@ async function asistenciasPorContrato(contratos) {
        LEFT JOIN salas_velacion sv  ON sv.id = hs.sala_id
        LEFT JOIN sedes sd           ON sd.id = sv.sede_id
        LEFT JOIN homenajes_residencia hr ON hr.asistencia_id = a.id
-      WHERE a.contrato IN (${lista.map(() => '?').join(',')})`,
+      WHERE a.contrato IN (${lista.map(() => '?').join(',')})
+      ORDER BY (hs.id IS NULL AND hr.id IS NULL), a.id DESC, hs.id DESC, hr.id DESC`,
     lista)
 
   const m = new Map()
   for (const f of filas) {
+    const clave = claveContrato(f.contrato)
+    if (m.has(clave)) continue // la consulta ya las ordenó: la primera es la preferida
     const ubicacion_tipo = f.sala_codigo ? RAMA.SALA : (f.residencia_id ? RAMA.RESIDENCIA : null)
-    m.set(String(f.contrato).trim(), {
+    m.set(clave, {
       id: f.id, codigo: f.codigo, estado: f.estado,
       ubicacion_tipo,
       ubicacion_detalle: f.sala_codigo ? `${f.sede_nombre} · ${f.sala_codigo}` : null,
@@ -85,14 +154,18 @@ async function asistenciasPorContrato(contratos) {
 /** Arma las filas de la bandeja a partir de las órdenes del ERP. */
 async function armarFilas(ordenes) {
   const contratos = ordenes.map(o => o.orden_servicio)
-  const [asistencias, gestiones] = await Promise.all([
+  const [asistencias, gestionesCrudas] = await Promise.all([
     asistenciasPorContrato(contratos),
     svc.gestionesPorOrdenes(contratos),
   ])
+  // El servicio indexa las gestiones por el número tal como está guardado: se
+  // vuelven a indexar con la misma clave que las asistencias, por la misma razón.
+  const gestiones = new Map([...gestionesCrudas].map(([orden, g]) => [claveContrato(orden), g]))
 
   return ordenes.map(o => {
-    const asistencia = asistencias.get(String(o.orden_servicio).trim()) || null
-    const g = gestiones.get(String(o.orden_servicio).trim()) || null
+    const clave = claveContrato(o.orden_servicio)
+    const asistencia = asistencias.get(clave) || null
+    const g = gestiones.get(clave) || null
     return {
       ...o,
       es_mascota: esMascota(o),
@@ -235,9 +308,10 @@ const FILTROS_BANDEJA = {
     aplica: (f, v) => f.rama === v,
   },
   estado: {
-    // PENDIENTE ya viene en el catálogo; se suma de todos modos porque la bandeja
-    // lo usa para las órdenes sin gestión y no debe depender de que siga ahí.
-    valores: [...new Set([...ESTADOS_GESTION, SIN_GESTION])],
+    // El catálogo tal cual. La bandeja llama SIN_GESTION (PENDIENTE) a toda orden
+    // sin gestión y ese valor ya viene en el catálogo: que siga ahí lo fija una
+    // prueba (duelo.bandeja.test.js), no una suma aquí que nada verificaba.
+    valores: ESTADOS_GESTION,
     aplica: (f, v) => (f.gestion?.estado ?? SIN_GESTION) === v,
   },
   incluir_mascotas: {
@@ -315,8 +389,10 @@ async function bandeja(req, res, next) {
  * deducción tiene un límite que no se puede cerrar desde el controlador: no
  * distingue «exactamente 200 resultados» de «hay más de 200, y se mostraron las
  * primeras 200». Se equivoca solo hacia el lado seguro (un aviso de más, nunca
- * uno de menos). Y depende de que este número siga siendo el del servicio: si
- * alguien cambia el TOP allá, hay que cambiarlo acá; una prueba compara los dos.
+ * uno de menos). Y depende de que este número siga siendo el del servicio: el
+ * servicio lo exporta como TOPE_BUSQUEDA y es con ese valor con el que arma el
+ * TOP de su consulta. Si alguien lo cambia allá, hay que cambiarlo acá; una
+ * prueba compara los dos valores.
  */
 const TOPE_BUSQUEDA = 200
 
@@ -363,6 +439,57 @@ async function buscar(req, res, next) {
 
 // ── Ficha de una gestión ─────────────────────────────────────────────────────
 
+/**
+ * Las columnas de la gestión que la ficha sirve. Es una LISTA y no «lo que
+ * venga»: gestionPorOrden hace un SELECT * y, si la tabla gana mañana una
+ * columna con contenido sensible, la ficha la serviría sola y ninguna prueba lo
+ * vería (el servicio está simulado en ellas). Así, incluir una columna es una
+ * decisión explícita: se agrega aquí, a la vista de quien revisa. La bandeja
+ * hace lo mismo con tres campos.
+ *
+ * Esta lista no es la de columnas editables del servicio: son cosas distintas.
+ * Aquí entran también las que el PATCH no toca, como `created_by` (quién abrió la
+ * gestión) y las fechas.
+ */
+const COLUMNAS_FICHA = [
+  'id', 'orden_servicio', 'asistencia_id', 'ubicacion_tipo', 'ubicacion_detalle',
+  'es_mascota', 'titular_nombre', 'titular_parentesco', 'telefonos', 'tipificacion',
+  'estado', 'observaciones', 'psicologa', 'psicologa_acompanante', 'cerrada_at',
+  'created_by', 'created_at', 'updated_at',
+]
+
+const dosDigitos = n => String(n).padStart(2, '0')
+
+/**
+ * Un DATETIME como el texto de su hora de pared: 'AAAA-MM-DD HH:MM', el mismo
+ * formato con que intentosDeGestion entrega `momento`.
+ *
+ * El pool no define dateStrings, así que mysql2 entrega los DATETIME como Date,
+ * armados con los dígitos de la base leídos en la zona del proceso (timezone
+ * 'local'). Por eso aquí se leen con los getters LOCALES, que devuelven los mismos
+ * dígitos en cualquier zona; Express, en cambio, serializa un Date en UTC
+ * (toISOString) y una gestión cerrada a las 16:05 en Cúcuta saldría como 21:05Z.
+ * Es la quinta vez que esta trampa aparece en el módulo: la regla es que de la
+ * ficha ninguna fecha sale como Date.
+ *
+ * Depende de que el pool de config/db.js no defina `timezone` (por defecto es
+ * 'local', que es lo que hace que los getters locales devuelvan los dígitos de la
+ * base). Si algún día se define, esta lectura debe cambiar con él.
+ */
+function horaDePared(d) {
+  return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(d.getDate())}`
+    + ` ${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}`
+}
+
+/** Copia de una fila con cada valor Date convertido a texto de hora de pared. */
+const fechasComoTexto = fila => Object.fromEntries(
+  Object.entries(fila).map(([campo, v]) => [campo, v instanceof Date ? horaDePared(v) : v]))
+
+/** La gestión tal como la sirve la ficha: solo COLUMNAS_FICHA y con las fechas como texto. */
+const gestionDeFicha = g => (g
+  ? fechasComoTexto(Object.fromEntries(COLUMNAS_FICHA.map(campo => [campo, g[campo]])))
+  : null)
+
 // GET /api/h360/duelo/gestion/:orden
 async function ficha(req, res, next) {
   try {
@@ -394,14 +521,19 @@ async function ficha(req, res, next) {
 
     // La asistencia de H360 va en la ficha para poder precargar la ubicación
     // al abrir la gestión: es el dato que el ERP no tiene.
-    const asistencia = (await asistenciasPorContrato([orden])).get(orden) || null
+    const asistencia = (await asistenciasPorContrato([orden])).get(claveContrato(orden)) || null
 
     const [intentos, servicios] = gestion
       ? await Promise.all([svc.intentosDeGestion(gestion.id), svc.serviciosDeGestion(gestion.id)])
       : [[], []]
 
+    // La gestión se proyecta (COLUMNAS_FICHA) y toda fecha sale como texto de hora
+    // de pared; los servicios traen created_at y updated_at (SELECT *) y los
+    // intentos podrían traer los suyos si el servicio los agrega.
     res.json({ orden_servicio: orden, contrato, erp_error, asistencia,
-      gestion, intentos, servicios })
+      gestion: gestionDeFicha(gestion),
+      intentos: intentos.map(fechasComoTexto),
+      servicios: servicios.map(fechasComoTexto) })
   } catch (err) { responderError(res, next, err) }
 }
 
@@ -417,7 +549,9 @@ async function crear(req, res, next) {
     })
 
     // La psicóloga sale del login y no del cuerpo: en el Excel se escribía a
-    // mano 1850 veces y no hay forma de auditar quién atendió de verdad.
+    // mano 1850 veces y no hay forma de auditar quién atendió de verdad. `created_by`
+    // (quién ABRIÓ la gestión) sale del mismo login y no se vuelve a escribir: ver
+    // `actualizar`.
     const datos = {
       orden_servicio:     orden,
       asistencia_id:      req.body.asistencia_id ?? null,
@@ -454,16 +588,40 @@ async function crear(req, res, next) {
   } catch (err) { responderError(res, next, err) }
 }
 
+/** `psicologa` es VARCHAR(50) NOT NULL en h360_duelo_gestion. */
+const MAX_PSICOLOGA = 50
+
+/**
+ * La psicóloga a la que se reasigna una gestión, recortada. Ahora que el campo se
+ * puede escribir, un texto en blanco cumpliría el NOT NULL de la tabla y dejaría
+ * el caso sin responsable, y uno más largo que la columna o que no es texto
+ * reventaría en MySQL con un 500: se rechazan con 400 y un mensaje que dice qué
+ * se esperaba. No se comprueba que sea un usuario existente.
+ */
+function leerPsicologa(valor) {
+  const v = typeof valor === 'string' ? valor.trim() : ''
+  if (!v || v.length > MAX_PSICOLOGA)
+    throw malUso(`La psicóloga asignada debe ser un usuario (texto de 1 a ${MAX_PSICOLOGA} caracteres); `
+      + `llegó ${eco(valor)}.`)
+  return v
+}
+
 // PATCH /api/h360/duelo/gestion/:id
+//
+// Reasignar la gestión SÍ se puede (decisión del dueño del sistema): una psicóloga
+// sale de turno, se incapacita o entra a vacaciones y la otra continúa el caso. La
+// auditoría no se pierde por eso, porque la fila guarda dos cosas distintas y se
+// tratan distinto:
+//   - `created_by`: quién ABRIÓ la gestión. Se toma del login en `crear` y no está
+//     entre los campos editables del servicio: ningún PATCH lo cambia. Es la huella.
+//   - `psicologa`: quién la TIENE ahora. Es lo que se reasigna.
+// Así la fila dice las dos cosas, sin ninguna columna nueva. (`psicologa_acompanante`
+// es otra cosa: la segunda psicóloga cuando atienden las dos.)
 async function actualizar(req, res, next) {
   try {
-    // Quién atendió sale del login, igual que al abrir la gestión (ver crear):
-    // el servicio deja `psicologa` entre los campos editables, pero si el PATCH
-    // lo aceptara del cuerpo, cualquiera podría reescribir quién la atendió y la
-    // auditoría que se busca se perdería por la puerta de al lado. La acompañante
-    // sí se puede cambiar: es un dato que se declara, no una identidad.
+    // Copia: lo que venga después en la cadena de middlewares ve el cuerpo completo.
     const cambios = { ...req.body }
-    delete cambios.psicologa
+    if (cambios.psicologa !== undefined) cambios.psicologa = leerPsicologa(cambios.psicologa)
 
     const cambiado = await svc.actualizarGestion(req.params.id, cambios)
     if (!cambiado) return res.status(400).json({ mensaje: 'No hay cambios que guardar' })
@@ -491,10 +649,12 @@ async function guardarServicios(req, res, next) {
     if (!Array.isArray(req.body?.servicios))
       return res.status(400).json({ mensaje: 'Se espera una lista en "servicios"' })
     await svc.guardarServicios(req.params.id, req.body.servicios)
-    const data = await svc.serviciosDeGestion(req.params.id)
+    // Los servicios traen created_at y updated_at: igual que en la ficha, sin Date.
+    const data = (await svc.serviciosDeGestion(req.params.id)).map(fechasComoTexto)
     res.json({ data })
   } catch (err) { responderError(res, next, err) }
 }
 
 module.exports = { bandeja, buscar, ficha, crear, actualizar, agregarIntento,
-  guardarServicios, esOtraCiudad, ramaDe, FILTROS_BANDEJA, TOPE_BUSQUEDA, verificarFiltros }
+  guardarServicios, esOtraCiudad, ramaDe, rangoPorDefecto, horaDePared, FILTROS_BANDEJA,
+  TOPE_BUSQUEDA, verificarFiltros }

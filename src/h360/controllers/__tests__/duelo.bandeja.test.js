@@ -63,7 +63,7 @@ const ORDENES = [
 
 const ASISTENCIA_A1 = {
   id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA',
-  viene_otra_ciudad: 0, sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia',
+  sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia',
 }
 
 const ERROR_ERP = Object.assign(new Error('ECONNREFUSED'), { code: 'ESOCKET' })
@@ -114,6 +114,101 @@ describe('bandeja', () => {
     })
   })
 
+  // Dos contratos de producción tienen DOS asistencias en H360. Con la consulta
+  // sin orden y un Map que se queda con la última fila, `rama` y `asistencia`
+  // dependían de qué fila devolvía el motor primero: la bandeja podía decir
+  // «sala» cuando el homenaje fue en residencia y mandar a alguien al lugar
+  // equivocado. La elección es una decisión visible, no el azar del motor: la
+  // consulta ordena (primero la asistencia que tiene un homenaje registrado y,
+  // entre las que empatan, la más reciente) y el cruce se queda con la PRIMERA
+  // fila de cada contrato.
+  describe('un contrato con más de una asistencia en H360', () => {
+    // Un unit test no ejecuta el ORDER BY (db.query es un doble): lo que se puede
+    // fijar es lo que se le pide al motor y qué se hace con las filas que vuelven.
+    const CON_HOMENAJE = {
+      id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA',
+      sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia', residencia_id: null,
+    }
+    const SIN_HOMENAJE_MAS_RECIENTE = {
+      id: 91, codigo: 'H360-2026-0420', contrato: 'A-1', estado: 'ASISTENCIA',
+      sala_codigo: null, sede_nombre: null, residencia_id: null,
+    }
+    const EN_RESIDENCIA = {
+      id: 80, codigo: 'H360-2026-0400', contrato: 'A-1', estado: 'RESIDENCIA',
+      sala_codigo: null, sede_nombre: null, residencia_id: 9,
+    }
+
+    test('la consulta ordena: con homenaje registrado primero y, después, la más reciente', async () => {
+      await llamar(ctrl.bandeja)
+      const sql = db.query.mock.calls[0][0].replace(/\s+/g, ' ').trim()
+      const orden = /ORDER BY (.+)$/i.exec(sql)?.[1]
+      expect(orden).toBeDefined()
+      // 1.º las asistencias con homenaje (sala o residencia) antes que las que no
+      //     tienen ninguno: sin homenaje no aportan lo único que H360 le agrega a
+      //     la bandeja, que es dónde es el homenaje.
+      // 2.º la más reciente (id más alto): la posterior reemplaza a la anterior.
+      expect(orden).toMatch(/^\(hs\.id IS NULL AND hr\.id IS NULL\), a\.id DESC\b/)
+    })
+
+    test('se queda con la primera fila del contrato, que es la preferida, y no con la última', async () => {
+      // El orden en que el motor devuelve las filas es el que pidió el ORDER BY.
+      db.query = jest.fn(async () => [[CON_HOMENAJE, SIN_HOMENAJE_MAS_RECIENTE]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia.id).toBe(77)
+      expect(fila(res, 'A-1').asistencia.ubicacion_tipo).toBe('SALA')
+      expect(fila(res, 'A-1').rama).toBe('SALA')
+    })
+
+    test('entre dos con homenaje gana la que llegó primera (la más reciente según el orden pedido)', async () => {
+      db.query = jest.fn(async () => [[EN_RESIDENCIA, CON_HOMENAJE]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia.id).toBe(80)
+      expect(fila(res, 'A-1').rama).toBe('RESIDENCIA')
+    })
+
+    test('una asistencia más reciente sin homenaje no tapa a la que sí lo tiene (rama por sede no pisa al homenaje)', async () => {
+      // A-3 es de otra ciudad por su sede: si ganara la asistencia sin homenaje,
+      // la rama saldría OTRA_CIUDAD en lugar de SALA.
+      db.query = jest.fn(async () => [[
+        { ...CON_HOMENAJE, contrato: 'A-3' }, { ...SIN_HOMENAJE_MAS_RECIENTE, contrato: 'A-3' },
+      ]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-3').rama).toBe('SALA')
+    })
+
+    test('los otros contratos no se ven afectados', async () => {
+      db.query = jest.fn(async () => [[
+        CON_HOMENAJE, SIN_HOMENAJE_MAS_RECIENTE,
+        { ...EN_RESIDENCIA, id: 82, contrato: 'A-3' },
+      ]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia.id).toBe(77)
+      expect(fila(res, 'A-3').asistencia.id).toBe(82)
+      expect(fila(res, 'MAS-9').asistencia).toBeNull()
+    })
+  })
+
+  // El IN de MySQL no distingue mayúsculas pero Map.get sí: un contrato guardado
+  // con otra capitalización llegaba en las filas y no se cruzaba. (Hoy no es
+  // alcanzable en producción: 0 contratos difieren solo en mayúsculas. Se cierra
+  // porque cuesta una línea y el día que ocurra nadie lo vería.)
+  test('el cruce no distingue mayúsculas, igual que el IN de MySQL', async () => {
+    db.query = jest.fn(async () => [[{ ...ASISTENCIA_A1, contrato: 'a-1' }]])
+    svc.gestionesPorOrdenes = jest.fn(async () => new Map([
+      ['mas-9', { id: 6, estado: 'EN_GESTION', tipificacion: null }],
+    ]))
+    const { res } = await llamar(ctrl.bandeja)
+    expect(fila(res, 'A-1').asistencia.id).toBe(77)
+    expect(fila(res, 'A-1').rama).toBe('SALA')
+    expect(fila(res, 'MAS-9').gestion.id).toBe(6)
+  })
+
+  // Era una columna que se traía y no se usaba en ningún lado.
+  test('la consulta de asistencias no trae columnas que nadie usa (viene_otra_ciudad)', async () => {
+    await llamar(ctrl.bandeja)
+    expect(db.query.mock.calls[0][0]).not.toMatch(/viene_otra_ciudad/)
+  })
+
   // El cruce es por número de contrato y cubre todas las órdenes del ERP: si se
   // pidieran solo algunas, el resto saldría «sin asistencia» aunque la tenga.
   test('cruza con H360 por el contrato de todas las órdenes, con un solo marcador por contrato', async () => {
@@ -157,7 +252,7 @@ describe('bandeja', () => {
   test('un homenaje en residencia registrado en H360 da la rama de residencia', async () => {
     db.query = jest.fn(async () => [[{
       id: 80, codigo: 'H360-2026-0400', contrato: 'A-3', estado: 'RESIDENCIA',
-      viene_otra_ciudad: 0, sala_codigo: null, sede_nombre: null, residencia_id: 9,
+      sala_codigo: null, sede_nombre: null, residencia_id: 9,
     }]])
     const { res } = await llamar(ctrl.bandeja)
     expect(fila(res, 'A-3').rama).toBe('RESIDENCIA')
@@ -168,7 +263,7 @@ describe('bandeja', () => {
   test('una asistencia sin homenaje todavía no decide la rama: la decide la sede', async () => {
     db.query = jest.fn(async () => [[{
       id: 81, codigo: 'H360-2026-0401', contrato: 'A-3', estado: 'ASISTENCIA',
-      viene_otra_ciudad: 0, sala_codigo: null, sede_nombre: null, residencia_id: null,
+      sala_codigo: null, sede_nombre: null, residencia_id: null,
     }]])
     const { res } = await llamar(ctrl.bandeja)
     expect(fila(res, 'A-3').asistencia.ubicacion_tipo).toBeNull()
@@ -257,14 +352,88 @@ describe('bandeja', () => {
   })
 
   describe('rango de fechas', () => {
-    // Se fija «hoy» (hora local, como lo lee el controlador): comparar solo que
-    // las dos fechas difieran un día pasaría también con «anteayer y ayer».
-    const fijarHoy = (anio, mes, dia) => jest.useFakeTimers({
-      now: new Date(anio, mes - 1, dia, 10, 0, 0),
+    // Se fija el INSTANTE y no una hora local de la máquina que corre las pruebas:
+    // «las 10:00 del 5 de noviembre» armado con new Date(a, m, d, 10) significaría
+    // cosas distintas en Bogotá y en un contenedor en UTC, y la prueba no diría
+    // nada del día de Bogotá. Aquí son las 10:00 de Bogotá (UTC-5, sin horario de
+    // verano), o sea las 15:00 UTC, en cualquier máquina. Comparar solo que las
+    // dos fechas difieran un día pasaría también con «anteayer y ayer».
+    const fijarInstante = instante => jest.useFakeTimers({
+      now: instante,
       doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate',
         'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
     })
+    const fijarHoy = (anio, mes, dia) => fijarInstante(new Date(Date.UTC(anio, mes - 1, dia, 15, 0, 0)))
     afterEach(() => { jest.useRealTimers() })
+
+    // «Hoy» es el día de Bogotá, que es donde trabajan las psicólogas, no el de la
+    // zona en que corra el proceso. Si el backend se muda a un contenedor en UTC,
+    // entre las 19:00 y la medianoche de Cúcuta el reloj del proceso ya marca el
+    // día siguiente: con la hora local, la bandeja abriría un día corrido sin
+    // avisar y las psicólogas perderían una jornada de casos.
+    //
+    // OJO con lo que NO demuestra una prueba: que pase en varias zonas horarias
+    // solo muestra que el código es coherente consigo mismo en cada zona, no que
+    // el día sea el de Bogotá. Por eso se fijan INSTANTES concretos y se compara
+    // con el día de Bogotá escrito a mano.
+    describe('«hoy» es el día de Bogotá y no el de la zona del proceso', () => {
+      test.each([
+        // En UTC ya es 6 de noviembre; en Bogotá todavía es el 5.
+        ['las 22:00 del 5 de noviembre en Bogotá (03:00 UTC del 6)', '2026-11-06T03:00:00Z',
+          ['2026-11-04', '2026-11-05']],
+        ['un segundo antes de la medianoche de Bogotá', '2026-11-06T04:59:59Z',
+          ['2026-11-04', '2026-11-05']],
+        // El borde exacto: fija el desfase en -5 horas (con -4 o -6 se corre).
+        ['la medianoche de Bogotá: empieza el día nuevo', '2026-11-06T05:00:00Z',
+          ['2026-11-05', '2026-11-06']],
+        ['las 19:00 de Bogotá, cuando en UTC ya es el día siguiente', '2026-11-05T00:00:00Z',
+          ['2026-11-03', '2026-11-04']],
+        // El corte de mes y de año cae en el día de Bogotá, no en el de UTC.
+        ['el último día del año a las 22:00 en Bogotá (en UTC ya es año nuevo)', '2027-01-01T03:00:00Z',
+          ['2026-12-30', '2026-12-31']],
+        ['el 1 de marzo a las 22:00 en Bogotá', '2026-03-02T03:00:00Z', ['2026-02-28', '2026-03-01']],
+        // Bogotá no tiene horario de verano: en julio sigue siendo UTC-5. Una zona
+        // con verano (Nueva York, UTC-4 en julio) ya estaría en el día siguiente.
+        ['las 23:30 de un 5 de julio en Bogotá', '2026-07-06T04:30:00Z', ['2026-07-04', '2026-07-05']],
+      ])('%s', async (_, instante, esperado) => {
+        fijarInstante(new Date(instante))
+        const { res } = await llamar(ctrl.bandeja)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith(...esperado)
+        expect([res.cuerpo.desde, res.cuerpo.hasta]).toEqual(esperado)
+      })
+
+      // Lo anterior solo distingue la hora local cuando la máquina que corre las
+      // pruebas NO está en Bogotá (con TZ=America/Bogota el reloj local y el de
+      // Bogotá coinciden y todo pasaría igual). Esta prueba no depende de dónde
+      // se corra: lanza procesos de Node en otras zonas y comprueba en cada uno que
+      // el rango es el de Bogotá. Si se vuelve a la hora local, falla en cualquier
+      // máquina.
+      test('el rango es el mismo en procesos que corren en otras zonas horarias', () => {
+        const { execFileSync } = require('child_process')
+        const ZONAS = ['UTC', 'Asia/Tokyo', 'Pacific/Auckland', 'America/Los_Angeles', 'America/Bogota']
+        const script = `
+          const c = require(${JSON.stringify(require.resolve('../duelo.controller'))})
+          const instante = new Date('2026-11-06T03:00:00Z')
+          const salida = {}
+          for (const tz of ${JSON.stringify(ZONAS)}) {
+            process.env.TZ = tz
+            salida[tz] = { rango: c.rangoPorDefecto(instante), diaLocal: instante.getDate() }
+          }
+          console.log(JSON.stringify(salida))`
+        // El proceso hijo arranca sin TZ y la fija él mismo en cada vuelta.
+        const entorno = { ...process.env }
+        delete entorno.TZ
+        const salida = JSON.parse(execFileSync(process.execPath, ['-e', script],
+          { env: entorno, encoding: 'utf8', timeout: 20000 }))
+
+        // Que la prueba tenga con qué fallar: en UTC, en Tokio y en Auckland el
+        // reloj local ya marca el 6, y una implementación con hora local daría
+        // [5, 6] en vez de [4, 5].
+        for (const tz of ['UTC', 'Asia/Tokyo', 'Pacific/Auckland']) expect(salida[tz].diaLocal).toBe(6)
+        for (const tz of ZONAS)
+          expect([tz, salida[tz].rango]).toEqual([tz, { desde: '2026-11-04', hasta: '2026-11-05' }])
+      })
+    })
 
     test('el defecto es ayer y hoy', async () => {
       fijarHoy(2026, 11, 5)
@@ -557,10 +726,24 @@ describe('bandeja', () => {
         const { res } = await llamar(ctrl.bandeja, { rama })
         expect(res.codigo).toBe(200)
       }
-      for (const estado of [...ESTADOS_GESTION, 'PENDIENTE']) {
+      for (const estado of ESTADOS_GESTION) {
         const { res } = await llamar(ctrl.bandeja, { estado })
         expect(res.codigo).toBe(200)
       }
+    })
+
+    // La bandeja llama PENDIENTE a toda orden sin gestión y deja pedirla como
+    // filtro porque el catálogo de estados ya trae PENDIENTE: el filtro usa el
+    // catálogo tal cual, sin sumarle nada. Lo que hace que eso funcione es esto, y
+    // es lo que se fija: si el catálogo dejara de traerlo, «lo que falta por
+    // llamar» pasaría a ser un 400 en el filtro más usado de la pantalla.
+    test('el estado de una orden sin gestión (PENDIENTE) sigue siendo un estado del catálogo y un filtro válido', async () => {
+      expect(ESTADOS_GESTION).toContain('PENDIENTE')
+      expect(ctrl.FILTROS_BANDEJA.estado.valores).toContain('PENDIENTE')
+      // Y se comporta como tal: la orden sin gestión sale al pedirlo.
+      const { res } = await llamar(ctrl.bandeja, { estado: 'PENDIENTE' })
+      expect(res.codigo).toBe(200)
+      expect(res.cuerpo.data.map(f => f.orden_servicio)).toEqual(['A-1', 'MAS-9', 'A-3'])
     })
 
     // El conjunto de ramas válidas no es una lista aparte que pueda desfasarse de
@@ -840,17 +1023,15 @@ describe('buscar', () => {
       expect(res.cuerpo.total).toBe(201)
     })
 
-    // El tope vive en el servicio del ERP (TOP 200 de buscarOrdenes) y el
-    // controlador lo repite para deducir el corte. Si alguien lo cambia allá y no
-    // acá, el aviso dejaría de saltar sin que nada se queje: esta prueba lo ata.
-    test('el tope del controlador es el TOP de buscarOrdenes en el servicio del ERP', () => {
-      const fs = require('fs')
-      const path = require('path')
-      const fuente = fs.readFileSync(path.join(__dirname, '../../services/karingsoft.service.js'), 'utf8')
-      const inicio = fuente.indexOf('async function buscarOrdenes')
-      expect(inicio).toBeGreaterThan(-1)
-      const topes = [...fuente.slice(inicio).matchAll(/\bTOP\s+(\d+)/g)].map(m => Number(m[1]))
-      expect(topes).toEqual([ctrl.TOPE_BUSQUEDA])
+    // El tope vive en el servicio del ERP (TOPE_BUSQUEDA, con el que buscarOrdenes
+    // arma su TOP) y el controlador lo repite para deducir el corte. Si alguien lo
+    // cambia allá y no acá, el aviso dejaría de saltar sin que nada se queje: esta
+    // prueba lo ata. Compara el valor exportado; no lee el código de otro archivo.
+    // (jest.requireActual: el servicio está simulado en este archivo.)
+    test('el tope del controlador es el que exporta el servicio del ERP', () => {
+      const { TOPE_BUSQUEDA: topeDelErp } = jest.requireActual('../../services/karingsoft.service')
+      expect(typeof topeDelErp).toBe('number')
+      expect(ctrl.TOPE_BUSQUEDA).toBe(topeDelErp)
     })
   })
 })

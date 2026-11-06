@@ -651,6 +651,17 @@ async function ordenesDelRango(desde, hasta) {
 }
 
 /**
+ * Tope de filas de buscarOrdenes: el TOP de su consulta. El ERP corta ahí sin
+ * decir nada, y el controlador del R-56 lo necesita para avisar «mostrando las
+ * primeras N» (deduce el corte cuando llegan tantas filas como el tope). Por eso
+ * está exportado con nombre: es el único lugar donde vive el número, la consulta
+ * lo usa y una prueba lo compara con el del controlador, en lugar de leer este
+ * archivo como texto. Es una constante, nunca un valor que llegue de fuera: se
+ * interpola en el SQL sin atarse.
+ */
+const TOPE_BUSQUEDA = 200
+
+/**
  * Búsqueda por los tres criterios del R-56: contrato, nombre del ser querido o
  * fecha de fallecimiento. Se combinan si llegan varios.
  *
@@ -710,7 +721,7 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
 
   const pool = await obtenerPool()
   const r = await p.atarA(pool.request()).query(`
-    SELECT TOP 200 ${CAMPOS_DUELO}
+    SELECT TOP ${TOPE_BUSQUEDA} ${CAMPOS_DUELO}
       FROM salas_ordenes_view o
      WHERE o.tipo_documento = 50
        AND ${cond.join(' AND ')}
@@ -719,4 +730,4 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
 }
 
 module.exports = { formatoR13, itemsR34, licenciaInhumacion, ordenServicio,
-  ordenesDelRango, buscarOrdenes, normalizarHora, configurado, ETIQUETA_GRUPO }
+  ordenesDelRango, buscarOrdenes, TOPE_BUSQUEDA, normalizarHora, configurado, ETIQUETA_GRUPO }
