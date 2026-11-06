@@ -484,4 +484,93 @@ async function ordenServicio(numeroContrato) {
   return r.recordset[0] || null
 }
 
-module.exports = { formatoR13, itemsR34, licenciaInhumacion, ordenServicio, normalizarHora, configurado, ETIQUETA_GRUPO }
+/* ── R-56: bandeja y búsqueda para acompañamiento al duelo ──────────────────
+   Las fechas salen formateadas desde SQL a propósito. Un datetime vuelve como
+   objeto Date, Express lo serializa en UTC y una fecha pelada se reparsea como
+   medianoche UTC: en Bogotá eso es el día anterior. Texto desde el origen
+   evita toda la aritmética de zonas. */
+const CAMPOS_DUELO = `
+         o.orden_servicio,
+         CONVERT(varchar(10), o.fecha, 23)                  AS fecha_orden,
+         CONVERT(varchar(10), o.fecha_fallecimiento, 23)    AS fecha_fallecimiento,
+         LTRIM(RTRIM(
+           LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
+           LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
+           LTRIM(RTRIM(ISNULL(o.nombres_fallecido,'')))))    AS nombre_ser_querido,
+         CAST(o.edad_fallecimiento AS int)                  AS edad,
+         LTRIM(RTRIM(ISNULL(o.telefono_fallecido,'')))      AS telefono,
+         LTRIM(RTRIM(ISNULL(o.direccion_fallecido,'')))     AS direccion,
+         LTRIM(RTRIM(ISNULL(o.barrio_fallecido,'')))        AS barrio,
+         LTRIM(RTRIM(ISNULL(o.descripcion_municipio_fallecido,''))) AS municipio,
+         LTRIM(RTRIM(ISNULL(o.descripcion_convenio,'')))    AS convenio,
+         LTRIM(RTRIM(ISNULL(o.descripcion_entidad,'')))     AS entidad,
+         LTRIM(RTRIM(ISNULL(o.descripcion_centro_costo,''))) AS sede,
+         LTRIM(RTRIM(ISNULL(o.descripcion_tipos_servicio,''))) AS tipo_servicio`
+
+/**
+ * Órdenes creadas entre dos fechas. El defecto del módulo es ayer y hoy, que
+ * es como las psicólogas trabajan hoy sobre el ERP.
+ */
+async function ordenesDelRango(desde, hasta) {
+  const pool = await obtenerPool()
+  const r = await pool.request()
+    .input('p_desde', driver().VarChar(10), String(desde))
+    .input('p_hasta', driver().VarChar(10), String(hasta))
+    .query(`
+      SELECT ${CAMPOS_DUELO}
+        FROM salas_ordenes_view o
+       WHERE o.tipo_documento = 50
+         AND CONVERT(varchar(10), o.fecha, 23) BETWEEN @p_desde AND @p_hasta
+       ORDER BY o.fecha DESC, o.orden_servicio DESC`)
+  return r.recordset
+}
+
+/**
+ * Búsqueda por los tres criterios del R-56: contrato, nombre del ser querido o
+ * fecha de fallecimiento. Se combinan si llegan varios.
+ *
+ * Sin criterios devuelve vacío y no consulta: un SELECT sin WHERE sobre una
+ * tabla de producción de otro sistema no es algo que se dispare por descuido.
+ */
+async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) {
+  const cond = []
+  const req = []
+
+  if (String(contrato ?? '').trim()) {
+    cond.push('o.orden_servicio = @p_contrato')
+    req.push(['p_contrato', driver().VarChar(20), String(contrato).trim()])
+  }
+  if (String(nombre ?? '').trim()) {
+    cond.push(`LTRIM(RTRIM(
+        LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
+        LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
+        LTRIM(RTRIM(ISNULL(o.nombres_fallecido,''))))) LIKE @p_nombre`)
+    const limpio = String(nombre).trim().toUpperCase().replace(/\s+/g, ' ')
+    req.push(['p_nombre', driver().VarChar(200), `%${limpio}%`])
+  }
+  if (String(fechaDesde ?? '').trim()) {
+    cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) >= @p_f_desde')
+    req.push(['p_f_desde', driver().VarChar(10), String(fechaDesde).trim()])
+  }
+  if (String(fechaHasta ?? '').trim()) {
+    cond.push('CONVERT(varchar(10), o.fecha_fallecimiento, 23) <= @p_f_hasta')
+    req.push(['p_f_hasta', driver().VarChar(10), String(fechaHasta).trim()])
+  }
+
+  if (!cond.length) return []
+
+  const pool = await obtenerPool()
+  let peticion = pool.request()
+  for (const [n, t, v] of req) peticion = peticion.input(n, t, v)
+
+  const r = await peticion.query(`
+    SELECT TOP 200 ${CAMPOS_DUELO}
+      FROM salas_ordenes_view o
+     WHERE o.tipo_documento = 50
+       AND ${cond.join(' AND ')}
+     ORDER BY o.fecha DESC`)
+  return r.recordset
+}
+
+module.exports = { formatoR13, itemsR34, licenciaInhumacion, ordenServicio,
+  ordenesDelRango, buscarOrdenes, normalizarHora, configurado, ETIQUETA_GRUPO }
