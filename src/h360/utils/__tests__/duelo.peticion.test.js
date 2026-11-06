@@ -4,7 +4,9 @@
 // en el otro. Acá se fija el criterio; que cada controlador lo use está en sus
 // propias pruebas (duelo.gestion.test.js y duelo.atenciones.test.js).
 
-const { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo } = require('../duelo.peticion')
+const { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo, responderError } =
+  require('../duelo.peticion')
+const { malUso, noEncontrado } = require('../errores')
 
 describe('usuarioDelLogin', () => {
   // De acá salen `psicologa` y `created_by`, que son NOT NULL y son toda la
@@ -119,6 +121,51 @@ describe('leerIdDeCuerpo', () => {
       expect(e.message.length).toBeLessThan(250)
     }
     expect.hasAssertions()
+  })
+})
+
+// Qué errores del servicio se contestan al que llamó y cuáles son un 500. Los
+// dos controladores del R-56 lo usan: antes había una copia en cada uno (y el de
+// atenciones, dos en el mismo archivo).
+describe('responderError', () => {
+  const resDoble = () => {
+    const r = { codigo: null, cuerpo: null }
+    r.status = c => { r.codigo = c; return r }
+    r.json = b => { r.cuerpo = b; return r }
+    return r
+  }
+
+  test('un 400 (malUso) se contesta con su mensaje y no llega a next', () => {
+    const res = resDoble(), next = jest.fn()
+    responderError(res, next, malUso('La modalidad de la atención no es válida'))
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toEqual({ mensaje: 'La modalidad de la atención no es válida' })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  test('un 404 (noEncontrado) también es de quien llamó', () => {
+    const res = resDoble(), next = jest.fn()
+    responderError(res, next, noEncontrado('No existe la gestión 9.'))
+    expect(res.codigo).toBe(404)
+    expect(res.cuerpo).toEqual({ mensaje: 'No existe la gestión 9.' })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  // Lo demás es una falla del servidor: va a next intacto y sin responder, para
+  // que el manejador global decida. Un 500 que se disfrazara de 400 mandaría a
+  // quien llamó a «corregir» una petición que estaba bien.
+  test.each([
+    ['un error de MySQL', Object.assign(new Error('Deadlock'), { code: 'ER_LOCK_DEADLOCK' })],
+    ['un error con otro status', Object.assign(new Error('x'), { status: 503 })],
+    ['un error sin status', new Error('x')],
+    ['algo que no es un Error', 'texto'],
+    ['undefined', undefined],
+  ])('%s va a next sin responder', (_caso, err) => {
+    const res = resDoble(), next = jest.fn()
+    responderError(res, next, err)
+    expect(next).toHaveBeenCalledWith(err)
+    expect(res.codigo).toBeNull()
+    expect(res.cuerpo).toBeNull()
   })
 })
 

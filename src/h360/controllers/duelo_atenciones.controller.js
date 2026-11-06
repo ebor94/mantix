@@ -13,9 +13,10 @@
  * psicológica también son dato de salud.
  */
 const svc = require('../services/duelo_atenciones.service')
-// Quién hace el registro y sobre qué gestión: las mismas guardas que usa el
-// controlador de la gestión, en un solo lugar (ver duelo.peticion.js).
-const { usuarioDelLogin, sinUsuario, leerId } = require('../utils/duelo.peticion')
+// Quién hace el registro, sobre qué gestión y cómo se contesta un error del
+// servicio: las mismas guardas que usa el controlador de la gestión, en un solo
+// lugar (ver duelo.peticion.js).
+const { usuarioDelLogin, sinUsuario, leerId, responderError } = require('../utils/duelo.peticion')
 
 const ROLES_PERMITIDOS = ['psicologia', 'admin']
 
@@ -42,10 +43,7 @@ async function listar(req, res, next) {
     // y la lista vacía se leería como «esta familia no tiene atenciones».
     const data = await svc.atencionesDeGestion(leerId(req.params.id))
     res.json({ data })
-  } catch (err) {
-    if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
-    next(err)
-  }
+  } catch (err) { responderError(res, next, err) }
 }
 
 // POST /api/h360/duelo/gestion/:id/atenciones
@@ -68,13 +66,15 @@ async function crear(req, res, next) {
     })
     res.status(201).json({ id })
   } catch (err) {
-    if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
     // El mensaje del error no lleva el cuerpo, pero mysql2 le cuelga la
     // sentencia ya armada en `err.sql`, con los valores adentro, y ahí van las
-    // notas. Se quita antes de pasarlo a next para que ningún manejador ni
-    // logger que serialice el error se las lleve.
+    // notas. Se quita ANTES de contestar, en cualquier camino, para que ningún
+    // manejador ni logger que serialice el error —el que llegue a next— se las
+    // lleve. (Un 400 de malUso no trae `sql`: quitarlo antes no le cambia nada,
+    // y así el orden no depende de qué error sea.) Solo `crear`: es la única
+    // consulta que lleva las notas adentro.
     if (err?.sql) delete err.sql
-    next(err)
+    responderError(res, next, err)
   }
 }
 

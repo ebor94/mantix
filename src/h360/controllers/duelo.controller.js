@@ -17,7 +17,8 @@ const { normalizarFechaHora } = require('../utils/fecha_hora')
 // Quién manda la petición y sobre qué gestión: las mismas guardas que usa el
 // controlador de atenciones (ver duelo.peticion.js). `eco` también vive ahí: es
 // cómo se cita en un mensaje lo que llegó.
-const { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo } = require('../utils/duelo.peticion')
+const { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo, responderError } =
+  require('../utils/duelo.peticion')
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -278,25 +279,6 @@ async function armarFilas(ordenes) {
       gestion: g ? { id: g.id, estado: g.estado, tipificacion: g.tipificacion } : null,
     }
   })
-}
-
-/**
- * Un 400 que viene del servicio se responde como 400, no como 500.
- *
- * Las consultas al ERP validan la forma de las fechas y el largo del nombre y
- * lanzan con `status = 400`: sin este mapeo, una fecha mal escrita por una
- * psicóloga saldría como error del servidor y en el log quedaría un error de
- * protocolo TDS que no le dice nada a nadie.
- *
- * Un 404 (noEncontrado) viaja igual: es el otro error que la petición puede
- * tener y que quien llama puede entender. Lo demás sigue a next, que es un 500.
- */
-const RESPUESTAS_DE_QUIEN_LLAMA = [400, 404]
-
-function responderError(res, next, err) {
-  if (RESPUESTAS_DE_QUIEN_LLAMA.includes(err?.status))
-    return res.status(err.status).json({ mensaje: err.message })
-  return next(err)
 }
 
 /**

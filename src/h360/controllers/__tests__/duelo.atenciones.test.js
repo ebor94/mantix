@@ -252,6 +252,17 @@ describe('listar', () => {
     expect(res.cuerpo.data[0].notas).toBe('contenido clínico')
   })
 
+  // Lo que no es de quien llamó (la base se cae) es un 500: va a next tal cual y
+  // no se contesta, ni se disfraza de 400.
+  test('si la base falla, el error va a next y no se responde', async () => {
+    const falla = Object.assign(new Error('Deadlock found'), { code: 'ER_LOCK_DEADLOCK' })
+    db.query = jest.fn(async () => { throw falla })
+    const res = resDoble(), next = jest.fn()
+    await ctrl.listar({ params: { id: '5' }, user: PSICOLOGA }, res, next)
+    expect(next).toHaveBeenCalledWith(falla)
+    expect(res.cuerpo).toBeNull()
+  })
+
   test('admin también', async () => {
     const res = resDoble()
     await ctrl.listar({ params: { id: '5' }, user: { rol: 'admin', usuario: 'A' } }, res, jest.fn())

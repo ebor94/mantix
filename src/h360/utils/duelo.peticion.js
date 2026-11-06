@@ -1,6 +1,7 @@
 /**
- * duelo.peticion.js — lo que los controladores del R-56 leen de una petición:
- * quién la manda, sobre qué gestión actúa y qué ids trae el cuerpo.
+ * duelo.peticion.js — lo que los controladores del R-56 leen de una petición
+ * (quién la manda, sobre qué gestión actúa, qué ids trae el cuerpo) y cómo
+ * contestan un error del servicio.
  *
  * Vive acá porque son DOS controladores hermanos sobre las mismas tablas
  * (duelo.controller.js y duelo_atenciones.controller.js). Con una copia en cada
@@ -110,4 +111,28 @@ function leerIdDeCuerpo(valor, campo) {
   return v
 }
 
-module.exports = { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo }
+/**
+ * Los errores del servicio que SON de quien llamó se contestan como tales; el
+ * resto es una falla del servidor y sigue a next (un 500).
+ *
+ * Un 400 (malUso) es una entrada que no puede dar un resultado correcto. Las
+ * consultas al ERP validan la forma de las fechas y el largo del nombre y lanzan
+ * con `status = 400`: sin este mapeo, una fecha mal escrita por una psicóloga
+ * saldría como error del servidor y en el log quedaría un error de protocolo TDS
+ * que no le dice nada a nadie. Un 404 (noEncontrado) viaja igual: es el otro
+ * error que la petición puede tener y que quien llama puede entender.
+ *
+ * Vive acá y no en un controlador porque los dos controladores del R-56 lo
+ * necesitan y el de atenciones lo tenía escrito dos veces en el mismo archivo.
+ * Quitar de un error lo que no debe salir (la sentencia de mysql2 con las notas)
+ * NO es de esta función: es de quien sabe qué lleva su consulta.
+ */
+const RESPUESTAS_DE_QUIEN_LLAMA = [400, 404]
+
+function responderError(res, next, err) {
+  if (RESPUESTAS_DE_QUIEN_LLAMA.includes(err?.status))
+    return res.status(err.status).json({ mensaje: err.message })
+  return next(err)
+}
+
+module.exports = { eco, usuarioDelLogin, sinUsuario, leerId, leerIdDeCuerpo, responderError }
