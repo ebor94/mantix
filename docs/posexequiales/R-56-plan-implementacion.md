@@ -674,7 +674,9 @@ git commit -m "feat(h360): consultas al ERP para la bandeja de duelo"
 
 **Interfaces:**
 - Consume: `src/h360/config/db` (pool `mysql2`), `duelo.catalogos.js`,
-  `normalizarFechaHora` de `src/h360/utils/fecha_hora.js`.
+  `normalizarFechaHora` de `src/h360/utils/fecha_hora.js`, y `malUso` de
+  `src/h360/utils/errores.js` — **ya existe, no lo redeclares**: arma el error
+  con `status = 400` para que el controlador responda 400 y no 500.
 - Produce:
   - `gestionPorOrden(orden)` → `Promise<fila|null>`
   - `gestionesPorOrdenes(ordenes: string[])` → `Promise<Map<string, fila>>`
@@ -773,13 +775,8 @@ Esperado: FAIL — `Cannot find module '../duelo.service'`
  */
 const db = require('../config/db')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
+const { malUso } = require('../utils/errores')
 const cat = require('../utils/duelo.catalogos')
-
-function malUso(mensaje) {
-  const e = new Error(mensaje)
-  e.status = 400
-  return e
-}
 
 async function gestionPorOrden(orden) {
   const [f] = await db.query(
@@ -1179,6 +1176,19 @@ async function armarFilas(ordenes) {
   })
 }
 
+/**
+ * Un 400 que viene del servicio se responde como 400, no como 500.
+ *
+ * Las consultas al ERP validan la forma de las fechas y el largo del nombre y
+ * lanzan con `status = 400`: sin este mapeo, una fecha mal escrita por una
+ * psicóloga saldría como error del servidor y en el log quedaría un error de
+ * protocolo TDS que no le dice nada a nadie.
+ */
+function responderError(res, next, err) {
+  if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
+  return next(err)
+}
+
 function sinErp(res) {
   return res.status(503).json({
     mensaje: 'No se pudo consultar Karingsoft (el ERP). La bandeja del día '
@@ -1208,7 +1218,7 @@ async function bandeja(req, res, next) {
     if (req.query.incluir_mascotas === 'false') filas = filas.filter(f => !f.es_mascota)
 
     res.json({ desde, hasta, total: filas.length, data: filas })
-  } catch (err) { next(err) }
+  } catch (err) { responderError(res, next, err) }
 }
 
 // GET /api/h360/duelo/buscar?contrato=&nombre=&fecha_fallecimiento=&fecha_hasta=
@@ -1236,7 +1246,7 @@ async function buscar(req, res, next) {
 
     const filas = await armarFilas(ordenes)
     res.json({ total: filas.length, data: filas })
-  } catch (err) { next(err) }
+  } catch (err) { responderError(res, next, err) }
 }
 
 module.exports = { bandeja, buscar, esOtraCiudad, ramaDe }
@@ -1428,13 +1438,10 @@ Esperado: FAIL — `ctrl.ficha is not a function`
 
 Agregar en `src/h360/controllers/duelo.controller.js`, antes de `module.exports`:
 
-```js
-/** Un 400 que viene del servicio se responde como 400, no como 500. */
-function responderError(res, next, err) {
-  if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
-  return next(err)
-}
+> `responderError` ya quedó definido en la Tarea 5, en este mismo archivo. No lo
+> vuelvas a declarar: reúsalo.
 
+```js
 // GET /api/h360/duelo/gestion/:orden
 async function ficha(req, res, next) {
   try {
@@ -1716,14 +1723,9 @@ Esperado: FAIL — `Cannot find module '../duelo_atenciones.controller'`
  */
 const db = require('../config/db')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
+const { malUso } = require('../utils/errores')
 
 const MODALIDADES_ATENCION = ['PRESENCIAL', 'TELEFONICA', 'VIRTUAL']
-
-function malUso(mensaje) {
-  const e = new Error(mensaje)
-  e.status = 400
-  return e
-}
 
 async function atencionesDeGestion(gestionId) {
   const [f] = await db.query(
