@@ -1500,6 +1500,10 @@ async function ficha(req, res, next) {
       const filas = await ks.buscarOrdenes({ contrato: orden })
       contrato = filas[0] || null
     } catch (err) {
+      // Un 400 es entrada inválida —una orden demasiado larga, por ejemplo—,
+      // no un ERP caído: tiene que subir. Si se tragara acá, la pantalla
+      // diría "no se pudo leer el contrato" y nadie encontraría el error real.
+      if (err?.status === 400) throw err
       console.warn('[duelo] ficha, ERP no disponible:', err.message)
       erp_error = 'No se pudo leer el contrato en Karingsoft (el ERP).'
     }
@@ -1569,7 +1573,13 @@ async function crear(req, res, next) {
 // PATCH /api/h360/duelo/gestion/:id
 async function actualizar(req, res, next) {
   try {
-    const cambiado = await svc.actualizarGestion(req.params.id, req.body || {})
+    const cambios = { ...(req.body || {}) }
+    // La psicóloga no se reescribe por el cuerpo: `crear` la toma del login
+    // justamente para poder auditar quién atendió, y permitir cambiarla acá
+    // anularía esa garantía. En el Excel se escribía a mano 1850 veces y no
+    // había forma de saber quién había atendido de verdad.
+    delete cambios.psicologa
+    const cambiado = await svc.actualizarGestion(req.params.id, cambios)
     if (!cambiado) return res.status(400).json({ mensaje: 'No hay cambios que guardar' })
     res.json({ ok: true })
   } catch (err) { responderError(res, next, err) }
@@ -1601,12 +1611,13 @@ async function guardarServicios(req, res, next) {
 }
 ```
 
-Y reemplazar la última línea por:
+Y **agregar** los nombres nuevos al `module.exports` que ya existe.
 
-```js
-module.exports = { bandeja, buscar, ficha, crear, actualizar, agregarIntento,
-  guardarServicios, esOtraCiudad, ramaDe }
-```
+> **Cuidado:** no lo reescribas de memoria. La Tarea 5 agregó exports que esta
+> tarea no conoce —la tabla declarativa de filtros, el tope de la búsqueda y su
+> verificador— y borrarlos **rompe la bandeja**. Leé la línea que está en el
+> archivo y sumale `ficha`, `crear`, `actualizar`, `agregarIntento` y
+> `guardarServicios` sin quitar nada.
 
 - [ ] **Paso 4: Correr la prueba y verificar que pasa**
 
@@ -1991,6 +2002,12 @@ export const useDueloStore = defineStore('duelo', () => {
   const cargando = ref(false)
   const error    = ref(null)
 
+  // Lo que la respuesta dice sobre sí misma: el rango que el backend usó de
+  // verdad, y si la búsqueda cortó resultados. Sin esto la pantalla no puede
+  // avisar que la lista está incompleta, y una psicóloga concluiría que una
+  // familia no está en el sistema cuando sí está.
+  const meta = ref({ desde: null, hasta: null, truncado: false, tope: null })
+
   // El 503 del ERP se distingue del resto: no es un fallo nuestro y el mensaje
   // que manda el backend ya explica qué hacer.
   function mensajeDe(e, porDefecto) {
@@ -2003,6 +2020,7 @@ export const useDueloStore = defineStore('duelo', () => {
     try {
       const { data } = await api.get('/duelo/bandeja', { params: filtros })
       bandeja.value = data.data ?? []
+      meta.value = { desde: data.desde, hasta: data.hasta, truncado: false, tope: null }
       return data
     } catch (e) { error.value = mensajeDe(e, 'Error al cargar la bandeja del día') }
     finally { cargando.value = false }
@@ -2013,6 +2031,7 @@ export const useDueloStore = defineStore('duelo', () => {
     try {
       const { data } = await api.get('/duelo/buscar', { params: criterios })
       bandeja.value = data.data ?? []
+      meta.value = { desde: null, hasta: null, truncado: !!data.truncado, tope: data.tope ?? null }
       return data
     } catch (e) { error.value = mensajeDe(e, 'Error en la búsqueda') }
     finally { cargando.value = false }
@@ -2035,7 +2054,7 @@ export const useDueloStore = defineStore('duelo', () => {
   const fetchAtenciones   = id           => api.get(`/duelo/gestion/${id}/atenciones`).then(r => r.data.data)
   const crearAtencion     = (id, datos)  => api.post(`/duelo/gestion/${id}/atenciones`, datos).then(r => r.data)
 
-  return { bandeja, ficha, cargando, error, fetchBandeja, buscar, fetchFicha,
+  return { bandeja, ficha, meta, cargando, error, fetchBandeja, buscar, fetchFicha,
     crearGestion, actualizarGestion, agregarIntento, guardarServicios,
     fetchAtenciones, crearAtencion }
 })
@@ -2083,6 +2102,13 @@ export const useDueloStore = defineStore('duelo', () => {
 
     <p v-if="store.error" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-4 py-3 mb-4">
       ⚠️ {{ store.error }}
+    </p>
+
+    <!-- El rango que el backend usó, no el que está escrito en los filtros:
+         sin fechas usa ayer y hoy, y conviene que se vea cuáles son. -->
+    <p v-if="store.meta.desde" class="text-xs text-gray-400 mb-3">
+      Órdenes creadas entre {{ store.meta.desde }} y {{ store.meta.hasta }} ·
+      {{ store.bandeja.length }} {{ store.bandeja.length === 1 ? 'caso' : 'casos' }}
     </p>
 
     <p v-if="store.cargando" class="text-sm text-gray-400">Consultando el ERP…</p>
@@ -2210,6 +2236,16 @@ onMounted(() => store.fetchBandeja())
     <p v-if="buscado && !store.bandeja.length && !store.cargando"
       class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded p-4">
       Ningún caso coincide con esos criterios.
+    </p>
+
+    <!-- La búsqueda corta en el tope del ERP. Decirlo importa: sin este aviso,
+         una psicóloga que no encuentra a una familia concluiría que no está en
+         el sistema, cuando puede estar más allá del corte. -->
+    <p v-else-if="store.meta.truncado"
+      class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-4 py-3 mb-3">
+      ⚠️ Hay más resultados de los que se muestran: la búsqueda corta en
+      {{ store.meta.tope }}. Afiná los criterios — por ejemplo agregá la fecha
+      de fallecimiento — para ver el caso que buscás.
     </p>
 
     <div v-else-if="store.bandeja.length" class="space-y-2">
