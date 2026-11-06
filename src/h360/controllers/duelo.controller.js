@@ -361,4 +361,140 @@ async function buscar(req, res, next) {
   } catch (err) { responderError(res, next, err) }
 }
 
-module.exports = { bandeja, buscar, esOtraCiudad, ramaDe, FILTROS_BANDEJA, TOPE_BUSQUEDA, verificarFiltros }
+// ── Ficha de una gestión ─────────────────────────────────────────────────────
+
+// GET /api/h360/duelo/gestion/:orden
+async function ficha(req, res, next) {
+  try {
+    const orden = String(req.params.orden ?? '').trim()
+    if (!orden) return res.status(400).json({ mensaje: 'Falta el número de orden' })
+
+    const gestion = await svc.gestionPorOrden(orden)
+
+    // El contrato se lee en vivo; si el ERP está caído la gestión sigue
+    // sirviendo y se avisa, igual que hace el bloque del ERP en el detalle
+    // de asistencia.
+    //
+    // Se usa buscarOrdenes y no ordenServicio porque la consulta de
+    // ordenServicio no trae nombre, fecha de fallecimiento, teléfono ni
+    // dirección, que es lo que la psicóloga necesita ver.
+    let contrato = null, erp_error = null
+    try {
+      const filas = await ks.buscarOrdenes({ contrato: orden })
+      contrato = filas[0] || null
+    } catch (err) {
+      // Una orden que el ERP rechaza por inválida (400: por ejemplo, más larga
+      // que el campo) es de quien la escribió, no una caída: igual que en la
+      // bandeja y en la búsqueda, sube al responderError de más abajo. Decir
+      // «no se pudo leer el contrato» mandaría a esperar a un ERP que está bien.
+      if (err?.status === 400) throw err
+      console.warn('[duelo] ficha, ERP no disponible:', err.message)
+      erp_error = 'No se pudo leer el contrato en Karingsoft (el ERP).'
+    }
+
+    // La asistencia de H360 va en la ficha para poder precargar la ubicación
+    // al abrir la gestión: es el dato que el ERP no tiene.
+    const asistencia = (await asistenciasPorContrato([orden])).get(orden) || null
+
+    const [intentos, servicios] = gestion
+      ? await Promise.all([svc.intentosDeGestion(gestion.id), svc.serviciosDeGestion(gestion.id)])
+      : [[], []]
+
+    res.json({ orden_servicio: orden, contrato, erp_error, asistencia,
+      gestion, intentos, servicios })
+  } catch (err) { responderError(res, next, err) }
+}
+
+// POST /api/h360/duelo/gestion
+async function crear(req, res, next) {
+  try {
+    const orden = String(req.body?.orden_servicio ?? '').trim()
+    if (!orden) return res.status(400).json({ mensaje: 'Falta el número de orden' })
+
+    const ya = await svc.gestionPorOrden(orden)
+    if (ya) return res.status(409).json({
+      mensaje: 'Esta orden ya tiene una gestión abierta.', gestion_id: ya.id,
+    })
+
+    // La psicóloga sale del login y no del cuerpo: en el Excel se escribía a
+    // mano 1850 veces y no hay forma de auditar quién atendió de verdad.
+    const datos = {
+      orden_servicio:     orden,
+      asistencia_id:      req.body.asistencia_id ?? null,
+      ubicacion_tipo:     req.body.ubicacion_tipo ?? 'OTRO',
+      ubicacion_detalle:  req.body.ubicacion_detalle ?? null,
+      es_mascota:         !!req.body.es_mascota,
+      titular_nombre:     req.body.titular_nombre ?? null,
+      titular_parentesco: req.body.titular_parentesco ?? null,
+      telefonos:          req.body.telefonos ?? null,
+      estado:             'EN_GESTION',
+      psicologa:          req.user.usuario,
+      created_by:         req.user.usuario,
+    }
+    let id
+    try {
+      id = await svc.crearGestion(datos)
+    } catch (err) {
+      // Son dos psicólogas trabajando la misma lista del día, así que las dos
+      // pueden abrir la misma orden en el mismo segundo: el chequeo de arriba
+      // pasa en las dos y el índice único (uk_orden) rechaza a la segunda. Sin
+      // esto, a una de ellas le saldría un 500 por ER_DUP_ENTRY en vez del 409
+      // que le dice que su compañera ya la abrió. Solo el duplicado se traduce:
+      // cualquier otro fallo de MySQL sigue su camino.
+      if (err?.code === 'ER_DUP_ENTRY') {
+        const existente = await svc.gestionPorOrden(orden)
+        return res.status(409).json({
+          mensaje: 'Esta orden ya tiene una gestión abierta.',
+          gestion_id: existente?.id ?? null,
+        })
+      }
+      throw err
+    }
+    res.status(201).json({ id, orden_servicio: orden })
+  } catch (err) { responderError(res, next, err) }
+}
+
+// PATCH /api/h360/duelo/gestion/:id
+async function actualizar(req, res, next) {
+  try {
+    // Quién atendió sale del login, igual que al abrir la gestión (ver crear):
+    // el servicio deja `psicologa` entre los campos editables, pero si el PATCH
+    // lo aceptara del cuerpo, cualquiera podría reescribir quién la atendió y la
+    // auditoría que se busca se perdería por la puerta de al lado. La acompañante
+    // sí se puede cambiar: es un dato que se declara, no una identidad.
+    const cambios = { ...req.body }
+    delete cambios.psicologa
+
+    const cambiado = await svc.actualizarGestion(req.params.id, cambios)
+    if (!cambiado) return res.status(400).json({ mensaje: 'No hay cambios que guardar' })
+    res.json({ ok: true })
+  } catch (err) { responderError(res, next, err) }
+}
+
+// POST /api/h360/duelo/gestion/:id/intentos
+async function agregarIntento(req, res, next) {
+  try {
+    const id = await svc.agregarIntento(req.params.id, {
+      momento:     req.body?.momento,
+      canal:       req.body?.canal,
+      resultado:   req.body?.resultado,
+      observacion: req.body?.observacion ?? null,
+      usuario:     req.user.usuario,
+    })
+    res.status(201).json({ id })
+  } catch (err) { responderError(res, next, err) }
+}
+
+// PUT /api/h360/duelo/gestion/:id/servicios
+async function guardarServicios(req, res, next) {
+  try {
+    if (!Array.isArray(req.body?.servicios))
+      return res.status(400).json({ mensaje: 'Se espera una lista en "servicios"' })
+    await svc.guardarServicios(req.params.id, req.body.servicios)
+    const data = await svc.serviciosDeGestion(req.params.id)
+    res.json({ data })
+  } catch (err) { responderError(res, next, err) }
+}
+
+module.exports = { bandeja, buscar, ficha, crear, actualizar, agregarIntento,
+  guardarServicios, esOtraCiudad, ramaDe, FILTROS_BANDEJA, TOPE_BUSQUEDA, verificarFiltros }
