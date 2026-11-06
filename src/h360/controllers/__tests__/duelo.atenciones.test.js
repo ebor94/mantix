@@ -1022,16 +1022,4 @@ describe('crear exige un usuario en el login', () => {
     expect(db.query.mock.calls[0][1]).toEqual(
       ['5', '2026-11-05 14:30:00', 'PRESENCIAL', 'JAZMIN', null, null, null, null, null, 'JAZMIN'])
   })
-
-  // La guarda vive en un módulo compartido: el controlador de la gestión usa la
-  // MISMA función en sus dos sitios, para que el mismo caso no se responda 403
-  // acá y 500 allá. (Era el defecto: dos controladores hermanos con dos
-  // criterios, y desde un solo archivo no se veía la diferencia.)
-  test('la guarda es la del módulo compartido, no una copia de este archivo', () => {
-    const compartido = require('../../utils/duelo.peticion')
-    expect(typeof compartido.usuarioDelLogin).toBe('function')
-    expect(compartido.usuarioDelLogin({ user: { usuario: ' JAZMIN ' } })).toBe('JAZMIN')
-    for (const user of [undefined, null, {}, { usuario: '' }, { usuario: '  ' }, { usuario: 7 }])
-      expect(compartido.usuarioDelLogin({ user })).toBeNull()
-  })
 })

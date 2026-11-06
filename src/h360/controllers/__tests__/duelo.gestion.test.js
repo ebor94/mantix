@@ -218,7 +218,12 @@ describe('ficha', () => {
   // El ERP caído no debe tumbar una gestión ya abierta: el trabajo del día
   // sigue, solo falta el bloque del contrato.
   test('con el ERP caído devuelve la gestión y avisa del contrato', async () => {
-    ks.buscarOrdenes = jest.fn(async () => { throw new Error('ECONNREFUSED') })
+    // El mismo error que la bandeja: el mensaje y el código son distintos a
+    // propósito. Del error del ERP solo se loguea lo que no es de la familia
+    // (nombre, código), así que la causa que se busca en el log es el código.
+    ks.buscarOrdenes = jest.fn(async () => {
+      throw Object.assign(new Error('ECONNREFUSED'), { code: 'ESOCKET' })
+    })
     svc.intentosDeGestion = jest.fn(async () => INTENTOS)
     svc.serviciosDeGestion = jest.fn(async () => SERVICIOS)
     db.query = jest.fn(async () => [[FILA_ASISTENCIA]])
@@ -236,7 +241,7 @@ describe('ficha', () => {
     expect(res.cuerpo.asistencia.id).toBe(77)
     // Y la causa queda en el log para quien la busque.
     expect(advertencias).toHaveBeenCalledTimes(1)
-    expect(String(advertencias.mock.calls[0])).toMatch(/Error/)
+    expect(String(advertencias.mock.calls[0])).toContain('ESOCKET')
   })
 
   // El mensaje de mssql en un error de conversión cita el valor que se consultó;
@@ -550,16 +555,42 @@ describe('crear', () => {
       expect(await esMascotaDe({ orden_servicio: 'A-9' })).toBe(false)
     })
 
-    // La fila guardada y la insignia de la bandeja salen de la misma función: no
-    // hay forma de que una diga una cosa y la otra la contraria.
+    // La divergencia que se temía: la insignia de la bandeja dice una cosa y la
+    // fila que se guarda, que es la que alimenta el informe del R-56, la
+    // contraria. Se cruzan las dos de verdad: cada orden se pide a la bandeja
+    // (el es_mascota de la fila que sale de ctrl.bandeja) y se abre con crear
+    // (el que queda guardado), y tienen que decir lo mismo. No se compara contra
+    // esMascota(): las dos lo llaman, y comparar el resultado con la función que
+    // acaba de producirlo no puede fallar.
+    //
+    // Cada orden es lo que el ERP trae, con su número y su sede; el cuerpo de
+    // crear lleva esa misma sede, que es lo que manda el frontend al abrir desde
+    // la bandeja. Hay órdenes de los dos lados, por cada una de las dos señales
+    // (prefijo y centro de costo) y con las variantes de escritura del ERP.
     test('la bandeja marca lo mismo que se guarda', async () => {
-      const { esMascota } = require('../../utils/duelo.catalogos')
-      for (const orden of [
-        { orden_servicio: 'MAS-7' }, { orden_servicio: '03233', sede: 'Mascotas' },
-        { orden_servicio: 'A-9', sede: 'Sede Gran Colombia' },
-      ]) {
-        jest.clearAllMocks()
-        expect([orden, await esMascotaDe({ ...orden })]).toEqual([orden, esMascota(orden)])
+      const ORDENES = [
+        { orden_servicio: 'MAS-7',    sede: 'Sede Gran Colombia' }, // solo el prefijo
+        { orden_servicio: 'mas-0596', sede: 'Sede Gran Colombia' }, // prefijo en minúsculas
+        { orden_servicio: '03233',    sede: 'Mascotas' },           // solo el centro de costo
+        { orden_servicio: '03234',    sede: 'MASCOTAS  CUCUTA' },   // variante con dos espacios
+        { orden_servicio: 'A-9',      sede: 'Sede Gran Colombia' },
+        { orden_servicio: 'A-20538',  sede: 'Sede San José' },
+        { orden_servicio: 'A-10',     sede: '' },
+      ]
+      ks.ordenesDelRango = jest.fn(async () => ORDENES.map(o => ({ ...o })))
+      svc.gestionesPorOrdenes = jest.fn(async () => new Map())
+      const { res: bandeja, next } = await llamar(ctrl.bandeja, { query: {} })
+      expect(next).not.toHaveBeenCalled()
+      expect(bandeja.codigo).toBe(200)
+      expect(bandeja.cuerpo.data).toHaveLength(ORDENES.length)
+
+      // Para que el cruce signifique algo, la bandeja tiene que marcar de los dos
+      // lados: si marcara todo igual, comparar contra lo guardado no probaría nada.
+      expect(new Set(bandeja.cuerpo.data.map(f => f.es_mascota))).toEqual(new Set([true, false]))
+
+      for (const fila of bandeja.cuerpo.data) {
+        const guardado = await esMascotaDe({ orden_servicio: fila.orden_servicio, sede: fila.sede })
+        expect([fila.orden_servicio, fila.es_mascota]).toEqual([fila.orden_servicio, guardado])
       }
     })
   })
@@ -800,14 +831,32 @@ describe('la sesión sin nombre de usuario se responde igual en los tres sitios'
     expect(svc.agregarIntento.mock.calls[0][1].usuario).toBe('JAZMIN')
   })
 
-  // Los tres sitios usan la MISMA función: un criterio, no tres copias que
-  // puedan separarse.
-  test('es la misma guarda que usa el controlador de atenciones', () => {
-    const compartido = require('../../utils/duelo.peticion')
-    expect(typeof compartido.usuarioDelLogin).toBe('function')
-    expect(compartido.usuarioDelLogin({ user: { usuario: ' JAZMIN ' } })).toBe('JAZMIN')
-    expect(compartido.usuarioDelLogin({ user: { usuario: '  ' } })).toBeNull()
-    expect(compartido.usuarioDelLogin({})).toBeNull()
+  // Los tres sitios contestan LO MISMO: el mismo código y el mismo cuerpo. Es lo
+  // que importa de que compartan la guarda (duelo.peticion.js), y se prueba por
+  // comportamiento: si un controlador volviera a tener su copia con otro texto,
+  // o dejara pasar la sesión sin nombre, las respuestas dejarían de ser iguales.
+  // (Una prueba que solo mirara el módulo compartido pasaría igual con tres
+  // copias privadas: verificaría que el archivo existe, no que alguien lo usa.)
+  test('crear, agregarIntento y el registro de atención contestan igual', async () => {
+    const atenciones = require('../duelo_atenciones.controller')
+    svc.gestionPorOrden = jest.fn(async () => null)
+    const user = { rol: 'psicologia', usuario: '   ' }
+    const respuestas = []
+    for (const [manejador, req] of [
+      [ctrl.crear,           { body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA' } }],
+      [ctrl.agregarIntento,  { params: { id: '5' },
+        body: { momento: '2026-11-05T14:30', canal: 'LLAMADA', resultado: 'NO_CONTESTO' } }],
+      [atenciones.crear,     { params: { id: '5' },
+        body: { momento: '2026-11-05T14:30', modalidad: 'PRESENCIAL' } }],
+    ]) {
+      const { res, next } = await llamar(manejador, { user, ...req })
+      expect(next).not.toHaveBeenCalled()
+      respuestas.push({ codigo: res.codigo, cuerpo: res.cuerpo })
+    }
+    expect(respuestas[0].codigo).toBe(403)
+    expect(respuestas[0].cuerpo.mensaje).toMatch(/usuario/)
+    expect(respuestas[1]).toEqual(respuestas[0])
+    expect(respuestas[2]).toEqual(respuestas[0])
   })
 })
 
