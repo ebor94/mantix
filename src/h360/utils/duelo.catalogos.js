@@ -23,7 +23,7 @@ const ESTADOS_SERVICIO = [
 const MODALIDADES = ['PRESENCIAL', 'VIRTUAL', 'MENSAJE']
 
 /**
- * La modalidad de una ATENCIÓN psicológica: el ENUM de h360_duelo_atenciones.
+ * La modalidad de una ATENCIÓN psicológica: el ENUM de la tabla de atenciones.
  *
  * Son DOS vocabularios distintos y el parecido de los nombres es la trampa:
  * MODALIDADES (arriba) es por qué medio se ofreció o se entregó un servicio del

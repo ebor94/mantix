@@ -23,7 +23,7 @@ describe('catálogos del módulo de duelo', () => {
   // Dos vocabularios parecidos y distintos, y el parecido de los nombres es la
   // trampa: MODALIDADES es cómo se OFRECE un servicio (el SI/SIV del Excel) y
   // MODALIDADES_ATENCION es cómo se ATENDIÓ a la familia (el ENUM de
-  // h360_duelo_atenciones). Validar uno con el otro aceptaría MENSAJE como
+  // la tabla de atenciones). Validar uno con el otro aceptaría MENSAJE como
   // atención psicológica y rechazaría una atención TELEFONICA.
   describe('las dos modalidades son vocabularios distintos', () => {
     test('la de la atención psicológica es PRESENCIAL/TELEFONICA/VIRTUAL', () => {
