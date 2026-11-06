@@ -294,13 +294,68 @@ describe('bandeja', () => {
       expect(res.cuerpo.hasta).toBe('2026-10-31')
     })
 
-    // Comportamiento que fija la tarea: una fecha con forma inválida no
-    // detiene la bandeja, se usa el defecto. La respuesta dice qué rango se usó.
-    test('una fecha con forma inválida cae al defecto y la respuesta dice el rango usado', async () => {
+    // Invertida. Esta prueba afirmaba que una fecha con forma inválida cae al
+    // defecto, y eso nunca se decidió: era un efecto de usar la expresión regular
+    // como filtro y no como validación. «No pediste un rango» (ausente: el
+    // defecto) no es lo mismo que «pediste un rango que no entiendo» («ayer»,
+    // «5/11/2026»): en el segundo caso, usar el defecto le da a la psicóloga la
+    // lista de otro día sin avisarle. Es 400, como el resto de la clase.
+    test('una fecha con forma inválida es 400 y no cae al defecto', async () => {
       fijarHoy(2026, 11, 5)
-      const { res } = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '5/11/2026' })
-      expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
-      expect([res.cuerpo.desde, res.cuerpo.hasta]).toEqual(['2026-11-04', '2026-11-05'])
+      const r = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '5/11/2026' })
+      expectRechazo(r, '«desde»', 'AAAA-MM-DD')
+      expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+    })
+
+    describe('una fecha con forma inválida no se reemplaza por el defecto', () => {
+      const FORMAS = ['ayer', 'hoy', '5/11/2026', '2026/11/04', '04-11-2026', '2026-11-4',
+        '20261104', '2026-11-04T10:00']
+      const OTRO = { desde: 'hasta', hasta: 'desde' }
+
+      // La otra punta ausente: sin la validación, la mala se reemplazaría por el
+      // defecto y la bandeja respondería 200 con otro día.
+      test.each(FORMAS.flatMap(forma => [['desde', forma], ['hasta', forma]]))(
+        '%s=%j es 400, nombra ese campo y dice la forma esperada', async (campo, valor) => {
+          fijarHoy(2026, 11, 5)
+          const r = await llamar(ctrl.bandeja, { [campo]: valor })
+          expectRechazo(r, `«${campo}»`, 'AAAA-MM-DD', JSON.stringify(valor))
+          // Solo el campo malo: «cuál de los dos está mal» es lo que hay que poder leer.
+          expect(r.res.cuerpo.mensaje).not.toContain(`«${OTRO[campo]}»`)
+          // Ni «no existe» (la fecha no tiene forma de fecha, no es un 31 de febrero)
+          // ni «al revés» (no hay rango que comparar todavía).
+          expect(r.res.cuerpo.mensaje).not.toContain('que exista')
+          expect(r.res.cuerpo.mensaje).not.toContain('al revés')
+          expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+        })
+
+      // La otra punta bien escrita no la salva: el rango no se completa con el defecto.
+      test('con la otra punta válida también es 400, y nombra solo la mala', async () => {
+        fijarHoy(2026, 11, 5)
+        const malDesde = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '2026-11-05' })
+        expectRechazo(malDesde, '«desde»', 'AAAA-MM-DD')
+        expect(malDesde.res.cuerpo.mensaje).not.toContain('«hasta»')
+
+        const malHasta = await llamar(ctrl.bandeja, { desde: '2026-11-01', hasta: 'mañana' })
+        expectRechazo(malHasta, '«hasta»', 'AAAA-MM-DD')
+        expect(malHasta.res.cuerpo.mensaje).not.toContain('«desde»')
+        expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+      })
+
+      // Reemplazar la mala por el defecto podía dejar el rango al revés, y entonces
+      // el 400 era de «rango al revés» con un «por defecto» que la psicóloga no
+      // escribió. La forma se rechaza primero: el motivo real es la forma.
+      test('si el defecto invertiría el rango, el 400 sigue siendo de forma y no de rango al revés', async () => {
+        fijarHoy(2026, 11, 5)
+        const malDesde = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '2026-10-01' })
+        expectRechazo(malDesde, '«desde»', 'AAAA-MM-DD')
+        const malHasta = await llamar(ctrl.bandeja, { desde: '2026-12-01', hasta: 'mañana' })
+        expectRechazo(malHasta, '«hasta»', 'AAAA-MM-DD')
+        for (const { res } of [malDesde, malHasta]) {
+          expect(res.cuerpo.mensaje).not.toContain('al revés')
+          expect(res.cuerpo.mensaje).not.toContain('por defecto')
+        }
+        expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+      })
     })
 
     // La forma YYYY-MM-DD la acepta el servicio del ERP, que además compara las
@@ -352,10 +407,7 @@ describe('bandeja', () => {
       expectRechazo(soloDesde)
       expect(soloDesde.res.cuerpo.mensaje).toMatch(/«desde» \(2026-12-01\).*«hasta» \(2026-11-05, por defecto\)/)
 
-      // Una fecha mal escrita que cae al defecto tampoco puede invertir el rango en silencio.
-      const malEscrita = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '2026-10-01' })
-      expectRechazo(malEscrita)
-      expect(malEscrita.res.cuerpo.mensaje).toContain('por defecto')
+      // (Una fecha mal escrita ya no cae al defecto: es 400 de forma, ver arriba.)
       expect(ks.ordenesDelRango).not.toHaveBeenCalled()
     })
 
@@ -367,6 +419,16 @@ describe('bandeja', () => {
         expect(res.codigo).toBe(200)
         expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
         expect(res.cuerpo.data.map(f => f.orden_servicio)).toEqual(['A-1', 'MAS-9', 'A-3'])
+      })
+
+      // La psicóloga no pidió rango: la respuesta le dice cuál se usó, para que sepa
+      // de qué días es la lista que está viendo.
+      test('sin rango la respuesta dice el rango por defecto que usó', async () => {
+        fijarHoy(2026, 11, 5)
+        const { res } = await llamar(ctrl.bandeja, {})
+        expect([res.cuerpo.desde, res.cuerpo.hasta]).toEqual(['2026-11-04', '2026-11-05'])
+        const { res: enBlanco } = await llamar(ctrl.bandeja, { desde: '', hasta: ' ' })
+        expect([enBlanco.cuerpo.desde, enBlanco.cuerpo.hasta]).toEqual(['2026-11-04', '2026-11-05'])
       })
 
       // Un selector en «todas» manda `rama=`, no omite el parámetro.

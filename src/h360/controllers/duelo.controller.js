@@ -133,6 +133,8 @@ function sinErp(res) {
  * vacía, ese día nadie llamaría a ninguna familia. Por eso toda entrada que no
  * pueda dar un resultado correcto se rechaza con 400 y un mensaje que dice qué
  * se esperaba; un error visible es mejor que una lista vacía que miente.
+ * Tampoco se reemplaza por un valor por defecto lo que se pidió y no se entiende
+ * (una fecha «ayer»): la lista saldría de otro día y nadie lo sabría.
  *
  * La regla vale para todo lo que entra por aquí, no para cada filtro por
  * separado: los filtros de la bandeja se DECLARAN en FILTROS_BANDEJA con sus
@@ -172,22 +174,42 @@ const msjFechaInexistente = (campo, valor) =>
   `«${campo}» no es una fecha que exista: llegó ${eco(valor)}. `
   + 'Se esperaba una fecha real en formato AAAA-MM-DD, por ejemplo 2026-11-04.'
 
+/**
+ * Una fecha de la petición: '' si no vino (ausente o en blanco no se pidió, y eso
+ * no es inválido) y, si vino, debe ser una fecha real AAAA-MM-DD o es 400 con el
+ * nombre del campo. La usan el rango de la bandeja y los criterios de la
+ * búsqueda. El servicio también rechaza la forma, pero con el nombre de su
+ * parámetro interno (fechaDesde); acá se nombra el de la API.
+ */
+function leerFecha(query, campo) {
+  const v = leerTexto(query, campo)
+  if (v === '') return ''
+  if (!ES_FECHA.test(v))
+    throw malUso(`«${campo}» debe ser una fecha en formato AAAA-MM-DD (por ejemplo 2026-11-04); llegó ${eco(v)}.`)
+  if (!existe(v)) throw malUso(msjFechaInexistente(campo, v))
+  return v
+}
+
 /** Cada punta con su valor, y «por defecto» si no la escribió nadie. */
 const punta = ({ valor, porDefecto }) => (porDefecto ? `${valor}, por defecto` : valor)
 
 /**
- * El rango de la bandeja. Ausente o en blanco: ayer y hoy. Una fecha con forma
- * inválida («ayer», «5/11/2026») tampoco detiene la bandeja: se usa el defecto y
- * la respuesta dice qué rango se usó. Una fecha con la forma correcta que no
- * existe, o un «desde» posterior a «hasta», sí es 400.
+ * El rango de la bandeja. Ausente o en blanco es «no se pidió rango»: ayer y hoy
+ * (cada punta por separado, y la respuesta dice cuál se usó). Presente es una
+ * petición y tiene que entenderse: una fecha con forma inválida («ayer»,
+ * «5/11/2026»), una que no existe o un «desde» posterior a «hasta» son 400. Usar
+ * el defecto en lugar de lo que no se entiende le daría a la psicóloga la lista
+ * de otro día sin avisarle.
+ *
+ * Las puntas no están en FILTROS_BANDEJA: ese catálogo declara un dominio finito
+ * de valores y cómo aplicarlo a una fila, y una fecha no tiene ni lo uno ni lo
+ * otro (se le pasa al ERP, no filtra filas). Lo común a toda fecha es leerFecha.
  */
 function leerRango(query) {
   const defecto = rangoPorDefecto()
   const leer = campo => {
-    const v = leerTexto(query, campo)
-    if (!ES_FECHA.test(v)) return { valor: defecto[campo], porDefecto: true }
-    if (!existe(v)) throw malUso(msjFechaInexistente(campo, v))
-    return { valor: v, porDefecto: false }
+    const v = leerFecha(query, campo)
+    return v === '' ? { valor: defecto[campo], porDefecto: true } : { valor: v, porDefecto: false }
   }
   const desde = leer('desde')
   const hasta = leer('hasta')
@@ -297,20 +319,6 @@ async function bandeja(req, res, next) {
  * alguien cambia el TOP allá, hay que cambiarlo acá; una prueba compara los dos.
  */
 const TOPE_BUSQUEDA = 200
-
-/**
- * Un criterio de fecha de la búsqueda: vacío si no vino, y si vino debe ser una
- * fecha real AAAA-MM-DD. El servicio también rechaza la forma, pero con el
- * nombre de su parámetro interno (fechaDesde); acá se nombra el de la API.
- */
-function leerFecha(query, campo) {
-  const v = leerTexto(query, campo)
-  if (v === '') return ''
-  if (!ES_FECHA.test(v))
-    throw malUso(`«${campo}» debe ser una fecha en formato AAAA-MM-DD (por ejemplo 2026-11-04); llegó ${eco(v)}.`)
-  if (!existe(v)) throw malUso(msjFechaInexistente(campo, v))
-  return v
-}
 
 // GET /api/h360/duelo/buscar?contrato=&nombre=&fecha_fallecimiento=&fecha_hasta=
 // Igual que la bandeja: lo que no puede dar un resultado correcto es 400, no un
