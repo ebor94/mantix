@@ -22,13 +22,13 @@ async function importarNomina(empresaId, filas) {
   const errores = [];
   const porDocumento = new Map();
   let ignorados = 0;
-  (filas || []).forEach((fila, idx) => {
+  (Array.isArray(filas) ? filas : []).forEach((fila, idx) => {
     const n = idx + 1;
     const { value, error } = filaNominaSchema.validate(fila, { stripUnknown: true });
     if (error) { errores.push({ fila: n, motivo: error.message }); return; }
     const doc = String(value.numeroDocumento).trim();
     if (porDocumento.has(doc)) ignorados += 1;
-    porDocumento.set(doc, { empresaId, ...value, numeroDocumento: doc, activo: 1 });
+    porDocumento.set(doc, { ...value, empresaId, numeroDocumento: doc, activo: 1 });
   });
   const docs = [...porDocumento.keys()];
   let creados = 0, actualizados = 0;
@@ -50,7 +50,7 @@ async function listarNomina(empresaId) {
 
 // Upsert de una sola fila (link público de interesado).
 async function crearInteresado(empresaId, datos) {
-  const [fila] = await EmpresaNomina.upsert({ empresaId, ...datos, numeroDocumento: String(datos.numeroDocumento).trim(), activo: 1 });
+  const [fila] = await EmpresaNomina.upsert({ ...datos, empresaId, numeroDocumento: String(datos.numeroDocumento).trim(), activo: 1 });
   return fila;
 }
 
