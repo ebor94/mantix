@@ -100,11 +100,21 @@ Se derivan de los datos, no se eligen a mano:
 
 Cada fila de la bandeja dice además **si la rama está confirmada o es una
 suposición**. Está confirmada cuando sale de la ubicación de la asistencia de
-H360 o cuando la sede del ERP dice que es otra ciudad; no lo está cuando es el
+H360 o cuando hay una señal que dice que el servicio es de otra ciudad —el
+convenio `OLIVOS <ciudad>` o una sede foránea conocida—; no lo está cuando es el
 valor por defecto —que es casi la mitad de las filas, y justo las más
 recientes—. Sin esa distinción la pantalla afirmaba «Residencia» como hecho y
 una psicóloga podía planificar una visita a domicilio para un caso donde
 todavía nadie sabe dónde va a ser la velación.
+
+Una sede que **no** es local y que tampoco se reconoce como foránea se gestiona
+como otra ciudad, pero **sin confirmar**: una sede desconocida no es un dato,
+es la ausencia de uno. Si el ERP gana un centro de costo o renombra uno local,
+esas familias caen en la rama telefónica, y afirmarlo las dejaría con la
+insignia plena de «otra ciudad» sin que nadie las visite ni las llame como
+locales. La lista de sedes foráneas conocidas vive en el controlador y hoy está
+**vacía**: no hay centros de costo foráneos medidos, y el convenio sigue siendo
+la señal que confirma.
 
 | Rama | Cómo se detecta | Gestión |
 |---|---|---|
@@ -264,11 +274,11 @@ Todo bajo `/api/h360/duelo`, rol `psicologia` o `admin`.
 
 | Método y ruta | Qué hace |
 |---|---|
-| `GET /bandeja?desde=&hasta=&sede=&estado=&incluir_mascotas=` | Órdenes del ERP del rango, enriquecidas con H360 y con el estado de gestión. Defecto: ayer y hoy |
+| `GET /bandeja?desde=&hasta=&sede=&estado=&incluir_mascotas=` | Órdenes del ERP del rango, enriquecidas con H360 y con el estado de gestión. Defecto: ayer y hoy. Máximo **90 días** por consulta: un año son ~3008 órdenes y la petición se queda sin responder en vez de tardar |
 | `GET /buscar?contrato=&nombre=&fecha_fallecimiento=&fecha_hasta=` | Los tres criterios de búsqueda |
-| `GET /gestion/:orden_servicio` | Ficha: contrato en vivo del ERP + datos de 360 + gestión + intentos + servicios |
-| `POST /gestion` | Abre la gestión de una orden |
-| `PATCH /gestion/:id` | Ubicación, titular, teléfonos, tipificación, estado, observaciones |
+| `GET /gestion/:orden_servicio` | Ficha: contrato en vivo del ERP + datos de 360 + gestión + intentos + servicios. La asistencia de H360 trae `nombre_contacto` y `telefono_contacto` (§11) |
+| `POST /gestion` | Abre la gestión de una orden. El cuerpo manda `sede` (del ERP) y **no** `es_mascota`: eso lo calcula el servidor con el mismo criterio de la bandeja |
+| `PATCH /gestion/:id` | Ubicación, titular, teléfonos, tipificación, estado, observaciones. Un id que no existe es 404; un texto más largo que su columna, 400 |
 | `POST /gestion/:id/intentos` | Registra un intento |
 | `PUT /gestion/:id/servicios` | Guarda de una vez el estado de los 6 servicios |
 | `GET /gestion/:id/atenciones` | **Restringido.** Las atenciones con sus notas |

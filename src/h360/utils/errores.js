@@ -17,4 +17,20 @@ function malUso(mensaje) {
   return e
 }
 
-module.exports = { malUso }
+/**
+ * noEncontrado arma el error de algo que se pidió por id y no existe. Lleva
+ * status = 404 porque no es lo que arma malUso: la petición está bien escrita y
+ * lo que falta es la fila. Con los dos casos saliendo como un mismo 400, la
+ * pantalla dice «revisa lo que pediste» de una petición correcta y quien depura
+ * busca el error en el cuerpo, que es justo donde no está.
+ *
+ * Igual que malUso, devuelve el error y no lo lanza, para que la pila apunte a
+ * la línea que lo detectó.
+ */
+function noEncontrado(mensaje) {
+  const e = new Error(mensaje)
+  e.status = 404
+  return e
+}
+
+module.exports = { malUso, noEncontrado }

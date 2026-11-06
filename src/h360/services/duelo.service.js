@@ -6,7 +6,7 @@
  */
 const db = require('../config/db')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
-const { malUso } = require('../utils/errores')
+const { malUso, noEncontrado } = require('../utils/errores')
 const cat = require('../utils/duelo.catalogos')
 
 async function gestionPorOrden(orden) {
@@ -99,7 +99,19 @@ async function actualizarGestion(id, cambios) {
 
   const [r] = await db.query(
     `UPDATE h360_duelo_gestion SET ?${cierre} WHERE id = ?`, [set, id])
-  return r.affectedRows > 0
+
+  // `affectedRows` cuenta las filas que COINCIDIERON y no las que cambiaron de
+  // valor: mysql2 pide el flag FOUND_ROWS por defecto y el pool de config/db.js
+  // no toca los flags. Así que 0 solo puede ser «esa gestión no existe», nunca
+  // «mandó los mismos valores que ya tenía» (eso coincide y devuelve 1).
+  //
+  // Son dos respuestas distintas de la API y antes salían las dos como el mismo
+  // false: «no existe» (404) y «no hay nada que guardar» (el false de más
+  // arriba, cuando el cuerpo no trae ningún campo editable, que el controlador
+  // responde 400). Con las dos juntas, un PATCH a un id inexistente contestaba
+  // «Revisa lo que pediste» sobre una petición bien formada.
+  if (r.affectedRows === 0) throw noEncontrado(`No existe la gestión ${id}.`)
+  return true
 }
 
 async function agregarIntento(gestionId, { momento, canal, resultado, observacion, usuario }) {
@@ -177,8 +189,16 @@ async function guardarServicios(gestionId, lista) {
 }
 
 async function serviciosDeGestion(gestionId) {
+  // Columnas nombradas y no `SELECT *`, por la misma regla que aplican
+  // COLUMNAS_FICHA en el controlador y la lista de atenciones: lo que esta tabla
+  // gane mañana no debe salir en una respuesta sin que nadie lo haya decidido
+  // (en las pruebas del controlador este servicio está simulado, así que no
+  // habría nada que lo notara). Esta tabla hoy guarda solo el estado de los seis
+  // servicios; agregar una columna acá es la decisión de servirla.
   const [f] = await db.query(
-    'SELECT * FROM h360_duelo_servicios WHERE gestion_id = ?', [gestionId])
+    `SELECT id, gestion_id, servicio, estado, modalidad, detalle, observacion,
+            created_at, updated_at
+       FROM h360_duelo_servicios WHERE gestion_id = ?`, [gestionId])
   return f
 }
 

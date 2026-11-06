@@ -11,9 +11,13 @@
 const db  = require('../config/db')
 const ks  = require('../services/karingsoft.service')
 const svc = require('../services/duelo.service')
-const { esMascota, ESTADOS_GESTION } = require('../utils/duelo.catalogos')
+const { esMascota, ESTADOS_GESTION, normalizarSede } = require('../utils/duelo.catalogos')
 const { malUso } = require('../utils/errores')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
+// Quién manda la petición y sobre qué gestión: las mismas guardas que usa el
+// controlador de atenciones (ver duelo.peticion.js). `eco` también vive ahí: es
+// cómo se cita en un mensaje lo que llegó.
+const { eco, usuarioDelLogin, sinUsuario, leerId } = require('../utils/duelo.peticion')
 
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/
 
@@ -67,14 +71,53 @@ function rangoPorDefecto(ahora = new Date()) {
  * Las sedes de otras ciudades se reconocen por el centro de costo o porque el
  * convenio es otra sucursal de Olivos. No se adivina por el municipio: el
  * municipio es donde falleció, no donde es el homenaje.
+ *
+ * La sede se compara por CONTENIDO sobre el texto normalizado (el ERP la escribe
+ * a mano: «Sede San José», «Sede  Arauca» con dos espacios), y con la misma
+ * normalización que usa esMascota en el archivo de catálogos: normalizarSede.
+ * Antes cada uno normalizaba y comparaba a su manera, y una sede «MASCOTAS
+ * CUCUTA» era local acá y no era mascota allá.
  */
 const SEDES_LOCALES = ['GRAN COLOMBIA', 'SAN JOSE', 'SAN JOSÉ', 'CRISTO REY CUCUTA', 'MASCOTAS']
 
+/**
+ * Sedes de otras ciudades que el módulo RECONOCE como tales.
+ *
+ * Arranca VACÍA a propósito y no es un olvido: los centros de costo foráneos que
+ * trae el ERP no están medidos —el diseño nombra Bucaramanga, Bogotá y
+ * Barrancabermeja como CONVENIOS («OLIVOS <ciudad>»), que es la otra señal y se
+ * reconoce abajo— y escribir acá un nombre inventado afirmaría como confirmado
+ * justo lo que nadie verificó. Con la lista vacía, toda sede que no es local cae
+ * en OTRA_CIUDAD sin confirmar, que es el lado prudente. Agregar una es una
+ * decisión que se ve en el código, con el nombre tal como lo escribe el ERP y
+ * normalizado como normalizarSede lo deja.
+ */
+const SEDES_FORANEAS_CONOCIDAS = Object.freeze([])
+
+const convenioDeOtraSucursal = orden =>
+  /^OLIVOS (?!CUCUTA)/.test(String(orden?.convenio ?? '').toUpperCase().trim())
+
+/**
+ * La orden va a la rama de otra ciudad: su sede no es ninguna de las locales, o
+ * el convenio es de otra sucursal de Olivos. Responde a DÓNDE se gestiona, no a
+ * cuánto se sabe (eso lo responde otraCiudadReconocida).
+ */
 function esOtraCiudad(orden) {
-  const sede = String(orden.sede ?? '').toUpperCase().replace(/\s+/g, ' ').trim()
-  if (sede && !SEDES_LOCALES.some(s => sede.includes(s))) return true
-  const conv = String(orden.convenio ?? '').toUpperCase()
-  return /^OLIVOS (?!CUCUTA)/.test(conv.trim())
+  const sede = normalizarSede(orden?.sede)
+  if (sede !== '' && !SEDES_LOCALES.some(s => sede.includes(s))) return true
+  return convenioDeOtraSucursal(orden)
+}
+
+/**
+ * Y además lo SABEMOS: hay una señal que dice que el servicio es de otra ciudad,
+ * no solo la ausencia de una sede local. Son las dos que ya estaban en el
+ * código: el convenio «OLIVOS <otra ciudad>» y la lista explícita de sedes
+ * foráneas conocidas (hoy vacía). La sede se compara completa y normalizada, no
+ * por contenido: reconocer de más es lo que se está evitando.
+ */
+function otraCiudadReconocida(orden) {
+  const sede = normalizarSede(orden?.sede)
+  return (sede !== '' && SEDES_FORANEAS_CONOCIDAS.includes(sede)) || convenioDeOtraSucursal(orden)
 }
 
 /**
@@ -87,19 +130,29 @@ const RAMA = Object.freeze({ SALA: 'SALA', RESIDENCIA: 'RESIDENCIA', OTRA_CIUDAD
 /**
  * La rama de una orden y si esa rama es un dato o una suposición.
  *
- * Hay tres orígenes y solo el último es una suposición:
+ * Hay cuatro orígenes y dos de ellos son suposiciones:
  *   1. La ubicación del homenaje que H360 ya registró (sala o residencia): dato.
- *   2. La sede del ERP, cuando dice que es de otra ciudad: dato.
- *   3. Ninguno de los dos: se devuelve RESIDENCIA POR DEFECTO. Nadie sabe aún
- *      dónde será la velación (casi la mitad de las filas, y justo las más
- *      recientes: las órdenes de ayer y hoy, que todavía no tienen homenaje).
+ *   2. Una señal que dice que el servicio es de otra ciudad —el convenio de otra
+ *      sucursal de Olivos, o una sede foránea conocida—: dato.
+ *   3. Una sede que no es local y que nadie reconoce: se gestiona como otra
+ *      ciudad, pero SIN confirmar. Una sede desconocida no es un dato: es la
+ *      ausencia de uno. Si el ERP gana un centro de costo nuevo o renombra uno
+ *      local («Sede Gran Colombia II»), esas familias caen en esta rama, y
+ *      afirmarlo las dejaría con la insignia plena de «otra ciudad»: nadie las
+ *      visita ni las llama como locales, que es justo lo que son. Sin confirmar,
+ *      la pantalla dice que no se sabe y alguien lo revisa.
+ *   4. Nada de lo anterior (sede local o vacía): RESIDENCIA POR DEFECTO, sin
+ *      confirmar. Nadie sabe aún dónde será la velación (casi la mitad de las
+ *      filas, y justo las más recientes: las órdenes de ayer y hoy, que todavía
+ *      no tienen homenaje).
  *
  * Es la única función que decide las dos cosas a la vez, para que `rama` y
  * `confirmada` no puedan desfasarse: salen del mismo `if`.
  */
 function decidirRama(orden, asistencia) {
   if (asistencia?.ubicacion_tipo) return { rama: asistencia.ubicacion_tipo, confirmada: true }
-  if (esOtraCiudad(orden)) return { rama: RAMA.OTRA_CIUDAD, confirmada: true }
+  if (otraCiudadReconocida(orden)) return { rama: RAMA.OTRA_CIUDAD, confirmada: true }
+  if (esOtraCiudad(orden)) return { rama: RAMA.OTRA_CIUDAD, confirmada: false }
   return { rama: RAMA.RESIDENCIA, confirmada: false }
 }
 
@@ -158,6 +211,7 @@ async function asistenciasPorContrato(contratos) {
   if (!lista.length) return new Map()
   const [filas] = await db.query(
     `SELECT a.id, a.codigo, a.contrato, a.estado,
+            a.nombre_contacto, a.telefono_contacto,
             sv.codigo AS sala_codigo, sd.nombre AS sede_nombre,
             hr.id AS residencia_id
        FROM asistencias a
@@ -179,6 +233,15 @@ async function asistenciasPorContrato(contratos) {
       id: f.id, codigo: f.codigo, estado: f.estado,
       ubicacion_tipo,
       ubicacion_detalle: f.sala_codigo ? `${f.sede_nombre} · ${f.sala_codigo}` : null,
+      // El contacto que el asesor llenó en el F-01. Es la mitigación que el §11
+      // del diseño declara para el riesgo medido: 91 de 336 órdenes del ERP no
+      // traen teléfono y H360 tiene uno guardado en el 54% de los casos; sin
+      // estas dos columnas, para esas 91 familias el módulo no ofrecía NINGÚN
+      // número en ninguna pantalla y la gestión terminaba NO_LOGRADA teniendo
+      // nosotros el número. Van con el nombre de la tabla `asistencias`, sin
+      // renombrar: es el mismo dato, no uno nuevo.
+      nombre_contacto: f.nombre_contacto,
+      telefono_contacto: f.telefono_contacto,
     })
   }
   return m
@@ -224,10 +287,37 @@ async function armarFilas(ordenes) {
  * lanzan con `status = 400`: sin este mapeo, una fecha mal escrita por una
  * psicóloga saldría como error del servidor y en el log quedaría un error de
  * protocolo TDS que no le dice nada a nadie.
+ *
+ * Un 404 (noEncontrado) viaja igual: es el otro error que la petición puede
+ * tener y que quien llama puede entender. Lo demás sigue a next, que es un 500.
  */
+const RESPUESTAS_DE_QUIEN_LLAMA = [400, 404]
+
 function responderError(res, next, err) {
-  if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
+  if (RESPUESTAS_DE_QUIEN_LLAMA.includes(err?.status))
+    return res.status(err.status).json({ mensaje: err.message })
   return next(err)
+}
+
+/**
+ * Lo que de un error del ERP se puede dejar en el log.
+ *
+ * NO el mensaje: el de mssql, en un error de conversión o de parámetro, cita el
+ * valor que se consultó, y en este módulo ese valor es el nombre de un ser
+ * querido o el contrato de una familia. No es dato de salud, pero es PII, y el
+ * log de pm2 lo guarda en claro, rotado y legible por quien administre el
+ * servidor.
+ *
+ * Lo que queda alcanza para diagnosticar y no lleva nada de la familia: el
+ * nombre del error, su código y, cuando viene, el número de error de SQL Server
+ * («RequestError (EREQUEST) nº 8114» es una conversión fallida; ESOCKET es red;
+ * ELOGIN, credenciales).
+ */
+function causaDelErp(err) {
+  const partes = [err?.name || 'Error']
+  if (err?.code) partes.push(`(${err.code})`)
+  if (err?.number !== undefined && err?.number !== null) partes.push(`nº ${err.number}`)
+  return partes.join(' ')
 }
 
 function sinErp(res) {
@@ -254,12 +344,6 @@ function sinErp(res) {
  * valores válidos, y esa misma declaración es la que se valida y la que se
  * aplica. Un filtro nuevo no puede aplicarse sin haber declarado qué acepta.
  */
-
-/** Cuánto de lo que llegó se cita en un mensaje: el valor puede ser enorme. */
-const eco = v => {
-  const t = String(v)
-  return JSON.stringify(t.length > 40 ? `${t.slice(0, 40)}…` : t)
-}
 
 /**
  * Un parámetro de texto, recortado. Ausente o en blanco es '' (no se pidió
@@ -307,6 +391,37 @@ function leerFecha(query, campo) {
 const punta = ({ valor, porDefecto }) => (porDefecto ? `${valor}, por defecto` : valor)
 
 /**
+ * Cuánto puede abarcar el rango de la bandeja, contando las dos puntas.
+ *
+ * Nada lo impedía y pedir un año tiene un costo medido: ~3008 órdenes del ERP y,
+ * con ellas, dos consultas a H360 con un IN de 3008 marcadores. Eso no falla con
+ * un mensaje: el `timeout: 15000` de axios del frontend lo convierte en «el
+ * servidor tardó demasiado», que no dice qué pedir distinto, y la psicóloga
+ * repite la misma consulta. Con el tope, lo que no se puede servir se dice en
+ * palabras y antes de tocar el ERP.
+ *
+ * 90 días son tres meses de trabajo hacia atrás: más que cualquier rango que la
+ * pantalla ofrece (abre en ayer y hoy) y suficiente para revisar un trimestre.
+ */
+const MAX_DIAS_RANGO = 90
+
+const MS_POR_DIA = 86400000
+
+/** El instante UTC de una fecha AAAA-MM-DD: aritmética de calendario, sin zonas. */
+const instanteUtc = dia => {
+  const [anio, mes, d] = dia.split('-').map(Number)
+  return Date.UTC(anio, mes - 1, d)
+}
+
+/**
+ * Días que abarca el rango, contando las dos puntas (un solo día es 1). Se
+ * calcula en UTC y no con la zona del proceso: en una zona con horario de verano,
+ * un rango que lo cruza tiene un día de 23 o 25 horas y el conteo se correría.
+ */
+const diasDelRango = (desde, hasta) =>
+  (instanteUtc(hasta) - instanteUtc(desde)) / MS_POR_DIA + 1
+
+/**
  * El rango de la bandeja. Ausente o en blanco es «no se pidió rango»: ayer y hoy
  * (cada punta por separado, y la respuesta dice cuál se usó). Presente es una
  * petición y tiene que entenderse: una fecha con forma inválida («ayer»,
@@ -330,6 +445,16 @@ function leerRango(query) {
   if (desde.valor > hasta.valor)
     throw malUso(`El rango está al revés: «desde» (${punta(desde)}) es posterior a «hasta» (${punta(hasta)}). `
       + '«desde» debe ser igual o anterior a «hasta».')
+
+  // Después de «al revés»: un rango invertido se nombra por lo que es, no por lo
+  // largo que sería al derecho.
+  const dias = diasDelRango(desde.valor, hasta.valor)
+  if (dias > MAX_DIAS_RANGO)
+    throw malUso(`El rango no puede ser mayor a ${MAX_DIAS_RANGO} días y el que pediste son ${dias}: `
+      + `«desde» (${punta(desde)}) y «hasta» (${punta(hasta)}). `
+      + 'Pide tramos más cortos: la bandeja consulta el ERP y H360 orden por orden, '
+      + 'y un rango largo se queda sin responder en vez de tardar.')
+
   return { desde: desde.valor, hasta: hasta.valor }
 }
 
@@ -408,7 +533,7 @@ async function bandeja(req, res, next) {
       // Una entrada que el ERP rechaza (400) es de quien escribió, no una caída:
       // sube al responderError de abajo en vez de disfrazarse de 503.
       if (err?.status === 400) throw err
-      console.warn('[duelo] bandeja, ERP no disponible:', err.message)
+      console.warn('[duelo] bandeja, ERP no disponible:', causaDelErp(err))
       return sinErp(res)
     }
 
@@ -466,7 +591,7 @@ async function buscar(req, res, next) {
     catch (err) {
       // Igual que en la bandeja: una entrada inválida es 400, no una caída.
       if (err?.status === 400) throw err
-      console.warn('[duelo] búsqueda, ERP no disponible:', err.message)
+      console.warn('[duelo] búsqueda, ERP no disponible:', causaDelErp(err))
       return sinErp(res)
     }
 
@@ -555,7 +680,7 @@ async function ficha(req, res, next) {
       // bandeja y en la búsqueda, sube al responderError de más abajo. Decir
       // «no se pudo leer el contrato» mandaría a esperar a un ERP que está bien.
       if (err?.status === 400) throw err
-      console.warn('[duelo] ficha, ERP no disponible:', err.message)
+      console.warn('[duelo] ficha, ERP no disponible:', causaDelErp(err))
       erp_error = 'No se pudo leer el contrato en Karingsoft (el ERP).'
     }
 
@@ -580,6 +705,12 @@ async function ficha(req, res, next) {
 // POST /api/h360/duelo/gestion
 async function crear(req, res, next) {
   try {
+    // Quién abre la gestión sale del login y las dos columnas son NOT NULL: si la
+    // sesión no trae nombre, es un 403 que lo explica (el mismo de atenciones) y
+    // no un 500 de MySQL.
+    const usuario = usuarioDelLogin(req)
+    if (!usuario) return sinUsuario(res)
+
     const orden = String(req.body?.orden_servicio ?? '').trim()
     if (!orden) return res.status(400).json({ mensaje: 'Falta el número de orden' })
 
@@ -597,13 +728,21 @@ async function crear(req, res, next) {
       asistencia_id:      req.body.asistencia_id ?? null,
       ubicacion_tipo:     req.body.ubicacion_tipo ?? 'OTRO',
       ubicacion_detalle:  req.body.ubicacion_detalle ?? null,
-      es_mascota:         !!req.body.es_mascota,
+      // Lo decide el servidor con el MISMO esMascota() con que la bandeja pinta
+      // la insignia, y no `req.body.es_mascota`. Con el cliente decidiendo, los
+      // dos podían desfasarse: la insignia decía «Mascota» y la fila guardaba un
+      // 0, y es la fila la que va a alimentar el informe del R-56. Entran el
+      // número de orden y la `sede` que manda el cuerpo (la sede es del ERP, no
+      // nuestra; viaja en la fila de la bandeja desde donde se abre la gestión).
+      // Si no llega, el prefijo MAS- del número sigue reconociéndolas: es la
+      // degradación aceptada mientras el frontend no la manda todavía.
+      es_mascota:         esMascota({ orden_servicio: orden, sede: req.body.sede }),
       titular_nombre:     req.body.titular_nombre ?? null,
       titular_parentesco: req.body.titular_parentesco ?? null,
       telefonos:          req.body.telefonos ?? null,
       estado:             'EN_GESTION',
-      psicologa:          req.user.usuario,
-      created_by:         req.user.usuario,
+      psicologa:          usuario,
+      created_by:         usuario,
     }
     let id
     try {
@@ -646,6 +785,50 @@ function leerPsicologa(valor) {
   return v
 }
 
+/**
+ * Lo que cabe en cada columna de texto de h360_duelo_gestion, con la unidad en
+ * que MySQL la mide. Los números son los del DDL (h360_duelo_tablas.sql) y una
+ * prueba los compara contra ese archivo: si la tabla cambia y esto no, la
+ * validación dejaría pasar lo que MySQL corta.
+ *
+ * Un texto más largo que su columna reventaba en MySQL con ER_DATA_TOO_LONG y
+ * desde la API era un 500: la psicóloga perdía lo que acababa de escribir y el
+ * mensaje no le decía qué recortar. Ahora es un 400 que nombra el campo y el
+ * tope. `psicologa` no está acá: la valida leerPsicologa, que además exige que
+ * no quede en blanco (es NOT NULL y es el responsable del caso).
+ *
+ * `observaciones` es TEXT y su tope son BYTES, no caracteres: una tilde ocupa
+ * dos y un emoji cuatro. Las VARCHAR cuentan caracteres.
+ */
+const TOPES_GESTION = Object.freeze({
+  ubicacion_detalle:     { tope: 120,   unidad: 'caracteres' },
+  titular_nombre:        { tope: 160,   unidad: 'caracteres' },
+  titular_parentesco:    { tope: 40,    unidad: 'caracteres' },
+  telefonos:             { tope: 120,   unidad: 'caracteres' },
+  psicologa_acompanante: { tope: 50,    unidad: 'caracteres' },
+  observaciones:         { tope: 65535, unidad: 'bytes' },
+})
+
+/**
+ * El valor si cabe en su columna; si no, 400. Es UNA función para los seis
+ * campos (reciben campo y tope), no seis validaciones iguales.
+ *
+ * Nulo o ausente no es un largo inválido: así se limpia un dato de la ficha. Y
+ * lo que cabe se devuelve TAL CUAL, sin recortar: recortar perdería en silencio
+ * parte de lo que alguien escribió. El tipo tampoco se restringe acá —un número
+ * en `telefonos` lo guarda MySQL como texto y eso ya funciona así—; lo que se
+ * mide es el largo de lo que se va a escribir.
+ */
+function acotar(campo, valor, { tope, unidad }) {
+  if (valor === null || valor === undefined) return valor
+  const texto = String(valor)
+  const largo = unidad === 'bytes' ? Buffer.byteLength(texto, 'utf8') : texto.length
+  if (largo > tope)
+    throw malUso(`«${campo}» no puede pasar de ${tope} ${unidad} y llegó con ${largo}: `
+      + `${eco(valor)}. Es el ancho de la columna en la base; acorta el texto y vuelve a guardar.`)
+  return valor
+}
+
 // PATCH /api/h360/duelo/gestion/:id
 //
 // Reasignar la gestión SÍ se puede (decisión del dueño del sistema): una psicóloga
@@ -659,11 +842,19 @@ function leerPsicologa(valor) {
 // es otra cosa: la segunda psicóloga cuando atienden las dos.)
 async function actualizar(req, res, next) {
   try {
+    const id = leerId(req.params.id)
+
     // Copia: lo que venga después en la cadena de middlewares ve el cuerpo completo.
     const cambios = { ...req.body }
     if (cambios.psicologa !== undefined) cambios.psicologa = leerPsicologa(cambios.psicologa)
+    for (const [campo, limite] of Object.entries(TOPES_GESTION))
+      if (cambios[campo] !== undefined) cambios[campo] = acotar(campo, cambios[campo], limite)
 
-    const cambiado = await svc.actualizarGestion(req.params.id, cambios)
+    // `false` es «el cuerpo no trae ningún campo editable», que es lo que dice el
+    // mensaje. Una gestión que no existe NO llega acá: el servicio lanza un 404
+    // (los dos casos salían antes como este mismo 400, y la pantalla decía
+    // «Revisa lo que pediste» de una petición bien formada).
+    const cambiado = await svc.actualizarGestion(id, cambios)
     if (!cambiado) return res.status(400).json({ mensaje: 'No hay cambios que guardar' })
     res.json({ ok: true })
   } catch (err) { responderError(res, next, err) }
@@ -672,12 +863,17 @@ async function actualizar(req, res, next) {
 // POST /api/h360/duelo/gestion/:id/intentos
 async function agregarIntento(req, res, next) {
   try {
-    const id = await svc.agregarIntento(req.params.id, {
+    // `usuario` es NOT NULL y es toda la auditoría del intento: la misma guarda
+    // que en `crear` y en el controlador de atenciones.
+    const usuario = usuarioDelLogin(req)
+    if (!usuario) return sinUsuario(res)
+
+    const id = await svc.agregarIntento(leerId(req.params.id), {
       momento:     req.body?.momento,
       canal:       req.body?.canal,
       resultado:   req.body?.resultado,
       observacion: req.body?.observacion ?? null,
-      usuario:     req.user.usuario,
+      usuario,
     })
     res.status(201).json({ id })
   } catch (err) { responderError(res, next, err) }
@@ -686,15 +882,17 @@ async function agregarIntento(req, res, next) {
 // PUT /api/h360/duelo/gestion/:id/servicios
 async function guardarServicios(req, res, next) {
   try {
+    const id = leerId(req.params.id)
     if (!Array.isArray(req.body?.servicios))
       return res.status(400).json({ mensaje: 'Se espera una lista en "servicios"' })
-    await svc.guardarServicios(req.params.id, req.body.servicios)
+    await svc.guardarServicios(id, req.body.servicios)
     // Los servicios traen created_at y updated_at: igual que en la ficha, sin Date.
-    const data = (await svc.serviciosDeGestion(req.params.id)).map(fechasComoTexto)
+    const data = (await svc.serviciosDeGestion(id)).map(fechasComoTexto)
     res.json({ data })
   } catch (err) { responderError(res, next, err) }
 }
 
 module.exports = { bandeja, buscar, ficha, crear, actualizar, agregarIntento,
-  guardarServicios, esOtraCiudad, ramaDe, rangoPorDefecto, horaDePared, FILTROS_BANDEJA,
-  TOPE_BUSQUEDA, verificarFiltros }
+  guardarServicios, esOtraCiudad, otraCiudadReconocida, normalizarSede, ramaDe,
+  rangoPorDefecto, horaDePared, FILTROS_BANDEJA, SEDES_FORANEAS_CONOCIDAS,
+  TOPES_GESTION, TOPE_BUSQUEDA, MAX_DIAS_RANGO, verificarFiltros }

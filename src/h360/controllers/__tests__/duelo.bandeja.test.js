@@ -64,9 +64,23 @@ const ORDENES = [
 const ASISTENCIA_A1 = {
   id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA',
   sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia',
+  // El contacto que el asesor llenó en el F-01: 91 de 336 órdenes del ERP no
+  // traen teléfono y H360 tiene uno guardado en el 54% de los casos.
+  nombre_contacto: 'ANA PEREZ', telefono_contacto: '3001234567',
 }
 
 const ERROR_ERP = Object.assign(new Error('ECONNREFUSED'), { code: 'ESOCKET' })
+
+// Lo que mssql devuelve cuando una conversión falla: el MENSAJE lleva adentro el
+// término que se buscó, que en este módulo es el nombre de un ser querido. El
+// log de pm2 lo guarda en claro y rotado, así que de un error del ERP solo se
+// escribe lo que no es de la familia: el nombre, el código y el número de error.
+const ERROR_ERP_CON_NOMBRE = Object.assign(
+  new Error("Conversion failed when converting the varchar value 'MARTINEZ GUERRERO' to data type int"),
+  { name: 'RequestError', code: 'EREQUEST', number: 245 })
+
+// Todo lo que se escribió en el log, en una sola cadena.
+const logEscrito = () => console.warn.mock.calls.map(c => c.join(' ')).join('\n')
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -111,6 +125,55 @@ describe('bandeja', () => {
     expect(fila(res, 'A-1').asistencia).toEqual({
       id: 77, codigo: 'H360-2026-0315', estado: 'SALA',
       ubicacion_tipo: 'SALA', ubicacion_detalle: 'Gran Colombia · SALGC06',
+      nombre_contacto: 'ANA PEREZ', telefono_contacto: '3001234567',
+    })
+  })
+
+  // §11 del diseño: 91 de 336 órdenes del ERP no traen teléfono, y H360 tiene uno
+  // guardado en el 54% de los casos. Sin estas dos columnas, para esas 91 el
+  // módulo no ofrecía NINGÚN número en ninguna pantalla y la familia quedaba
+  // «NO_LOGRADA» teniendo nosotros el teléfono. Los nombres son los de la tabla
+  // `asistencias`, sin renombrar: la pantalla los busca así.
+  describe('el contacto de la familia que H360 ya tiene', () => {
+    test('la consulta pide el nombre y el teléfono del contacto', async () => {
+      await llamar(ctrl.bandeja)
+      const sql = db.query.mock.calls[0][0]
+      expect(sql).toMatch(/\ba\.nombre_contacto\b/)
+      expect(sql).toMatch(/\ba\.telefono_contacto\b/)
+    })
+
+    test('viajan dentro de asistencia, con el nombre de la tabla', async () => {
+      db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia.nombre_contacto).toBe('ANA PEREZ')
+      expect(fila(res, 'A-1').asistencia.telefono_contacto).toBe('3001234567')
+    })
+
+    // El 46% de las órdenes no tiene caso en H360: ahí no hay contacto que dar y
+    // la fila sigue saliendo igual.
+    test('una orden sin asistencia no inventa contacto', async () => {
+      db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-3').asistencia).toBeNull()
+    })
+
+    test('un caso de H360 sin contacto guardado lo entrega nulo', async () => {
+      db.query = jest.fn(async () => [[
+        { ...ASISTENCIA_A1, nombre_contacto: null, telefono_contacto: null },
+      ]])
+      const { res } = await llamar(ctrl.bandeja)
+      expect(fila(res, 'A-1').asistencia.nombre_contacto).toBeNull()
+      expect(fila(res, 'A-1').asistencia.telefono_contacto).toBeNull()
+    })
+
+    // El ORDER BY está medido contra datos reales de producción: agregar columnas
+    // al SELECT no lo toca.
+    test('el orden de preferencia de la consulta no cambia', async () => {
+      await llamar(ctrl.bandeja)
+      const sql = db.query.mock.calls[0][0].replace(/\s+/g, ' ').trim()
+      expect(/ORDER BY (.+)$/i.exec(sql)?.[1]).toBe(
+        "(a.estado IN ('CERRADO', 'DESISTIDO', 'RECHAZADO')), "
+        + '(hs.id IS NULL AND hr.id IS NULL), a.id DESC, hs.id DESC, hr.id DESC')
     })
   })
 
@@ -490,6 +553,90 @@ describe('bandeja', () => {
       expect(ctrl.ramaDe(ORDENES[2], null)).toBe('OTRA_CIUDAD')
       expect(ctrl.ramaDe(ORDENES[0], { ubicacion_tipo: 'SALA' })).toBe('SALA')
     })
+
+    // Era el único lugar del módulo donde lo DESCONOCIDO se presentaba como un
+    // dato. «No es ninguna de las cinco sedes locales» no es lo mismo que «es de
+    // otra ciudad»: si el ERP gana o renombra un centro de costo local, esas
+    // familias salen en la rama de otra ciudad, y antes salían con la insignia
+    // plena y sin el «sin confirmar» que el módulo construyó justo para esto;
+    // nadie las visita ni las llama como locales.
+    describe('una sede desconocida es una suposición, no un dato', () => {
+      const CONVENIO_LOCAL = 'Planes TRADICIONAL'
+      const soloOrden = o => { ks.ordenesDelRango = jest.fn(async () => [o]) }
+
+      test('la sede que no es local ni se reconoce como foránea: OTRA_CIUDAD SIN confirmar', async () => {
+        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
+        const { res } = await llamar(ctrl.bandeja)
+        expect(fila(res, 'P-1').rama).toBe('OTRA_CIUDAD')
+        expect(fila(res, 'P-1').rama_confirmada).toBe(false)
+      })
+
+      // Ninguna de las sedes foráneas que el ERP devuelve de verdad está
+      // reconocida: las cuatro salen en la rama telefónica como suposición.
+      test.each(['Sede Pamplona', 'Sede Saravena', 'Sede  Arauca', 'Sede Tame'])(
+        '%j: la rama es OTRA_CIUDAD y no se afirma', async sede => {
+          soloOrden({ orden_servicio: 'P-9', sede, convenio: CONVENIO_LOCAL })
+          const { res } = await llamar(ctrl.bandeja)
+          expect([fila(res, 'P-9').rama, fila(res, 'P-9').rama_confirmada])
+            .toEqual(['OTRA_CIUDAD', false])
+        })
+
+      // El convenio «OLIVOS <otra ciudad>» sí dice de dónde es el servicio: es la
+      // señal que ya existía y sigue valiendo como dato.
+      test('el convenio de otra sucursal de Olivos sí es un dato: confirmada', async () => {
+        soloOrden({ orden_servicio: 'P-2', sede: 'Sede Pamplona', convenio: 'Olivos Bucaramanga' })
+        const { res } = await llamar(ctrl.bandeja)
+        expect(fila(res, 'P-2').rama).toBe('OTRA_CIUDAD')
+        expect(fila(res, 'P-2').rama_confirmada).toBe(true)
+      })
+
+      test('una sede local sin homenaje registrado sigue en RESIDENCIA sin confirmar', async () => {
+        soloOrden({ orden_servicio: 'P-3', sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL })
+        const { res } = await llamar(ctrl.bandeja)
+        expect([fila(res, 'P-3').rama, fila(res, 'P-3').rama_confirmada])
+          .toEqual(['RESIDENCIA', false])
+      })
+
+      // La lista arranca VACÍA a propósito: los centros de costo foráneos del ERP
+      // no están medidos y un nombre inventado afirmaría como confirmado algo que
+      // nadie verificó, que es el defecto que esto cierra. Congelada para que no
+      // se le agregue uno en tiempo de ejecución, lejos de la vista.
+      test('la lista de sedes foráneas conocidas arranca vacía y es inmutable', () => {
+        expect(ctrl.SEDES_FORANEAS_CONOCIDAS).toEqual([])
+        expect(Object.isFrozen(ctrl.SEDES_FORANEAS_CONOCIDAS)).toBe(true)
+      })
+
+      // La propiedad que no se puede perder: las dos salen del mismo if, así que
+      // no hay fila con rama sin su marca.
+      test('toda fila trae las dos cosas: rama y si es un dato', async () => {
+        ks.ordenesDelRango = jest.fn(async () => [
+          { orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL },
+          { orden_servicio: 'P-2', sede: 'Sede Pamplona', convenio: 'Olivos Bucaramanga' },
+          { orden_servicio: 'P-3', sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL },
+        ])
+        const { res } = await llamar(ctrl.bandeja)
+        expect(res.cuerpo.data.map(f => [f.rama, f.rama_confirmada])).toEqual([
+          ['OTRA_CIUDAD', false], ['OTRA_CIUDAD', true], ['RESIDENCIA', false],
+        ])
+      })
+
+      // Una rama supuesta no se cae del filtro: la psicóloga que pide «otra
+      // ciudad» tiene que ver también las que están sin confirmar.
+      test('la rama supuesta sigue entrando en el filtro por rama', async () => {
+        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
+        const { res } = await llamar(ctrl.bandeja, { rama: 'OTRA_CIUDAD' })
+        expect(res.codigo).toBe(200)
+        expect(fila(res, 'P-1').rama_confirmada).toBe(false)
+      })
+
+      // El homenaje registrado en H360 sigue mandando sobre cualquier sede.
+      test('el homenaje de H360 manda sobre una sede desconocida, y es un dato', async () => {
+        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
+        db.query = jest.fn(async () => [[{ ...ASISTENCIA_A1, contrato: 'P-1' }]])
+        const { res } = await llamar(ctrl.bandeja)
+        expect([fila(res, 'P-1').rama, fila(res, 'P-1').rama_confirmada]).toEqual(['SALA', true])
+      })
+    })
   })
 
   test('dice qué ya se gestionó', async () => {
@@ -785,6 +932,66 @@ describe('bandeja', () => {
       expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-04')
     })
 
+    // Nada impedía pedir un año: ~3008 órdenes, y con ellas un IN de 3008
+    // marcadores en dos consultas de H360. El timeout de axios del frontend lo
+    // convierte en «el servidor tardó demasiado», que no dice qué pedir distinto.
+    // El tope se dice en palabras y en el mismo 400 que el resto de la clase.
+    describe('tope de 90 días', () => {
+      test('un año es 400 y lo dice en palabras', async () => {
+        const r = await llamar(ctrl.bandeja, { desde: '2026-01-01', hasta: '2026-12-31' })
+        expectRechazo(r, 'rango no puede ser mayor a 90 días')
+        // Y dice cuántos días se pidieron, que es lo que hay que acortar.
+        expect(r.res.cuerpo.mensaje).toContain('365')
+        expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+      })
+
+      test('el mensaje dice qué rango llegó, para saber qué acortar', async () => {
+        const r = await llamar(ctrl.bandeja, { desde: '2026-01-01', hasta: '2026-12-31' })
+        expect(r.res.cuerpo.mensaje).toContain('2026-01-01')
+        expect(r.res.cuerpo.mensaje).toContain('2026-12-31')
+      })
+
+      // El borde exacto: 90 días contando las dos puntas pasan; 91 no.
+      test('90 días exactos se aceptan y 91 no', async () => {
+        const noventa = await llamar(ctrl.bandeja, { desde: '2026-01-01', hasta: '2026-03-31' })
+        expect(noventa.res.codigo).toBe(200)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-01-01', '2026-03-31')
+        const unoMas = await llamar(ctrl.bandeja, { desde: '2026-01-01', hasta: '2026-04-01' })
+        expectRechazo(unoMas, '90 días')
+      })
+
+      // El tope no se mide en milisegundos contra la zona del proceso: un rango
+      // que cruza un cambio de hora de otra zona sigue contando los mismos días.
+      test('el conteo de días no depende de la zona del proceso', async () => {
+        const { res } = await llamar(ctrl.bandeja, { desde: '2026-10-05', hasta: '2027-01-02' })
+        expect(res.codigo).toBe(200) // 90 días exactos, cruzando el cambio de año
+        expectRechazo(await llamar(ctrl.bandeja, { desde: '2026-10-05', hasta: '2027-01-03' }), '90 días')
+      })
+
+      // Lo que la pantalla pide de verdad no cambia: ayer y hoy son dos días.
+      test('el rango por defecto y un rango corto siguen pasando', async () => {
+        fijarHoy(2026, 11, 5)
+        expect((await llamar(ctrl.bandeja)).res.codigo).toBe(200)
+        expect((await llamar(ctrl.bandeja, { desde: '2026-10-01', hasta: '2026-10-31' })).res.codigo).toBe(200)
+      })
+
+      // Una sola punta: la otra es la del defecto, y el mensaje dice cuál no la
+      // escribió nadie (igual que el 400 del rango al revés).
+      test('con una sola punta el mensaje dice que la otra es el defecto', async () => {
+        fijarHoy(2026, 11, 5)
+        const r = await llamar(ctrl.bandeja, { desde: '2026-01-01' })
+        expectRechazo(r, '90 días', 'por defecto')
+        expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+      })
+
+      // El orden de los rechazos: un rango al revés se nombra por lo que es.
+      test('un rango al revés y largo se sigue rechazando por estar al revés', async () => {
+        const r = await llamar(ctrl.bandeja, { desde: '2026-12-31', hasta: '2026-01-01' })
+        expectRechazo(r, 'al revés')
+        expect(r.res.cuerpo.mensaje).not.toContain('90 días')
+      })
+    })
+
     // Si llega solo una punta, la otra es la del defecto: el rango puede quedar
     // al revés sin que quien escribió lo haya querido. Se rechaza y el mensaje
     // dice cuál de las dos fechas no la puso nadie.
@@ -1041,10 +1248,29 @@ describe('bandeja', () => {
       expect(next).not.toHaveBeenCalled()
     })
 
+    // El log tiene que seguir siendo diagnosticable: de un error del ERP se
+    // escribe su nombre y su código (y el número de SQL Server cuando lo trae),
+    // que es lo que dice si fue red, login o consulta.
     test('el 503 deja en el log la causa que el mensaje no da', async () => {
       ks.ordenesDelRango = jest.fn(async () => { throw ERROR_ERP })
       await llamar(ctrl.bandeja)
-      expect(console.warn).toHaveBeenCalledWith(expect.any(String), 'ECONNREFUSED')
+      expect(console.warn).toHaveBeenCalledTimes(1)
+      expect(logEscrito()).toContain('ESOCKET')
+    })
+
+    // El mensaje de mssql puede llevar el apellido de la familia: es PII y no
+    // entra al log de pm2, ni acá ni en la búsqueda ni en la ficha.
+    test('el log no lleva el mensaje del ERP, que puede traer el nombre de la familia', async () => {
+      ks.ordenesDelRango = jest.fn(async () => { throw ERROR_ERP_CON_NOMBRE })
+      const { res } = await llamar(ctrl.bandeja)
+      expect(res.codigo).toBe(503)
+      const log = logEscrito()
+      expect(log).not.toContain('MARTINEZ')
+      expect(log).not.toContain('GUERRERO')
+      expect(log).not.toContain('Conversion failed')
+      // Y aun así se puede diagnosticar.
+      expect(log).toContain('EREQUEST')
+      expect(log).toContain('245')
     })
 
     // La psicóloga escribió algo mal: no es una caída del ERP y no debe decírselo.
@@ -1156,7 +1382,19 @@ describe('buscar', () => {
     expect(res.codigo).toBe(503)
     expect(res.cuerpo.data).toBeUndefined()
     expect(next).not.toHaveBeenCalled()
-    expect(console.warn).toHaveBeenCalledWith(expect.any(String), 'ECONNREFUSED')
+    expect(logEscrito()).toContain('ESOCKET')
+  })
+
+  // La búsqueda es el peor sitio para esto: lo que se busca por nombre ES el
+  // nombre de un ser querido, y el mensaje de mssql lo repite.
+  test('el log de una búsqueda fallida no lleva el nombre que se buscó', async () => {
+    ks.buscarOrdenes = jest.fn(async () => { throw ERROR_ERP_CON_NOMBRE })
+    const { res } = await llamar(ctrl.buscar, { nombre: 'martinez guerrero' })
+    expect(res.codigo).toBe(503)
+    const log = logEscrito()
+    expect(log.toUpperCase()).not.toContain('MARTINEZ')
+    expect(log).not.toContain('Conversion failed')
+    expect(log).toContain('EREQUEST')
   })
 
   test('una entrada inválida que rechaza el ERP se responde 400, no 503', async () => {
@@ -1306,5 +1544,50 @@ describe('esOtraCiudad con las sedes reales del ERP', () => {
     expect(ctrl.esOtraCiudad({ sede: '', convenio: '' })).toBe(false)
     expect(ctrl.esOtraCiudad({ sede: null, convenio: null })).toBe(false)
     expect(ctrl.esOtraCiudad({})).toBe(false)
+  })
+})
+
+// `esOtraCiudad` responde «esta orden va a la rama telefónica»; esto responde
+// otra cosa: «y eso lo SABEMOS». Son dos preguntas y antes se contestaban con
+// una sola, así que una sede que nadie reconoce se afirmaba como dato.
+describe('otraCiudadReconocida: cuándo «otra ciudad» es un dato y no una suposición', () => {
+  const CONVENIO_LOCAL = 'Planes TRADICIONAL'
+
+  // Las cuatro sedes foráneas que el ERP devuelve de verdad (30 días de
+  // producción). Ninguna está en la lista de conocidas: ninguna se afirma.
+  test.each(['Sede Pamplona', 'Sede Saravena', 'Sede  Arauca', 'Sede Tame'])(
+    '%j no es una sede foránea reconocida', sede => {
+      expect(ctrl.otraCiudadReconocida({ sede, convenio: CONVENIO_LOCAL })).toBe(false)
+      // Y sigue yendo a la rama de otra ciudad: lo que cambia es la certeza.
+      expect(ctrl.esOtraCiudad({ sede, convenio: CONVENIO_LOCAL })).toBe(true)
+    })
+
+  test('el convenio OLIVOS <otra ciudad> sí es señal reconocida', () => {
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: 'Olivos Bucaramanga' })).toBe(true)
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Pamplona', convenio: 'OLIVOS BOGOTA' })).toBe(true)
+  })
+
+  test('el convenio de Olivos Cucuta no es otra ciudad', () => {
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: 'Olivos Cucuta' })).toBe(false)
+  })
+
+  test('una sede local no es foránea ni reconocida', () => {
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL })).toBe(false)
+  })
+
+  test('sin sede ni convenio no se reconoce nada', () => {
+    expect(ctrl.otraCiudadReconocida({ sede: '', convenio: '' })).toBe(false)
+    expect(ctrl.otraCiudadReconocida({})).toBe(false)
+  })
+
+  // El detalle que venía con esto: la rama comparaba la sede por contenido y
+  // esMascota con ===, así que una sede «MASCOTAS CUCUTA» era local para la rama
+  // y no era mascota. Las dos normalizan con la MISMA función.
+  test('la sede se normaliza con la misma función que esMascota', () => {
+    const { normalizarSede, esMascota } = require('../../utils/duelo.catalogos')
+    expect(ctrl.normalizarSede).toBe(normalizarSede)
+    const sede = 'MASCOTAS  CUCUTA'
+    expect(esMascota({ orden_servicio: '03233', sede })).toBe(true)
+    expect(ctrl.esOtraCiudad({ sede, convenio: 'Planes TRADICIONAL' })).toBe(false)
   })
 })

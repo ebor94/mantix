@@ -14,10 +14,12 @@ jest.mock('../../config/db')
 jest.mock('../../services/karingsoft.service')
 jest.mock('../../services/duelo.service')
 
+const fs   = require('fs')
+const path = require('path')
 const ks   = require('../../services/karingsoft.service')
 const svc  = require('../../services/duelo.service')
 const db   = require('../../config/db')
-const { malUso } = require('../../utils/errores')
+const { malUso, noEncontrado } = require('../../utils/errores')
 const ctrl = require('../duelo.controller')
 
 const resDoble = () => {
@@ -75,10 +77,13 @@ const SERVICIOS = [
   { id: 1, gestion_id: 5, servicio: 'MISA_DE_MES', estado: 'ACEPTA', modalidad: 'PRESENCIAL',
     detalle: 'CATOLICA', observacion: null },
 ]
-// La fila que asistenciasPorContrato lee de MySQL para el contrato A-1.
+// La fila que asistenciasPorContrato lee de MySQL para el contrato A-1. El
+// contacto es el que el asesor llenó en el F-01: para las 91 órdenes de 336 que
+// el ERP trae sin teléfono, es el único número que hay.
 const FILA_ASISTENCIA = {
   id: 77, codigo: 'H360-2026-0315', contrato: 'A-1', estado: 'SALA',
   sala_codigo: 'SALGC06', sede_nombre: 'Gran Colombia', residencia_id: null,
+  nombre_contacto: 'ANA PEREZ', telefono_contacto: '3001234567',
 }
 // Lo que un error de MySQL trae cuando el índice único rechaza la inserción.
 const errorDuplicado = () => Object.assign(
@@ -161,7 +166,29 @@ describe('ficha', () => {
     expect(res.cuerpo.asistencia).toEqual({
       id: 77, codigo: 'H360-2026-0315', estado: 'SALA',
       ubicacion_tipo: 'SALA', ubicacion_detalle: 'Gran Colombia · SALGC06',
+      nombre_contacto: 'ANA PEREZ', telefono_contacto: '3001234567',
     })
+  })
+
+  // §11 del diseño: 91 de 336 órdenes del ERP no traen teléfono y H360 tiene uno
+  // en el 54% de los casos. La ficha es donde la psicóloga marca: sin estas dos
+  // columnas no le ofrecía ningún número para esas 91 familias.
+  test('la ficha trae el contacto que H360 tiene, aunque el ERP no traiga teléfono', async () => {
+    ks.buscarOrdenes = jest.fn(async () => [{ ...CONTRATO, telefono: '' }])
+    db.query = jest.fn(async () => [[FILA_ASISTENCIA]])
+    const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+    expect(res.cuerpo.contrato.telefono).toBe('')
+    expect(res.cuerpo.asistencia.telefono_contacto).toBe('3001234567')
+    expect(res.cuerpo.asistencia.nombre_contacto).toBe('ANA PEREZ')
+  })
+
+  test('un caso de H360 sin contacto guardado lo entrega nulo', async () => {
+    db.query = jest.fn(async () => [[
+      { ...FILA_ASISTENCIA, nombre_contacto: null, telefono_contacto: null },
+    ]])
+    const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+    expect(res.cuerpo.asistencia.nombre_contacto).toBeNull()
+    expect(res.cuerpo.asistencia.telefono_contacto).toBeNull()
   })
 
   // El IN de MySQL no distingue mayúsculas y Map.get sí: con el número escrito a
@@ -202,7 +229,25 @@ describe('ficha', () => {
     expect(res.cuerpo.asistencia.id).toBe(77)
     // Y la causa queda en el log para quien la busque.
     expect(advertencias).toHaveBeenCalledTimes(1)
-    expect(String(advertencias.mock.calls[0])).toContain('ECONNREFUSED')
+    expect(String(advertencias.mock.calls[0])).toMatch(/Error/)
+  })
+
+  // El mensaje de mssql en un error de conversión cita el valor que se consultó;
+  // acá ese valor es el número de orden, pero la misma línea sirve a la búsqueda
+  // por nombre. Del error del ERP solo se loguea lo que no es de la familia.
+  test('el log de la ficha no lleva el mensaje del ERP', async () => {
+    ks.buscarOrdenes = jest.fn(async () => {
+      throw Object.assign(
+        new Error("Conversion failed when converting the varchar value 'MARTINEZ GUERRERO' to data type int"),
+        { name: 'RequestError', code: 'EREQUEST', number: 245 })
+    })
+    const { res } = await llamar(ctrl.ficha, { params: { orden: 'A-1' } })
+    expect(res.codigo).toBe(200)
+    expect(res.cuerpo.erp_error).toMatch(/ERP|Karing/i)
+    const log = advertencias.mock.calls.map(c => c.join(' ')).join('\n')
+    expect(log).not.toContain('MARTINEZ')
+    expect(log).not.toContain('Conversion failed')
+    expect(log).toContain('EREQUEST')
   })
 
   test('un ERP caído no se confunde con un contrato que no existe', async () => {
@@ -450,16 +495,65 @@ describe('crear', () => {
     await llamar(ctrl.crear, {
       body: {
         orden_servicio: 'A-9', asistencia_id: 77, ubicacion_tipo: 'SALA',
-        ubicacion_detalle: 'Gran Colombia · SALGC06', es_mascota: true,
+        ubicacion_detalle: 'Gran Colombia · SALGC06', sede: 'Sede Gran Colombia',
         titular_nombre: 'ANA PEREZ', titular_parentesco: 'HIJA', telefonos: '3001234567-3109876543',
       },
     })
     expect(svc.crearGestion).toHaveBeenCalledTimes(1)
+    // `sede` no se guarda (la tabla no la tiene): entra solo para calcular
+    // es_mascota, igual que en la bandeja.
     expect(svc.crearGestion.mock.calls[0][0]).toEqual({
       orden_servicio: 'A-9', asistencia_id: 77, ubicacion_tipo: 'SALA',
-      ubicacion_detalle: 'Gran Colombia · SALGC06', es_mascota: true,
+      ubicacion_detalle: 'Gran Colombia · SALGC06', es_mascota: false,
       titular_nombre: 'ANA PEREZ', titular_parentesco: 'HIJA', telefonos: '3001234567-3109876543',
       estado: 'EN_GESTION', psicologa: 'JAZMIN', created_by: 'JAZMIN',
+    })
+  })
+
+  // Era el cliente el que decidía si la orden es de una mascota, y la bandeja lo
+  // calculaba por su cuenta: desfasados, la insignia decía «Mascota» y la fila
+  // guardada un 0. La fila es la que va a alimentar el informe del R-56, así que
+  // la decide el servidor con el mismo esMascota() de la bandeja.
+  describe('es_mascota lo calcula el servidor', () => {
+    // La última llamada, no la primera: varias pruebas de acá abren más de una.
+    const esMascotaDe = async body => {
+      svc.gestionPorOrden = jest.fn(async () => null)
+      await llamar(ctrl.crear, { body: { ubicacion_tipo: 'SALA', ...body } })
+      return svc.crearGestion.mock.calls.at(-1)[0].es_mascota
+    }
+
+    test('lo reconoce por el prefijo de la orden, aunque el cuerpo diga que no', async () => {
+      expect(await esMascotaDe({ orden_servicio: 'MAS-0596', es_mascota: false })).toBe(true)
+    })
+
+    test('lo reconoce por la sede, aunque el cuerpo diga que no', async () => {
+      expect(await esMascotaDe({ orden_servicio: '03233', sede: 'Mascotas', es_mascota: false })).toBe(true)
+    })
+
+    test('un servicio de persona no es mascota, aunque el cuerpo diga que sí', async () => {
+      expect(await esMascotaDe({
+        orden_servicio: 'A-20538', sede: 'Sede Gran Colombia', es_mascota: true,
+      })).toBe(false)
+    })
+
+    // La degradación aceptada del despliegue (backend primero, frontend después):
+    // sin `sede` en el cuerpo, el prefijo de la orden sigue reconociéndolas.
+    test('sin sede en el cuerpo, el prefijo MAS- sigue alcanzando', async () => {
+      expect(await esMascotaDe({ orden_servicio: 'MAS-7' })).toBe(true)
+      expect(await esMascotaDe({ orden_servicio: 'A-9' })).toBe(false)
+    })
+
+    // La fila guardada y la insignia de la bandeja salen de la misma función: no
+    // hay forma de que una diga una cosa y la otra la contraria.
+    test('la bandeja marca lo mismo que se guarda', async () => {
+      const { esMascota } = require('../../utils/duelo.catalogos')
+      for (const orden of [
+        { orden_servicio: 'MAS-7' }, { orden_servicio: '03233', sede: 'Mascotas' },
+        { orden_servicio: 'A-9', sede: 'Sede Gran Colombia' },
+      ]) {
+        jest.clearAllMocks()
+        expect([orden, await esMascotaDe({ ...orden })]).toEqual([orden, esMascota(orden)])
+      }
     })
   })
 
@@ -548,6 +642,116 @@ describe('crear', () => {
     svc.crearGestion = jest.fn(async () => { throw malUso('La ubicación del homenaje no es válida') })
     const r = await llamar(ctrl.crear, { body: { orden_servicio: 'A-9', ubicacion_tipo: 'PALOMAR' } })
     expectRechazo(r, /ubicación/)
+  })
+})
+
+// `psicologa` y `created_by` son columnas NOT NULL y salen del login. Si la
+// sesión no trae usuario, el controlador hermano de atenciones ya respondía un
+// 403 que explica qué hacer; estos dos escribían `req.user.usuario` directo y
+// habrían reventado en MySQL con un 500 que no dice nada. Hoy no es alcanzable
+// (ldap.service siempre devuelve un usuario con contenido y el login rechaza el
+// vacío), pero eran dos criterios distintos para la misma cosa en dos
+// controladores hermanos.
+describe('la sesión sin nombre de usuario se responde igual en los tres sitios', () => {
+  const USUARIOS_SIN_NOMBRE = [
+    ['sin req.user',             undefined],
+    ['req.user null',            null],
+    ['sin usuario',              { rol: 'psicologia' }],
+    ['usuario vacío',            { rol: 'psicologia', usuario: '' }],
+    ['usuario en blanco',        { rol: 'psicologia', usuario: '   ' }],
+    ['usuario que no es texto',  { rol: 'psicologia', usuario: 42 }],
+    ['usuario que es una lista', { rol: 'psicologia', usuario: ['ANA'] }],
+  ]
+
+  const expect403 = ({ res, next }) => {
+    expect(res.codigo).toBe(403)
+    expect(res.cuerpo.mensaje).toMatch(/usuario/)
+    expect(next).not.toHaveBeenCalled()
+  }
+
+  test.each(USUARIOS_SIN_NOMBRE)('crear, %s: 403 con mensaje y sin escribir', async (_caso, user) => {
+    svc.gestionPorOrden = jest.fn(async () => null)
+    expect403(await llamar(ctrl.crear, { user, body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA' } }))
+    expect(svc.crearGestion).not.toHaveBeenCalled()
+  })
+
+  test.each(USUARIOS_SIN_NOMBRE)('agregarIntento, %s: 403 con mensaje y sin escribir', async (_caso, user) => {
+    expect403(await llamar(ctrl.agregarIntento, {
+      user, params: { id: '5' },
+      body: { momento: '2026-11-05T14:30', canal: 'LLAMADA', resultado: 'NO_CONTESTO' },
+    }))
+    expect(svc.agregarIntento).not.toHaveBeenCalled()
+  })
+
+  // El usuario se valida recortado y se guarda recortado: `psicologa` y
+  // `created_by` son los campos de auditoría, y ' JAZMIN ' guardado tal cual
+  // dejaría dos nombres distintos para la misma persona.
+  test('un usuario con espacios alrededor se guarda recortado', async () => {
+    svc.gestionPorOrden = jest.fn(async () => null)
+    await llamar(ctrl.crear, {
+      user: { rol: 'psicologia', usuario: ' JAZMIN ' },
+      body: { orden_servicio: 'A-9', ubicacion_tipo: 'SALA' },
+    })
+    const datos = svc.crearGestion.mock.calls[0][0]
+    expect([datos.psicologa, datos.created_by]).toEqual(['JAZMIN', 'JAZMIN'])
+
+    await llamar(ctrl.agregarIntento, {
+      user: { rol: 'psicologia', usuario: '\tJAZMIN\n' }, params: { id: '5' },
+      body: { momento: '2026-11-05T14:30', canal: 'LLAMADA', resultado: 'NO_CONTESTO' },
+    })
+    expect(svc.agregarIntento.mock.calls[0][1].usuario).toBe('JAZMIN')
+  })
+
+  // Los tres sitios usan la MISMA función: un criterio, no tres copias que
+  // puedan separarse.
+  test('es la misma guarda que usa el controlador de atenciones', () => {
+    const compartido = require('../../utils/duelo.peticion')
+    expect(typeof compartido.usuarioDelLogin).toBe('function')
+    expect(compartido.usuarioDelLogin({ user: { usuario: ' JAZMIN ' } })).toBe('JAZMIN')
+    expect(compartido.usuarioDelLogin({ user: { usuario: '  ' } })).toBeNull()
+    expect(compartido.usuarioDelLogin({})).toBeNull()
+  })
+})
+
+// Un id no numérico («abc», «5; drop…») llegaba al WHERE y al INSERT tal cual:
+// MySQL en modo estricto corta la escritura con ER_TRUNCATED_WRONG_VALUE y desde
+// la API es un 500 que no dice nada. No es alcanzable desde la pantalla (el id
+// sale de la ficha), pero es lo primero que se escribe a mano al depurar.
+describe('el id de la gestión se valida antes del SQL', () => {
+  const NO_NUMERICOS = ['abc', '', '   ', '5a', '-1', '1.5', '5 OR 1=1', undefined, '1e3']
+
+  const expect400Id = ({ res, next }) => {
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo.mensaje).toMatch(/gesti[óo]n/i)
+    expect(next).not.toHaveBeenCalled()
+  }
+
+  test.each(NO_NUMERICOS)('actualizar con id %j: 400 y no toca el servicio', async id => {
+    expect400Id(await llamar(ctrl.actualizar, { params: { id }, body: { estado: 'GESTIONADA' } }))
+    expect(svc.actualizarGestion).not.toHaveBeenCalled()
+  })
+
+  test.each(NO_NUMERICOS)('agregarIntento con id %j: 400 y no toca el servicio', async id => {
+    expect400Id(await llamar(ctrl.agregarIntento, {
+      params: { id }, body: { momento: '2026-11-05T14:30', canal: 'LLAMADA', resultado: 'NO_CONTESTO' },
+    }))
+    expect(svc.agregarIntento).not.toHaveBeenCalled()
+  })
+
+  test.each(NO_NUMERICOS)('guardarServicios con id %j: 400 y no toca el servicio', async id => {
+    expect400Id(await llamar(ctrl.guardarServicios, {
+      params: { id }, body: { servicios: [{ servicio: 'MISA_DE_MES', estado: 'ACEPTA' }] },
+    }))
+    expect(svc.guardarServicios).not.toHaveBeenCalled()
+    expect(svc.serviciosDeGestion).not.toHaveBeenCalled()
+  })
+
+  // Un id válido no cambia de forma al pasar por la validación: el servicio
+  // sigue recibiendo lo que traía la ruta.
+  test('un id numérico pasa tal cual', async () => {
+    const { res } = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { estado: 'GESTIONADA' } })
+    expect(res.codigo).toBe(200)
+    expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { estado: 'GESTIONADA' })
   })
 })
 
@@ -674,6 +878,144 @@ describe('actualizar', () => {
     const { res, next } = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { estado: 'GESTIONADA' } })
     expect(next).toHaveBeenCalledWith(falla)
     expect(res.cuerpo).toBeNull()
+  })
+
+  // «No existe esa gestión» y «no mandaste nada que guardar» salían las dos como
+  // el mismo 400 y la pantalla decía «Revisa lo que pediste» de una petición bien
+  // formada. No es alcanzable desde la UI (el id sale de la ficha), pero manda a
+  // quien depura a buscar el error donde no está.
+  describe('una gestión que no existe es 404, no 400', () => {
+    test('el servicio dice que no existe: 404 con mensaje', async () => {
+      svc.actualizarGestion = jest.fn(async () => { throw noEncontrado('No existe la gestión 999.') })
+      const { res, next } = await llamar(ctrl.actualizar, {
+        params: { id: '999' }, body: { estado: 'GESTIONADA' },
+      })
+      expect(res.codigo).toBe(404)
+      expect(res.cuerpo.mensaje).toMatch(/no existe/i)
+      expect(res.cuerpo.ok).toBeUndefined()
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    // Las dos mitades juntas: acá el servicio es el de verdad (sí la base), así
+    // que lo que se mira es lo que de verdad se concluye de la escritura.
+    test('ninguna fila coincide (affectedRows 0): 404', async () => {
+      svc.actualizarGestion = jest.requireActual('../../services/duelo.service').actualizarGestion
+      db.query = jest.fn(async () => [{ affectedRows: 0 }])
+      const { res, next } = await llamar(ctrl.actualizar, {
+        params: { id: '999' }, body: { estado: 'GESTIONADA' },
+      })
+      expect(res.codigo).toBe(404)
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    // Y el 400 sigue siendo el de su propio caso: un cuerpo sin nada editable.
+    test('un cuerpo sin campos editables sigue siendo 400 y no 404', async () => {
+      svc.actualizarGestion = jest.requireActual('../../services/duelo.service').actualizarGestion
+      db.query = jest.fn(async () => [{ affectedRows: 0 }])
+      const r = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { created_by: 'OTRA_PERSONA' },
+      })
+      expectRechazo(r, /No hay cambios/)
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+    // La gestión existe y se mandaron los mismos valores: eso no es «no existe».
+    test('mandar los mismos valores sobre una gestión que existe es 200', async () => {
+      svc.actualizarGestion = jest.requireActual('../../services/duelo.service').actualizarGestion
+      db.query = jest.fn(async () => [{ affectedRows: 1 }])
+      const { res } = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { observaciones: 'lo mismo de antes' },
+      })
+      expect(res.codigo).toBe(200)
+      expect(res.cuerpo).toEqual({ ok: true })
+    })
+  })
+
+  // Los campos de texto de la ficha tienen el ancho de su columna. Un texto más
+  // largo reventaba en MySQL con ER_DATA_TOO_LONG y desde la API era un 500: la
+  // psicóloga perdía lo que acababa de escribir sin saber qué recortar.
+  describe('un texto más largo que su columna es 400 con mensaje', () => {
+    // Los anchos reales de h360_duelo_gestion. `observaciones` es TEXT y su tope
+    // son BYTES, no caracteres.
+    const CAMPOS = [
+      ['ubicacion_detalle', 120], ['titular_nombre', 160], ['titular_parentesco', 40],
+      ['telefonos', 120], ['psicologa_acompanante', 50], ['observaciones', 65535],
+    ]
+
+    test.each(CAMPOS)('%s: un carácter más que %i es 400, nombra el campo y no escribe', async (campo, tope) => {
+      const r = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { [campo]: 'x'.repeat(tope + 1) },
+      })
+      expectRechazo(r, new RegExp(campo))
+      expect(r.res.cuerpo.mensaje).toContain(String(tope))
+      expect(svc.actualizarGestion).not.toHaveBeenCalled()
+    })
+
+    test.each(CAMPOS)('%s: el largo exacto de la columna (%i) sí cabe', async (campo, tope) => {
+      const { res } = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { [campo]: 'x'.repeat(tope) },
+      })
+      expect(res.codigo).toBe(200)
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', { [campo]: 'x'.repeat(tope) })
+    })
+
+    // El 400 no cambia lo que se guarda cuando el texto cabe: el valor pasa tal
+    // cual, sin recortarse (recortar perdería en silencio lo que se escribió).
+    test('un texto que cabe pasa tal cual, sin recortes', async () => {
+      const cambios = { titular_nombre: '  ANA PEREZ  ', observaciones: 'prefiere la tarde' }
+      await llamar(ctrl.actualizar, { params: { id: '5' }, body: cambios })
+      expect(svc.actualizarGestion).toHaveBeenCalledWith('5', cambios)
+    })
+
+    // TEXT se mide en bytes: 20.000 emojis son 80.000 bytes y no caben, aunque
+    // sean menos de 65.535 «caracteres».
+    test('observaciones se mide en bytes, no en caracteres', async () => {
+      const r = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { observaciones: '😀'.repeat(20000) },
+      })
+      expectRechazo(r, /observaciones/)
+      expect(r.res.cuerpo.mensaje).toContain('bytes')
+      expect(svc.actualizarGestion).not.toHaveBeenCalled()
+    })
+
+    // El mensaje no repite el texto entero: puede traer miles de caracteres y va
+    // al log y al cuerpo de la respuesta.
+    test('el mensaje no repite el texto completo', async () => {
+      const largo = 'B'.repeat(500)
+      const r = await llamar(ctrl.actualizar, { params: { id: '5' }, body: { telefonos: largo } })
+      expectRechazo(r, /telefonos/)
+      expect(r.res.cuerpo.mensaje.length).toBeLessThan(400)
+    })
+
+    // Un campo vacío o nulo es cómo se limpia un dato de la ficha: no es un largo
+    // inválido.
+    test.each([[null], [''], [undefined]])('un valor %p no es un texto demasiado largo', async valor => {
+      const { res } = await llamar(ctrl.actualizar, {
+        params: { id: '5' }, body: { titular_nombre: valor, estado: 'EN_GESTION' },
+      })
+      expect(res.codigo).toBe(200)
+    })
+
+    // Los topes no son números sueltos: son los de las columnas. Si alguien
+    // cambia la tabla y no esto, la validación dejaría pasar lo que MySQL corta.
+    test('los topes son los anchos declarados en h360_duelo_tablas.sql', () => {
+      const sql = fs.readFileSync(
+        path.join(__dirname, '../../../scripts/h360_duelo_tablas.sql'), 'utf8')
+      const bloque = sql.match(/CREATE TABLE IF NOT EXISTS h360_duelo_gestion \(([\s\S]*?)\n\) ENGINE/)
+      expect(bloque).not.toBeNull()
+      const anchos = {}
+      for (const linea of bloque[1].split('\n')) {
+        const m = linea.match(/^\s{2}([a-z_]+)\s+VARCHAR\((\d+)\)/i)
+        if (m) anchos[m[1]] = Number(m[2])
+        else if (/^\s{2}([a-z_]+)\s+TEXT\b/i.test(linea))
+          anchos[linea.match(/^\s{2}([a-z_]+)/)[1]] = 65535 // el tope de TEXT, en bytes
+      }
+      for (const [campo, tope] of CAMPOS) expect([campo, anchos[campo]]).toEqual([campo, tope])
+      // Y es la misma tabla que usa el controlador, no una copia de esta prueba.
+      expect(Object.fromEntries(
+        Object.entries(ctrl.TOPES_GESTION).map(([c, t]) => [c, t.tope])))
+        .toEqual(Object.fromEntries(CAMPOS))
+    })
   })
 })
 

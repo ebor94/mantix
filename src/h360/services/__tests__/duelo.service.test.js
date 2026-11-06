@@ -160,9 +160,28 @@ describe('actualizarGestion', () => {
     expect(db.query).not.toHaveBeenCalled()
   })
 
-  test('devuelve false cuando ninguna fila coincide', async () => {
+  // «No existe esa gestión» y «no hay nada que guardar» son dos respuestas
+  // distintas de la API (404 y 400) y antes salían las dos como el mismo false:
+  // el frontend decía «Revisa lo que pediste» sobre un id que no existe.
+  //
+  // affectedRows cuenta las filas que COINCIDIERON (mysql2 pide FOUND_ROWS por
+  // defecto y el pool no cambia los flags), así que 0 es «esa gestión no existe»
+  // y no «mandaste los mismos valores».
+  test('cuando ninguna fila coincide lanza un 404, no devuelve false', async () => {
     db.query = jest.fn(async () => [{ affectedRows: 0 }])
-    expect(await svc.actualizarGestion(404, { estado: 'NO_LOGRADA' })).toBe(false)
+    await expect(svc.actualizarGestion(999, { estado: 'NO_LOGRADA' }))
+      .rejects.toMatchObject({ status: 404, message: expect.stringMatching(/no existe/i) })
+  })
+
+  test('una fila que coincide devuelve true, aunque los valores sean los mismos', async () => {
+    db.query = jest.fn(async () => [{ affectedRows: 1, changedRows: 0 }])
+    expect(await svc.actualizarGestion(8, { observaciones: 'lo mismo' })).toBe(true)
+  })
+
+  // El false se reserva para su propio caso: no había nada editable que escribir.
+  test('false sigue significando «no hay nada que guardar», y entonces no consulta', async () => {
+    expect(await svc.actualizarGestion(8, { created_by: 'intruso' })).toBe(false)
+    expect(db.query).not.toHaveBeenCalled()
   })
 
   test('rechaza un estado inválido', async () => {
@@ -493,5 +512,53 @@ describe('serviciosDeGestion', () => {
     const f = await svc.serviciosDeGestion(5)
     expect(f).toEqual([{ servicio: 'MISA_DE_MES' }])
     expect(db.query.mock.calls[0][1]).toEqual([5])
+  })
+
+  // Era el único SELECT * del módulo que llegaba a una respuesta. La regla la
+  // aplican ya COLUMNAS_FICHA y la lista de atenciones: lo que la tabla gane
+  // mañana no sale solo. Esta tabla hoy no guarda nada sensible; la regla es para
+  // el día en que gane una columna que sí lo sea, que es cuando ya no se revisa.
+  describe('la lista de columnas que sale', () => {
+    // Escrita a mano a propósito: dice qué se decidió servir.
+    const COLUMNAS_QUE_SALEN = [
+      'id', 'gestion_id', 'servicio', 'estado', 'modalidad', 'detalle', 'observacion',
+      'created_at', 'updated_at',
+    ]
+    const COLUMNAS_QUE_NO_SALEN = [] // ninguna, hoy
+
+    const columnas = sql => sql.match(/SELECT([\s\S]*?)\sFROM\s/i)[1]
+      .split(',').map(c => c.trim()).filter(Boolean)
+
+    test('nombra cada columna: no hay SELECT *', async () => {
+      await svc.serviciosDeGestion(5)
+      const sql = db.query.mock.calls[0][0]
+      expect(sql).not.toMatch(/SELECT\s+\*/i)
+      expect(columnas(sql).sort()).toEqual([...COLUMNAS_QUE_SALEN].sort())
+    })
+
+    // Si alguien agrega una columna a la tabla y no decide si sale, esto se pone
+    // rojo: va a COLUMNAS_QUE_SALEN (y al SELECT) o a COLUMNAS_QUE_NO_SALEN.
+    test('toda columna de la tabla sale o está excluida a propósito', () => {
+      const fs = require('fs'), path = require('path')
+      const sql = fs.readFileSync(
+        path.join(__dirname, '../../../scripts/h360_duelo_tablas.sql'), 'utf8')
+      const bloque = sql.match(/CREATE TABLE IF NOT EXISTS h360_duelo_servicios \(([\s\S]*?)\n\) ENGINE/)
+      expect(bloque).not.toBeNull()
+      const enLaTabla = bloque[1].split('\n')
+        .map(l => l.match(/^\s{2}([a-z_]+)\s+(?:INT|DATETIME|ENUM|VARCHAR|TEXT)\b/i))
+        .filter(Boolean).map(m => m[1])
+      expect(enLaTabla.length).toBeGreaterThan(0)
+      expect(enLaTabla.sort()).toEqual([...COLUMNAS_QUE_SALEN, ...COLUMNAS_QUE_NO_SALEN].sort())
+    })
+
+    // Las dos DATETIME siguen saliendo: el controlador las convierte a texto de
+    // hora de pared (fechasComoTexto) y la pantalla las muestra. Si se cayeran de
+    // la lista, la ficha dejaría de decir cuándo se registró cada servicio.
+    test('created_at y updated_at siguen en la lista', async () => {
+      await svc.serviciosDeGestion(5)
+      const lista = columnas(db.query.mock.calls[0][0])
+      expect(lista).toContain('created_at')
+      expect(lista).toContain('updated_at')
+    })
   })
 })

@@ -2,7 +2,7 @@
 // para ella) de «el servidor falló» (500, genérico). Si pierde el status, cada
 // validación del módulo se convierte en un 500 sin decir qué estaba mal.
 
-const { malUso } = require('../errores')
+const { malUso, noEncontrado } = require('../errores')
 
 describe('malUso', () => {
   test('devuelve un Error; no lo lanza (quien llama escribe throw malUso(...))', () => {
@@ -32,5 +32,26 @@ describe('malUso', () => {
   // Con throw se ve en el log de dónde salió: sin pila, el 400 sería un misterio.
   test('trae pila, como cualquier Error', () => {
     expect(typeof malUso('x').stack).toBe('string')
+  })
+})
+
+// noEncontrado separa «lo que pediste por id no existe» (404) de «lo que mandaste
+// no sirve» (400). Con el 400, la pantalla dice «Revisa lo que pediste» de una
+// petición bien formada y quien depura busca el error en el cuerpo y no en el id.
+describe('noEncontrado', () => {
+  test('lleva status 404', () => {
+    expect(noEncontrado('No existe la gestión 999.').status).toBe(404)
+  })
+
+  test('devuelve un Error con su mensaje, y no lo lanza', () => {
+    let e
+    expect(() => { e = noEncontrado('No existe la gestión 999.') }).not.toThrow()
+    expect(e).toBeInstanceOf(Error)
+    expect(e.message).toBe('No existe la gestión 999.')
+    expect(typeof e.stack).toBe('string')
+  })
+
+  test('no se confunde con malUso: son dos status distintos', () => {
+    expect(noEncontrado('x').status).not.toBe(malUso('x').status)
   })
 })
