@@ -98,6 +98,14 @@ Tres criterios, como se pidió:
 
 Se derivan de los datos, no se eligen a mano:
 
+Cada fila de la bandeja dice además **si la rama está confirmada o es una
+suposición**. Está confirmada cuando sale de la ubicación de la asistencia de
+H360 o cuando la sede del ERP dice que es otra ciudad; no lo está cuando es el
+valor por defecto —que es casi la mitad de las filas, y justo las más
+recientes—. Sin esa distinción la pantalla afirmaba «Residencia» como hecho y
+una psicóloga podía planificar una visita a domicilio para un caso donde
+todavía nadie sabe dónde va a ser la velación.
+
 | Rama | Cómo se detecta | Gestión |
 |---|---|---|
 | **Sala de velación** | H360 tiene homenaje en sala → sede y sala conocidas | Visita presencial. Gran Colombia concentra 239 de 336; San José solo 7 |
@@ -128,7 +136,7 @@ vivo al mostrar la ficha. Acá vive solo lo que es nuestro.
 | `tipificacion` | ENUM NULL | Nula mientras no se haya trabajado la gestión: nace `PENDIENTE` y todavía no hay nada que tipificar. Vocabulario del R-56, para el reporte: `OFRECIDO_EN_HOMENAJE`, `ATENCION_EN_HOMENAJE`, `OFRECIDO_POR_LLAMADA`, `ATENCION_POR_LLAMADA`, `OFRECIDO_POR_MENSAJE`, `COORDINA_ASISTENCIA`, `NO_CONTESTO`, `REPETIDO` |
 | `estado` | ENUM NOT NULL DEFAULT 'PENDIENTE' | Para la bandeja: `PENDIENTE`, `EN_GESTION`, `GESTIONADA`, `NO_LOGRADA`, `NO_APLICA`, `REPETIDA` |
 | `observaciones` | TEXT NULL | |
-| `psicologa` | VARCHAR(50) NOT NULL | `sAMAccountName`, del login |
+| `psicologa` | VARCHAR(50) NOT NULL | Quién tiene el caso **ahora**. Sale del login al crear y **se puede reasignar**: una psicóloga sale de turno, se incapacita o entra a vacaciones, y la otra continúa. La auditoría no se pierde porque `created_by` guarda quién lo abrió y no es editable |
 | `psicologa_acompanante` | VARCHAR(50) NULL | Los 124 casos atendidos por las dos |
 | `cerrada_at` | DATETIME NULL | |
 | `created_by`, `created_at`, `updated_at` | | |
@@ -193,6 +201,38 @@ construir lo que nadie pidió.
 
 Está en su propia tabla para que el permiso sea a nivel de tabla y para poder
 excluirla de consultas y exportes generales sin acordarse de filtrar columnas.
+
+## 5bis. Cómo se cierra una gestión
+
+El pedido original era saber **a cuáles ya se les hizo gestión**, así que poder
+cerrar un caso no es un detalle: sin eso la psicóloga ve los mismos casos todos
+los días y tiene que acordarse de memoria, que es el Excel otra vez.
+
+Se cierra con **un solo selector**, con las palabras del R-56 que el equipo ya
+usa. De esa elección se deducen la tipificación y el estado, para que no haya
+dos campos que llenar ni combinaciones sin sentido. La correspondencia sale de
+medir los 3008 casos del año:
+
+| Lo que elige | `tipificacion` | `estado` |
+|---|---|---|
+| Ofrecido en el homenaje | `OFRECIDO_EN_HOMENAJE` | `GESTIONADA` |
+| Atención en el homenaje | `ATENCION_EN_HOMENAJE` | `GESTIONADA` |
+| Ofrecido por llamada | `OFRECIDO_POR_LLAMADA` | `GESTIONADA` |
+| Atención por llamada | `ATENCION_POR_LLAMADA` | `GESTIONADA` |
+| Ofrecido por mensaje | `OFRECIDO_POR_MENSAJE` | `GESTIONADA` |
+| **Coordina una atención** | `COORDINA_ASISTENCIA` | **`EN_GESTION`** |
+| No contestó | `NO_CONTESTO` | `NO_LOGRADA` |
+| Repetido | `REPETIDO` | `REPETIDA` |
+| No aplica | *(ninguna)* | `NO_APLICA` |
+
+**«Coordina una atención» no cierra el caso**, y la pantalla lo dice antes de
+guardar: si se está coordinando una atención para más adelante, alguien
+todavía tiene que ir. Eran 33 casos en el año y quedarían marcados como
+terminados sin estarlo.
+
+Una gestión cerrada **se puede reabrir** eligiendo esa opción. Al reabrirse se
+borra la hora de cierre, así que un cierre posterior toma su propia hora; la
+pantalla avisa de eso antes de guardar.
 
 ## 6. Privacidad
 

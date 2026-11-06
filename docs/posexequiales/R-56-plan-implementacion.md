@@ -1573,13 +1573,15 @@ async function crear(req, res, next) {
 // PATCH /api/h360/duelo/gestion/:id
 async function actualizar(req, res, next) {
   try {
-    const cambios = { ...(req.body || {}) }
-    // La psicóloga no se reescribe por el cuerpo: `crear` la toma del login
-    // justamente para poder auditar quién atendió, y permitir cambiarla acá
-    // anularía esa garantía. En el Excel se escribía a mano 1850 veces y no
-    // había forma de saber quién había atendido de verdad.
-    delete cambios.psicologa
-    const cambiado = await svc.actualizarGestion(req.params.id, cambios)
+    /* `psicologa` SÍ se puede cambiar: una psicóloga sale de turno, se
+       incapacita o entra a vacaciones, y la otra continúa el caso. Lo decidió
+       el dueño del sistema.
+
+       La auditoría no se pierde, y no hizo falta otra migración para eso:
+       `created_by` ya guarda quién abrió la gestión, se toma del login al
+       crearla y **no está en los campos editables**. Así que la fila dice las
+       dos cosas — quién la abrió y quién la tiene ahora — sin columna nueva. */
+    const cambiado = await svc.actualizarGestion(req.params.id, req.body || {})
     if (!cambiado) return res.status(400).json({ mensaje: 'No hay cambios que guardar' })
     res.json({ ok: true })
   } catch (err) { responderError(res, next, err) }
@@ -2294,11 +2296,13 @@ async function ejecutar() {
 
 En `homenajes360-frontend/src/router/index.js`, junto a las demás rutas hijas.
 
-> **El orden de estas tres importa.** `duelo/buscar` tiene que ir ANTES de
-> `duelo/:orden`: vue-router resuelve por orden de declaración, y si la ruta con
-> parámetro va primero se queda con «buscar» como si fuera un número de
-> contrato. La pantalla de búsqueda no abriría nunca y en su lugar saldría una
-> ficha vacía de una orden llamada «buscar».
+> **Nota sobre el orden, corregida.** Una versión anterior de este plan
+> advertía que `duelo/buscar` tenía que declararse antes de `duelo/:orden` o la
+> ruta con parámetro se comería «buscar». **Es falso en vue-router 4.6**: se
+> comprobaron las dos órdenes de declaración en un router en memoria y las dos
+> resuelven `/duelo/buscar` a su propia vista, porque una ruta fija tiene más
+> precedencia que una con parámetro. Se declara `buscar` primero por claridad
+> de lectura, no por necesidad.
 
 ```js
       // POSEXEQUIALES — R-56 acompañamiento al duelo
@@ -2333,7 +2337,27 @@ párrafo de introducción:
     </router-link>
 ```
 
-- [ ] **Paso 5: Compilar**
+- [ ] **Paso 5: La entrada en el menú**
+
+**Sin esto el módulo queda completo y nadie puede llegar a él.** El menú de
+`src/views/layouts/MainLayout.vue` se arma por rol, y `psicologia` no aparece
+en ninguna parte: una psicóloga entraría, caería en el tablero y no tendría
+forma de abrir su bandeja.
+
+Agregar el enlace siguiendo el patrón que ya usa el archivo:
+
+```html
+            <router-link v-if="puedeVer(['psicologia', 'admin'])"
+              to="/duelo" class="sidebar-link" active-class="active" @click="cerrarMenu">
+              <span>🫂</span> Acompañamiento al duelo
+            </router-link>
+```
+
+Y revisar `rutaInicial` en `src/utils/roles.js`: hoy manda a `psicologia` al
+tablero, que es un panel de métricas de la operación y no su trabajo. Lo
+natural es que arranque en `/duelo`.
+
+- [ ] **Paso 6: Compilar**
 
 Correr, desde `homenajes360-frontend/`: `npm run build`
 Esperado: `✓ built in …`, sin errores
