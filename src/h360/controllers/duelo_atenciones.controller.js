@@ -13,6 +13,9 @@
  * psicológica también son dato de salud.
  */
 const svc = require('../services/duelo_atenciones.service')
+// Quién hace el registro y sobre qué gestión: las mismas guardas que usa el
+// controlador de la gestión, en un solo lugar (ver duelo.peticion.js).
+const { usuarioDelLogin, sinUsuario, leerId } = require('../utils/duelo.peticion')
 
 const ROLES_PERMITIDOS = ['psicologia', 'admin']
 
@@ -26,38 +29,23 @@ function denegar(res) {
   })
 }
 
-// Quién atendió sale del login (no del cuerpo) para poder auditarlo. Un token
-// válido en rol pero sin nombre de usuario guardaría NULL en `psicologa` y en
-// `created_by`, y no habría forma de saber quién atendió: el mismo hueco que
-// tenía el Excel, donde ese nombre se escribía a mano. Solo vale un texto con
-// contenido; cualquier otra cosa (ausente, null, vacío, solo espacios, número,
-// objeto, arreglo) se trata como «no hay usuario».
-//
-// Se devuelve el valor RECORTADO, el mismo que se validó: `psicologa` y
-// `created_by` son los campos de auditoría, y guardar `' JAZMIN '` con los
-// espacios dejaría dos nombres distintos para la misma persona.
-function usuarioDelLogin(req) {
-  const u = req.user.usuario
-  if (typeof u !== 'string') return null
-  const limpio = u.trim()
-  return limpio !== '' ? limpio : null
-}
-
-function sinUsuario(res) {
-  return res.status(403).json({
-    mensaje: 'No se pudo identificar a la persona que registra la atención: ' +
-      'la sesión no trae el nombre de usuario. Cierra sesión, ingresa de nuevo ' +
-      'y, si persiste, avisa a soporte.',
-  })
-}
+// Quién atendió sale del login (no del cuerpo) para poder auditarlo: lo lee
+// usuarioDelLogin, y sinUsuario es el 403 que explica qué hacer cuando la sesión
+// no trae nombre. Las dos viven en utils/duelo.peticion.js porque el controlador
+// de la gestión escribe las mismas columnas NOT NULL desde el mismo login.
 
 // GET /api/h360/duelo/gestion/:id/atenciones
 async function listar(req, res, next) {
   if (!puede(req)) return denegar(res)
   try {
-    const data = await svc.atencionesDeGestion(req.params.id)
+    // El id se valida antes de la consulta: uno no numérico no coincide con nada
+    // y la lista vacía se leería como «esta familia no tiene atenciones».
+    const data = await svc.atencionesDeGestion(leerId(req.params.id))
     res.json({ data })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err?.status === 400) return res.status(400).json({ mensaje: err.message })
+    next(err)
+  }
 }
 
 // POST /api/h360/duelo/gestion/:id/atenciones
@@ -66,7 +54,7 @@ async function crear(req, res, next) {
   const psicologa = usuarioDelLogin(req)
   if (!psicologa) return sinUsuario(res)
   try {
-    const id = await svc.crearAtencion(req.params.id, {
+    const id = await svc.crearAtencion(leerId(req.params.id), {
       momento:             req.body?.momento,
       modalidad:           req.body?.modalidad,
       // Del login, no del cuerpo.

@@ -10,8 +10,12 @@
 const db = require('../config/db')
 const { normalizarFechaHora } = require('../utils/fecha_hora')
 const { malUso } = require('../utils/errores')
-
-const MODALIDADES_ATENCION = ['PRESENCIAL', 'TELEFONICA', 'VIRTUAL']
+// El vocabulario del R-56 vive todo en duelo.catalogos.js, este incluido: ahí se
+// lee de una sola vez que la modalidad de una ATENCIÓN (PRESENCIAL/TELEFONICA/
+// VIRTUAL) y la de un SERVICIO (MODALIDADES: PRESENCIAL/VIRTUAL/MENSAJE) son dos
+// listas distintas. Se sigue reexportando: es parte de lo que este servicio
+// declara sobre la tabla que gobierna.
+const { MODALIDADES_ATENCION } = require('../utils/duelo.catalogos')
 
 async function atencionesDeGestion(gestionId) {
   // Las tres columnas DATETIME se formatean en SQL y viajan como texto de hora de

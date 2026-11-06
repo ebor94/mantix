@@ -22,6 +22,19 @@ const ESTADOS_SERVICIO = [
 
 const MODALIDADES = ['PRESENCIAL', 'VIRTUAL', 'MENSAJE']
 
+/**
+ * La modalidad de una ATENCIÓN psicológica: el ENUM de h360_duelo_atenciones.
+ *
+ * Son DOS vocabularios distintos y el parecido de los nombres es la trampa:
+ * MODALIDADES (arriba) es por qué medio se ofreció o se entregó un servicio del
+ * R-56 —el SI/SIV del Excel— y esta es cómo se atendió a la familia. Ninguna
+ * sirve para validar lo de la otra: un servicio por MENSAJE no es una atención y
+ * una atención TELEFONICA no es una modalidad de servicio. Están las dos acá
+ * porque todo el vocabulario del módulo vive en este archivo; así la diferencia
+ * se lee de una sola vez, en vez de en dos archivos que nadie compara.
+ */
+const MODALIDADES_ATENCION = ['PRESENCIAL', 'TELEFONICA', 'VIRTUAL']
+
 /** Solo aplica a la misa de mes. */
 const RELIGIONES_MISA = ['CRISTIANA', 'CATOLICA', 'MIXTA', 'MUSULMANA', 'TESTIGOS_JEHOVA']
 
@@ -49,18 +62,35 @@ const RESULTADOS_INTENTO = [
 const UBICACIONES = ['SALA', 'RESIDENCIA', 'OTRA_CIUDAD', 'EXTERNA', 'OTRO']
 
 /**
+ * La sede del ERP, comparable: en mayúsculas, con un solo espacio entre palabras
+ * y recortada. El ERP la escribe a mano («Sede  Arauca» llega con dos espacios).
+ *
+ * Es UNA función y la usan los dos sitios que miran la sede: esMascota (acá
+ * abajo) y la rama de otra ciudad del controlador. Antes cada uno normalizaba y
+ * comparaba a su manera —uno con === sobre el texto completo, el otro por
+ * contenido—, y entonces una sede como «MASCOTAS CUCUTA» era local para la rama
+ * y no era mascota acá: la insignia de la bandeja habría dicho persona mientras
+ * la fila guardada decía mascota, y la fila es la que alimenta el informe.
+ */
+const normalizarSede = sede => String(sede ?? '').toUpperCase().replace(/\s+/g, ' ').trim()
+
+/**
  * El ERP mezcla servicios de mascotas con los de personas: 41 al mes. Se
  * reconocen por el prefijo de la orden o por su centro de costo propio.
  * Entran a la bandeja marcadas, no se esconden.
+ *
+ * El centro de costo se busca por CONTENIDO y no con ===, igual que las sedes
+ * locales del controlador (donde «MASCOTAS» es una de ellas): así una variante
+ * como «Sede Mascotas» cae del mismo lado en los dos sitios.
  */
 function esMascota(orden) {
   const num  = String(orden?.orden_servicio ?? '').trim().toUpperCase()
-  const sede = String(orden?.sede ?? '').trim().toUpperCase()
-  return num.startsWith('MAS-') || sede === 'MASCOTAS'
+  const sede = normalizarSede(orden?.sede)
+  return num.startsWith('MAS-') || (sede !== '' && sede.includes('MASCOTAS'))
 }
 
 module.exports = {
-  SERVICIOS, ESTADOS_SERVICIO, MODALIDADES, RELIGIONES_MISA,
+  SERVICIOS, ESTADOS_SERVICIO, MODALIDADES, MODALIDADES_ATENCION, RELIGIONES_MISA,
   TIPIFICACIONES, ESTADOS_GESTION, CANALES_INTENTO, RESULTADOS_INTENTO,
-  UBICACIONES, esMascota,
+  UBICACIONES, normalizarSede, esMascota,
 }

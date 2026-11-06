@@ -940,6 +940,48 @@ describe('ningún camino de salida de crear ni de listar escribe datos de salud 
   })
 })
 
+// El id de la gestión entra al WHERE y al INSERT: con un id no numérico, el
+// INSERT muere en MySQL (modo estricto) y desde la API es un 500 que no dice
+// nada; el GET devolvería una lista vacía, que en este módulo es peor que un
+// error porque parece «esta familia no tiene atenciones». Es el mismo leerId
+// compartido que usa el controlador de la gestión.
+describe('el id de la gestión se valida antes del SQL', () => {
+  const NO_NUMERICOS = ['abc', '', '   ', '5a', '-1', '1.5', '5 OR 1=1', undefined]
+
+  test.each(NO_NUMERICOS)('listar con id %j: 400 y no toca la base', async id => {
+    const res = resDoble(), next = jest.fn()
+    await ctrl.listar({ params: { id }, user: PSICOLOGA }, res, next)
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo.mensaje).toMatch(/gesti[óo]n/i)
+    expect(next).not.toHaveBeenCalled()
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  test.each(NO_NUMERICOS)('crear con id %j: 400 y no toca la base', async id => {
+    const res = resDoble(), next = jest.fn()
+    await ctrl.crear({ params: { id }, body: BODY_OK, user: PSICOLOGA }, res, next)
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo.mensaje).toMatch(/gesti[óo]n/i)
+    expect(next).not.toHaveBeenCalled()
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  // Un rol sin acceso sigue recibiendo 403 y no un 400 que le confirme nada:
+  // el permiso se mira antes que la forma del id.
+  test('un rol sin acceso con un id inválido sigue recibiendo 403', async () => {
+    const res = resDoble()
+    await ctrl.listar({ params: { id: 'abc' }, user: { rol: 'coordinador', usuario: 'X' } },
+      res, jest.fn())
+    expect(res.codigo).toBe(403)
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  test('un id numérico pasa tal cual al servicio', async () => {
+    await ctrl.listar({ params: { id: '5' }, user: PSICOLOGA }, resDoble(), jest.fn())
+    expect(db.query.mock.calls[0][1]).toEqual(['5'])
+  })
+})
+
 describe('crear exige un usuario en el login', () => {
   // La psicóloga sale de req.user.usuario para poder auditar quién atendió. Con
   // un token válido en rol pero sin nombre, guardar NULL deja la auditoría tan
@@ -968,5 +1010,17 @@ describe('crear exige un usuario en el login', () => {
     expect(res.codigo).toBe(201)
     expect(db.query.mock.calls[0][1]).toEqual(
       ['5', '2026-11-05 14:30:00', 'PRESENCIAL', 'JAZMIN', null, null, null, null, null, 'JAZMIN'])
+  })
+
+  // La guarda vive en un módulo compartido: el controlador de la gestión usa la
+  // MISMA función en sus dos sitios, para que el mismo caso no se responda 403
+  // acá y 500 allá. (Era el defecto: dos controladores hermanos con dos
+  // criterios, y desde un solo archivo no se veía la diferencia.)
+  test('la guarda es la del módulo compartido, no una copia de este archivo', () => {
+    const compartido = require('../../utils/duelo.peticion')
+    expect(typeof compartido.usuarioDelLogin).toBe('function')
+    expect(compartido.usuarioDelLogin({ user: { usuario: ' JAZMIN ' } })).toBe('JAZMIN')
+    for (const user of [undefined, null, {}, { usuario: '' }, { usuario: '  ' }, { usuario: 7 }])
+      expect(compartido.usuarioDelLogin({ user })).toBeNull()
   })
 })
