@@ -2572,6 +2572,22 @@ Esperado: `1`. Si devuelve `0`, **parar**: pedirlo a TI antes de seguir.
 
 - [ ] **Paso 2: Aplicar la migración**
 
+Primero comprobar que ninguna de las cuatro tablas exista ya. Las sentencias
+llevan `IF NOT EXISTS`, así que si una existe con la definición anterior MySQL
+**solo emite un aviso y la deja como está**: el script termina sin error y el
+esquema queda viejo — por ejemplo con el `ON DELETE CASCADE` en las notas
+clínicas en vez del `RESTRICT`. Un éxito silencioso es peor que un fallo.
+
+```bash
+ssh bortega@192.9.17.30 'cd ~/apps/mantix/mantix-backend && set -a && . ./.env 2>/dev/null && set +a && MYSQL_PWD="$DB_PASSWORD" mysql -h "$DB_HOST" -u "$DB_USER" -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE \"h360_duelo%\"" "$DB_NAME"'
+```
+
+Esperado: `0`. Si devuelve otra cosa, **parar** y mirar con
+`SHOW CREATE TABLE` cuál existe y con qué definición, antes de decidir si se
+borra o se altera. Al 2026-11-05 la consulta daba `0`.
+
+Con `0` confirmado, aplicar:
+
 ```bash
 ssh -t bortega@192.9.17.30 'cd ~/apps/mantix/mantix-backend && mysql -u root -p serfuweb < src/scripts/h360_duelo_tablas.sql'
 ```
