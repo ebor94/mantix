@@ -222,13 +222,39 @@ describe('actualizarGestion', () => {
       expect(params[0]).toEqual({ estado: 'GESTIONADA' })
     })
 
-    test.each(CIERRAN)('%s pone cerrada_at = NOW() en la misma escritura', async (estado) => {
+    // cerrada_at es dato de auditoría («cuándo se cerró el caso»), no un
+    // timestamp de modificación: volver a guardar una gestión ya cerrada no debe
+    // correrlo. COALESCE conserva la primera hora mientras siga cerrada; para
+    // «última modificación» está updated_at.
+    test.each(CIERRAN)('%s pone cerrada_at = COALESCE(cerrada_at, NOW()) en la misma escritura', async (estado) => {
       await svc.actualizarGestion(8, { estado })
       expect(db.query).toHaveBeenCalledTimes(1)
       const [sql, params] = db.query.mock.calls[0]
-      expect(sql).toMatch(/SET\s+\?,\s*cerrada_at\s*=\s*NOW\(\)\s+WHERE\s+id\s*=\s*\?/)
-      // NOW() no viaja como valor: el objeto lleva solo el estado.
+      expect(sql).toMatch(
+        /SET\s+\?,\s*cerrada_at\s*=\s*COALESCE\(\s*cerrada_at\s*,\s*NOW\(\)\s*\)\s+WHERE\s+id\s*=\s*\?/)
+      // COALESCE y NOW() no viajan como valor: el objeto lleva solo el estado.
       expect(params).toEqual([{ estado }, 8])
+    })
+
+    test.each(CIERRAN)('%s no sobrescribe la hora de cierre con un NOW() pelado', async (estado) => {
+      await svc.actualizarGestion(8, { estado })
+      // Un `cerrada_at = NOW()` suelto reescribiría la hora en cada guardado.
+      expect(db.query.mock.calls[0][0]).not.toMatch(/cerrada_at\s*=\s*NOW\(\)/)
+    })
+
+    // Cerrar, reabrir y volver a cerrar: el segundo cierre toma la hora nueva
+    // porque la reapertura dejó cerrada_at en NULL y COALESCE(NULL, NOW()) es
+    // NOW(). La hora vieja solo se conserva mientras la gestión siga cerrada.
+    // Acá se verifica lo que emite el servicio en cada paso; que COALESCE sobre
+    // NULL dé NOW() es semántica estándar de SQL y no se prueba contra una base.
+    test('cerrar, reabrir y volver a cerrar emite COALESCE, NULL y COALESCE', async () => {
+      await svc.actualizarGestion(8, { estado: 'GESTIONADA' })
+      await svc.actualizarGestion(8, { estado: 'EN_GESTION' })
+      await svc.actualizarGestion(8, { estado: 'NO_LOGRADA' })
+      const sqls = db.query.mock.calls.map((c) => c[0])
+      expect(sqls[0]).toMatch(/cerrada_at\s*=\s*COALESCE\(\s*cerrada_at\s*,\s*NOW\(\)\s*\)/)
+      expect(sqls[1]).toMatch(/cerrada_at\s*=\s*NULL\s+WHERE/)
+      expect(sqls[2]).toMatch(/cerrada_at\s*=\s*COALESCE\(\s*cerrada_at\s*,\s*NOW\(\)\s*\)/)
     })
 
     test.each(REABREN)('%s deja cerrada_at en NULL: una gestión reabierta no está cerrada', async (estado) => {

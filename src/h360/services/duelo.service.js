@@ -80,10 +80,21 @@ async function actualizarGestion(id, cambios) {
   // quedaría con la hora. Así se usa el reloj de la base y la gestión se cierra
   // (o se reabre) en la misma escritura que cambia el estado. Los fragmentos son
   // constantes: nada que venga del cliente se concatena al SQL.
+  //
+  // Al cerrar se usa COALESCE(cerrada_at, NOW()) y no NOW() a secas: cerrada_at
+  // es un dato de auditoría («cuándo se cerró el caso»), no un timestamp de
+  // modificación. Si el formulario manda `estado` en cada guardado, un NOW()
+  // pelado correría la hora de cierre con cada corrección de una observación.
+  // Así se conserva la primera hora mientras la gestión siga cerrada; para
+  // «última modificación» ya está updated_at, que la tabla actualiza sola.
+  // La reapertura sí produce una hora nueva: reabrir deja cerrada_at en NULL, y
+  // al volver a cerrar COALESCE(NULL, NOW()) da NOW(), la hora del nuevo cierre.
+  // (cerrada_at no está en CAMPOS_EDITABLES, así que nunca va en `set` y
+  // COALESCE lee el valor que la fila tenía antes de esta escritura.)
   let cierre = ''
   if (set.estado !== undefined)
     cierre = ESTADOS_QUE_CIERRAN.includes(set.estado)
-      ? ', cerrada_at = NOW()'
+      ? ', cerrada_at = COALESCE(cerrada_at, NOW())'
       : ', cerrada_at = NULL'
 
   const [r] = await db.query(
