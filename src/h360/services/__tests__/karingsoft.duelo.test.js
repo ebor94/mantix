@@ -49,6 +49,15 @@ const rechazo = async promesa => {
   throw new Error('se esperaba que la promesa se rechazara y se resolvió')
 }
 
+// La cláusula WHERE de una consulta, con los espacios colapsados: así se afirma
+// sobre QUÉ columna y QUÉ operador se compara sin depender de la sangría. Los
+// valores atados se prueban aparte; esto es lo que las pruebas de valores no ven.
+const clausulaWhere = sql => {
+  const m = sql.replace(/\s+/g, ' ').match(/\bWHERE\b(.*?)(?:\bORDER BY\b|$)/)
+  if (!m) throw new Error('la consulta no tiene WHERE')
+  return m[1]
+}
+
 describe('ordenesDelRango', () => {
   test('filtra por tipo_documento 50 y por el rango de fechas', async () => {
     await ks.ordenesDelRango('2026-11-04', '2026-11-05')
@@ -58,6 +67,20 @@ describe('ordenesDelRango', () => {
     expect(params.p_desde).toBe('2026-11-04')
     expect(params.p_hasta).toBe('2026-11-05')
     expect(nombresEnSql(sql)).toEqual(nombresAtados(params))
+  })
+
+  // Las pruebas de valores atados no ven la dirección: con BETWEEN @p_hasta AND
+  // @p_desde los dos parámetros siguen atados y la bandeja sale siempre vacía
+  // (BETWEEN con límites invertidos no devuelve nada). Aquí se fija que desde es
+  // el límite inferior y hasta el superior, y que la fecha es la de la orden
+  // (o.fecha), no la de fallecimiento. En los patrones, «[^@()]*\)» es el resto
+  // del CONVERT que da formato a la columna: la columna es el operando directo.
+  test('el rango compara desde como límite inferior y hasta como superior, sobre la fecha de la orden', async () => {
+    await ks.ordenesDelRango('2026-11-04', '2026-11-05')
+    const where = clausulaWhere(consultas[0].sql)
+    expect(where).toMatch(/\bo\.fecha\b[^@()]*\)\s*BETWEEN\s+@p_desde\s+AND\s+@p_hasta\b/)
+    // un solo BETWEEN: nadie agrega un segundo filtro de fecha a escondidas
+    expect(where.match(/\bBETWEEN\b/g)).toHaveLength(1)
   })
 
   // La fecha y la hora salen formateadas desde SQL: mysql2 y mssql devolverían
@@ -154,6 +177,38 @@ describe('buscarOrdenes', () => {
     expect(nombresEnSql(sql)).toEqual(['p_f_desde'])
   })
 
+  // Buscar por fecha de fallecimiento NO es buscar por fecha de la orden: hay
+  // órdenes creadas días después del fallecimiento (una real tiene fallecimiento
+  // en junio y orden en octubre). Si la columna fuera o.fecha, la búsqueda
+  // devolvería en silencio casos equivocados y los valores atados serían los
+  // mismos, así que se afirma sobre la columna y el sentido de cada operador.
+  describe('la fecha de fallecimiento filtra por o.fecha_fallecimiento, desde como mínimo y hasta como máximo', () => {
+    test('con las dos fechas', async () => {
+      await ks.buscarOrdenes({ fechaDesde: '2026-11-01', fechaHasta: '2026-11-05' })
+      const where = clausulaWhere(consultas[0].sql)
+      expect(where).toMatch(/\bo\.fecha_fallecimiento\b[^@()]*\)\s*>=\s*@p_f_desde\b/)
+      expect(where).toMatch(/\bo\.fecha_fallecimiento\b[^@()]*\)\s*<=\s*@p_f_hasta\b/)
+      // la fecha de la orden (o.fecha) no interviene en el filtro
+      expect(where).not.toMatch(/\bo\.fecha\b/)
+    })
+
+    test('solo desde: el mínimo, sobre fecha_fallecimiento, y sin tope', async () => {
+      await ks.buscarOrdenes({ fechaDesde: '2026-11-01' })
+      const where = clausulaWhere(consultas[0].sql)
+      expect(where).toMatch(/\bo\.fecha_fallecimiento\b[^@()]*\)\s*>=\s*@p_f_desde\b/)
+      expect(where).not.toMatch(/<=|@p_f_hasta/)
+      expect(where).not.toMatch(/\bo\.fecha\b/)
+    })
+
+    test('solo hasta: el máximo, sobre fecha_fallecimiento, y sin piso', async () => {
+      await ks.buscarOrdenes({ fechaHasta: '2026-11-05' })
+      const where = clausulaWhere(consultas[0].sql)
+      expect(where).toMatch(/\bo\.fecha_fallecimiento\b[^@()]*\)\s*<=\s*@p_f_hasta\b/)
+      expect(where).not.toMatch(/>=|@p_f_desde/)
+      expect(where).not.toMatch(/\bo\.fecha\b/)
+    })
+  })
+
   test('combina todos los criterios con AND, ata exactamente lo que el SQL nombra y limita a 200', async () => {
     await ks.buscarOrdenes({ contrato: 'A-20538', nombre: 'prada', fechaDesde: '2026-11-01', fechaHasta: '2026-11-05' })
     const { sql, params } = consultas[0]
@@ -206,6 +261,48 @@ describe('buscarOrdenes', () => {
     // la sensible a tildes es la que no queremos; la española trata la Ñ como
     // letra aparte de la N y rompe 'munoz'
     expect(sql).not.toMatch(/Modern_Spanish|CI_AS\b/)
+  })
+
+  // El nombre que se muestra (nombre_ser_querido, en el SELECT) y el que se
+  // compara (el WHERE) son UNA sola expresión SQL. Si divergieran (otro orden de
+  // apellidos, un segundo nombre solo en uno), la psicóloga buscaría un nombre y
+  // vería otro: «lo busqué y no aparece, pero acá está». Los espacios se quitan
+  // para comparar, porque el SELECT y el WHERE la indentan distinto.
+  describe('el nombre que se busca es el mismo que se muestra', () => {
+    const sinEspacios = sql => sql.replace(/\s+/g, '')
+
+    test('la expresión del WHERE es exactamente la que lleva el alias nombre_ser_querido', async () => {
+      await ks.buscarOrdenes({ nombre: 'prada' })
+      const plano = sinEspacios(consultas[0].sql)
+      const buscada = plano.match(/tipo_documento=50AND(.+?)COLLATE/)[1]
+      // que no sea una captura vacía o trivial: es la concatenación de los tres campos
+      expect(buscada).toContain('primer_apellido_fallecido')
+      expect(buscada).toContain('segundo_apellido_fallecido')
+      expect(buscada).toContain('nombres_fallecido')
+      expect(plano).toContain(`${buscada}ASnombre_ser_querido`)
+    })
+
+    test('la bandeja muestra la misma expresión que la búsqueda compara', async () => {
+      await ks.buscarOrdenes({ nombre: 'prada' })
+      await ks.ordenesDelRango('2026-11-04', '2026-11-05')
+      const buscada = sinEspacios(consultas[0].sql).match(/tipo_documento=50AND(.+?)COLLATE/)[1]
+      expect(sinEspacios(consultas[1].sql)).toContain(`${buscada}ASnombre_ser_querido`)
+    })
+
+    // La colación se aplica encima de la expresión, solo en la comparación. En
+    // el SELECT el nombre sale tal como está en la base.
+    test('el SELECT no lleva COLLATE: solo la comparación del WHERE', async () => {
+      await ks.ordenesDelRango('2026-11-04', '2026-11-05')
+      await ks.buscarOrdenes({ contrato: 'A-20538' })
+      expect(consultas[0].sql).not.toMatch(/COLLATE/)
+      expect(consultas[1].sql).not.toMatch(/COLLATE/)
+
+      await ks.buscarOrdenes({ nombre: 'prada' })
+      const { sql } = consultas[2]
+      const select = sql.slice(0, sql.search(/\bWHERE\b/))
+      expect(select).not.toMatch(/COLLATE/)
+      expect(clausulaWhere(sql)).toMatch(/COLLATE/)
+    })
   })
 
   // Guarda contra el «arreglo» equivocado. Quitar diacríticos en JavaScript
@@ -448,5 +545,67 @@ describe('ningún parámetro atado excede su longitud declarada', () => {
     expect(err).toBeInstanceOf(Error)
     expect(err.status).toBe(400)
     expect(consultas).toHaveLength(0)
+  })
+})
+
+// El mensaje de una fecha inválida va al log y al cuerpo de la respuesta 400. Si
+// repitiera el valor entero, 10000 caracteres de entrada pesarían más de 10 KB
+// en las dos partes; la validación de texto (contrato, nombre) ya no repite el
+// valor, y ésta cita solo el comienzo, con una marca de que se recortó.
+describe('el mensaje de una fecha inválida acota lo que muestra del valor', () => {
+  const enorme = 'Z'.repeat(10000)
+  const MAX_ECO = 40
+
+  const llamadas = [
+    ['ordenesDelRango: desde',    valor => ks.ordenesDelRango(valor, '2026-11-05'), 'desde'],
+    ['ordenesDelRango: hasta',    valor => ks.ordenesDelRango('2026-11-04', valor), 'hasta'],
+    ['buscarOrdenes: fechaDesde', valor => ks.buscarOrdenes({ fechaDesde: valor }), 'fechaDesde'],
+    ['buscarOrdenes: fechaHasta', valor => ks.buscarOrdenes({ fechaHasta: valor }), 'fechaHasta'],
+  ]
+
+  describe.each(llamadas)('%s', (_caso, llamar, campo) => {
+    test('con 10000 caracteres el mensaje queda corto y no repite el valor', async () => {
+      const err = await rechazo(llamar(enorme))
+      expect(err.status).toBe(400)
+      expect(err.message.length).toBeLessThan(300)
+      expect(err.message).not.toContain('Z'.repeat(MAX_ECO + 1))
+    })
+
+    test('cita el comienzo, dice que recortó y cuánto llegó', async () => {
+      const err = await rechazo(llamar(enorme))
+      expect(err.message).toContain(`"${'Z'.repeat(MAX_ECO)}"`)
+      expect(err.message).toMatch(/recortado/)
+      expect(err.message).toContain('10000')
+    })
+
+    // El resto del mensaje no se toca: la forma esperada y el campo siguen ahí.
+    test('conserva el campo y la forma esperada', async () => {
+      const err = await rechazo(llamar(enorme))
+      expect(err.message).toContain(`"${campo}"`)
+      expect(err.message).toMatch(/debe ser una fecha en formato YYYY-MM-DD/)
+      expect(consultas).toHaveLength(0)
+    })
+
+    // El borde: lo que cabe en el tope se cita entero y sin marca.
+    test('el límite exacto: 40 caracteres se citan enteros y sin marca, 41 se recortan', async () => {
+      const justo = await rechazo(llamar('x'.repeat(MAX_ECO)))
+      expect(justo.message).toContain(`"${'x'.repeat(MAX_ECO)}"`)
+      expect(justo.message).not.toMatch(/recortado/)
+
+      const pasado = await rechazo(llamar('x'.repeat(MAX_ECO + 1)))
+      expect(pasado.message).toContain(`"${'x'.repeat(MAX_ECO)}"`)
+      expect(pasado.message).not.toContain('x'.repeat(MAX_ECO + 1))
+      expect(pasado.message).toMatch(/recortado/)
+      expect(pasado.message).toContain(String(MAX_ECO + 1))
+    })
+
+    // No solo los textos: un arreglo largo (?desde=a&desde=b&...) se vuelve
+    // texto con String() y sería igual de enorme.
+    test('un valor que no es texto (un arreglo de 10000 elementos) también se acota', async () => {
+      const err = await rechazo(llamar(Array(10000).fill('a')))
+      expect(err.status).toBe(400)
+      expect(err.message.length).toBeLessThan(300)
+      expect(err.message).toMatch(/recortado/)
+    })
   })
 })

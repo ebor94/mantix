@@ -486,8 +486,22 @@ async function ordenServicio(numeroContrato) {
   return r.recordset[0] || null
 }
 
-/* ── R-56: bandeja y búsqueda para acompañamiento al duelo ──────────────────
-   Las fechas salen formateadas desde SQL a propósito. Un datetime vuelve como
+/* ── R-56: bandeja y búsqueda para acompañamiento al duelo ────────────────── */
+
+/* El nombre del fallecido como un solo texto («primer apellido, segundo
+   apellido, nombres», sin espacios de más). Es UNA constante a propósito: se
+   devuelve en CAMPOS_DUELO (lo que se muestra como nombre_ser_querido) y se
+   compara en el WHERE de buscarOrdenes (por lo que se busca). Con dos copias,
+   cambiar una (otro orden, un segundo nombre) haría que la búsqueda y lo que se
+   ve dejaran de coincidir, y nada fallaría.
+   Va SIN COLLATE: la colación de la comparación se aplica encima de esta
+   expresión, en buscarOrdenes; en el SELECT el nombre sale como está guardado. */
+const NOMBRE_SQL = `LTRIM(RTRIM(
+           LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
+           LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
+           LTRIM(RTRIM(ISNULL(o.nombres_fallecido,'')))))`
+
+/* Las fechas salen formateadas desde SQL a propósito. Un datetime vuelve como
    objeto Date, Express lo serializa en UTC y una fecha pelada se reparsea como
    medianoche UTC: en Bogotá eso es el día anterior. Texto desde el origen
    evita toda la aritmética de zonas. */
@@ -495,10 +509,7 @@ const CAMPOS_DUELO = `
          o.orden_servicio,
          CONVERT(varchar(10), o.fecha, 23)                  AS fecha_orden,
          CONVERT(varchar(10), o.fecha_fallecimiento, 23)    AS fecha_fallecimiento,
-         LTRIM(RTRIM(
-           LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
-           LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
-           LTRIM(RTRIM(ISNULL(o.nombres_fallecido,'')))))    AS nombre_ser_querido,
+         ${NOMBRE_SQL}                                       AS nombre_ser_querido,
          CAST(o.edad_fallecimiento AS int)                  AS edad,
          LTRIM(RTRIM(ISNULL(o.telefono_fallecido,'')))      AS telefono,
          LTRIM(RTRIM(ISNULL(o.direccion_fallecido,'')))     AS direccion,
@@ -537,15 +548,31 @@ const escaparLike = texto => texto.replace(/[\\%_[]/g, coincidencia => ESCAPE_LI
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
 
+/* Cuánto de un valor recibido se repite en un mensaje de error. Basta para
+   depurar («4/11/2026», «2026-11-04T00:00:00») y acota el mensaje, que va al log
+   y al cuerpo de la respuesta 400: el valor puede tener miles de caracteres. */
+const MAX_ECO_VALOR = 40
+
+/* El valor, acotado, para citarlo en un mensaje. Un texto se cita entre comillas
+   con JSON.stringify (que escapa saltos de línea y comillas); lo demás se cita
+   con String(), como siempre. Si se recortó, lo dice y da el largo original. */
+function eco(valor) {
+  const completo = String(valor)
+  const recortado = completo.length > MAX_ECO_VALOR
+  const mostrado = recortado ? completo.slice(0, MAX_ECO_VALOR) : completo
+  const citado = typeof valor === 'string' ? JSON.stringify(mostrado) : mostrado
+  return recortado ? `${citado}… (recortado: llegó con ${completo.length} caracteres)` : citado
+}
+
 /* Una fecha malformada se lanza con un mensaje claro que nombra el campo y
-   muestra lo que llegó; no se devuelve vacío, porque vacío lo esconde. Esto
-   valida la FORMA; que el valor quepa en el VarChar lo valida parametrosDe, por
-   donde pasa toda fecha. «funcion» es la que se nombra en el mensaje, para que
-   el log diga cuál de las dos falló. */
+   muestra el comienzo de lo que llegó (ver eco: no lo repite entero); no se
+   devuelve vacío, porque vacío lo esconde. Esto valida la FORMA; que el valor
+   quepa en el VarChar lo valida parametrosDe, por donde pasa toda fecha.
+   «funcion» es la que se nombra en el mensaje, para que el log diga cuál de las
+   dos falló. */
 function exigirFechaIso(valor, nombre, funcion) {
   if (typeof valor === 'string' && FECHA_ISO.test(valor)) return
-  const recibido = typeof valor === 'string' ? JSON.stringify(valor) : String(valor)
-  throw malUso(`${funcion}: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${recibido}`)
+  throw malUso(`${funcion}: "${nombre}" debe ser una fecha en formato YYYY-MM-DD (por ejemplo 2026-11-04); llegó ${eco(valor)}`)
 }
 
 /* Tamaños declarados de los VarChar que se atan en las búsquedas. Cada uno se
@@ -649,10 +676,9 @@ async function buscarOrdenes({ contrato, nombre, fechaDesde, fechaHasta } = {}) 
     p.texto('p_contrato', 'contrato', MAX_CONTRATO, numero)
   }
   if (String(nombre ?? '').trim()) {
-    cond.push(`LTRIM(RTRIM(
-        LTRIM(RTRIM(ISNULL(o.primer_apellido_fallecido,''))) + ' ' +
-        LTRIM(RTRIM(ISNULL(o.segundo_apellido_fallecido,''))) + ' ' +
-        LTRIM(RTRIM(ISNULL(o.nombres_fallecido,''))))) COLLATE ${COLACION_NOMBRE}
+    // Se compara la misma expresión que se muestra (NOMBRE_SQL); el COLLATE va
+    // encima, solo aquí, y en los dos lados del LIKE.
+    cond.push(`${NOMBRE_SQL} COLLATE ${COLACION_NOMBRE}
         LIKE @p_nombre COLLATE ${COLACION_NOMBRE} ESCAPE '${ESCAPE_LIKE}'`)
     // Que 'rodriguez' encuentre RODRÍGUEZ y 'munoz' encuentre MUÑOZ lo resuelve
     // la colación (ver COLACION_NOMBRE); aquí el término solo se limpia y se
