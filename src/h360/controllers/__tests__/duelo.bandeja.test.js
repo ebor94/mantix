@@ -15,6 +15,7 @@ const ks  = require('../../services/karingsoft.service')
 const svc = require('../../services/duelo.service')
 const { malUso } = require('../../utils/errores')
 const ctrl = require('../duelo.controller')
+const { ESTADOS_GESTION } = require('../../utils/duelo.catalogos')
 
 const resDoble = () => {
   const r = { codigo: 200, cuerpo: null }
@@ -40,6 +41,15 @@ function fila(res, orden) {
   if (!f) throw new Error(
     `la orden ${orden} no está en la respuesta (código ${res.codigo}): ${JSON.stringify(res.cuerpo)}`)
   return f
+}
+
+// Un rechazo de verdad: 400 con mensaje, sin lista en el cuerpo (una lista vacía
+// es justo lo que se quiere evitar) y sin pasar por next, que sería un 500.
+function expectRechazo({ res, next }, ...fragmentos) {
+  expect(res.codigo).toBe(400)
+  expect(res.cuerpo.data).toBeUndefined()
+  expect(next).not.toHaveBeenCalled()
+  for (const f of fragmentos) expect(res.cuerpo.mensaje).toContain(f)
 }
 
 const ORDENES = [
@@ -292,6 +302,98 @@ describe('bandeja', () => {
       expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
       expect([res.cuerpo.desde, res.cuerpo.hasta]).toEqual(['2026-11-04', '2026-11-05'])
     })
+
+    // La forma YYYY-MM-DD la acepta el servicio del ERP, que además compara las
+    // fechas como TEXTO: «2026-13-45» no es menor ni mayor que ninguna fecha real
+    // de 2026, el BETWEEN no encuentra nada y la bandeja diría «hoy no hay nadie».
+    test.each([
+      ['desde', '2026-13-45'], ['hasta', '2026-13-45'], // mes y día imposibles
+      ['desde', '2026-02-31'], ['hasta', '2026-04-31'], // día que ese mes no tiene
+      ['desde', '2025-02-29'],                          // año no bisiesto
+      ['hasta', '2026-00-10'], ['desde', '2026-11-00'], // mes cero y día cero
+    ])('%s=%s: tiene la forma pero no existe, es 400', async (campo, valor) => {
+      fijarHoy(2026, 11, 5)
+      const r = await llamar(ctrl.bandeja, { [campo]: valor })
+      expectRechazo(r, `«${campo}»`, valor, 'AAAA-MM-DD')
+      expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+    })
+
+    test('el 29 de febrero de un año bisiesto sí existe', async () => {
+      fijarHoy(2028, 3, 1)
+      const { res } = await llamar(ctrl.bandeja, { desde: '2028-02-29', hasta: '2028-03-01' })
+      expect(res.codigo).toBe(200)
+      expect(ks.ordenesDelRango).toHaveBeenCalledWith('2028-02-29', '2028-03-01')
+    })
+
+    test('desde posterior a hasta no es un rango: 400 que dice cuál es cuál', async () => {
+      const r = await llamar(ctrl.bandeja, { desde: '2026-11-10', hasta: '2026-11-04' })
+      expectRechazo(r)
+      expect(r.res.cuerpo.mensaje).toMatch(/«desde» \(2026-11-10\).*«hasta» \(2026-11-04\)/)
+      expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+    })
+
+    // El borde: un solo día (desde == hasta) es un rango válido.
+    test('desde igual a hasta es un solo día, no un rango al revés', async () => {
+      const { res } = await llamar(ctrl.bandeja, { desde: '2026-11-04', hasta: '2026-11-04' })
+      expect(res.codigo).toBe(200)
+      expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-04')
+    })
+
+    // Si llega solo una punta, la otra es la del defecto: el rango puede quedar
+    // al revés sin que quien escribió lo haya querido. Se rechaza y el mensaje
+    // dice cuál de las dos fechas no la puso nadie.
+    test('una sola punta que invierte el rango contra el defecto es 400 y dice que la otra es el defecto', async () => {
+      fijarHoy(2026, 11, 5)
+      const soloHasta = await llamar(ctrl.bandeja, { hasta: '2026-10-01' })
+      expectRechazo(soloHasta)
+      expect(soloHasta.res.cuerpo.mensaje).toMatch(/«desde» \(2026-11-04, por defecto\).*«hasta» \(2026-10-01\)/)
+
+      const soloDesde = await llamar(ctrl.bandeja, { desde: '2026-12-01' })
+      expectRechazo(soloDesde)
+      expect(soloDesde.res.cuerpo.mensaje).toMatch(/«desde» \(2026-12-01\).*«hasta» \(2026-11-05, por defecto\)/)
+
+      // Una fecha mal escrita que cae al defecto tampoco puede invertir el rango en silencio.
+      const malEscrita = await llamar(ctrl.bandeja, { desde: 'ayer', hasta: '2026-10-01' })
+      expectRechazo(malEscrita)
+      expect(malEscrita.res.cuerpo.mensaje).toContain('por defecto')
+      expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+    })
+
+    // Lo ausente no es inválido: la bandeja sigue abriendo con ayer y hoy, sin filtros.
+    describe('los parámetros ausentes no son inválidos', () => {
+      test('sin ningún parámetro: ayer y hoy, y nada filtrado', async () => {
+        fijarHoy(2026, 11, 5)
+        const { res } = await llamar(ctrl.bandeja, {})
+        expect(res.codigo).toBe(200)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
+        expect(res.cuerpo.data.map(f => f.orden_servicio)).toEqual(['A-1', 'MAS-9', 'A-3'])
+      })
+
+      // Un selector en «todas» manda `rama=`, no omite el parámetro.
+      test('un parámetro en blanco cuenta como ausente', async () => {
+        fijarHoy(2026, 11, 5)
+        const { res } = await llamar(ctrl.bandeja, {
+          desde: '', hasta: '  ', rama: '', estado: ' ', incluir_mascotas: '',
+        })
+        expect(res.codigo).toBe(200)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
+        expect(res.cuerpo.data).toHaveLength(3)
+      })
+
+      test('solo desde: hasta es hoy', async () => {
+        fijarHoy(2026, 11, 5)
+        const { res } = await llamar(ctrl.bandeja, { desde: '2026-11-01' })
+        expect(res.codigo).toBe(200)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-01', '2026-11-05')
+      })
+
+      test('solo hasta: desde es ayer', async () => {
+        fijarHoy(2026, 11, 5)
+        const { res } = await llamar(ctrl.bandeja, { hasta: '2026-11-05' })
+        expect(res.codigo).toBe(200)
+        expect(ks.ordenesDelRango).toHaveBeenCalledWith('2026-11-04', '2026-11-05')
+      })
+    })
   })
 
   describe('filtros', () => {
@@ -322,6 +424,133 @@ describe('bandeja', () => {
       expect(ordenes(con.res)).toEqual(['A-1', 'MAS-9', 'A-3'])
       const defecto = await llamar(ctrl.bandeja)
       expect(ordenes(defecto.res)).toEqual(['A-1', 'MAS-9', 'A-3'])
+    })
+  })
+
+  // Una lista vacía en esta pantalla se lee como «hoy no hay nadie a quien
+  // llamar». Un filtro por un valor que no existe nunca va a coincidir con nada:
+  // si respondiera 200 con la lista vacía, ese día nadie llamaría a ninguna
+  // familia. Toda entrada que no puede dar un resultado correcto es un 400 que
+  // dice qué se esperaba.
+  describe('filtros con valores inválidos', () => {
+    const sinConsultar = () => expect(ks.ordenesDelRango).not.toHaveBeenCalled()
+
+    test('una rama que no existe es 400 y dice cuáles hay', async () => {
+      const r = await llamar(ctrl.bandeja, { rama: 'XYZ' })
+      expectRechazo(r, '«rama»', '"XYZ"', 'SALA', 'RESIDENCIA', 'OTRA_CIUDAD')
+      sinConsultar()
+    })
+
+    // «sala» en minúscula y EXTERNA (que el catálogo de ubicaciones tiene pero la
+    // bandeja nunca produce como rama) tampoco coinciden con nada.
+    test.each([['SALAS'], ['sala'], ['EXTERNA'], ['otra ciudad'], ['SALA,RESIDENCIA']])(
+      'rama=%j no existe, es 400', async rama => {
+        expectRechazo(await llamar(ctrl.bandeja, { rama }), '«rama»')
+        sinConsultar()
+      })
+
+    test('un estado que no existe es 400 y dice cuáles hay', async () => {
+      const r = await llamar(ctrl.bandeja, { estado: 'XYZ' })
+      expectRechazo(r, '«estado»', '"XYZ"')
+      for (const e of ESTADOS_GESTION) expect(r.res.cuerpo.mensaje).toContain(e)
+      sinConsultar()
+    })
+
+    test.each([['gestionada'], ['PENDIENTES'], ['EN GESTION'], ['SIN_GESTION']])(
+      'estado=%j no existe, es 400', async estado => {
+        expectRechazo(await llamar(ctrl.bandeja, { estado }), '«estado»')
+        sinConsultar()
+      })
+
+    // «No» o «0» parecen decir «sin mascotas» y hoy dejarían las mascotas dentro
+    // sin avisar: la lista saldría distinta de la que se pidió.
+    test.each([['no'], ['0'], ['False'], ['si']])(
+      'incluir_mascotas=%j no es true ni false, es 400', async valor => {
+        expectRechazo(await llamar(ctrl.bandeja, { incluir_mascotas: valor }),
+          '«incluir_mascotas»', 'true', 'false')
+        sinConsultar()
+      })
+
+    // Un parámetro repetido llega como arreglo y nunca es igual a una rama ni a
+    // un estado; en las fechas caía al defecto sin decirlo.
+    test.each([
+      ['rama', ['SALA', 'RESIDENCIA']], ['estado', ['PENDIENTE', 'GESTIONADA']],
+      ['incluir_mascotas', ['true', 'false']],
+      ['desde', ['2026-11-01', '2026-11-02']], ['hasta', ['2026-11-01', '2026-11-02']],
+    ])('%s repetido (llega como arreglo) es 400', async (campo, valor) => {
+      expectRechazo(await llamar(ctrl.bandeja, { [campo]: valor }), `«${campo}»`)
+      sinConsultar()
+    })
+
+    // Un filtro válido no tapa a otro inválido, en ningún orden.
+    test('un filtro válido junto a uno inválido sigue siendo 400', async () => {
+      expectRechazo(await llamar(ctrl.bandeja, { rama: 'SALA', estado: 'XYZ' }), '«estado»')
+      expectRechazo(await llamar(ctrl.bandeja, { estado: 'PENDIENTE', rama: 'XYZ' }), '«rama»')
+      expectRechazo(await llamar(ctrl.bandeja, { rama: 'SALA', incluir_mascotas: 'no' }), '«incluir_mascotas»')
+      sinConsultar()
+    })
+
+    test('los valores válidos se aceptan: cada rama y cada estado, con PENDIENTE', async () => {
+      for (const rama of ['SALA', 'RESIDENCIA', 'OTRA_CIUDAD']) {
+        const { res } = await llamar(ctrl.bandeja, { rama })
+        expect(res.codigo).toBe(200)
+      }
+      for (const estado of [...ESTADOS_GESTION, 'PENDIENTE']) {
+        const { res } = await llamar(ctrl.bandeja, { estado })
+        expect(res.codigo).toBe(200)
+      }
+    })
+
+    // El conjunto de ramas válidas no es una lista aparte que pueda desfasarse de
+    // lo que ramaDe calcula: toda rama que sale en una fila se puede pedir.
+    test('toda rama que la bandeja produce se puede pedir como filtro', async () => {
+      db.query = jest.fn(async () => [[ASISTENCIA_A1]])
+      const todas = await llamar(ctrl.bandeja)
+      const producidas = [...new Set(todas.res.cuerpo.data.map(f => f.rama))]
+      // Que el escenario produzca las tres: sin esto la prueba no cubriría nada.
+      expect(producidas.sort()).toEqual(['OTRA_CIUDAD', 'RESIDENCIA', 'SALA'])
+      for (const rama of producidas) {
+        const { res } = await llamar(ctrl.bandeja, { rama })
+        expect(res.codigo).toBe(200)
+        expect(res.cuerpo.data.length).toBeGreaterThan(0)
+        expect(res.cuerpo.data.every(f => f.rama === rama)).toBe(true)
+      }
+    })
+
+    // La clase entera: no se lista cada filtro a mano. Todo filtro que exista en
+    // FILTROS_BANDEJA rechaza un valor que no existe y acepta los que declara; si
+    // mañana se agrega uno, esta prueba lo cubre sin que nadie la toque.
+    test('todo filtro declarado rechaza un valor inexistente y acepta los suyos', async () => {
+      expect(ctrl.FILTROS_BANDEJA).toBeDefined()
+      expect(Object.keys(ctrl.FILTROS_BANDEJA))
+        .toEqual(expect.arrayContaining(['rama', 'estado', 'incluir_mascotas']))
+      for (const [campo, def] of Object.entries(ctrl.FILTROS_BANDEJA)) {
+        expectRechazo(await llamar(ctrl.bandeja, { [campo]: '__no_existe__' }), `«${campo}»`)
+        for (const valor of def.valores) {
+          const { res } = await llamar(ctrl.bandeja, { [campo]: valor })
+          expect([campo, valor, res.codigo]).toEqual([campo, valor, 200])
+        }
+      }
+    })
+
+    // Declarar un filtro sin sus valores válidos es la forma de volver a la lista
+    // vacía muda; el módulo no carga si alguien lo hace.
+    test('un filtro sin valores declarados, o sin cómo aplicarse, impide cargar el módulo', () => {
+      const aplica = () => true
+      expect(() => ctrl.verificarFiltros(ctrl.FILTROS_BANDEJA)).not.toThrow()
+      expect(() => ctrl.verificarFiltros({ nuevo: { aplica } })).toThrow(/nuevo.*valores/)
+      expect(() => ctrl.verificarFiltros({ nuevo: { valores: [], aplica } })).toThrow(/nuevo.*valores/)
+      expect(() => ctrl.verificarFiltros({ nuevo: { valores: 'SALA', aplica } })).toThrow(/nuevo.*valores/)
+      expect(() => ctrl.verificarFiltros({ nuevo: { valores: ['A'] } })).toThrow(/nuevo.*aplica/)
+    })
+
+    // La validación va antes del ERP: con el ERP caído, una entrada mal escrita
+    // sigue siendo del que escribió, no una caída que no es.
+    test('la entrada inválida se rechaza antes de consultar el ERP', async () => {
+      ks.ordenesDelRango = jest.fn(async () => { throw ERROR_ERP })
+      const r = await llamar(ctrl.bandeja, { rama: 'XYZ' })
+      expectRechazo(r, '«rama»')
+      expect(ks.ordenesDelRango).not.toHaveBeenCalled()
     })
   })
 
@@ -432,7 +661,7 @@ describe('buscar', () => {
     ks.buscarOrdenes = jest.fn(async () => [])
     const { res } = await llamar(ctrl.buscar, { nombre: 'nadie' })
     expect(res.codigo).toBe(200)
-    expect(res.cuerpo).toEqual({ total: 0, data: [] })
+    expect(res.cuerpo).toEqual({ total: 0, truncado: false, tope: 200, data: [] })
   })
 
   test('si el ERP no está configurado responde 503 y lo dice', async () => {
@@ -465,6 +694,102 @@ describe('buscar', () => {
     const { res, next } = await llamar(ctrl.buscar, { contrato: 'A-1' })
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'ER_NO_SUCH_TABLE' }))
     expect(res.cuerpo).toBeNull()
+  })
+  // Lo mismo que en la bandeja: «sin resultados» no puede ser el efecto de haber
+  // escrito algo que no existe. Una fecha imposible se compara como texto en el
+  // ERP y no coincide con nada; la psicóloga concluiría que la familia no está.
+  describe('entradas que no pueden dar resultado', () => {
+    test.each([
+      ['fecha_fallecimiento', '2026-02-31'], ['fecha_fallecimiento', '2026-13-45'],
+      ['fecha_hasta', '2026-13-45'], ['fecha_hasta', '2025-02-29'],
+    ])('%s=%s: tiene la forma pero no existe, es 400', async (campo, valor) => {
+      // El nombre cuenta como criterio: sin la validación esto sería un 200.
+      const r = await llamar(ctrl.buscar, { nombre: 'perez', [campo]: valor })
+      expectRechazo(r, `«${campo}»`, valor, 'no es una fecha que exista')
+      expect(ks.buscarOrdenes).not.toHaveBeenCalled()
+    })
+
+    // El servicio ya rechaza la forma, pero nombra su parámetro interno
+    // (fechaDesde); el controlador habla con el nombre que usa la API. Y dice lo
+    // que pasa de verdad: «5/11/2026» no es una fecha mal puesta que «no exista».
+    test('una fecha con forma inválida es 400 con el nombre del campo de la API y habla del formato', async () => {
+      const r = await llamar(ctrl.buscar, { fecha_fallecimiento: '5/11/2026' })
+      expectRechazo(r, '«fecha_fallecimiento»', 'debe ser una fecha en formato AAAA-MM-DD')
+      expect(r.res.cuerpo.mensaje).not.toContain('que exista')
+      expect(ks.buscarOrdenes).not.toHaveBeenCalled()
+    })
+
+    test('fecha_fallecimiento posterior a fecha_hasta es 400 y dice cuál es cuál', async () => {
+      const r = await llamar(ctrl.buscar, { fecha_fallecimiento: '2026-11-10', fecha_hasta: '2026-11-04' })
+      expectRechazo(r)
+      expect(r.res.cuerpo.mensaje)
+        .toMatch(/«fecha_fallecimiento» \(2026-11-10\).*«fecha_hasta» \(2026-11-04\)/)
+      expect(ks.buscarOrdenes).not.toHaveBeenCalled()
+    })
+
+    test('las dos fechas iguales son un solo día, no un rango al revés', async () => {
+      const { res } = await llamar(ctrl.buscar, { fecha_fallecimiento: '2026-11-04', fecha_hasta: '2026-11-04' })
+      expect(res.codigo).toBe(200)
+      expect(ks.buscarOrdenes).toHaveBeenCalledTimes(1)
+    })
+
+    // Un criterio repetido llega como arreglo y el servicio lo vuelve «a,b»: se
+    // buscaría un nombre que no existe.
+    test.each([
+      ['nombre', ['ana', 'juan']], ['contrato', ['A-1', 'A-2']],
+      ['fecha_fallecimiento', ['2026-11-01', '2026-11-02']],
+    ])('%s repetido (llega como arreglo) es 400', async (campo, valor) => {
+      // El nombre sale primero: así, sin la validación, solo el repetido da un 200.
+      expectRechazo(await llamar(ctrl.buscar, { nombre: 'perez', [campo]: valor }), `«${campo}»`)
+      expect(ks.buscarOrdenes).not.toHaveBeenCalled()
+    })
+  })
+
+  // El ERP corta la búsqueda en 200 filas sin avisar: sin este aviso, una búsqueda
+  // amplia parece completa y se concluye que una familia no está en el sistema.
+  describe('aviso de truncado', () => {
+    const ordenesN = n => Array.from({ length: n }, (_, i) => (
+      { orden_servicio: `T-${i}`, nombre_ser_querido: 'PEREZ', sede: 'Sede Gran Colombia', convenio: '' }))
+
+    test('con menos filas que el tope no hubo corte, y la respuesta dice cuál es el tope', async () => {
+      ks.buscarOrdenes = jest.fn(async () => ordenesN(199))
+      const { res } = await llamar(ctrl.buscar, { nombre: 'perez' })
+      expect(res.cuerpo.truncado).toBe(false)
+      expect(res.cuerpo.tope).toBe(200)
+      expect(res.cuerpo.total).toBe(199)
+    })
+
+    // 200 filas pueden ser exactamente 200 o las primeras 200 de más: no se
+    // distingue, así que se avisa. Un aviso de más cuesta una frase; uno de menos
+    // cuesta una familia que nadie llama.
+    test('con el tope exacto avisa que pudo haber más', async () => {
+      ks.buscarOrdenes = jest.fn(async () => ordenesN(200))
+      const { res } = await llamar(ctrl.buscar, { nombre: 'perez' })
+      expect(res.cuerpo.truncado).toBe(true)
+      expect(res.cuerpo.tope).toBe(200)
+      expect(res.cuerpo.total).toBe(200)
+      expect(res.cuerpo.data).toHaveLength(200)
+    })
+
+    test('si el servicio devolviera más del tope, también avisa', async () => {
+      ks.buscarOrdenes = jest.fn(async () => ordenesN(201))
+      const { res } = await llamar(ctrl.buscar, { nombre: 'perez' })
+      expect(res.cuerpo.truncado).toBe(true)
+      expect(res.cuerpo.total).toBe(201)
+    })
+
+    // El tope vive en el servicio del ERP (TOP 200 de buscarOrdenes) y el
+    // controlador lo repite para deducir el corte. Si alguien lo cambia allá y no
+    // acá, el aviso dejaría de saltar sin que nada se queje: esta prueba lo ata.
+    test('el tope del controlador es el TOP de buscarOrdenes en el servicio del ERP', () => {
+      const fs = require('fs')
+      const path = require('path')
+      const fuente = fs.readFileSync(path.join(__dirname, '../../services/karingsoft.service.js'), 'utf8')
+      const inicio = fuente.indexOf('async function buscarOrdenes')
+      expect(inicio).toBeGreaterThan(-1)
+      const topes = [...fuente.slice(inicio).matchAll(/\bTOP\s+(\d+)/g)].map(m => Number(m[1]))
+      expect(topes).toEqual([ctrl.TOPE_BUSQUEDA])
+    })
   })
 })
 
