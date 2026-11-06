@@ -792,8 +792,8 @@ async function aprobar(req, res, next) {
     // OJO: Veolia usa canal='EMPRESARIAL' de forma histórica pero NO es el canal
     // empresarial real (ese es origen ASESOR/CONVENIO_PUBLICO). Veolia debe
     // seguir el flujo normal (certificado + aprobación pública), no la bienvenida.
-    const emiteCertFirma = await empresaEmiteCertificadoFirma(afiliado.empresaId);
-    if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA' && !emiteCertFirma) {
+    if (afiliado.canal === 'EMPRESARIAL' && afiliado.origen !== 'VEOLIA'
+        && !(await empresaEmiteCertificadoFirma(afiliado.empresaId))) {
       // Canal empresarial: NO lleva certificado ni carné por WhatsApp. En su
       // lugar se dispara el workflow de bienvenida (correo al afiliado + copia
       // al correo matriculado en la empresa). Fire-and-forget.
