@@ -809,10 +809,16 @@ async function crearGestion(datos) {
   return r.insertId
 }
 
+/**
+ * Lo que un cliente puede cambiar. `cerrada_at` NO está: la pone el servidor
+ * con el reloj de la base cuando el estado cierra la gestión. Una gestión se
+ * cierra *ahora*; si la hora viniera de un input, una gestión cerrada a las
+ * 14:30 se guardaría a las 19:30 al convertirse a UTC.
+ */
 const CAMPOS_EDITABLES = [
   'asistencia_id', 'ubicacion_tipo', 'ubicacion_detalle', 'titular_nombre',
   'titular_parentesco', 'telefonos', 'tipificacion', 'estado', 'observaciones',
-  'psicologa', 'psicologa_acompanante', 'cerrada_at',
+  'psicologa', 'psicologa_acompanante',
 ]
 
 async function actualizarGestion(id, cambios) {
@@ -1208,6 +1214,10 @@ async function bandeja(req, res, next) {
     let ordenes
     try { ordenes = await ks.ordenesDelRango(desde, hasta) }
     catch (err) {
+      // Un 400 del servicio es entrada inválida, no un ERP caído: tiene que
+      // subir. Si se tragara acá, una fecha mal escrita por una psicóloga le
+      // diría "el ERP no responde" y nadie encontraría el error real.
+      if (err?.status === 400) throw err
       console.warn('[duelo] bandeja, ERP no disponible:', err.message)
       return sinErp(res)
     }
@@ -1232,7 +1242,12 @@ async function buscar(req, res, next) {
       fechaDesde: req.query.fecha_fallecimiento,
       fechaHasta: req.query.fecha_hasta,
     }
-    if (!criterios.contrato && !criterios.nombre && !criterios.fechaDesde)
+    // Se mira el contenido y no la presencia: un criterio de solo espacios
+    // pasaba este chequeo, el servicio devolvía vacío, y la pantalla decía
+    // "sin resultados" en vez de pedir un criterio de verdad.
+    const conContenido = v => !!String(v ?? '').trim()
+    if (!conContenido(criterios.contrato) && !conContenido(criterios.nombre)
+        && !conContenido(criterios.fechaDesde))
       return res.status(400).json({
         mensaje: 'Indica al menos un criterio: contrato, nombre del ser querido o fecha de fallecimiento.',
       })
@@ -1240,6 +1255,7 @@ async function buscar(req, res, next) {
     let ordenes
     try { ordenes = await ks.buscarOrdenes(criterios) }
     catch (err) {
+      if (err?.status === 400) throw err      // entrada inválida, no ERP caído
       console.warn('[duelo] búsqueda, ERP no disponible:', err.message)
       return sinErp(res)
     }
@@ -1490,9 +1506,15 @@ async function crear(req, res, next) {
       mensaje: 'Esta orden ya tiene una gestión abierta.', gestion_id: ya.id,
     })
 
+    // Son dos psicólogas trabajando la misma lista del día, así que las dos
+    // pueden abrir la misma orden en el mismo segundo: el chequeo de arriba
+    // pasa en las dos y el índice único rechaza a la segunda. Sin esto, a una
+    // de ellas le saldría un 500 por ER_DUP_ENTRY en vez del 409 que le dice
+    // que su compañera ya la abrió.
+
     // La psicóloga sale del login y no del cuerpo: en el Excel se escribía a
     // mano 1850 veces y no hay forma de auditar quién atendió de verdad.
-    const id = await svc.crearGestion({
+    const datos = {
       orden_servicio:     orden,
       asistencia_id:      req.body.asistencia_id ?? null,
       ubicacion_tipo:     req.body.ubicacion_tipo ?? 'OTRO',
@@ -1504,7 +1526,20 @@ async function crear(req, res, next) {
       estado:             'EN_GESTION',
       psicologa:          req.user.usuario,
       created_by:         req.user.usuario,
-    })
+    }
+    let id
+    try {
+      id = await svc.crearGestion(datos)
+    } catch (err) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        const existente = await svc.gestionPorOrden(orden)
+        return res.status(409).json({
+          mensaje: 'Esta orden ya tiene una gestión abierta.',
+          gestion_id: existente?.id ?? null,
+        })
+      }
+      throw err
+    }
     res.status(201).json({ id, orden_servicio: orden })
   } catch (err) { responderError(res, next, err) }
 }
