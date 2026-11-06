@@ -833,7 +833,29 @@ async function actualizarGestion(id, cambios) {
     throw malUso('El estado de la gestión no es válido')
 
   if (!Object.keys(set).length) return false
-  const [r] = await db.query('UPDATE h360_duelo_gestion SET ? WHERE id = ?', [set, id])
+
+  /* La hora de cierre la pone el servidor con el reloj de la base, nunca el
+     cliente: una gestión se cierra *ahora*, y si la hora viniera de un input
+     se correría a UTC.
+
+     Va como fragmento del SQL y no dentro del objeto del `SET ?`, porque
+     `NOW()` metido como valor se escaparía como texto.
+
+     Y se conserva con COALESCE en vez de sobrescribirse: es dato de
+     auditoría. Si el frontend manda el estado en cada guardado, un `NOW()`
+     pelado correría la hora de cierre con cada corrección de una observación,
+     y el campo pasaría a decir "cuándo se editó" en vez de "cuándo se cerró"
+     —para eso ya está `updated_at`—. La reapertura sí la borra, así que un
+     cierre posterior toma su propia hora nueva. */
+  const CIERRAN  = ['GESTIONADA', 'NO_LOGRADA', 'NO_APLICA', 'REPETIDA']
+  const REABREN  = ['PENDIENTE', 'EN_GESTION']
+  const cierre = set.estado === undefined ? ''
+    : CIERRAN.includes(set.estado) ? ', cerrada_at = COALESCE(cerrada_at, NOW())'
+    : REABREN.includes(set.estado) ? ', cerrada_at = NULL'
+    : ''
+
+  const [r] = await db.query(
+    `UPDATE h360_duelo_gestion SET ?${cierre} WHERE id = ?`, [set, id])
   return r.affectedRows > 0
 }
 
