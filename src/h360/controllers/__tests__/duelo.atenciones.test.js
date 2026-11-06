@@ -10,6 +10,30 @@ const util = require('util')
 
 jest.mock('../../config/db')
 const db = require('../../config/db')
+
+// El logger del repo (src/utils/logger.js) es winston con transportes a archivo
+// y a stderr; no pasa por console, así que espiar console no lo ve. Aquí se
+// reemplaza por un doble que no escribe nada y que, para CUALQUIER método que
+// se le pida (error, warn, info, log, child...), vuelca lo que recibe a
+// `mockLogger.escrito` con util.inspect en el momento de la llamada. El prefijo
+// `mock` del nombre es lo que deja a jest.mock (que se eleva al inicio del
+// archivo) referirse a la variable.
+const mockLogger = { escrito: [] }
+jest.mock('../../../utils/logger', () => {
+  const inspeccionar = require('util').inspect
+  const registrar = (...args) => { mockLogger.escrito.push(inspeccionar(args, { depth: null })) }
+  const logger = new Proxy({}, {
+    get: (_obj, metodo) => {
+      if (typeof metodo === 'symbol' || metodo === 'then' || metodo === '__esModule') return undefined
+      // child(meta) devuelve un logger que lleva `meta` en cada línea: lo que
+      // se le pase también es una vía de salida.
+      if (metodo === 'child') return (...args) => { registrar(...args); return logger }
+      return registrar
+    },
+  })
+  return logger
+})
+const logger = require('../../../utils/logger')
 const ctrl = require('../duelo_atenciones.controller')
 
 const resDoble = () => {
@@ -19,21 +43,54 @@ const resDoble = () => {
   return r
 }
 
-// Espía todos los métodos de console, no solo log y warn: un console.error en
-// un catch es justo donde se cuela el cuerpo de la petición. Lo que recibe cada
-// llamada se vuelca a texto EN EL MOMENTO de la llamada, con util.inspect, que
-// también imprime las propiedades de un Error (un `.sql` dentro de un Error sale
-// en el log). Guardar solo la referencia no sirve: si el código le quita la
-// propiedad al error después de loguearlo, la prueba vería el error ya limpio.
-const METODOS_CONSOLA = ['log', 'info', 'warn', 'error', 'debug']
-function espiarConsola() {
+// Todas las propiedades función de console, propias o heredadas. Quedan fuera
+// el constructor `Console` (una clase, no escribe nada) y los métodos de
+// Object.prototype (toString, hasOwnProperty...), que no son vías de salida y
+// que espiar rompería util.inspect. No se corta la cadena comparando con
+// `Object.prototype` porque la consola de jest viene de otro contexto (vm) y su
+// Object.prototype no es el de este archivo.
+const DE_OBJECT = new Set(Object.getOwnPropertyNames(Object.prototype))
+function metodosDeConsola() {
+  const nombres = new Set()
+  for (let o = console; o; o = Object.getPrototypeOf(o)) {
+    for (const nombre of Object.getOwnPropertyNames(o)) {
+      if (DE_OBJECT.has(nombre) || nombre === 'Console') continue
+      if (typeof Object.getOwnPropertyDescriptor(o, nombre).value === 'function') nombres.add(nombre)
+    }
+  }
+  return [...nombres]
+}
+
+// Guarda de logs: vigila por dónde podría salir texto hacia un log.
+//
+// Qué cubre:
+//   - TODAS las propiedades función de console, propias o heredadas (se
+//     enumeran con metodosDeConsola, no hay lista fija: la lista de cinco
+//     métodos que había dejaba fuera console.dir y console.dirxml).
+//   - TODOS los métodos del logger del repo (winston, src/utils/logger.js),
+//     que escribe a archivo y a stderr sin pasar por console. Está simulado
+//     arriba (mockLogger) y registra cualquier método que se le pida.
+// Qué NO cubre: escribir directo en process.stdout / process.stderr, otra
+// librería de logging que no sea ese logger, ni lo que corra fuera del
+// controlador (por ejemplo un manejador de errores global que serialice req).
+//
+// Lo que recibe cada llamada se vuelca a texto EN EL MOMENTO de la llamada, con
+// util.inspect, que también imprime las propiedades de un Error (un `.sql`
+// dentro de un Error sale en el log). Guardar solo la referencia no sirve: si
+// el código le quita la propiedad al error después de loguearlo, la prueba
+// vería el error ya limpio.
+function espiarRegistros() {
   const escrito = []
-  const espias = METODOS_CONSOLA.map(m => jest.spyOn(console, m).mockImplementation((...args) => {
+  mockLogger.escrito = escrito
+  const espias = metodosDeConsola().map(m => jest.spyOn(console, m).mockImplementation((...args) => {
     escrito.push(util.inspect(args, { depth: null }))
   }))
   return {
     volcado: () => escrito.join('\n'),
-    restaurar: () => espias.forEach(e => e.mockRestore()),
+    restaurar: () => {
+      espias.forEach(e => e.mockRestore())
+      mockLogger.escrito = []
+    },
   }
 }
 
@@ -280,11 +337,12 @@ describe('crear', () => {
   // La versión original de esta prueba juntaba los argumentos de console.log y
   // console.warn con `.flat().join(' ')`. Un `console.log('crear', req.body)` le
   // pasa el cuerpo como objeto, y join lo vuelve «[object Object]»: la prueba
-  // quedaba en verde con la fuga puesta. Por eso se usa util.inspect y se vigilan
-  // todos los métodos de console.
+  // quedaba en verde con la fuga puesta. Por eso se usa util.inspect y se
+  // vigilan todas las propiedades función de console y el logger del repo; lo
+  // que la guarda cubre y lo que no, está descrito en espiarRegistros.
   test('las notas no se escriben en el log', async () => {
     db.query = jest.fn(async () => [{ insertId: 7 }])
-    const consola = espiarConsola()
+    const consola = espiarRegistros()
     try {
       await ctrl.crear({
         params: { id: '5' },
@@ -300,13 +358,18 @@ describe('crear', () => {
   // Lo mismo cuando algo sale mal: el catch es donde un console.error(req.body)
   // parece razonable.
   test.each([
+    // El error trae `.sql` con el valor adentro, como el de mysql2. Sin eso, un
+    // volcado del error (logger.error(err)) no tendría nada que delatar.
     ['la base rechaza', async () => {
-      throw Object.assign(new Error('Data too long'), { code: 'ER_DATA_TOO_LONG' })
+      throw Object.assign(new Error('Data too long'), {
+        code: 'ER_DATA_TOO_LONG',
+        sql: "INSERT INTO h360_duelo_atenciones (gestion_id, notas) VALUES (5, 'SECRETO_CLINICO')",
+      })
     }, BODY_OK],
     ['el cuerpo no es válido (400)', null, { momento: 'no es hora', modalidad: 'PRESENCIAL' }],
   ])('las notas no se escriben en el log cuando %s', async (_caso, simulacion, base) => {
     if (simulacion) db.query = jest.fn(simulacion)
-    const consola = espiarConsola()
+    const consola = espiarRegistros()
     try {
       await ctrl.crear({
         params: { id: '5' }, body: { ...base, notas: 'SECRETO_CLINICO', motivo: 'SECRETO_MOTIVO' },
@@ -330,7 +393,7 @@ describe('crear', () => {
         sql: "INSERT INTO h360_duelo_atenciones (gestion_id, notas) VALUES (999, 'SECRETO_CLINICO')",
       })
     db.query = jest.fn(async () => { throw falla })
-    const consola = espiarConsola()
+    const consola = espiarRegistros()
     const res = resDoble(), next = jest.fn()
     try {
       await ctrl.crear({ params: { id: '999' }, body: { ...BODY_OK, notas: 'SECRETO_CLINICO' },
@@ -344,5 +407,85 @@ describe('crear', () => {
       expect(consola.volcado()).not.toContain('SECRETO_CLINICO')
       expect(res.cuerpo).toBeNull()
     } finally { consola.restaurar() }
+  })
+})
+
+// La guarda de logs tiene que ver todo lo que podría escribir; si no, es una
+// falsa guarda. Estas pruebas la ejercitan directamente, sin pasar por el
+// controlador: cada vía por la que un cuerpo de petición podría llegar a un log
+// tiene que dejar rastro en el volcado.
+describe('la guarda de logs ve cada vía de salida', () => {
+  const CUERPO = { notas: 'SECRETO_CLINICO' }
+
+  test('vigila cada propiedad función de console, no una lista fija', () => {
+    const guarda = espiarRegistros()
+    let sinVigilar
+    try {
+      sinVigilar = metodosDeConsola().filter(m => {
+        const marca = `MARCA_${m}`
+        try { console[m](marca) } catch { return true } // sin espía, algunos revientan
+        return !guarda.volcado().includes(marca)
+      })
+    } finally { guarda.restaurar() }
+    expect(sinVigilar).toEqual([])
+  })
+
+  test.each([
+    ['console.dir',    () => console.dir(CUERPO)],
+    ['console.dirxml', () => console.dirxml(CUERPO)],
+    ['logger.error',   () => logger.error('crear', CUERPO)],
+    ['logger.warn',    () => logger.warn('crear', CUERPO)],
+    ['logger.info',    () => logger.info('crear', CUERPO)],
+    ['logger.debug',   () => logger.debug('crear', CUERPO)],
+    ['logger.log con el nivel como primer argumento', () => logger.log('error', 'crear', CUERPO)],
+    ['logger.child(...).error', () => logger.child({ origen: 'duelo' }).error('crear', CUERPO)],
+    ['logger.child con el cuerpo de metadato', () => logger.child(CUERPO).info('crear')],
+    ['logger.error con un Error que trae .sql', () => logger.error(
+      Object.assign(new Error('falló'), { sql: "INSERT ... VALUES ('SECRETO_CLINICO')" }))],
+  ])('%s deja rastro en el volcado', (_via, emitir) => {
+    const guarda = espiarRegistros()
+    try {
+      emitir()
+      expect(guarda.volcado()).toContain('SECRETO_CLINICO')
+    } finally { guarda.restaurar() }
+  })
+
+  // listar es por donde las notas salen de verdad. Si un `console.log(data)`
+  // se cuela ahí, esta prueba lo atrapa.
+  test('listar no escribe las notas en ningún log', async () => {
+    const guarda = espiarRegistros()
+    const res = resDoble()
+    try {
+      await ctrl.listar({ params: { id: '5' }, user: PSICOLOGA }, res, jest.fn())
+      // Que las notas sí viajaron: sin esto, «no aparecen en el log» valdría
+      // también si la respuesta no las trajera.
+      expect(res.codigo).toBe(200)
+      expect(res.cuerpo.data[0].notas).toBe('contenido clínico')
+      expect(guarda.volcado()).not.toContain('contenido clínico')
+    } finally { guarda.restaurar() }
+  })
+})
+
+describe('crear exige un usuario en el login', () => {
+  // La psicóloga sale de req.user.usuario para poder auditar quién atendió. Con
+  // un token válido en rol pero sin nombre, guardar NULL deja la auditoría tan
+  // vacía como el Excel donde ese nombre se escribía a mano.
+  test.each([
+    ['sin usuario',                    { rol: 'psicologia' }],
+    ['usuario null',                   { rol: 'psicologia', usuario: null }],
+    ['usuario vacío',                  { rol: 'psicologia', usuario: '' }],
+    ['usuario de solo espacios',       { rol: 'psicologia', usuario: '   ' }],
+    ['usuario numérico',               { rol: 'psicologia', usuario: 42 }],
+    ['usuario que es un objeto',       { rol: 'psicologia', usuario: { nombre: 'JAZMIN' } }],
+    ['usuario que es un arreglo',      { rol: 'psicologia', usuario: ['JAZMIN'] }],
+    ['admin sin usuario',              { rol: 'admin' }],
+  ])('%s: 403 con mensaje y no escribe', async (_caso, user) => {
+    const res = resDoble(), next = jest.fn()
+    await ctrl.crear({ params: { id: '5' }, body: BODY_OK, user }, res, next)
+    expect(res.codigo).toBe(403)
+    // El mensaje explica la causa; no es el de «no tiene permiso».
+    expect(res.cuerpo.mensaje).toMatch(/usuario/)
+    expect(next).not.toHaveBeenCalled()
+    expect(db.query).not.toHaveBeenCalled()
   })
 })

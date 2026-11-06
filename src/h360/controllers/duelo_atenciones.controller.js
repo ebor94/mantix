@@ -23,6 +23,25 @@ function denegar(res) {
   })
 }
 
+// Quién atendió sale del login (no del cuerpo) para poder auditarlo. Un token
+// válido en rol pero sin nombre de usuario guardaría NULL en `psicologa` y en
+// `created_by`, y no habría forma de saber quién atendió: el mismo hueco que
+// tenía el Excel, donde ese nombre se escribía a mano. Solo vale un texto con
+// contenido; cualquier otra cosa (ausente, null, vacío, solo espacios, número,
+// objeto, arreglo) se trata como «no hay usuario».
+function usuarioDelLogin(req) {
+  const u = req.user.usuario
+  return typeof u === 'string' && u.trim() !== '' ? u : null
+}
+
+function sinUsuario(res) {
+  return res.status(403).json({
+    mensaje: 'No se pudo identificar a la persona que registra la atención: ' +
+      'la sesión no trae el nombre de usuario. Cierra sesión, ingresa de nuevo ' +
+      'y, si persiste, avisa a soporte.',
+  })
+}
+
 // GET /api/h360/duelo/gestion/:id/atenciones
 async function listar(req, res, next) {
   if (!puede(req)) return denegar(res)
@@ -35,18 +54,20 @@ async function listar(req, res, next) {
 // POST /api/h360/duelo/gestion/:id/atenciones
 async function crear(req, res, next) {
   if (!puede(req)) return denegar(res)
+  const psicologa = usuarioDelLogin(req)
+  if (!psicologa) return sinUsuario(res)
   try {
     const id = await svc.crearAtencion(req.params.id, {
       momento:             req.body?.momento,
       modalidad:           req.body?.modalidad,
       // Del login, no del cuerpo.
-      psicologa:           req.user.usuario,
+      psicologa,
       acompanante:         req.body?.acompanante ?? null,
       atendido_nombre:     req.body?.atendido_nombre ?? null,
       atendido_parentesco: req.body?.atendido_parentesco ?? null,
       motivo:              req.body?.motivo ?? null,
       notas:               req.body?.notas ?? null,
-      created_by:          req.user.usuario,
+      created_by:          psicologa,
     })
     res.status(201).json({ id })
   } catch (err) {
