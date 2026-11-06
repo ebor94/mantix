@@ -49,6 +49,7 @@ const ROLES_POR_GRUPO = [
   ['LDAP_GROUP_COORDINADOR',      'coordinador'],
   ['LDAP_GROUP_CONTABILIDAD',     'contabilidad'],
   ['LDAP_GROUP_RECEPCION',        'recepcion'],             // atiende exequias/ceremonias
+  ['LDAP_GROUP_PSICOLOGIA',       'psicologia'],            // R-56: duelo y posexequiales
   // Último a propósito: el tramitador solo paga exequias, así que si alguien
   // está además en otro grupo debe entrar con el rol de más alcance.
   ['LDAP_GROUP_TRAMITADOR',       'tramitador'],

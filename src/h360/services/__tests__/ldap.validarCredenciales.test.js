@@ -3,11 +3,11 @@ const { EventEmitter } = require('events');
 
 jest.mock('ldapjs', () => ({ createClient: jest.fn() }));
 const ldap = require('ldapjs');
-const { validarCredenciales, autenticarLDAP } = require('../ldap.service');
+const { validarCredenciales, autenticarLDAP, detectarRoles } = require('../ldap.service');
 
 const GRUPOS_H360 = ['LDAP_GROUP_ADMIN', 'LDAP_GROUP_ASESOR', 'LDAP_GROUP_ASISTENTE', 'LDAP_GROUP_TANATOLOGO',
   'LDAP_GROUP_ASIST_TANATOLOGO', 'LDAP_GROUP_SUPERVISORA', 'LDAP_GROUP_COORDINADOR', 'LDAP_GROUP_CONTABILIDAD',
-  'LDAP_GROUP_RECEPCION', 'LDAP_GROUP_TRAMITADOR'];
+  'LDAP_GROUP_RECEPCION', 'LDAP_GROUP_PSICOLOGIA', 'LDAP_GROUP_TRAMITADOR'];
 
 const ENTRADA = {
   dn: 'CN=Juan Pérez,OU=Usuarios,DC=olivos,DC=local',
@@ -213,5 +213,34 @@ describe('autenticarLDAP (H360) conserva su comportamiento', () => {
     await expect(autenticarLDAP('jperez', 'clave')).resolves.toEqual({
       usuario: 'jperez', nombre: 'Juan Pérez', email: 'jperez@olivos.local', rol: 'asistente', roles: ['asistente'],
     });
+  });
+});
+
+describe('el rol de psicología sale de su grupo del directorio', () => {
+  const DN_PSICOLOGIA = ['CN=Psicologia_360,OU=Grupos,DC=olivos,DC=local'];
+
+  test('quien está en el grupo de psicología entra con ese rol', () => {
+    process.env.LDAP_GROUP_PSICOLOGIA = 'Psicologia_360';
+    expect(detectarRoles(DN_PSICOLOGIA)).toContain('psicologia');
+  });
+
+  // Sin la variable de entorno el grupo no entra al mapa y detectarRoles
+  // devuelve []. Es el modo de falla que dejó a recepción sin poder entrar: el
+  // rol existía en el código y nadie avisaba de que faltaba la variable.
+  test('sin la variable de entorno el rol no existe', () => {
+    delete process.env.LDAP_GROUP_PSICOLOGIA;
+    expect(detectarRoles(DN_PSICOLOGIA)).not.toContain('psicologia');
+  });
+
+  // El tramitador va último a propósito en ROLES_POR_GRUPO. Psicología se
+  // agrega antes que él, así que quien esté en los dos grupos entra con el rol
+  // de más alcance y no con el de tramitador.
+  test('no desplaza al tramitador del último lugar', () => {
+    process.env.LDAP_GROUP_PSICOLOGIA = 'Psicologia_360';
+    process.env.LDAP_GROUP_TRAMITADOR = 'Tramitador_360';
+    const roles = detectarRoles([...DN_PSICOLOGIA, 'CN=Tramitador_360,OU=Grupos,DC=olivos,DC=local']);
+    // Sin esto, un rol ausente (indexOf = -1) pasaría la comparación de abajo.
+    expect(roles).toEqual(expect.arrayContaining(['psicologia', 'tramitador']));
+    expect(roles.indexOf('psicologia')).toBeLessThan(roles.indexOf('tramitador'));
   });
 });
