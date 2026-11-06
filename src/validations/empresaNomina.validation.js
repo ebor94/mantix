@@ -9,12 +9,13 @@ const filaNominaSchema = Joi.object({
   segundoNombre: Joi.string().max(80).allow('', null),
   primerApellido: Joi.string().max(80).allow('', null),
   segundoApellido: Joi.string().max(80).allow('', null),
-  estadoCivil: Joi.string().valid(...ESTADOS).allow('', null),
-  fechaNacimiento: Joi.date().iso().allow('', null),
+  estadoCivil: Joi.string().valid(...ESTADOS).empty('').allow(null),
+  fechaNacimiento: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).empty('').allow(null)
+    .messages({ 'string.pattern.base': 'fechaNacimiento debe ser AAAA-MM-DD' }),
   direccion: Joi.string().max(255).allow('', null),
   celular: Joi.string().max(20).allow('', null),
   email: Joi.string().email().max(150).allow('', null),
-  planTipo: Joi.string().valid(...PLANES).allow('', null)
+  planTipo: Joi.string().valid(...PLANES).empty('').allow(null)
 });
 
 // Autoregistro público del interesado (link abierto): mínimos + contacto.
