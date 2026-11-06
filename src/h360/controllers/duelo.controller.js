@@ -69,9 +69,10 @@ function rangoPorDefecto(ahora = new Date()) {
 }
 
 /**
- * Las sedes de otras ciudades se reconocen por el centro de costo o porque el
- * convenio es otra sucursal de Olivos. No se adivina por el municipio: el
- * municipio es donde falleció, no donde es el homenaje.
+ * Las sedes de otras ciudades se reconocen por el centro de costo, y solo por
+ * él. No se adivina por el municipio (es donde falleció, no donde es el
+ * homenaje) ni por el convenio ni por la entidad: ver «Lo que NO es señal», más
+ * abajo.
  *
  * La sede se compara por CONTENIDO sobre el texto normalizado (el ERP la escribe
  * a mano: «Sede San José», «Sede  Arauca» con dos espacios), y con la misma
@@ -82,43 +83,78 @@ function rangoPorDefecto(ahora = new Date()) {
 const SEDES_LOCALES = ['GRAN COLOMBIA', 'SAN JOSE', 'SAN JOSÉ', 'CRISTO REY CUCUTA', 'MASCOTAS']
 
 /**
- * Sedes de otras ciudades que el módulo RECONOCE como tales.
+ * Las sedes de otras ciudades que el módulo RECONOCE como tales: el ERP dice el
+ * municipio por su propio centro de costo, así que para ellas la rama de «otra
+ * ciudad» sale CONFIRMADA.
  *
- * Arranca VACÍA a propósito y no es un olvido: los centros de costo foráneos que
- * trae el ERP no están medidos —el diseño nombra Bucaramanga, Bogotá y
- * Barrancabermeja como CONVENIOS («OLIVOS <ciudad>»), que es la otra señal y se
- * reconoce abajo— y escribir acá un nombre inventado afirmaría como confirmado
- * justo lo que nadie verificó. Con la lista vacía, toda sede que no es local cae
- * en OTRA_CIUDAD sin confirmar, que es el lado prudente. Agregar una es una
- * decisión que se ve en el código, con el nombre tal como lo escribe el ERP y
- * normalizado como normalizarSede lo deja.
+ * La lista sale de una medición, no de una suposición. Medido el 2026-11-06
+ * sobre `salas_ordenes_view` con `tipo_documento = 50`: 3975 órdenes de servicio
+ * de los últimos 365 días. Es el universo COMPLETO de centros de costo, no una
+ * muestra:
+ *
+ *   2888  Sede Gran Colombia   locales (SEDES_LOCALES): 3512
+ *    422  Mascotas             "
+ *    107  Sede San José        "
+ *     95  Cristo Rey Cucuta    "
+ *    288  Sede Pamplona        foráneas (esta lista): 462
+ *    128  Sede Saravena        "
+ *     36  Sede  Arauca         "  (dos espacios en el ERP)
+ *     10  Sede Tame            "
+ *      1  (vacío)              sin sede: no se adivina, RESIDENCIA sin confirmar
+ *
+ * Una sede NUEVA que el ERP gane mañana no está acá y no es un olvido: cae en
+ * OTRA_CIUDAD «sin confirmar» (ver decidirRama) hasta que alguien la agregue a
+ * esta lista a conciencia. Ése es el diseño: lo que nadie midió no se afirma.
+ * Agregar una es una decisión que se ve en el código, con el nombre tal como lo
+ * escribe el ERP y normalizado como normalizarSede lo deja; tres pruebas lo
+ * cuidan (que sea exactamente lo medido, que esté normalizado y que ninguna
+ * entrada sea una sede local, que es lo que gana siempre).
+ *
+ * A diferencia de SEDES_LOCALES, la sede se compara COMPLETA y no por contenido:
+ * reconocer de más es lo que se está evitando.
  */
-const SEDES_FORANEAS_CONOCIDAS = Object.freeze([])
+const SEDES_FORANEAS_CONOCIDAS = Object.freeze(['SEDE PAMPLONA', 'SEDE SARAVENA', 'SEDE ARAUCA', 'SEDE TAME'])
 
-const convenioDeOtraSucursal = orden =>
-  /^OLIVOS (?!CUCUTA)/.test(String(orden?.convenio ?? '').toUpperCase().trim())
+/*
+ * LO QUE NO ES SEÑAL DE «OTRA CIUDAD». No lo repongas por intuición.
+ *
+ * esOtraCiudad comprobaba antes que `convenio` (el `descripcion_convenio` del
+ * ERP) empezara por «OLIVOS <otra ciudad>». Se quitó. Medido el 2026-11-06 sobre
+ * las mismas 3975 órdenes de servicio de 365 días:
+ *
+ *   1. Era código muerto: 0 de 3975 órdenes tienen un `descripcion_convenio` que
+ *      empiece por «OLIVOS <otra ciudad>». No coincidió ni una vez en un año.
+ *   2. El patrón «OLIVOS <ciudad>» SÍ existe en el ERP, pero en otro campo:
+ *      `descripcion_entidad`, con 328 órdenes (Olivos Bogotá 95, Bucaramanga 68,
+ *      Cali 37, Barrancabermeja 26, Villavicencio 16 y nueve ciudades más). Por
+ *      eso parece la respuesta, y pasar la comprobación de `convenio` a `entidad`
+ *      es la tentación.
+ *   3. Pero `entidad` es la sucursal que VENDIÓ el plan, NO dónde es el
+ *      homenaje (lo resolvió el dueño del sistema). El homenaje de esas 328
+ *      órdenes es en Cúcuta. Mirarla mandaría a gestión telefónica a 264
+ *      familias que están en Cúcuta.
+ *
+ * La única señal que funciona es el centro de costo: la sede.
+ */
 
 /**
- * La orden va a la rama de otra ciudad: su sede no es ninguna de las locales, o
- * el convenio es de otra sucursal de Olivos. Responde a DÓNDE se gestiona, no a
- * cuánto se sabe (eso lo responde otraCiudadReconocida).
+ * La orden va a la rama de otra ciudad: tiene sede y no es ninguna de las
+ * locales. Responde a DÓNDE se gestiona, no a cuánto se sabe (eso lo responde
+ * otraCiudadReconocida). Sin sede no se adivina.
  */
 function esOtraCiudad(orden) {
   const sede = normalizarSede(orden?.sede)
-  if (sede !== '' && !SEDES_LOCALES.some(s => sede.includes(s))) return true
-  return convenioDeOtraSucursal(orden)
+  return sede !== '' && !SEDES_LOCALES.some(s => sede.includes(s))
 }
 
 /**
- * Y además lo SABEMOS: hay una señal que dice que el servicio es de otra ciudad,
- * no solo la ausencia de una sede local. Son las dos que ya estaban en el
- * código: el convenio «OLIVOS <otra ciudad>» y la lista explícita de sedes
- * foráneas conocidas (hoy vacía). La sede se compara completa y normalizada, no
- * por contenido: reconocer de más es lo que se está evitando.
+ * Y además lo SABEMOS: la sede es una de las foráneas medidas
+ * (SEDES_FORANEAS_CONOCIDAS), comparada completa y normalizada. Es la única
+ * señal de otra ciudad que se afirma; el resto de las sedes no locales va a la
+ * misma rama pero sin confirmar.
  */
 function otraCiudadReconocida(orden) {
-  const sede = normalizarSede(orden?.sede)
-  return (sede !== '' && SEDES_FORANEAS_CONOCIDAS.includes(sede)) || convenioDeOtraSucursal(orden)
+  return SEDES_FORANEAS_CONOCIDAS.includes(normalizarSede(orden?.sede))
 }
 
 /**
@@ -133,15 +169,16 @@ const RAMA = Object.freeze({ SALA: 'SALA', RESIDENCIA: 'RESIDENCIA', OTRA_CIUDAD
  *
  * Hay cuatro orígenes y dos de ellos son suposiciones:
  *   1. La ubicación del homenaje que H360 ya registró (sala o residencia): dato.
- *   2. Una señal que dice que el servicio es de otra ciudad —el convenio de otra
- *      sucursal de Olivos, o una sede foránea conocida—: dato.
+ *   2. Una sede foránea conocida (SEDES_FORANEAS_CONOCIDAS: Pamplona, Saravena,
+ *      Arauca, Tame): dato, el ERP dice el municipio por su centro de costo.
+ *      Ni el convenio ni la entidad cuentan: ver «Lo que NO es señal».
  *   3. Una sede que no es local y que nadie reconoce: se gestiona como otra
  *      ciudad, pero SIN confirmar. Una sede desconocida no es un dato: es la
  *      ausencia de uno. Si el ERP gana un centro de costo nuevo o renombra uno
- *      local («Sede Gran Colombia II»), esas familias caen en esta rama, y
- *      afirmarlo las dejaría con la insignia plena de «otra ciudad»: nadie las
- *      visita ni las llama como locales, que es justo lo que son. Sin confirmar,
- *      la pantalla dice que no se sabe y alguien lo revisa.
+ *      local de modo que ya no contenga su nombre («Sede GC»), esas familias
+ *      caen en esta rama, y afirmarlo las dejaría con la insignia plena de «otra
+ *      ciudad»: nadie las visita ni las llama como locales, que es justo lo que
+ *      son. Sin confirmar, la pantalla dice que no se sabe y alguien lo revisa.
  *   4. Nada de lo anterior (sede local o vacía): RESIDENCIA POR DEFECTO, sin
  *      confirmar. Nadie sabe aún dónde será la velación (casi la mitad de las
  *      filas, y justo las más recientes: las órdenes de ayer y hoy, que todavía

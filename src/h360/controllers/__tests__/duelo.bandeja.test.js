@@ -57,8 +57,10 @@ const ORDENES = [
     convenio: 'Planes TRADICIONAL', fecha_fallecimiento: '2026-11-04' },
   { orden_servicio: 'MAS-9', nombre_ser_querido: 'MASCOTA MAX', sede: 'Mascotas',
     convenio: 'Otros Servicios', fecha_fallecimiento: '2026-11-04' },
+  // Convenio corriente a propósito: la rama de otra ciudad sale de la SEDE, y un
+  // convenio «Olivos <ciudad>» aquí haría pasar por buena una señal que no lo es.
   { orden_servicio: 'A-3', nombre_ser_querido: 'ANA RUIZ', sede: 'Sede Pamplona',
-    convenio: 'Olivos Bucaramanga', fecha_fallecimiento: '2026-11-04' },
+    convenio: 'Planes TRADICIONAL', fecha_fallecimiento: '2026-11-04' },
 ]
 
 const ASISTENCIA_A1 = {
@@ -556,62 +558,83 @@ describe('bandeja', () => {
 
     // Era el único lugar del módulo donde lo DESCONOCIDO se presentaba como un
     // dato. «No es ninguna de las cinco sedes locales» no es lo mismo que «es de
-    // otra ciudad»: si el ERP gana o renombra un centro de costo local, esas
-    // familias salen en la rama de otra ciudad, y antes salían con la insignia
-    // plena y sin el «sin confirmar» que el módulo construyó justo para esto;
-    // nadie las visita ni las llama como locales.
+    // otra ciudad»: si el ERP gana un centro de costo, esa familia sale en la
+    // rama de otra ciudad y nadie sabe si es verdad. Lo que se afirma es lo que
+    // el ERP ya mostró: las cuatro sedes foráneas medidas (462 de 3975 órdenes
+    // en 365 días, 2026-11-06). Todo lo demás se gestiona igual, sin confirmar.
     describe('una sede desconocida es una suposición, no un dato', () => {
       const CONVENIO_LOCAL = 'Planes TRADICIONAL'
+      // Un centro de costo que el ERP nunca ha devuelto: ni local ni de la lista.
+      // Se inventa acá, en una prueba, y jamás en el código de producción.
+      const SEDE_NUEVA = 'Sede Los Patios'
       const soloOrden = o => { ks.ordenesDelRango = jest.fn(async () => [o]) }
+      const ramaYMarca = (res, orden) => [fila(res, orden).rama, fila(res, orden).rama_confirmada]
 
-      test('la sede que no es local ni se reconoce como foránea: OTRA_CIUDAD SIN confirmar', async () => {
-        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
+      test('la sede que no es local ni foránea conocida: OTRA_CIUDAD SIN confirmar', async () => {
+        soloOrden({ orden_servicio: 'P-1', sede: SEDE_NUEVA, convenio: CONVENIO_LOCAL })
         const { res } = await llamar(ctrl.bandeja)
-        expect(fila(res, 'P-1').rama).toBe('OTRA_CIUDAD')
-        expect(fila(res, 'P-1').rama_confirmada).toBe(false)
+        expect(ramaYMarca(res, 'P-1')).toEqual(['OTRA_CIUDAD', false])
       })
 
-      // Ninguna de las sedes foráneas que el ERP devuelve de verdad está
-      // reconocida: las cuatro salen en la rama telefónica como suposición.
+      // Las cuatro sedes foráneas que el ERP devuelve de verdad, con el texto
+      // EXACTO con que llegan —capitalización y los dos espacios de «Sede  Arauca»—:
+      // el ERP dice el municipio por su propio centro de costo, así que es un dato.
       test.each(['Sede Pamplona', 'Sede Saravena', 'Sede  Arauca', 'Sede Tame'])(
-        '%j: la rama es OTRA_CIUDAD y no se afirma', async sede => {
+        '%j: la rama es OTRA_CIUDAD y se afirma', async sede => {
           soloOrden({ orden_servicio: 'P-9', sede, convenio: CONVENIO_LOCAL })
           const { res } = await llamar(ctrl.bandeja)
-          expect([fila(res, 'P-9').rama, fila(res, 'P-9').rama_confirmada])
-            .toEqual(['OTRA_CIUDAD', false])
+          expect(ramaYMarca(res, 'P-9')).toEqual(['OTRA_CIUDAD', true])
         })
 
-      // El convenio «OLIVOS <otra ciudad>» sí dice de dónde es el servicio: es la
-      // señal que ya existía y sigue valiendo como dato.
-      test('el convenio de otra sucursal de Olivos sí es un dato: confirmada', async () => {
-        soloOrden({ orden_servicio: 'P-2', sede: 'Sede Pamplona', convenio: 'Olivos Bucaramanga' })
+      // El convenio «OLIVOS <ciudad>» no es señal (0 de 3975 órdenes en un año lo
+      // traen, y la sucursal que aparece en `entidad` es quien vendió el plan, no
+      // dónde es el homenaje). Con cualquier sede, el resultado es el mismo que con
+      // un convenio corriente.
+      test.each([
+        ['local',     'Sede Gran Colombia', 'RESIDENCIA',  false],
+        ['foránea',   'Sede Tame',          'OTRA_CIUDAD', true],
+        ['desconocida', SEDE_NUEVA,         'OTRA_CIUDAD', false],
+      ])('el convenio de otra sucursal de Olivos no cambia la rama de una sede %s', async (_, sede, rama, marca) => {
+        soloOrden({ orden_servicio: 'P-2', sede, convenio: 'Olivos Bucaramanga' })
         const { res } = await llamar(ctrl.bandeja)
-        expect(fila(res, 'P-2').rama).toBe('OTRA_CIUDAD')
-        expect(fila(res, 'P-2').rama_confirmada).toBe(true)
+        expect(ramaYMarca(res, 'P-2')).toEqual([rama, marca])
       })
 
       test('una sede local sin homenaje registrado sigue en RESIDENCIA sin confirmar', async () => {
         soloOrden({ orden_servicio: 'P-3', sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL })
         const { res } = await llamar(ctrl.bandeja)
-        expect([fila(res, 'P-3').rama, fila(res, 'P-3').rama_confirmada])
-          .toEqual(['RESIDENCIA', false])
+        expect(ramaYMarca(res, 'P-3')).toEqual(['RESIDENCIA', false])
       })
 
-      // La lista arranca VACÍA a propósito: los centros de costo foráneos del ERP
-      // no están medidos y un nombre inventado afirmaría como confirmado algo que
-      // nadie verificó, que es el defecto que esto cierra. Congelada para que no
-      // se le agregue uno en tiempo de ejecución, lejos de la vista.
-      test('la lista de sedes foráneas conocidas arranca vacía y es inmutable', () => {
-        expect(ctrl.SEDES_FORANEAS_CONOCIDAS).toEqual([])
-        expect(Object.isFrozen(ctrl.SEDES_FORANEAS_CONOCIDAS)).toBe(true)
+      // La lista es una decisión que se ve en el código: son exactamente las
+      // cuatro sedes medidas, ya normalizadas, y congelada para que no se le
+      // agregue una en tiempo de ejecución, lejos de la vista.
+      describe('SEDES_FORANEAS_CONOCIDAS', () => {
+        test('son las cuatro sedes medidas y es inmutable', () => {
+          expect(ctrl.SEDES_FORANEAS_CONOCIDAS)
+            .toEqual(['SEDE PAMPLONA', 'SEDE SARAVENA', 'SEDE ARAUCA', 'SEDE TAME'])
+          expect(Object.isFrozen(ctrl.SEDES_FORANEAS_CONOCIDAS)).toBe(true)
+        })
+
+        // Se compara contra el texto ya normalizado: una entrada escrita con
+        // minúsculas o con dos espacios no coincidiría nunca y nadie lo notaría.
+        test('cada entrada está escrita como normalizarSede la deja', () => {
+          for (const sede of ctrl.SEDES_FORANEAS_CONOCIDAS)
+            expect(ctrl.normalizarSede(sede)).toBe(sede)
+        })
+
+        // SEDES_LOCALES gana: una entrada que contuviera una sede local nunca
+        // se vería como foránea (y es justo lo que esta prueba no deja pasar).
+        test('ninguna entrada es una sede local', () => {
+          for (const sede of ctrl.SEDES_FORANEAS_CONOCIDAS)
+            expect(ctrl.esOtraCiudad({ sede })).toBe(true)
+        })
       })
 
-      // La propiedad que no se puede perder: las dos salen del mismo if, así que
-      // no hay fila con rama sin su marca.
       test('toda fila trae las dos cosas: rama y si es un dato', async () => {
         ks.ordenesDelRango = jest.fn(async () => [
-          { orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL },
-          { orden_servicio: 'P-2', sede: 'Sede Pamplona', convenio: 'Olivos Bucaramanga' },
+          { orden_servicio: 'P-1', sede: SEDE_NUEVA, convenio: CONVENIO_LOCAL },
+          { orden_servicio: 'P-2', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL },
           { orden_servicio: 'P-3', sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL },
         ])
         const { res } = await llamar(ctrl.bandeja)
@@ -622,20 +645,26 @@ describe('bandeja', () => {
 
       // Una rama supuesta no se cae del filtro: la psicóloga que pide «otra
       // ciudad» tiene que ver también las que están sin confirmar.
-      test('la rama supuesta sigue entrando en el filtro por rama', async () => {
-        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
+      test('la rama supuesta y la confirmada entran las dos en el filtro por rama', async () => {
+        ks.ordenesDelRango = jest.fn(async () => [
+          { orden_servicio: 'P-1', sede: SEDE_NUEVA, convenio: CONVENIO_LOCAL },
+          { orden_servicio: 'P-2', sede: 'Sede Tame', convenio: CONVENIO_LOCAL },
+        ])
         const { res } = await llamar(ctrl.bandeja, { rama: 'OTRA_CIUDAD' })
         expect(res.codigo).toBe(200)
-        expect(fila(res, 'P-1').rama_confirmada).toBe(false)
+        expect(ramaYMarca(res, 'P-1')).toEqual(['OTRA_CIUDAD', false])
+        expect(ramaYMarca(res, 'P-2')).toEqual(['OTRA_CIUDAD', true])
       })
 
-      // El homenaje registrado en H360 sigue mandando sobre cualquier sede.
-      test('el homenaje de H360 manda sobre una sede desconocida, y es un dato', async () => {
-        soloOrden({ orden_servicio: 'P-1', sede: 'Sede Pamplona', convenio: CONVENIO_LOCAL })
-        db.query = jest.fn(async () => [[{ ...ASISTENCIA_A1, contrato: 'P-1' }]])
-        const { res } = await llamar(ctrl.bandeja)
-        expect([fila(res, 'P-1').rama, fila(res, 'P-1').rama_confirmada]).toEqual(['SALA', true])
-      })
+      // El homenaje registrado en H360 sigue mandando sobre cualquier sede,
+      // conocida o no, y es un dato.
+      test.each([['desconocida', SEDE_NUEVA], ['foránea conocida', 'Sede Pamplona']])(
+        'el homenaje de H360 manda sobre una sede %s, y es un dato', async (_, sede) => {
+          soloOrden({ orden_servicio: 'P-1', sede, convenio: CONVENIO_LOCAL })
+          db.query = jest.fn(async () => [[{ ...ASISTENCIA_A1, contrato: 'P-1' }]])
+          const { res } = await llamar(ctrl.bandeja)
+          expect(ramaYMarca(res, 'P-1')).toEqual(['SALA', true])
+        })
     })
   })
 
@@ -1507,8 +1536,9 @@ describe('buscar', () => {
   })
 })
 
-// Las sedes que el ERP devuelve de verdad (30 días de producción), tal como
-// llegan: con tilde en «San José» y con dos espacios en «Sede  Arauca».
+// Las sedes que el ERP devuelve de verdad (3975 órdenes de servicio de 365 días,
+// medidas el 2026-11-06), tal como llegan: con tilde en «San José» y con dos
+// espacios en «Sede  Arauca».
 describe('esOtraCiudad con las sedes reales del ERP', () => {
   const CONVENIO_LOCAL = 'Planes TRADICIONAL'
 
@@ -1531,18 +1561,20 @@ describe('esOtraCiudad con las sedes reales del ERP', () => {
     expect(ctrl.esOtraCiudad({ sede: 'SEDE  PAMPLONA', convenio: CONVENIO_LOCAL })).toBe(true)
   })
 
-  // La sede y el convenio son dos señales independientes: una sola basta.
-  test('el convenio de otra sucursal de Olivos basta aunque la sede sea local', () => {
-    expect(ctrl.esOtraCiudad({ sede: 'Sede Gran Colombia', convenio: 'Olivos Bucaramanga' })).toBe(true)
-  })
+  // Antes el convenio «OLIVOS <otra ciudad>» bastaba. Se midió: 0 de 3975 órdenes
+  // en un año lo traen en `descripcion_convenio`; el patrón existe en `entidad`
+  // (328 órdenes), que es la sucursal que vendió el plan y no dónde es el
+  // homenaje. La señal es la sede, nada más.
+  test.each(['Olivos Bucaramanga', 'OLIVOS BOGOTA', 'Olivos Barrancabermeja', 'Olivos Cucuta'])(
+    'el convenio %j no manda a nadie a otra ciudad: una sede local sigue siendo local', convenio => {
+      expect(ctrl.esOtraCiudad({ sede: 'Sede Gran Colombia', convenio })).toBe(false)
+    })
 
-  test('el convenio de Olivos Cucuta es local', () => {
-    expect(ctrl.esOtraCiudad({ sede: 'Sede Gran Colombia', convenio: 'Olivos Cucuta' })).toBe(false)
-  })
-
-  test('sin sede ni convenio no se adivina otra ciudad', () => {
+  test('sin sede no se adivina otra ciudad, ni siquiera con un convenio de otra sucursal', () => {
     expect(ctrl.esOtraCiudad({ sede: '', convenio: '' })).toBe(false)
     expect(ctrl.esOtraCiudad({ sede: null, convenio: null })).toBe(false)
+    expect(ctrl.esOtraCiudad({ sede: '', convenio: 'Olivos Bucaramanga' })).toBe(false)
+    expect(ctrl.esOtraCiudad({ convenio: 'Olivos Bucaramanga' })).toBe(false)
     expect(ctrl.esOtraCiudad({})).toBe(false)
   })
 })
@@ -1553,30 +1585,58 @@ describe('esOtraCiudad con las sedes reales del ERP', () => {
 describe('otraCiudadReconocida: cuándo «otra ciudad» es un dato y no una suposición', () => {
   const CONVENIO_LOCAL = 'Planes TRADICIONAL'
 
-  // Las cuatro sedes foráneas que el ERP devuelve de verdad (30 días de
-  // producción). Ninguna está en la lista de conocidas: ninguna se afirma.
+  // Las cuatro sedes foráneas del ERP (462 de 3975 órdenes en 365 días), con el
+  // texto exacto con que llegan: se reconocen, y siguen yendo a otra ciudad.
   test.each(['Sede Pamplona', 'Sede Saravena', 'Sede  Arauca', 'Sede Tame'])(
-    '%j no es una sede foránea reconocida', sede => {
-      expect(ctrl.otraCiudadReconocida({ sede, convenio: CONVENIO_LOCAL })).toBe(false)
-      // Y sigue yendo a la rama de otra ciudad: lo que cambia es la certeza.
+    '%j es una sede foránea reconocida', sede => {
+      expect(ctrl.otraCiudadReconocida({ sede, convenio: CONVENIO_LOCAL })).toBe(true)
       expect(ctrl.esOtraCiudad({ sede, convenio: CONVENIO_LOCAL })).toBe(true)
     })
 
-  test('el convenio OLIVOS <otra ciudad> sí es señal reconocida', () => {
-    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: 'Olivos Bucaramanga' })).toBe(true)
-    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Pamplona', convenio: 'OLIVOS BOGOTA' })).toBe(true)
+  // Sin esta prueba, un editor que colapsara los dos espacios de la prueba de
+  // arriba la dejaría pasando sin ejercitar lo que tiene que ejercitar.
+  test('«Sede  Arauca» se prueba con sus dos espacios, y coincide también limpia', () => {
+    expect('Sede  Arauca').toMatch(/ {2}/)
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede  Arauca' })).toBe(true)
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Arauca' })).toBe(true)
   })
 
-  test('el convenio de Olivos Cucuta no es otra ciudad', () => {
-    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: 'Olivos Cucuta' })).toBe(false)
+  test('no distingue capitalización ni espacios de más', () => {
+    for (const sede of ['SEDE PAMPLONA', 'sede   saravena', '  Sede Arauca  ', 'sEdE  tAmE'])
+      expect(ctrl.otraCiudadReconocida({ sede })).toBe(true)
   })
 
-  test('una sede local no es foránea ni reconocida', () => {
-    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio: CONVENIO_LOCAL })).toBe(false)
+  // Una sede que el ERP gane mañana: va a la rama telefónica, sin confirmar,
+  // hasta que alguien la agregue a la lista a conciencia.
+  test.each(['Sede Los Patios', 'Sede Villa del Rosario'])(
+    '%j no está medida: no se reconoce, pero sigue yendo a otra ciudad', sede => {
+      expect(ctrl.otraCiudadReconocida({ sede, convenio: CONVENIO_LOCAL })).toBe(false)
+      expect(ctrl.esOtraCiudad({ sede, convenio: CONVENIO_LOCAL })).toBe(true)
+    })
+
+  // Reconocer de más es lo que se está evitando: la sede se compara completa.
+  test('se compara la sede completa y no por contenido', () => {
+    expect(ctrl.otraCiudadReconocida({ sede: 'Sede Pamplona Norte' })).toBe(false)
+    expect(ctrl.esOtraCiudad({ sede: 'Sede Pamplona Norte' })).toBe(true)
   })
 
-  test('sin sede ni convenio no se reconoce nada', () => {
+  test.each(['Olivos Bucaramanga', 'OLIVOS BOGOTA', 'Olivos Cucuta'])(
+    'el convenio %j NO es señal reconocida', convenio => {
+      expect(ctrl.otraCiudadReconocida({ sede: 'Sede Gran Colombia', convenio })).toBe(false)
+      expect(ctrl.otraCiudadReconocida({ sede: '', convenio })).toBe(false)
+      expect(ctrl.otraCiudadReconocida({ convenio })).toBe(false)
+    })
+
+  // SEDES_LOCALES gana: ninguna de las cuatro foráneas vuelve foránea a una local.
+  test.each(['Sede Gran Colombia', 'Mascotas', 'Cristo Rey Cucuta', 'Sede San José', 'Sede San Jose', 'MASCOTAS  CUCUTA'])(
+    'la sede local %j no es foránea ni reconocida', sede => {
+      expect(ctrl.otraCiudadReconocida({ sede, convenio: CONVENIO_LOCAL })).toBe(false)
+      expect(ctrl.esOtraCiudad({ sede, convenio: CONVENIO_LOCAL })).toBe(false)
+    })
+
+  test('sin sede no se reconoce nada', () => {
     expect(ctrl.otraCiudadReconocida({ sede: '', convenio: '' })).toBe(false)
+    expect(ctrl.otraCiudadReconocida({ sede: null })).toBe(false)
     expect(ctrl.otraCiudadReconocida({})).toBe(false)
   })
 
