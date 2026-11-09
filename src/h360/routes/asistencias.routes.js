@@ -13,6 +13,12 @@ router.get ('/:id',                ctrl.obtener)
 router.get ('/:id/historial',      ctrl.obtenerHistorial)
 // Solo lectura del ERP: lo ve quien ya puede ver la asistencia.
 router.get ('/:id/orden-servicio', ctrl.ordenServicioErp)
+// F-10: los R-34 que se le emitieron al proveedor por el contrato del caso.
+// Lleva los valores pactados con cada proveedor, así que no se abre al
+// personal del laboratorio: lo ven los mismos que ya ven los servicios
+// prestados del caso.
+const ROLES_VER_R34 = ['asesor', 'supervisora', 'coordinador', 'contabilidad', 'admin']
+router.get ('/:id/r34',            requireRol(...ROLES_VER_R34), ctrl.r34DeLaAsistencia)
 router.get ('/:id/etapa/:etapa',   ctrl.obtenerEtapa)
 router.post('/',                 requireRol('asesor', 'coordinador', 'admin'), ctrl.crear)
 router.post('/:id/actores',      requireRol('asesor', 'coordinador', 'admin'), ctrl.asignarActores)

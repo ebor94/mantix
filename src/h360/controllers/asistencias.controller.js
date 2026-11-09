@@ -470,6 +470,50 @@ async function ordenServicioErp(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /asistencias/:id/r34 — los R-34 emitidos para el contrato del caso.
+ *
+ * Es la misma lista que en /r34 sale bajo "Ya emitidos en este contrato", pero
+ * entrando por la asistencia: quien sigue el caso quiere ver qué se le
+ * contrató a cada proveedor sin tener que acordarse del número de contrato.
+ *
+ * Se busca por contrato porque esa es la llave del R-34: la tabla no guarda
+ * asistencia_id, el documento pertenece al contrato del ERP y no al caso de
+ * H360. El número se resuelve aquí, con el id de la asistencia, y no se recibe
+ * por parámetro: así nadie se trae los R-34 de un contrato ajeno cambiando la
+ * URL.
+ *
+ * La fecha de entrega se formatea en SQL a texto plano. Es un DATE, y
+ * devuelta como objeto Express la serializa en UTC: la pantalla mostraría el
+ * día anterior.
+ */
+async function r34DeLaAsistencia(req, res, next) {
+  try {
+    const [[a]] = await db.query('SELECT contrato FROM asistencias WHERE id = ?', [req.params.id])
+    if (!a) return res.status(404).json({ mensaje: 'Asistencia no encontrada' })
+
+    // Sin contrato no hay nada que buscar. El número se registra en el
+    // encuentro (F-05), así que un caso nuevo todavía no lo tiene, y buscar
+    // por "0" o "PTE" traería los R-34 de cualquier otro caso con el mismo
+    // relleno.
+    if (!contratoValido(a.contrato))
+      return res.json({ contrato: null, emitidos: [] })
+
+    const [emitidos] = await db.query(
+      `SELECT id, consecutivo, grupo, servicio_desc, cantidad, costo,
+              proveedor_nit, proveedor_nombre,
+              DATE_FORMAT(fecha_entrega, '%Y-%m-%d') AS fecha_entrega,
+              hora_prestacion, observaciones,
+              autoriza_usuario, autoriza_nombre,
+              enviado_at, enviado_a, created_at
+         FROM h360_r34
+        WHERE contrato = ?
+        ORDER BY consecutivo_num DESC`, [a.contrato])
+
+    res.json({ contrato: a.contrato, emitidos })
+  } catch (err) { next(err) }
+}
+
 async function obtenerHistorial(req, res, next) {
   try {
     const { id } = req.params
@@ -1110,7 +1154,7 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
   }
 }
 
-module.exports = { ordenServicioErp, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento,
+module.exports = { ordenServicioErp, r34DeLaAsistencia, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento,
   // Se exportan para probarlos: de ellos depende que un caso pueda avanzar, y
   // equivocarse deja a alguien pidiendo un formato que no puede llenar.
   hayVehiculoQueDesinfectar, requisitosEfectivos }
