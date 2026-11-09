@@ -786,7 +786,8 @@ async function getRechazados(usuario) {
       { model: Seguro, as: 'seguros' },
       { model: ContratoValor, as: 'contrato', include: [{ model: Tarifa, as: 'tarifa' }] },
       { model: Empresa, as: 'empresa' },
-      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] }
+      { model: Convenio, as: 'convenio', attributes: ['id', 'slug', 'nombre'] },
+      { model: Usuario, as: 'asesor', attributes: ['id', 'nombre', 'apellido'] }
     ],
     order: [['updatedAt', 'DESC']]
   });
