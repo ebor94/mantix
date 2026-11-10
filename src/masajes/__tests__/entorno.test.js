@@ -5,6 +5,7 @@ const BASE = Object.freeze({
   JWT_SECRET: 'a'.repeat(40), PORTERIA_JWT_SECRET: 'b'.repeat(40),
   MASAJES_JWT_SECRET: 'm'.repeat(40),
   MSJ_GRUPO_ADMIN_DN: 'CN=GG-Masajes-Admin,OU=Grupos,DC=olivos,DC=local',
+  LDAP_URL: 'ldaps://dc.olivos.local', LDAP_BASE_DN: 'DC=olivos,DC=local', LDAP_BIND_USER: 'svc', LDAP_BIND_PASS: 'x',
 });
 const leer = (extra = {}) => leerEntorno({ ...BASE, ...extra });
 
@@ -70,6 +71,12 @@ describe('leerEntorno', () => {
     expect(leer({ MSJ_APP_URL: 'http://mantix.losolivos.co/masajes' }).ok).toBe(false);
     expect(leer({ MSJ_APP_URL: 'https://mantix.losolivos.co/masajes" onclick="x' }).ok).toBe(false);
     expect(leer({ MSJ_APP_URL: 'https://mantix.losolivos.co/masajes' }).config.appUrl).toBe('https://mantix.losolivos.co/masajes');
+  });
+
+  test('sin la configuración del directorio activo el módulo queda deshabilitado (el login no podría funcionar)', () => {
+    expect(leer({ LDAP_URL: '' })).toMatchObject({ ok: false, motivo: expect.stringMatching(/LDAP_URL/) });
+    expect(leer({ LDAP_BIND_PASS: '' }).ok).toBe(false);
+    expect(leer({ LDAP_URL: 'http://dc' }).ok).toBe(false);
   });
 
   test('nunca lanza', () => {

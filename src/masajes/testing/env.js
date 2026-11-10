@@ -9,6 +9,10 @@ const DEFAULTS = {
   PORTERIA_JWT_SECRET: 'test-jwt-porteria-0123456789abcdef0123',
   MASAJES_JWT_SECRET: 'test-jwt-masajes-0123456789abcdef01234567',
   MSJ_GRUPO_ADMIN_DN: 'CN=GG-Masajes-Admin,OU=Grupos,DC=olivos,DC=local',
+  LDAP_URL: 'ldap://127.0.0.1:1',
+  LDAP_BASE_DN: 'DC=olivos,DC=local',
+  LDAP_BIND_USER: 'svc_prueba',
+  LDAP_BIND_PASS: 'prueba',
   LOG_LEVEL: 'error',
 };
 

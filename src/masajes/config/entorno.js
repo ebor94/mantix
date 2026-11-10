@@ -3,6 +3,7 @@ const vacia = (v) => v === undefined || v === null || String(v).trim() === '';
 const recortada = (v) => (vacia(v) ? undefined : String(v).trim());
 
 const CONEXION = ['DB_HOST', 'DB_USER', 'DB_PASSWORD'];
+const LDAP = ['LDAP_URL', 'LDAP_BASE_DN', 'LDAP_BIND_USER', 'LDAP_BIND_PASS'];
 const OTROS_SECRETOS = ['JWT_SECRET', 'IDENTIDAD_JWT_SECRET', 'TRK_JWT_SECRET', 'PORTERIA_JWT_SECRET'];
 const FRANJAS_DEFECTO = '08:00,09:00,10:00,14:00,15:00,16:00';
 
@@ -40,6 +41,12 @@ function leerConexion(env = process.env, { paraMigrar = false } = {}) {
 function leerEntorno(env = process.env) {
   const conexion = leerConexion(env);
   if (!conexion.ok) return conexion;
+
+  // El login valida contra el AD (ldap.service de H360). Sin estas variables, ldapjs lanza en cada intento:
+  // mejor dejar el módulo en 503 desde el arranque, con el motivo en el log.
+  const faltanLdap = LDAP.filter((n) => vacia(env[n]));
+  if (faltanLdap.length) return { ok: false, motivo: `Faltan variables del directorio activo: ${faltanLdap.join(', ')}` };
+  if (!/^ldaps?:\/\//i.test(String(env.LDAP_URL).trim())) return { ok: false, motivo: 'LDAP_URL debe empezar por ldap:// o ldaps://' };
 
   const secreto = recortada(env.MASAJES_JWT_SECRET);
   if (!secreto) return { ok: false, motivo: 'Falta MASAJES_JWT_SECRET' };
