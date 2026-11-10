@@ -55,7 +55,13 @@ async function vincular(conn, id, usuario) {
   return r.affectedRows === 1;
 }
 
+/** Dentro de la transacción de agendar: ¿existe y está activo? Bloqueo compartido: no se desactiva a mitad. */
+async function estaActivoCompartido(conn, id) {
+  const [filas] = await conn.execute('SELECT activo FROM msj_beneficiarios WHERE id = ? FOR SHARE', [id]);
+  return Boolean(filas[0] && filas[0].activo);
+}
+
 module.exports = {
   listarParaImportar, insertar, actualizarDatosListado,
-  buscarPorUsuario, obtenerActivoPorUsuario, porCorreoParaVincular, vincular,
+  buscarPorUsuario, obtenerActivoPorUsuario, porCorreoParaVincular, vincular, estaActivoCompartido,
 };

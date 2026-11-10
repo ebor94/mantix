@@ -13,4 +13,14 @@ async function activasEnRango(ejecutor, desde, hasta, { conBeneficiario }) {
   return filas;
 }
 
-module.exports = { activasEnRango };
+/** Inserta una cita activa. Un ER_DUP_ENTRY de slot_key o cupo_key lo traduce el servicio (mapDuplicado). */
+async function insertarActiva(conn, d) {
+  const [r] = await conn.execute(
+    `INSERT INTO msj_citas (beneficiario_id, semana_id, inicio, fin, periodo, estado, slot_key, cupo_key, creado_por, actualizado_por)
+     VALUES (?, ?, ?, ?, ?, 'agendada', ?, ?, ?, ?)`,
+    [d.beneficiarioId, d.semanaId, d.inicio, d.fin, d.periodo, d.slotKey, d.cupoKey, d.actor, d.actor],
+  );
+  return r.insertId;
+}
+
+module.exports = { activasEnRango, insertarActiva };

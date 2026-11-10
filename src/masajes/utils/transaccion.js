@@ -17,4 +17,19 @@ async function enTransaccion(bd, fn) {
   }
 }
 
-module.exports = { enTransaccion };
+// InnoDB puede abortar una transacción sana por deadlock o espera de bloqueo cuando hay inserciones simultáneas
+// sobre el mismo índice UNIQUE. Esas sí se reintentan completas; los errores de negocio y los demás de BD, nunca.
+const REINTENTABLES = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+
+async function conReintentos(fn, { intentos = 3, esperaMs = 25 } = {}) {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!err || !REINTENTABLES.has(err.code) || i >= intentos) throw err;
+      if (esperaMs) await new Promise((r) => setTimeout(r, esperaMs * i + Math.floor(Math.random() * esperaMs)));
+    }
+  }
+}
+
+module.exports = { enTransaccion, conReintentos };
