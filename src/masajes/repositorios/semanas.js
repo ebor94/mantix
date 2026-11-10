@@ -23,4 +23,29 @@ async function publicadaPorLunesCompartida(conn, fechaLunes) {
   return filas[0] || null;
 }
 
-module.exports = { listarEnRango, publicadaPorLunesCompartida };
+/** Crea la semana; el ER_DUP_ENTRY de uq_msj_semanas_fecha_inicio lo traduce el servicio. */
+async function insertar(conn, { fechaInicio, capacidad, notas, actor }) {
+  const [r] = await conn.execute(
+    "INSERT INTO msj_semanas (fecha_inicio, estado, capacidad_franja, notas, creado_por) VALUES (?, 'borrador', ?, ?, ?)",
+    [fechaInicio, capacidad, notas, actor],
+  );
+  return r.insertId;
+}
+
+async function obtener(ejecutor, id) {
+  const [filas] = await ejecutor.execute(`SELECT ${COLUMNAS}, notas FROM msj_semanas WHERE id = ?`, [id]);
+  return filas[0] || null;
+}
+
+/** Bloqueo exclusivo: espera a que terminen las reservas en curso de la semana (que toman FOR SHARE). */
+async function obtenerParaModificar(conn, id) {
+  const [filas] = await conn.execute(`SELECT ${COLUMNAS}, notas FROM msj_semanas WHERE id = ? FOR UPDATE`, [id]);
+  return filas[0] || null;
+}
+
+async function cambiarEstado(conn, id, desde, hacia) {
+  const [r] = await conn.execute('UPDATE msj_semanas SET estado = ? WHERE id = ? AND estado = ?', [hacia, id, desde]);
+  return r.affectedRows === 1;
+}
+
+module.exports = { listarEnRango, publicadaPorLunesCompartida, insertar, obtener, obtenerParaModificar, cambiarEstado };

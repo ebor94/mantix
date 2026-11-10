@@ -57,4 +57,29 @@ async function marcarCancelada(conn, id, motivo, actor) {
   return r.affectedRows === 1;
 }
 
-module.exports = { activasEnRango, insertarActiva, obtenerParaModificar, mover, marcarCancelada };
+/** ¿Hay alguna cita activa de la semana que se solape con [inicio, fin)? Con bloqueo: ve lo último confirmado. */
+async function hayActivaSolapada(conn, semanaId, inicio, fin) {
+  const [filas] = await conn.execute(
+    'SELECT 1 AS si FROM msj_citas WHERE semana_id = ? AND slot_key IS NOT NULL AND inicio < ? AND fin > ? LIMIT 1 FOR SHARE',
+    [semanaId, fin, inicio],
+  );
+  return filas.length > 0;
+}
+
+async function contarActivasDeSemana(ejecutor, semanaId) {
+  const [[f]] = await ejecutor.execute('SELECT COUNT(*) AS n FROM msj_citas WHERE semana_id = ? AND slot_key IS NOT NULL', [semanaId]);
+  return Number(f.n);
+}
+
+/** agendada → asistio | no_asistio. El cupo sigue consumido (spec §5.3): no se tocan las claves. */
+async function marcarAsistencia(conn, id, estado, actor) {
+  const [r] = await conn.execute(
+    "UPDATE msj_citas SET estado = ?, actualizado_por = ? WHERE id = ? AND estado = 'agendada'", [estado, actor, id],
+  );
+  return r.affectedRows === 1;
+}
+
+module.exports = {
+  activasEnRango, insertarActiva, obtenerParaModificar, mover, marcarCancelada,
+  hayActivaSolapada, contarActivasDeSemana, marcarAsistencia,
+};

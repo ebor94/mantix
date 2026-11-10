@@ -1,4 +1,4 @@
-// Citas: agendar (Tarea 8), reprogramar y cancelar (Tarea 9). Asistencia: Tarea 10.
+// Citas: agendar (Tarea 8), reprogramar y cancelar (Tarea 9), asistencia (Tarea 10).
 const { E } = require('../utils/MasajesError');
 const { enTransaccion, conReintentos } = require('../utils/transaccion');
 const { limpiar } = require('../utils/texto');
@@ -163,7 +163,26 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
     }));
   }
 
-  return { agendar, reprogramar, cancelar };
+  /** Admin (lo exige la ruta): marca asistencia de una cita que ya empezó. El cupo sigue consumido. */
+  async function marcarAsistencia({ citaId, asistio, actor, auditoria = {} }) {
+    if (!esId(citaId)) throw E.NO_ENCONTRADA();
+    exigirActor(actor);
+    if (typeof asistio !== 'boolean') throw E.VALIDACION([{ campo: 'asistio', motivo: 'ASISTIO_INVALIDO' }]);
+    const { reglas } = herramientas();
+    const estado = asistio ? 'asistio' : 'no_asistio';
+
+    return enTransaccion(bd, async (conn) => {
+      const cita = await citasRepo.obtenerParaModificar(conn, citaId, null);
+      if (!cita) throw E.NO_ENCONTRADA();
+      if (cita.estado !== 'agendada') throw E.ESTADO_INVALIDO();
+      if (!reglas.puedeMarcarAsistencia({ ahora: reloj(), cita })) throw E.VALIDACION([{ campo: 'citaId', motivo: 'AUN_NO_EMPIEZA' }]);
+      if (!(await citasRepo.marcarAsistencia(conn, cita.id, estado, actor))) throw E.ESTADO_INVALIDO();
+      await historial.registrar(conn, { beneficiarioId: cita.beneficiario_id, citaId: cita.id, accion: 'asistencia', motivo: estado, usuario: actor, esAdmin: true, auditoria });
+      return { id: cita.id, beneficiario_id: cita.beneficiario_id, inicio: cita.inicio, estado };
+    });
+  }
+
+  return { agendar, reprogramar, cancelar, marcarAsistencia };
 }
 
 module.exports = { crearServicioCitas, mapDuplicado };
