@@ -65,6 +65,13 @@ describe('leerEntorno', () => {
     expect(leer({ MSJ_GRUPO_ADMIN_DN: '' }).ok).toBe(false);
   });
 
+  test('MSJ_APP_URL debe ser https (va como enlace en los correos)', () => {
+    expect(leer({ MSJ_APP_URL: 'javascript:alert(1)' }).ok).toBe(false);
+    expect(leer({ MSJ_APP_URL: 'http://mantix.losolivos.co/masajes' }).ok).toBe(false);
+    expect(leer({ MSJ_APP_URL: 'https://mantix.losolivos.co/masajes" onclick="x' }).ok).toBe(false);
+    expect(leer({ MSJ_APP_URL: 'https://mantix.losolivos.co/masajes' }).config.appUrl).toBe('https://mantix.losolivos.co/masajes');
+  });
+
   test('nunca lanza', () => {
     expect(() => leerEntorno({})).not.toThrow();
     expect(leerEntorno({}).ok).toBe(false);

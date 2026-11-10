@@ -65,6 +65,9 @@ function leerEntorno(env = process.env) {
     anticipacionModificarH: entero(env, 'MSJ_ANTICIPACION_MODIFICAR_H', 24, { max: 720 }),
     smsTopeDiario: entero(env, 'MSJ_SMS_TOPE_DIARIO', 100, { min: 1, max: 10000 }),
   };
+  const appUrl = recortada(env.MSJ_APP_URL) ?? 'https://mantix.losolivos.co/masajes';
+  if (!/^https:\/\/[^\s"'<>]+$/.test(appUrl)) return { ok: false, motivo: 'MSJ_APP_URL debe ser una URL https' };
+
   const malo = Object.values(nums).find((r) => !r.ok);
   if (malo) return { ok: false, motivo: malo.motivo };
   const valores = Object.fromEntries(Object.entries(nums).map(([k, r]) => [k, r.valor]));
@@ -81,7 +84,7 @@ function leerEntorno(env = process.env) {
       grupoAdminDn: grupoAdminDn.toLowerCase(),
       dominiosAutovinculo: (recortada(env.MSJ_DOMINIOS_AUTOVINCULO) ?? 'losolivos.co')
         .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
-      appUrl: recortada(env.MSJ_APP_URL) ?? 'https://mantix.losolivos.co/masajes',
+      appUrl,
       outboxMaxIntentos: 5,
       db: conexion.db,
     },

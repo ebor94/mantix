@@ -78,3 +78,21 @@ La spec §9 dice "se reutiliza el login AD existente (JWT con `username` y `grou
 - **Todo o nada:** una fila con error (nombre de más de 150 caracteres, persona repetida en el archivo, coincide con dos beneficiarios existentes) bloquea la importación completa. Celular o correo inválidos son avisos: la persona se importa sin ese dato.
 - **Match:** nombre normalizado (sin tildes ni mayúsculas) + celular. La importación nunca cambia `ad_usuario` ni `activo`.
 - **Zip bomb:** `utils/zipSeguro.js` revisa el directorio central antes de que exceljs descomprima (máx. 200 entradas y 50 MB declarados). Confía en los tamaños declarados; la defensa en profundidad es la subida solo para admin, 2 MB y el tope de 500 filas.
+
+## 7. Adaptadores externos (Tarea 12, 2026-11-10)
+
+### Háblame — contrato confirmado
+Leído en la documentación oficial (docs.hablame.co: `/reference/envio-sms-post`, `/reference/autenticacion`, `/reference/limites`):
+- `POST https://www.hablame.co/api/sms/v5/send` (se configura en `MSJ_HABLAME_URL`).
+- Autenticación: cabecera `X-Hablame-Key`. La doc también la acepta en el query o en el cuerpo; el adaptador usa **solo la cabecera**. La key se genera en el panel de Háblame (`mesh.hablame.co`). `MSJ_HABLAME_CUENTA` y `MSJ_HABLAME_TOKEN` **no los usa la v5**: quedan opcionales.
+- Cuerpo: `{ priority: true, messages: [{ to, text }] }`. Respuesta OK: `statusCode: 200` y el id en `payLoad.messages[].id`. Errores: `{ statusCode, errorCode, statusMessage }` (p. ej. 403 para JSON malformado, 401 para key inválida, 429 por límite).
+- **No documentado (verificar en staging con un celular TIC):** formato exacto de `to` (el adaptador envía `573XXXXXXXXX`), largo máximo y codificación. El texto se mantiene en ≤ 160 caracteres GSM-7 sin tildes.
+
+### Google Calendar
+`@googleapis/calendar` + `google-auth-library` (los paquetes oficiales por separado, no el `googleapis` completo). Scope `calendar.events`, `subject` solo desde `MSJ_GOOGLE_IMPERSONAR`, eventos `visibility: private` sin celular ni cargo.
+
+### Correo
+Transporte nodemailer propio con las mismas variables `EMAIL_*` de Mantix y STARTTLS obligatorio. No se usa `emailService.enviarNotificacion`: interpola HTML sin escapar y atrapa los errores (el outbox necesita que fallen para reintentar).
+
+### Requisito de despliegue: `fix/npm-audit` antes que Masajes
+`npm audit` marca `jws@3.2.2` (la que usa `jsonwebtoken`) con *"Improperly Verifies HMAC Signature"* (< 3.2.3). Afecta la verificación HS256 del token de Masajes. La rama `fix/npm-audit` (commit `31a18f8`) la sube a 3.2.3. **Fusionar esa rama a `main` antes de desplegar Masajes**, y luego rebasar `feature/masajes` sobre ella. La copia `jws@4.0.1` que trae `google-auth-library` no está afectada.
