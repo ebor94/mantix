@@ -10,11 +10,18 @@
 -- Tres decisiones del modelo que vale la pena dejar escritas, porque las tres
 -- salieron de mirar los datos reales de la hoja y no son obvias:
 --
--- 1. La periodicidad NO es de la actividad: es del par actividad × tipo de
---    vehículo. En la hoja, «desinfección choque» son 15 días para los de
---    traslado y 30 para las carrozas. Guardarla en la actividad obligaría a
---    tener dos actividades con el mismo nombre, y el catálogo empezaría a
---    mentir. Por eso existe h360_desinf_regla.
+-- 1. La periodicidad va en el par actividad × tipo de vehículo, no en la
+--    actividad. Hoy cada actividad aplica a un solo tipo o con la misma
+--    periodicidad en los dos, pero la hoja se lleva a mano y eso cambia; con
+--    la periodicidad dentro de la actividad, el día que una pida ritmos
+--    distintos por tipo habría que duplicar la actividad y el catálogo
+--    empezaría a mentir. Por eso existe h360_desinf_regla.
+--
+--    OJO con el choque: «choque» (15 días, traslado) y «choque-choque»
+--    (30 días, carroza) son DOS actividades distintas, no una con dos ritmos.
+--    La primera versión de este archivo lo modeló como una sola y estaba mal;
+--    lo corrige h360_desinfecciones_carga_hoja.sql para las bases que ya
+--    corrieron esa versión.
 --
 -- 2. La fecha próxima se PROGRAMA, no se calcula. En la hoja, las próximas
 --    limpiezas caen 12, 13, 14, 15, 16 y 21 de noviembre: un vehículo por día,
@@ -228,7 +235,8 @@ DEALLOCATE PREPARE aplicar;
 INSERT INTO h360_desinf_actividad (nombre, descripcion) VALUES
   ('Lavado y polichado',  'Lavado exterior y polichado de la carrocería. La hace el lavadero.'),
   ('Limpieza y lavado',   'Limpieza interior y lavado general. La hace el lavadero.'),
-  ('Desinfección choque', 'Desinfección por choque del compartimiento. La ejecuta el operario y exige evidencia fotográfica.')
+  ('Desinfección choque', 'Desinfección por choque del compartimiento. La ejecuta el operario y exige evidencia fotográfica.'),
+  ('Desinfección choque-choque', 'Desinfección por doble choque del compartimiento. La ejecuta el operario y exige evidencia fotográfica.')
 ON DUPLICATE KEY UPDATE nombre = nombre;
 
 -- La matriz de la hoja, sin interpretar nada: «CARROZAS - NECRO(traslado)»
@@ -240,8 +248,8 @@ SELECT a.id, t.tipo, t.dias, t.registro FROM h360_desinf_actividad a
     SELECT 'Lavado y polichado',        'TRASLADO',       30,       'ORDEN_SERVICIO' UNION ALL
     SELECT 'Limpieza y lavado',         'CARROZA',        15,       'ORDEN_SERVICIO' UNION ALL
     SELECT 'Limpieza y lavado',         'TRASLADO',       15,       'ORDEN_SERVICIO' UNION ALL
-    SELECT 'Desinfección choque',       'CARROZA',        30,       'EVIDENCIA'      UNION ALL
-    SELECT 'Desinfección choque',       'TRASLADO',       15,       'EVIDENCIA'
+    SELECT 'Desinfección choque',       'TRASLADO',       15,       'EVIDENCIA'      UNION ALL
+    SELECT 'Desinfección choque-choque','CARROZA',        30,       'EVIDENCIA'
   ) t ON t.act = a.nombre
 ON DUPLICATE KEY UPDATE
   periodicidad_dias = VALUES(periodicidad_dias),
