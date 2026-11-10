@@ -192,6 +192,14 @@ describe('validarCredenciales', () => {
     expect(ldap.createClient).not.toHaveBeenCalled();
   });
 
+  test('el usuario tal como se escribió no va al log si no tiene forma de usuario (podría ser una contraseña)', async () => {
+    directorio({ svc: cliente({ entradas: [] }) });
+    await validarCredenciales('Mi Clave#2026!', 'x').catch(() => {});
+    const escrito = console.log.mock.calls.flat().join(' ');
+    expect(escrito).not.toMatch(/clave#2026!/i);
+    expect(escrito).toContain('[formato no válido]');
+  });
+
   test('directorio caído → AD_NO_DISPONIBLE', async () => {
     directorio({ svc: cliente({ bind: (dn, pw, cb) => cb(new Error('connect ECONNREFUSED')) }) });
     const err = await validarCredenciales('jperez', 'clave').catch((e) => e);
