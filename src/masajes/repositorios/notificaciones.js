@@ -11,4 +11,18 @@ async function encolar(conn, { citaId, tipo, canal, clave }) {
   );
 }
 
-module.exports = { encolar };
+/** Al reprogramar o cancelar: lo pendiente habla del horario anterior y ya no debe salir. */
+async function descartarPendientes(conn, citaId) {
+  await conn.execute("UPDATE msj_notificaciones SET estado = 'descartado' WHERE cita_id = ? AND estado = 'pendiente'", [citaId]);
+}
+
+/** ¿El spa recibió alguna vez esta cita? Decide si se le escribe "reprogramada"/"cancelada" o nada. */
+async function huboEnvioAlSpa(conn, citaId) {
+  const [filas] = await conn.execute(
+    "SELECT 1 AS si FROM msj_notificaciones WHERE cita_id = ? AND tipo IN ('spa_nueva', 'spa_reprogramada') AND estado = 'enviado' LIMIT 1",
+    [citaId],
+  );
+  return filas.length > 0;
+}
+
+module.exports = { encolar, descartarPendientes, huboEnvioAlSpa };

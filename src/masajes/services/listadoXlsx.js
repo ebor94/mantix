@@ -12,6 +12,7 @@ const ExcelJS = require('exceljs');
 const { E } = require('../utils/MasajesError');
 const { inspeccionarZip } = require('../utils/zipSeguro');
 const { normalizarCelular } = require('../dominio/telefono');
+const { limpiar } = require('../utils/texto');
 
 const MAX_FILAS = 500;
 const FILAS_BUSQUEDA_ENCABEZADO = 10;
@@ -30,15 +31,6 @@ const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
 const CORREO = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
 
 const errorArchivo = (motivo) => E.VALIDACION([{ campo: 'archivo', motivo }]);
-
-/** Quita caracteres de control y de ancho cero; saltos de línea y tabs pasan a espacio. */
-function limpiar(s) {
-  return String(s)
-    .replace(/[\t\r\n\u2028\u2029]+/g, ' ')
-    .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2060\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 const sinTildes = (s) => s.normalize('NFD').replace(/\p{M}/gu, '');
 const normalizarEncabezado = (s) => sinTildes(limpiar(s)).toUpperCase().replace(/[^A-Z0-9]/g, '');
