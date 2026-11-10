@@ -26,6 +26,23 @@ const ROLES_POR_GRUPO = [
   ['LDAP_GROUP_TRAMITADOR',       'tramitador'],
 ]
 
+// Pertenencia EXACTA a un grupo. Antes se usaba dn.includes(nombre): un grupo "H360AdminViejo", o cualquier DN
+// con "H360Admin" en una OU, daba el rol de admin. Portería ya lo hacía bien (esDelGrupo en su auth.service).
+// - Si el valor configurado es un DN completo (CN=…,OU=…), se compara el DN entero.
+// - Si es solo el nombre del grupo, se compara el CN (primer componente del DN), completo.
+// Mayúsculas y espacios alrededor de "=" y "," no cuentan. Las comas escapadas (\,) del CN se respetan.
+const RDN = /^\s*cn\s*=\s*((?:\\.|[^,\\])*?)\s*(?:,|$)/i
+const normalizarDn = (dn) => String(dn).split(/(?<!\\),/).map(p => p.trim().replace(/\s*=\s*/, '=')).join(',').toLowerCase()
+function esDelGrupo(dn, grupo) {
+  if (typeof dn !== 'string' || !grupo) return false
+  if (/^\s*cn\s*=.+,/i.test(grupo)) return normalizarDn(dn) === normalizarDn(grupo)
+  const m = RDN.exec(dn)
+  return Boolean(m) && m[1].toLowerCase() === String(grupo).trim().toLowerCase()
+}
+
+/** Para el log: solo nombres con forma de usuario. Si alguien escribe su contraseña como usuario, no queda escrita. */
+const usuarioParaLog = (u) => (/^[a-z0-9._-]{1,64}$/.test(u) ? u : '[formato no válido]')
+
 /** Pares [nombreDeGrupo, rol] de las variables que sí están definidas. */
 const ROLE_MAP = () => ROLES_POR_GRUPO
   .map(([envVar, rol]) => [String(process.env[envVar] ?? '').trim(), rol])
@@ -189,6 +206,43 @@ async function listarMiembrosGrupo(groupName) {
   return miembros
 }
 
+/**
+ * Diagnóstico de SOLO LECTURA para el cambio a comparación exacta de grupos (antes era por subcadena).
+ * Por cada grupo configurado (y los de administradores del dominio del respaldo) busca los grupos cuyo CN lo
+ * CONTIENE sin ser exactamente él, y lista sus miembros activos que NO están en el grupo exacto: son quienes
+ * tenían el rol solo por la subcadena y lo pierden con la corrección.
+ * No detecta el caso del nombre dentro de una OU (el AD no filtra memberOf por subcadena); es raro.
+ * Retorna [{ rol, grupo, grupoParecido, usuarios: [sAMAccountName] }].
+ */
+async function diagnosticarRolesPorSubcadena() {
+  const domainBase = (process.env.LDAP_BASE_DN || '').split(',').filter(p => p.trim().toUpperCase().startsWith('DC=')).join(',')
+  const base = domainBase || process.env.LDAP_BASE_DN
+  const configurados = [...ROLE_MAP(), ['Admins. del dominio', 'admin (respaldo)'], ['Domain Admins', 'admin (respaldo)']]
+    .map(([grupo, rol]) => [/^\s*cn\s*=/i.test(grupo) ? (RDN.exec(grupo) || [])[1] || grupo : grupo, rol])
+
+  const cliente = createClient()
+  try {
+    await bindAsync(cliente, process.env.LDAP_BIND_USER, process.env.LDAP_BIND_PASS)
+    const miembrosDe = async (dnGrupo) => (await searchAsync(cliente, base, `(&${USER_FILTER}(memberOf=${escapeFilter(dnGrupo)}))`, ['sAMAccountName']))
+      .map(e => extraerAtributos(e).sam).filter(Boolean)
+    const resultado = []
+    for (const [grupo, rol] of configurados) {
+      const parecidos = await searchAsync(cliente, base, `(&(objectClass=group)(cn=*${escapeFilter(grupo)}*))`, ['cn'])
+      const dnDe = (e) => e.objectName?.toString() || e.dn?.toString() || ''
+      const exactos = parecidos.filter(e => esDelGrupo(dnDe(e), grupo))
+      const conRolExacto = new Set()
+      for (const e of exactos) for (const u of await miembrosDe(dnDe(e))) conRolExacto.add(u.toLowerCase())
+      for (const e of parecidos.filter(x => !esDelGrupo(dnDe(x), grupo))) {
+        const usuarios = (await miembrosDe(dnDe(e))).filter(u => !conRolExacto.has(u.toLowerCase())).sort()
+        if (usuarios.length) resultado.push({ rol, grupo, grupoParecido: dnDe(e), usuarios })
+      }
+    }
+    return resultado
+  } finally {
+    cliente.destroy()
+  }
+}
+
 /** Error del directorio con un código estable para quien llama; el mensaje es el de siempre. */
 function errorDirectorio(message, codigo) {
   const err = new Error(message)
@@ -215,7 +269,7 @@ async function validarCredenciales(usuarioRaw, password) {
   // Un bind con contraseña vacía es anónimo y el AD lo acepta: nunca puede valer como login.
   if (!usuario || !password) throw errorDirectorio('Usuario o contraseña incorrectos', 'CREDENCIALES_INVALIDAS')
 
-  console.log(`[LDAP] Autenticando usuario: ${usuario}`)
+  console.log(`[LDAP] Autenticando usuario: ${usuarioParaLog(usuario)}`)
 
   // --- Paso 1: bind como cuenta de servicio ---
   const svcClient = createClient()
@@ -304,16 +358,15 @@ async function autenticarLDAP(usuarioRaw, password) {
  * que se propone por defecto.
  */
 function detectarRoles(memberOf) {
+  const grupos = Array.isArray(memberOf) ? memberOf : []
   const roles = []
   for (const [groupName, rol] of ROLE_MAP()) {
-    if (memberOf.some(dn => dn.includes(groupName))) roles.push(rol)
+    if (grupos.some(dn => esDelGrupo(dn, groupName))) roles.push(rol)
   }
   if (roles.length) return roles
 
-  // Fallback temporal: admins de dominio → rol admin en H360
-  const esAdminDominio = memberOf.some(dn =>
-    dn.includes('Admins. del dominio') || dn.includes('Domain Admins')
-  )
+  // Fallback temporal: admins de dominio → rol admin en H360 (grupo exacto, nunca por subcadena)
+  const esAdminDominio = grupos.some(dn => esDelGrupo(dn, 'Admins. del dominio') || esDelGrupo(dn, 'Domain Admins'))
   return esAdminDominio ? ['admin'] : []
 }
 
@@ -363,4 +416,4 @@ async function buscarUsuarioPorSam(sam) {
   }
 }
 
-module.exports = { autenticarLDAP, validarCredenciales, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles }
+module.exports = { autenticarLDAP, validarCredenciales, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles, esDelGrupo, diagnosticarRolesPorSubcadena }
