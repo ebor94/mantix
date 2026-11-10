@@ -120,8 +120,34 @@ async function contarConCupoEnPeriodo(ejecutor, periodo) {
   return Number(f.n);
 }
 
+// ---- Worker y recordatorios (Tareas 13 y 14) ----
+
+/** Lo que necesita una notificación: la cita y los datos de contacto del beneficiario. */
+async function obtenerParaNotificar(ejecutor, id) {
+  const [filas] = await ejecutor.execute(
+    `SELECT c.id, c.inicio, c.fin, c.periodo, c.estado, c.google_event_id,
+            b.nombre AS b_nombre, b.cargo AS b_cargo, b.celular AS b_celular, b.correo AS b_correo
+       FROM msj_citas c JOIN msj_beneficiarios b ON b.id = c.beneficiario_id WHERE c.id = ?`,
+    [id],
+  );
+  return filas[0] || null;
+}
+
+async function guardarEventoGoogle(ejecutor, id, eventId) {
+  await ejecutor.execute('UPDATE msj_citas SET google_event_id = ? WHERE id = ?', [eventId, id]);
+}
+
+async function agendadasEntre(ejecutor, desde, hasta) {
+  const [filas] = await ejecutor.execute(
+    "SELECT id, inicio, fin, created_at FROM msj_citas WHERE estado = 'agendada' AND inicio >= ? AND inicio < ? ORDER BY inicio",
+    [desde, hasta],
+  );
+  return filas;
+}
+
 module.exports = {
   activasEnRango, insertarActiva, obtenerParaModificar, mover, marcarCancelada,
   hayActivaSolapada, contarActivasDeSemana, marcarAsistencia,
   delBeneficiario, listarAdmin, contarConCupoEnPeriodo, ESTADOS,
+  obtenerParaNotificar, guardarEventoGoogle, agendadasEntre,
 };

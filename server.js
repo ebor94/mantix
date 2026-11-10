@@ -34,6 +34,9 @@ sequelize.authenticate()
     // SP-3: cron cleanup OTPs (limpiar expirados > 24h cada hora)
     require('./src/sv/jobs/otpCleanup.job').start();
 
+    // Agenda de Masajes: outbox y recordatorios. Solo con MSJ_JOBS_ENABLED=true (en UNA instancia de pm2).
+    require('./src/masajes/jobs').start();
+
     // Iniciar servidor
     // Servidor HTTP explícito: Mantix + Socket.IO de TRIKIPELUDOS (namespace /trk)
     const server = http.createServer(app);

@@ -17,4 +17,13 @@ async function registrar(conn, { beneficiarioId, citaId = null, accion, inicioAn
   );
 }
 
-module.exports = { registrar };
+/** Inicio anterior de la reprogramación que dejó la cita en `inicioActual` (para el correo "antes → ahora"). */
+async function inicioAnteriorDe(ejecutor, citaId, inicioActual) {
+  const [filas] = await ejecutor.execute(
+    "SELECT inicio_anterior FROM msj_cita_historial WHERE cita_id = ? AND accion = 'reprogramada' AND inicio_nuevo = ? ORDER BY id DESC LIMIT 1",
+    [citaId, inicioActual],
+  );
+  return filas[0] ? filas[0].inicio_anterior : null;
+}
+
+module.exports = { registrar, inicioAnteriorDe };
