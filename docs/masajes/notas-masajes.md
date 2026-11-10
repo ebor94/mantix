@@ -67,5 +67,7 @@ La spec §9 dice "se reutiliza el login AD existente (JWT con `username` y `grou
 
 - **Rama:** `feature/masajes`, creada desde `origin/main` (`e2c64cc`, que ya incluye Portería).
 - **Instalado:** `dayjs@1.11.23` y `nock@15.0.6` (dev), con `--save-exact`. `supertest` y `joi` ya estaban.
-- **No instalado:** `colombian-holidays` (un solo mantenedor, ~4 mil descargas semanales, depende de `pascua`). Los festivos son datos fijos y la Ley 18 de 1983 los define con reglas simples: en la Tarea 3 se implementan con una tabla propia más el cálculo de Pascua, sin dependencia externa.
+- **No instalado:** `colombian-holidays` (un solo mantenedor, ~4 mil descargas semanales, depende de `pascua`). Los festivos se definen con reglas simples (Ley 51 de 1983, "Ley Emiliani"), así que en la Tarea 3 se implementan con reglas propias más el cálculo de Pascua, sin dependencia externa (`src/masajes/dominio/festivos.js`).
+- **Ley 2578 de 2026:** creó el festivo de la Virgen de Chiquinquirá (9 de julio, trasladable al lunes). Se aplicó por primera vez el lunes 13 de julio de 2026; en 2027 cae el lunes 12 de julio. Con él son 19 festivos. Hallado al verificar el calendario 2027 en la Tarea 3.
+- **Mantenimiento:** si una ley nueva agrega o cambia un festivo, se agrega en `festivos.js` con su año `desde` y un test con las fechas oficiales. Mientras tanto, el admin puede bloquear el día a mano. Algunos años dos festivos caen el mismo lunes (p. ej. 30-jun-2025: San Pedro y Sagrado Corazón) y cuentan como un solo día de descanso.
 - **Pospuesto:** `googleapis`, para la Tarea 12, que es donde se usa.
