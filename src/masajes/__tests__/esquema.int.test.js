@@ -22,7 +22,7 @@ async function semanaYDos() {
 describe('migraciones', () => {
   test('quedan registradas y un segundo intento no aplica nada', async () => {
     const [filas] = await conn.query('SELECT nombre FROM msj_migraciones ORDER BY nombre');
-    expect(filas.map((f) => f.nombre)).toEqual(['001_esquema.sql']);
+    expect(filas.map((f) => f.nombre)).toEqual(['001_esquema.sql', '002_historial_beneficiarios.sql']);
     expect(await aplicarMigraciones(conn)).toEqual([]);
   });
 

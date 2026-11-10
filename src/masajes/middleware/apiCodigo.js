@@ -16,18 +16,22 @@ const MOTIVO_POR_STATUS = {
 /**
  * Primer middleware de toda ruta de Masajes: fija el código de API, la cabecera X-MSJ-API y el
  * logger hijo, y garantiza que cualquier respuesta de error lleve { error: <código>, motivo }.
+ * Puede usarse dos veces en la misma cadena (uno genérico en router.use y otro por ruta): el último gana,
+ * y res.json se envuelve y la petición se registra UNA sola vez.
  */
 function apiCodigo(codigo) {
   const middleware = (req, res, next) => {
-    const inicio = Date.now();
     req.msjApiCodigo = codigo;
     req.msjLog = logger.child({ modulo: 'masajes', api_codigo: codigo });
     res.setHeader('X-MSJ-API', codigo);
+    if (res.msjEnvuelto) return next();
+    res.msjEnvuelto = true;
 
+    const inicio = Date.now();
     const jsonOriginal = res.json.bind(res);
     res.json = (cuerpo) => {
       if (cuerpo && cuerpo.success === false) {
-        cuerpo.error = codigo;
+        cuerpo.error = req.msjApiCodigo; // el vigente al responder, no el del primer apiCodigo
         if (!cuerpo.motivo) cuerpo.motivo = MOTIVO_POR_STATUS[res.statusCode] || 'ERROR';
       }
       return jsonOriginal(cuerpo);

@@ -8,6 +8,8 @@ const { deLocal } = require('../dominio/tiempo');
 const semanasRepo = require('../repositorios/semanas');
 const bloqueosRepo = require('../repositorios/bloqueos');
 const citasRepo = require('../repositorios/citas');
+const beneficiariosRepo = require('../repositorios/beneficiarios');
+const { validarRango } = require('../dominio/disponibilidad');
 
 const MOTIVOS_BLOQUEO = Object.freeze(['festivo', 'spa', 'otro']);
 const TRANSICIONES = Object.freeze({ publicar: ['borrador', 'publicada'], cerrar: ['publicada', 'cerrada'] });
@@ -124,8 +126,53 @@ function crearServicioSemanas({ bd, obtenerConfig }) {
     return { franjas: lista.length, bloqueadas, capacidadTotal, ocupadas, libres: Math.max(0, capacidadTotal - ocupadas) };
   }
 
+  async function listar({ desde, hasta }) {
+    validarRango(desde, hasta);
+    const semanas = await semanasRepo.listarEnRango(bd.obtener(), desde, hasta, { soloPublicadas: false });
+    return Promise.all(semanas.map(async (w) => ({ ...w, resumen: await resumen({ semanaId: w.id }) })));
+  }
+
+  async function detalle({ semanaId }) {
+    if (!esId(semanaId)) throw E.NO_ENCONTRADA();
+    const semana = await semanasRepo.obtener(bd.obtener(), semanaId);
+    if (!semana) throw E.NO_ENCONTRADA();
+    const bloqueos = await bloqueosRepo.listarDeSemana(bd.obtener(), semanaId);
+    return { ...semana, bloqueos, resumen: await resumen({ semanaId }) };
+  }
+
+  async function actualizarNotas({ semanaId, notas, actor }) {
+    exigirActor(actor);
+    if (!esId(semanaId)) throw E.NO_ENCONTRADA();
+    const n = textoOpcional(notas, 'notas', 'NOTAS_MUY_LARGAS');
+    return enTransaccion(bd, async (conn) => {
+      if (!(await semanasRepo.obtenerParaModificar(conn, semanaId))) throw E.NO_ENCONTRADA();
+      await semanasRepo.actualizarNotas(conn, semanaId, n);
+      return semanasRepo.obtener(conn, semanaId);
+    });
+  }
+
+  /** "x de N bonos agendados en el mes / cupos libres restantes" (spec §12). */
+  async function cobertura({ periodo }) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(periodo))) throw invalido('periodo', 'PERIODO_INVALIDO');
+    const ejecutor = bd.obtener();
+    const [a, m] = periodo.split('-').map(Number);
+    const primero = `${periodo}-01`;
+    const ultimo = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
+    const lunesPrevio = franjasDe().lunesDe(deLocal(`${primero}T12:00`).toDate());
+    const semanas = (await semanasRepo.listarEnRango(ejecutor, lunesPrevio, ultimo, { soloPublicadas: true }));
+    let libres = 0;
+    for (const w of semanas) libres += (await resumen({ semanaId: w.id })).libres;
+    return {
+      periodo,
+      beneficiariosActivos: await beneficiariosRepo.contarActivos(ejecutor),
+      agendados: await citasRepo.contarConCupoEnPeriodo(ejecutor, periodo),
+      semanasPublicadas: semanas.length,
+      cuposLibres: libres,
+    };
+  }
+
   return {
-    crear, agregarBloqueo, eliminarBloqueo, resumen,
+    crear, agregarBloqueo, eliminarBloqueo, resumen, listar, detalle, actualizarNotas, cobertura,
     publicar: (p) => transicion('publicar', p),
     cerrar: (p) => transicion('cerrar', p),
   };

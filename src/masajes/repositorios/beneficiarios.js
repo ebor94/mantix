@@ -1,4 +1,5 @@
 // src/masajes/repositorios/beneficiarios.js
+const { enteroSql } = require('../utils/paginacion');
 // Acceso a msj_beneficiarios. Reciben la conexión de la transacción. Columnas fijas: nunca se interpola texto.
 
 /** Todos los beneficiarios con los campos que compara la importación, bloqueados hasta el commit. */
@@ -61,7 +62,58 @@ async function estaActivoCompartido(conn, id) {
   return Boolean(filas[0] && filas[0].activo);
 }
 
+// ---- Administración ----
+
+const COLUMNAS_ADMIN = 'id, nombre, cargo, celular, correo, ad_usuario, activo, updated_at, updated_by';
+// LIKE con '!' como escape: el texto del usuario nunca actúa como comodín (% o _).
+const escaparLike = (q) => `%${q.replace(/[!%_]/g, '!$&')}%`;
+
+/** Filtros de una lista cerrada; los valores siempre van como parámetros. */
+async function listarAdmin(ejecutor, { q, sinVincular, activo, limite, desplazamiento }) {
+  const where = [];
+  const params = [];
+  if (q) { where.push("nombre LIKE ? ESCAPE '!'"); params.push(escaparLike(q)); }
+  if (sinVincular === true) where.push('ad_usuario IS NULL');
+  if (activo === true || activo === false) { where.push('activo = ?'); params.push(activo ? 1 : 0); }
+  const filtro = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const [[{ total }]] = await ejecutor.execute(`SELECT COUNT(*) AS total FROM msj_beneficiarios ${filtro}`, params);
+  // LIMIT/OFFSET ya validados como enteros por el servicio: van en el SQL porque execute() no los acepta como ?.
+  const [items] = await ejecutor.execute(
+    `SELECT ${COLUMNAS_ADMIN} FROM msj_beneficiarios ${filtro} ORDER BY nombre LIMIT ${enteroSql(limite)} OFFSET ${enteroSql(desplazamiento)}`,
+    params,
+  );
+  return { total: Number(total), items };
+}
+
+async function obtenerAdmin(ejecutor, id) {
+  const [filas] = await ejecutor.execute(`SELECT ${COLUMNAS_ADMIN} FROM msj_beneficiarios WHERE id = ?`, [id]);
+  return filas[0] || null;
+}
+
+async function obtenerParaModificar(conn, id) {
+  const [filas] = await conn.execute(`SELECT ${COLUMNAS_ADMIN} FROM msj_beneficiarios WHERE id = ? FOR UPDATE`, [id]);
+  return filas[0] || null;
+}
+
+const EDITABLES = Object.freeze(['nombre', 'cargo', 'celular', 'correo', 'ad_usuario', 'activo']);
+
+/** Solo columnas de la lista EDITABLES; el nombre de columna nunca viene del usuario. */
+async function actualizarAdmin(conn, id, cambios, actor) {
+  const cols = Object.keys(cambios).filter((c) => EDITABLES.includes(c));
+  if (cols.length === 0) return;
+  await conn.execute(
+    `UPDATE msj_beneficiarios SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_by = ? WHERE id = ?`,
+    [...cols.map((c) => cambios[c]), actor, id],
+  );
+}
+
+async function contarActivos(ejecutor) {
+  const [[f]] = await ejecutor.execute('SELECT COUNT(*) AS n FROM msj_beneficiarios WHERE activo = 1');
+  return Number(f.n);
+}
+
 module.exports = {
   listarParaImportar, insertar, actualizarDatosListado,
   buscarPorUsuario, obtenerActivoPorUsuario, porCorreoParaVincular, vincular, estaActivoCompartido,
+  listarAdmin, obtenerAdmin, obtenerParaModificar, actualizarAdmin, contarActivos, EDITABLES,
 };

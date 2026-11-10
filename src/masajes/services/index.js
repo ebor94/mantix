@@ -5,6 +5,7 @@ const { crearServicioDisponibilidad } = require('./disponibilidad.service');
 const { crearServicioCitas } = require('./citas.service');
 const { crearOutbox } = require('./outbox.service');
 const { crearServicioSemanas } = require('./semanas.service');
+const { crearServicioNotificaciones } = require('./notificaciones.service');
 
 function crearServicios({ bd, obtenerConfig, reloj = () => new Date(), ...reemplazos }) {
   const beneficiarios = reemplazos.beneficiarios || crearServicioBeneficiarios({ bd });
@@ -12,7 +13,8 @@ function crearServicios({ bd, obtenerConfig, reloj = () => new Date(), ...reempl
   const outbox = reemplazos.outbox || crearOutbox();
   const citas = reemplazos.citas || crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj });
   const semanas = reemplazos.semanas || crearServicioSemanas({ bd, obtenerConfig });
-  return { beneficiarios, disponibilidad, outbox, citas, semanas };
+  const notificaciones = reemplazos.notificaciones || crearServicioNotificaciones({ bd });
+  return { beneficiarios, disponibilidad, outbox, citas, semanas, notificaciones };
 }
 
 module.exports = { crearServicios };

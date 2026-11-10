@@ -1,4 +1,5 @@
 // src/masajes/repositorios/citas.js
+const { enteroSql } = require('../utils/paginacion');
 // Citas activas = las que retienen franja (slot_key IS NOT NULL; ver ck_msj_citas_claves).
 
 // Para el empleado ni siquiera se leen datos del beneficiario: no hay nada que filtrar después.
@@ -79,7 +80,48 @@ async function marcarAsistencia(conn, id, estado, actor) {
   return r.affectedRows === 1;
 }
 
+// ---- Consultas del empleado (/me) y del admin ----
+
+async function delBeneficiario(ejecutor, beneficiarioId, { periodos, desde }) {
+  const [filas] = await ejecutor.execute(
+    `SELECT id, inicio, fin, periodo, estado FROM msj_citas
+      WHERE beneficiario_id = ? AND ((periodo IN (?, ?) AND estado <> 'cancelada') OR (estado = 'agendada' AND inicio >= ?))
+      ORDER BY inicio`,
+    [beneficiarioId, periodos[0], periodos[1], desde],
+  );
+  return filas;
+}
+
+const ESTADOS = Object.freeze(['agendada', 'cancelada', 'asistio', 'no_asistio']);
+
+async function listarAdmin(ejecutor, { periodo, estado, beneficiarioId, limite, desplazamiento }) {
+  const where = [];
+  const params = [];
+  if (periodo) { where.push('c.periodo = ?'); params.push(periodo); }
+  if (estado) { where.push('c.estado = ?'); params.push(estado); }
+  if (beneficiarioId) { where.push('c.beneficiario_id = ?'); params.push(beneficiarioId); }
+  const filtro = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const [[{ total }]] = await ejecutor.execute(`SELECT COUNT(*) AS total FROM msj_citas c ${filtro}`, params);
+  const [items] = await ejecutor.execute(
+    `SELECT c.id, c.inicio, c.fin, c.periodo, c.estado, c.motivo_cancelacion, c.creado_por, c.actualizado_por,
+            c.beneficiario_id, b.nombre AS beneficiario_nombre, b.cargo AS beneficiario_cargo
+       FROM msj_citas c JOIN msj_beneficiarios b ON b.id = c.beneficiario_id ${filtro}
+      ORDER BY c.inicio DESC LIMIT ${enteroSql(limite)} OFFSET ${enteroSql(desplazamiento)}`,
+    params,
+  );
+  return { total: Number(total), items };
+}
+
+/** Beneficiarios distintos con una cita que consume el cupo de ese periodo. */
+async function contarConCupoEnPeriodo(ejecutor, periodo) {
+  const [[f]] = await ejecutor.execute(
+    'SELECT COUNT(DISTINCT beneficiario_id) AS n FROM msj_citas WHERE periodo = ? AND cupo_key IS NOT NULL', [periodo],
+  );
+  return Number(f.n);
+}
+
 module.exports = {
   activasEnRango, insertarActiva, obtenerParaModificar, mover, marcarCancelada,
   hayActivaSolapada, contarActivasDeSemana, marcarAsistencia,
+  delBeneficiario, listarAdmin, contarConCupoEnPeriodo, ESTADOS,
 };

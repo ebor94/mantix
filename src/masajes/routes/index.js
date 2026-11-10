@@ -10,16 +10,21 @@ const apiCodigo = require('../middleware/apiCodigo');
 const { masajesErrorHandler } = require('../middleware/errorHandler');
 const { errorParaLog } = require('../utils/errorSeguro');
 const { crearAutenticacion, crearResolverBeneficiario } = require('../middleware/autenticacion');
-const { crearServicioBeneficiarios } = require('../services/beneficiarios.service');
+const { crearLimites } = require('../middleware/limites');
+const { crearServicios } = require('../services');
 const { crearRouterAuth } = require('./auth.routes');
+const { crearRouterEmpleado } = require('./empleado.routes');
+const { crearRouterAdmin } = require('./admin.routes');
 
 /**
  * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
- * `directorio` = { validarCredenciales } (AD). Las rutas de empleado y admin se agregan en la Tarea 11.
+ * `directorio` = { validarCredenciales } (AD); `servicios` se arman con crearServicios si no se pasan.
+ * Cada llamada crea sus propios limitadores (express-rate-limit exige crearlos al construir el router).
  */
-function crearRouterMasajes({ bd, obtenerConfig, directorio, beneficiarios = crearServicioBeneficiarios({ bd }) }) {
+function crearRouterMasajes({ bd, obtenerConfig, directorio, reloj, servicios = crearServicios({ bd, obtenerConfig, reloj }), limites = crearLimites() }) {
   const router = express.Router();
   const autenticar = crearAutenticacion(obtenerConfig);
+  const { beneficiarios } = servicios;
   const resolverBeneficiario = crearResolverBeneficiario({ beneficiarios });
 
   router.get('/health', apiCodigo('MSJ-SIS-001'), async (req, res) => {
@@ -33,6 +38,8 @@ function crearRouterMasajes({ bd, obtenerConfig, directorio, beneficiarios = cre
   });
 
   router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, beneficiarios, autenticar, resolverBeneficiario }));
+  router.use('/admin', crearRouterAdmin({ autenticar, limites, servicios }));
+  router.use('/', crearRouterEmpleado({ autenticar, resolverBeneficiario, limites, servicios }));
 
   router.use(apiCodigo('MSJ-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 

@@ -1,4 +1,5 @@
 // src/masajes/repositorios/notificaciones.js — outbox msj_notificaciones.
+const { enteroSql } = require('../utils/paginacion');
 
 /**
  * Inserta la tarea si su clave no existe. ON DUPLICATE KEY UPDATE y no INSERT IGNORE: IGNORE también callaría
@@ -25,4 +26,28 @@ async function huboEnvioAlSpa(conn, citaId) {
   return filas.length > 0;
 }
 
-module.exports = { encolar, descartarPendientes, huboEnvioAlSpa };
+// ---- Administración ----
+const ESTADOS = Object.freeze(['pendiente', 'enviado', 'fallido', 'descartado']);
+
+async function listar(ejecutor, { estado, limite, desplazamiento }) {
+  const filtro = estado ? 'WHERE n.estado = ?' : '';
+  const params = estado ? [estado] : [];
+  const [[{ total }]] = await ejecutor.execute(`SELECT COUNT(*) AS total FROM msj_notificaciones n ${filtro}`, params);
+  const [items] = await ejecutor.execute(
+    `SELECT n.id, n.cita_id, n.tipo, n.canal, n.estado, n.intentos, n.proximo_intento, n.ultimo_error, n.enviado_at, n.created_at
+       FROM msj_notificaciones n ${filtro} ORDER BY n.id DESC LIMIT ${enteroSql(limite)} OFFSET ${enteroSql(desplazamiento)}`,
+    params,
+  );
+  return { total: Number(total), items };
+}
+
+/** Solo una fallida vuelve a la cola, desde cero. El worker revalida la cita antes de enviar. */
+async function reintentar(conn, id) {
+  const [r] = await conn.execute(
+    "UPDATE msj_notificaciones SET estado = 'pendiente', intentos = 0, proximo_intento = CURRENT_TIMESTAMP WHERE id = ? AND estado = 'fallido'",
+    [id],
+  );
+  return r.affectedRows === 1;
+}
+
+module.exports = { encolar, descartarPendientes, huboEnvioAlSpa, listar, reintentar, ESTADOS };

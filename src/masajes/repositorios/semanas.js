@@ -48,4 +48,8 @@ async function cambiarEstado(conn, id, desde, hacia) {
   return r.affectedRows === 1;
 }
 
-module.exports = { listarEnRango, publicadaPorLunesCompartida, insertar, obtener, obtenerParaModificar, cambiarEstado };
+async function actualizarNotas(conn, id, notas) {
+  await conn.execute('UPDATE msj_semanas SET notas = ? WHERE id = ?', [notas, id]);
+}
+
+module.exports = { listarEnRango, publicadaPorLunesCompartida, insertar, obtener, obtenerParaModificar, cambiarEstado, actualizarNotas };

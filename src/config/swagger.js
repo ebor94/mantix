@@ -50,7 +50,8 @@ const options = {
     './src/routes/*.js',
     './src/controllers/*.js',
     './src/models/*.js',
-    './src/porteria/docs/*.yaml'
+    './src/porteria/docs/*.yaml',
+    './src/masajes/docs/*.yaml'
   ]
 };
 

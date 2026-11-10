@@ -8,6 +8,8 @@ const citasRepo = require('../repositorios/citas');
 const beneficiariosRepo = require('../repositorios/beneficiarios');
 const notificacionesRepo = require('../repositorios/notificaciones');
 const historial = require('../repositorios/historial');
+const { paginar } = require('../utils/paginacion');
+const { local } = require('../dominio/tiempo');
 
 const MAX_MOTIVO = 255;
 
@@ -182,7 +184,47 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
     });
   }
 
-  return { agendar, reprogramar, cancelar, marcarAsistencia };
+  /**
+   * GET /me: cupo del mes actual y del siguiente y las citas que importan al empleado. Por cada cita dice si
+   * todavía puede reprogramarla o cancelarla y hasta cuándo (spec §12, botones deshabilitados con explicación).
+   */
+  async function resumenDelBeneficiario(beneficiarioId) {
+    if (!esId(beneficiarioId)) throw E.NO_BENEFICIARIO();
+    const { config, reglas } = herramientas();
+    const ahora = reloj();
+    const actual = local(ahora).format('YYYY-MM');
+    const siguiente = local(ahora).startOf('month').add(1, 'month').format('YYYY-MM');
+    const filas = await citasRepo.delBeneficiario(bd.obtener(), beneficiarioId, { periodos: [actual, siguiente], desde: ahora });
+    const cupos = {};
+    for (const p of [actual, siguiente]) {
+      const c = filas.find((f) => f.periodo === p && f.estado !== 'cancelada');
+      cupos[p] = c ? { usado: true, citaId: c.id, estado: c.estado } : { usado: false };
+    }
+    const citas = filas.filter((f) => f.estado === 'agendada').map((f) => ({
+      id: f.id, inicio: f.inicio.toISOString(), fin: f.fin.toISOString(), periodo: f.periodo, estado: f.estado,
+      puedeModificar: reglas.puedeModificar({ ahora, cita: f, esAdmin: false }),
+      modificableHasta: new Date(f.inicio.getTime() - config.anticipacionModificarH * 3600000).toISOString(),
+    }));
+    return { cupos, citas };
+  }
+
+  async function listarAdmin({ periodo, estado, beneficiarioId, pagina, porPagina } = {}) {
+    if (periodo !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(periodo))) throw E.VALIDACION([{ campo: 'periodo', motivo: 'PERIODO_INVALIDO' }]);
+    if (estado !== undefined && !citasRepo.ESTADOS.includes(estado)) throw E.VALIDACION([{ campo: 'estado', motivo: 'ESTADO_INVALIDO' }]);
+    if (beneficiarioId !== undefined && !esId(beneficiarioId)) throw E.VALIDACION([{ campo: 'beneficiarioId', motivo: 'INVALIDO' }]);
+    const pg = paginar({ pagina, porPagina });
+    const r = await citasRepo.listarAdmin(bd.obtener(), { periodo, estado, beneficiarioId, ...pg });
+    return {
+      total: r.total, pagina: pg.pagina, porPagina: pg.porPagina,
+      items: r.items.map((c) => ({
+        id: c.id, inicio: c.inicio.toISOString(), fin: c.fin.toISOString(), periodo: c.periodo, estado: c.estado,
+        motivo_cancelacion: c.motivo_cancelacion, creado_por: c.creado_por, actualizado_por: c.actualizado_por,
+        beneficiario: { id: c.beneficiario_id, nombre: c.beneficiario_nombre, cargo: c.beneficiario_cargo },
+      })),
+    };
+  }
+
+  return { agendar, reprogramar, cancelar, marcarAsistencia, resumenDelBeneficiario, listarAdmin };
 }
 
 module.exports = { crearServicioCitas, mapDuplicado };
