@@ -20,7 +20,12 @@
     "test:porteria:int": "jest -c jest.porteria-int.config.js --runInBand",
     "porteria:db:test": "docker compose -f src/porteria/testing/docker-compose.yml up -d --wait",
     "porteria:migrate": "node src/porteria/scripts/migrar.js",
-    "porteria:sembrar": "node src/porteria/scripts/sembrar.js"
+    "porteria:sembrar": "node src/porteria/scripts/sembrar.js",
+    "test:masajes": "jest src/masajes",
+    "test:masajes:int": "jest -c jest.masajes-int.config.js --runInBand",
+    "masajes:db:test": "docker compose -f src/masajes/testing/docker-compose.yml up -d --wait",
+    "masajes:migrate": "node src/masajes/scripts/migrar.js",
+    "masajes:importar": "node src/masajes/scripts/importarBeneficiarios.js"
   },
   "jest": {
     "testEnvironment": "node",
@@ -42,16 +47,19 @@
   "author": "Tu Nombre",
   "license": "MIT",
   "dependencies": {
+    "@googleapis/calendar": "20.1.0",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "csv-parse": "^6.2.1",
+    "dayjs": "1.11.23",
     "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.1",
     "express-validator": "^7.2.1",
+    "google-auth-library": "11.3.4",
     "helmet": "^7.2.0",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.2",
@@ -73,6 +81,7 @@
   },
   "devDependencies": {
     "jest": "^29.7.0",
+    "nock": "14.0.17",
     "nodemon": "^3.1.10",
     "socket.io-client": "^4.8.4",
     "supertest": "^6.3.4"

@@ -49,6 +49,7 @@ const bigdayRoutes = require('../bigday/routes').router; // ← Módulo October 
 const porteriaRoutes = require('../porteria/routes').router; // ← Módulo Portería
 const rutinasRoutes = require('./rutinasRoutes'); // Rutinas ejecución por QR (internas)
 const publicRutinasRoutes = require('./publicRoutinasRoutes'); // Rutinas público (sin auth)
+const masajesRoutes = require('../masajes/routes').router;   // ← Módulo Agenda de Masajes
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -98,5 +99,6 @@ router.use('/identidad', identidadRoutes); // ← SSO compartido entre apps (afi
 router.use('/trk/v1', trkRoutes);   // ← Módulo TRIKIPELUDOS (concurso de disfraces)
 router.use('/bigday/v1', bigdayRoutes); // ← Módulo October Big Day (encuesta)
 router.use('/porteria/v1', porteriaRoutes); // ← Módulo Portería (ingresos y salidas de vehículos)
+router.use('/masajes/v1', masajesRoutes);   // ← Módulo Agenda de Masajes (bono mensual, login AD propio)
 
 module.exports = router;

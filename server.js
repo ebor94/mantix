@@ -38,6 +38,9 @@ sequelize.authenticate()
     // vehiculos por vencimiento y mandar un solo aviso al espacio de operaciones)
     require('./src/h360/jobs/desinfecciones.job').start();
 
+    // Agenda de Masajes: outbox y recordatorios. Solo con MSJ_JOBS_ENABLED=true (en UNA instancia de pm2).
+    require('./src/masajes/jobs').start();
+
     // Iniciar servidor
     // Servidor HTTP explícito: Mantix + Socket.IO de TRIKIPELUDOS (namespace /trk)
     const server = http.createServer(app);

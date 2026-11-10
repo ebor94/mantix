@@ -1,0 +1,155 @@
+# Agenda de Masajes — /api/masajes/v1 (spec: docs/masajes/2026-11-09-agenda-masajes-design.md)
+# Sin ejemplos con datos reales: /api-docs se publica hoy también en producción (notas-masajes.md H3).
+components:
+  securitySchemes:
+    masajesBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de POST /api/masajes/v1/auth/login (scope "masajes"). Los tokens de Mantix o Portería no sirven.
+  schemas:
+    MasajesError:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error: { type: string, description: Código de API de la ruta (también en la cabecera X-MSJ-API), example: MSJ-CIT-001 }
+        motivo:
+          type: string
+          enum: [VALIDACION, NO_AUTENTICADO, CREDENCIALES_INVALIDAS, NO_BENEFICIARIO, NO_ADMIN, NO_ENCONTRADA, NO_ENCONTRADO,
+                 SLOT_OCUPADO, CUPO_MES_USADO, SLOT_CON_CITA, SEMANA_DUPLICADA, AD_USUARIO_EN_USO, FUERA_DE_VENTANA,
+                 ANTICIPACION_INSUFICIENTE, ESTADO_INVALIDO, DEMASIADOS_INTENTOS, DEMASIADAS_SOLICITUDES,
+                 DIRECTORIO_NO_DISPONIBLE, NO_DISPONIBLE, ERROR_INTERNO]
+        message: { type: string, description: Mensaje en español para mostrar }
+        errors:
+          type: array
+          description: Solo en VALIDACION. Campo y regla; nunca repite el valor enviado.
+          items: { type: object, properties: { campo: { type: string }, motivo: { type: string } } }
+    Inicio:
+      type: string
+      description: ISO 8601 con zona horaria explícita y sin milisegundos.
+      example: '2026-11-24T09:00:00-05:00'
+    Cita:
+      type: object
+      properties:
+        id: { type: integer }
+        inicio: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+        periodo: { type: string, example: '2026-11' }
+        estado: { type: string, enum: [agendada, cancelada, asistio, no_asistio] }
+    Franja:
+      type: object
+      properties:
+        inicio: { type: string, format: date-time }
+        estado: { type: string, enum: [libre, ocupada, bloqueada, pasada] }
+  responses:
+    Error:
+      description: Error con el contrato del módulo
+      content: { application/json: { schema: { $ref: '#/components/schemas/MasajesError' } } }
+
+paths:
+  /api/masajes/v1/health:
+    get: { tags: [Masajes], summary: Estado del módulo y de la BD, security: [], responses: { '200': { description: OK }, '503': { $ref: '#/components/responses/Error' } } }
+
+  /api/masajes/v1/auth/login:
+    post:
+      tags: [Masajes]
+      summary: Login con el Directorio Activo
+      description: 10 fallos por usuario+IP y 100 por IP en 15 min (solo cuentan los 401). Cualquier campo extra → 400.
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: false, required: [usuario, password], properties: { usuario: { type: string, maxLength: 100 }, password: { type: string, maxLength: 200 } } } } }
+      responses:
+        '200': { description: '{ token, usuario: { usuario, nombre, rol, beneficiario } }' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/masajes/v1/auth/sesion:
+    get: { tags: [Masajes], summary: Sesión actual (relee el beneficiario), security: [{ masajesBearer: [] }], responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Error' } } }
+
+  /api/masajes/v1/me:
+    get: { tags: [Masajes], summary: 'Empleado: cupos del mes actual y siguiente, y sus citas', security: [{ masajesBearer: [] }], responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Error' } } }
+  /api/masajes/v1/disponibilidad:
+    get:
+      tags: [Masajes]
+      summary: 'Empleado: franjas de semanas publicadas (solo inicio y estado)'
+      security: [{ masajesBearer: [] }]
+      parameters:
+        - { in: query, name: desde, required: true, schema: { type: string, format: date } }
+        - { in: query, name: hasta, required: true, schema: { type: string, format: date }, description: Máximo 31 días desde "desde" }
+      responses: { '200': { description: 'franjas: Franja[]' }, '400': { $ref: '#/components/responses/Error' } }
+  /api/masajes/v1/citas:
+    post:
+      tags: [Masajes]
+      summary: 'Empleado: agenda su cita (el beneficiario sale de la sesión)'
+      security: [{ masajesBearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [inicio], properties: { inicio: { $ref: '#/components/schemas/Inicio' } } } } } }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Cita' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/masajes/v1/citas/{id}/reprogramar:
+    patch:
+      tags: [Masajes]
+      summary: 'Empleado: reprograma su cita (hasta 24 h antes)'
+      security: [{ masajesBearer: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,9}$' } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [inicio], properties: { inicio: { $ref: '#/components/schemas/Inicio' } } } } } }
+      responses: { '200': { description: OK }, '404': { description: 'La cita no existe o no es suya' }, '409': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/Error' } }
+  /api/masajes/v1/citas/{id}/cancelar:
+    post:
+      tags: [Masajes]
+      summary: 'Empleado: cancela su cita (hasta 24 h antes)'
+      security: [{ masajesBearer: [] }]
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, pattern: '^[1-9][0-9]{0,9}$' } }]
+      requestBody: { content: { application/json: { schema: { type: object, additionalProperties: false, properties: { motivo: { type: string, maxLength: 255 } } } } } }
+      responses: { '200': { description: OK }, '404': { description: 'La cita no existe o no es suya' }, '422': { $ref: '#/components/responses/Error' } }
+
+  /api/masajes/v1/admin/disponibilidad:
+    get: { tags: [Masajes admin], summary: Franjas de todas las semanas con sus citas, security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/cobertura:
+    get: { tags: [Masajes admin], summary: 'Bonos agendados del mes y cupos libres (?periodo=YYYY-MM)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/semanas:
+    get: { tags: [Masajes admin], summary: 'Semanas entre desde y hasta, con resumen', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+    post: { tags: [Masajes admin], summary: 'Crea semana { fechaInicio (lunes), capacidad?, notas? } con bloqueos de festivos', security: [{ masajesBearer: [] }], responses: { '201': { description: OK }, '409': { $ref: '#/components/responses/Error' } } }
+  /api/masajes/v1/admin/semanas/{id}:
+    get: { tags: [Masajes admin], summary: Detalle con bloqueos y resumen, security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+    patch: { tags: [Masajes admin], summary: 'Actualiza notas { notas }', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/semanas/{id}/publicar:
+    post: { tags: [Masajes admin], summary: borrador → publicada, security: [{ masajesBearer: [] }], responses: { '200': { description: OK }, '422': { $ref: '#/components/responses/Error' } } }
+  /api/masajes/v1/admin/semanas/{id}/cerrar:
+    post: { tags: [Masajes admin], summary: 'publicada → cerrada (no cancela citas)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/semanas/{id}/bloqueos:
+    post: { tags: [Masajes admin], summary: 'Bloquea { inicio, fin, motivo: festivo|spa|otro, detalle? }', security: [{ masajesBearer: [] }], responses: { '201': { description: OK }, '409': { description: SLOT_CON_CITA } } }
+  /api/masajes/v1/admin/semanas/{id}/bloqueos/{bloqueoId}:
+    delete: { tags: [Masajes admin], summary: Quita un bloqueo de esa semana, security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/beneficiarios:
+    get: { tags: [Masajes admin], summary: 'Listado (?q, sinVincular, activo, pagina, porPagina); celular enmascarado', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+    post: { tags: [Masajes admin], summary: 'Alta { nombre, cargo?, celular?, correo? }', security: [{ masajesBearer: [] }], responses: { '201': { description: OK } } }
+  /api/masajes/v1/admin/beneficiarios/{id}:
+    get: { tags: [Masajes admin], summary: Detalle con celular completo, security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+    patch: { tags: [Masajes admin], summary: 'Edita { nombre?, cargo?, celular?, correo?, adUsuario?, activo? } (queda en historial)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK }, '409': { description: AD_USUARIO_EN_USO } } }
+  /api/masajes/v1/admin/beneficiarios/importar:
+    post:
+      tags: [Masajes admin]
+      summary: 'Importa el listado xlsx (cuerpo binario, máx. 2 MB; ?simular=true no escribe)'
+      security: [{ masajesBearer: [] }]
+      requestBody: { required: true, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: '{ aplicado, creados, actualizados, sinCambios, errores, advertencias }' }, '413': { $ref: '#/components/responses/Error' }, '422': { description: Hay filas con error; no se importó nada } }
+  /api/masajes/v1/admin/citas:
+    get: { tags: [Masajes admin], summary: 'Listado (?periodo, estado, beneficiarioId, pagina, porPagina)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+    post: { tags: [Masajes admin], summary: 'Agenda por un beneficiario { beneficiarioId, inicio } sin anticipación', security: [{ masajesBearer: [] }], responses: { '201': { description: OK } } }
+  /api/masajes/v1/admin/citas/{id}/reprogramar:
+    patch: { tags: [Masajes admin], summary: Reprograma sin restricción de anticipación, security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/citas/{id}/cancelar:
+    post: { tags: [Masajes admin], summary: 'Cancela { motivo } (obligatorio)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/citas/{id}/asistencia:
+    patch: { tags: [Masajes admin], summary: 'Marca asistencia { asistio: boolean } de una cita que ya empezó', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/notificaciones:
+    get: { tags: [Masajes admin], summary: 'Outbox (?estado=pendiente|enviado|fallido|descartado)', security: [{ masajesBearer: [] }], responses: { '200': { description: OK } } }
+  /api/masajes/v1/admin/notificaciones/{id}/reintentar:
+    post: { tags: [Masajes admin], summary: Vuelve a encolar una notificación fallida, security: [{ masajesBearer: [] }], responses: { '200': { description: OK }, '422': { description: No estaba fallida } } }

@@ -24,6 +24,8 @@ uploads/
 !src/bigday/migrations/*.sql
 !src/porteria/migrations/*.sql
 !src/porteria/testing/sql/*.sql
+!src/masajes/migrations/*.sql
+!docs/masajes/*.sql
 
 # Evidencia fotográfica de las desinfecciones del parque automotor.
 # Va aquí por el default de DESINF_UPLOAD_PATH, que cae FUERA de uploads/ a
