@@ -1,6 +1,6 @@
 # Agenda de Masajes — Despliegue (runbook para TI)
 
-Backend dentro de Mantix (`/api/masajes/v1`, rama `feature/masajes`). Front en el repositorio `agendaPromax/masajes-web`, servido en `/masajes/`.
+Backend dentro de Mantix (`/api/masajes/v1`, ya fusionado en `main`). Front en el repositorio `agendaPromax/masajes-web`, servido en `https://losolivoscucuta.com/AgendaPromax/` (carpeta `www/AgendaPromax` de AppServ).
 
 Orden: **0 → 12**. Cada paso dice cómo comprobarlo y cómo deshacerlo. Hasta el paso 8, Mantix funciona igual que hoy: sin las variables de Masajes el módulo responde 503 (`MSJ-SIS-000`) y nada más cambia. Los jobs no corren hasta el paso 11.
 
