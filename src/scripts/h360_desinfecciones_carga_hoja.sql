@@ -70,6 +70,17 @@ UPDATE h360_desinf_regla r
 -- Las dos placas duplicadas en la base se resolvieron con operaciones: se usa
 -- `NQN-835` y no `NQN-835 PAM`, y `JLL-579` y no `JLL-579 SAR`. (JLL-579 no
 -- está en la hoja, así que acá no aparece.)
+--
+-- EL ENGANCHE NO ES POR IGUALDAD EXACTA DE TEXTO, y no es un lujo: la primera
+-- corrida de este script dejó cuatro vehículos afuera porque la placa en la
+-- base era `LVZ-087` y acá decía `LVZ - 087`. Son placas que se escriben a
+-- mano, y un espacio de más no puede decidir si un carro queda con fechas o
+-- sin ellas. Se comparan sin espacios, sin guiones y en mayúsculas.
+--
+-- Eso solo es seguro si la normalización no junta dos vehículos distintos, así
+-- que hay una guarda abajo que lo comprueba y no deja seguir si pasara: una
+-- fecha escrita contra la placa equivocada deja un carro diciendo que está al
+-- día cuando no lo está.
 DROP TEMPORARY TABLE IF EXISTS tmp_carga_desinf;
 CREATE TEMPORARY TABLE tmp_carga_desinf (
   placa        VARCHAR(15)  NOT NULL,
@@ -147,19 +158,51 @@ INSERT INTO tmp_carga_desinf (placa, placa_hoja, actividad, fecha_ult, fecha_pro
 ('LWL 087',     'LWL-087 - NO OPERATIVA', 'Limpieza y lavado',    NULL, NULL, 0, 'Cargado de la hoja: marcada «NO OPERATIVA», sin fechas.'),
 ('LWL 087',     'LWL-087 - NO OPERATIVA', 'Desinfección choque',  NULL, NULL, 0, 'Cargado de la hoja: marcada «NO OPERATIVA», sin fechas.');
 
--- ── 2a. Avisar de lo que no se va a cargar ────────────────────────────────
--- Si una placa de la hoja no existe en `vehiculos`, su fila se perdería en
--- silencio. Esto la saca a la luz ANTES de escribir nada.
+-- ── 2a. Guardas y diagnóstico, antes de escribir ─────────────────────────
+--
+-- Primero: que la normalización no junte dos vehículos distintos. Si esta
+-- consulta devuelve algo, NO hay que correr el resto: habría que arreglar las
+-- placas en `vehiculos` antes, porque la carga no sabría a cuál de los dos le
+-- corresponde cada fecha.
+SELECT clave AS placas_que_se_confunden_al_normalizar,
+       GROUP_CONCAT(placa ORDER BY placa) AS placas, COUNT(*) AS cuantas
+  FROM (SELECT id, placa,
+               REPLACE(REPLACE(REPLACE(UPPER(placa), ' ', ''), '-', ''), '.', '') AS clave
+          FROM vehiculos) x
+ GROUP BY clave HAVING COUNT(*) > 1;
+
+-- La guarda de arriba informa; esta tabla PROTEGE. Solo entran los vehículos
+-- cuya placa normalizada identifica a uno y nada más. Si dos se confundieran,
+-- quedan fuera de la carga en vez de recibir la fecha del otro: es mejor que un
+-- carro se quede sin fechas (se ve: aparece PENDIENTE) que con las ajenas (no
+-- se ve: aparece al día).
+DROP TEMPORARY TABLE IF EXISTS tmp_veh_clave;
+CREATE TEMPORARY TABLE tmp_veh_clave (
+  vehiculo_id INT UNSIGNED NOT NULL PRIMARY KEY,
+  clave       VARCHAR(40)  NOT NULL,
+  UNIQUE KEY (clave)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO tmp_veh_clave (vehiculo_id, clave)
+SELECT MIN(id), clave FROM (
+  SELECT id, REPLACE(REPLACE(REPLACE(UPPER(placa), ' ', ''), '-', ''), '.', '') AS clave FROM vehiculos
+) x GROUP BY clave HAVING COUNT(*) = 1;
+
+-- Y después: si una placa de la hoja no existe en `vehiculos`, su fila se
+-- perdería en silencio. Esto la saca a la luz ANTES de escribir nada.
+-- Se busca contra las claves NO ambiguas, así que una placa que quedó fuera por
+-- colisión también sale reportada acá.
 SELECT t.placa_hoja AS placa_de_la_hoja_que_no_existe_en_vehiculos
   FROM (SELECT DISTINCT placa, placa_hoja FROM tmp_carga_desinf) t
-  LEFT JOIN vehiculos v ON v.placa = t.placa
- WHERE v.id IS NULL;
+  LEFT JOIN tmp_veh_clave k ON k.clave = REPLACE(REPLACE(REPLACE(UPPER(t.placa), ' ', ''), '-', ''), '.', '')
+ WHERE k.vehiculo_id IS NULL;
 
 -- Y si una actividad de la carga no tiene regla para el tipo de ese vehículo,
 -- tampoco hay dónde poner la fecha.
 SELECT t.placa, t.actividad AS actividad_sin_regla_para_ese_tipo, v.tipo
   FROM tmp_carga_desinf t
-  JOIN vehiculos v ON v.placa = t.placa
+  JOIN tmp_veh_clave k ON k.clave = REPLACE(REPLACE(REPLACE(UPPER(t.placa), ' ', ''), '-', ''), '.', '')
+  JOIN vehiculos v     ON v.id = k.vehiculo_id
   LEFT JOIN h360_desinf_actividad a ON a.nombre = t.actividad
   LEFT JOIN h360_desinf_regla r ON r.actividad_id = a.id AND r.tipo_vehiculo = v.tipo
  WHERE r.id IS NULL;
@@ -170,7 +213,8 @@ SELECT t.placa, t.actividad AS actividad_sin_regla_para_ese_tipo, v.tipo
 INSERT IGNORE INTO h360_desinf_programacion (vehiculo_id, regla_id, estado)
 SELECT v.id, r.id, 'PENDIENTE'
   FROM tmp_carga_desinf t
-  JOIN vehiculos v              ON v.placa = t.placa
+  JOIN tmp_veh_clave k ON k.clave = REPLACE(REPLACE(REPLACE(UPPER(t.placa), ' ', ''), '-', ''), '.', '')
+  JOIN vehiculos v     ON v.id = k.vehiculo_id
   JOIN h360_desinf_actividad a  ON a.nombre = t.actividad
   JOIN h360_desinf_regla r      ON r.actividad_id = a.id AND r.tipo_vehiculo = v.tipo;
 
@@ -183,7 +227,9 @@ UPDATE h360_desinf_programacion p
   JOIN h360_desinf_regla r     ON r.id = p.regla_id
   JOIN h360_desinf_actividad a ON a.id = r.actividad_id
   JOIN vehiculos v             ON v.id = p.vehiculo_id
-  JOIN tmp_carga_desinf t      ON t.placa = v.placa AND t.actividad = a.nombre
+  JOIN tmp_veh_clave k    ON k.vehiculo_id = v.id
+  JOIN tmp_carga_desinf t ON k.clave = REPLACE(REPLACE(REPLACE(UPPER(t.placa), ' ', ''), '-', ''), '.', '')
+   AND t.actividad = a.nombre
    SET p.fecha_ult     = t.fecha_ult,
        p.fecha_prox    = t.fecha_prox,
        p.observaciones = COALESCE(t.nota, p.observaciones),
@@ -201,6 +247,7 @@ UPDATE h360_desinf_programacion p
  WHERE p.ultimo_registro_id IS NULL;
 
 DROP TEMPORARY TABLE IF EXISTS tmp_carga_desinf;
+DROP TEMPORARY TABLE IF EXISTS tmp_veh_clave;
 
 -- ── 3. Cómo quedó ─────────────────────────────────────────────────────────
 SELECT a.nombre AS actividad, r.tipo_vehiculo, r.periodicidad_dias, r.tipo_registro
