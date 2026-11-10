@@ -31,6 +31,14 @@ async function insertarCita(conn, d) {
   return r.insertId;
 }
 
+async function insertarBloqueo(conn, d) {
+  const [r] = await conn.execute(
+    'INSERT INTO msj_bloqueos (semana_id, inicio, fin, motivo, detalle, creado_por) VALUES (?, ?, ?, ?, ?, ?)',
+    [d.semana_id, d.inicio, d.fin, d.motivo ?? 'spa', d.detalle ?? null, d.creado_por ?? 'test'],
+  );
+  return r.insertId;
+}
+
 /** Borra los datos de las tablas del módulo entre pruebas (en orden de dependencias). */
 async function limpiar(conn) {
   for (const t of ['msj_notificaciones', 'msj_cita_historial', 'msj_citas', 'msj_bloqueos', 'msj_semanas', 'msj_beneficiarios']) {
@@ -38,4 +46,4 @@ async function limpiar(conn) {
   }
 }
 
-module.exports = { insertarBeneficiario, insertarSemana, insertarCita, limpiar };
+module.exports = { insertarBeneficiario, insertarSemana, insertarCita, insertarBloqueo, limpiar };
