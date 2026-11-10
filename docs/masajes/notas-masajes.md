@@ -71,3 +71,10 @@ La spec §9 dice "se reutiliza el login AD existente (JWT con `username` y `grou
 - **Ley 2578 de 2026:** creó el festivo de la Virgen de Chiquinquirá (9 de julio, trasladable al lunes). Se aplicó por primera vez el lunes 13 de julio de 2026; en 2027 cae el lunes 12 de julio. Con él son 19 festivos. Hallado al verificar el calendario 2027 en la Tarea 3.
 - **Mantenimiento:** si una ley nueva agrega o cambia un festivo, se agrega en `festivos.js` con su año `desde` y un test con las fechas oficiales. Mientras tanto, el admin puede bloquear el día a mano. Algunos años dos festivos caen el mismo lunes (p. ej. 30-jun-2025: San Pedro y Sagrado Corazón) y cuentan como un solo día de descanso.
 - **Pospuesto:** `googleapis`, para la Tarea 12, que es donde se usa.
+
+## 6. Importación del listado (Tarea 5, 2026-11-10)
+
+- **No se tuvo el archivo real** (`LISTADO MASAJES 53 BONOS.xlsx`): el lector se probó con xlsx generados con los encabezados de la spec (título en la fila 1, `N.º`, `NOMBRE`, `CARGO`, `NUEMRODECELULAR`, `CORREO ELECTRONICO`). Busca los encabezados en las 10 primeras filas de cualquier hoja y acepta variantes. **Pendiente:** correr `npm run masajes:importar -- <archivo> --actor <usuario> --simular` con el archivo real en staging (Tarea 18) y revisar errores y avisos antes de aplicar.
+- **Todo o nada:** una fila con error (nombre de más de 150 caracteres, persona repetida en el archivo, coincide con dos beneficiarios existentes) bloquea la importación completa. Celular o correo inválidos son avisos: la persona se importa sin ese dato.
+- **Match:** nombre normalizado (sin tildes ni mayúsculas) + celular. La importación nunca cambia `ad_usuario` ni `activo`.
+- **Zip bomb:** `utils/zipSeguro.js` revisa el directorio central antes de que exceljs descomprima (máx. 200 entradas y 50 MB declarados). Confía en los tamaños declarados; la defensa en profundidad es la subida solo para admin, 2 MB y el tope de 500 filas.

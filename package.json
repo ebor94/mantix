@@ -24,7 +24,8 @@
     "test:masajes": "jest src/masajes",
     "test:masajes:int": "jest -c jest.masajes-int.config.js --runInBand",
     "masajes:db:test": "docker compose -f src/masajes/testing/docker-compose.yml up -d --wait",
-    "masajes:migrate": "node src/masajes/scripts/migrar.js"
+    "masajes:migrate": "node src/masajes/scripts/migrar.js",
+    "masajes:importar": "node src/masajes/scripts/importarBeneficiarios.js"
   },
   "jest": {
     "testEnvironment": "node",
