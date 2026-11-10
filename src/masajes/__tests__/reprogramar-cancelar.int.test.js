@@ -176,6 +176,16 @@ describe('reprogramar', () => {
     expect(f.inicio.toISOString()).toBe(h[1].inicio_nuevo.toISOString());
   });
 
+  test('un empleado no puede hacer más de 4 cambios en 24 h (cada uno escribe al spa); el admin sí', async () => {
+    const { c } = await citaDe();
+    const destinos = ['2026-11-24T14:00:00Z', '2026-11-25T14:00:00Z', '2026-11-26T14:00:00Z', '2026-11-27T14:00:00Z', '2026-11-24T15:00:00Z'].map((x) => new Date(x));
+    for (const d of destinos.slice(0, 4)) await reprogramar(c, d);
+    const r = await reprogramar(c, destinos[4]).catch((e) => e);
+    expect(r).toMatchObject({ statusCode: 429, motivo: 'DEMASIADOS_CAMBIOS' });
+    expect(await motivo(cancelar(c))).toBe('DEMASIADOS_CAMBIOS');
+    expect((await reprogramar(c, destinos[4], { esAdmin: true, actor: 'admin1' })).estado).toBe('agendada');
+  });
+
   test('a la misma franja → VALIDACION', async () => {
     const { c } = await citaDe();
     expect(await motivo(reprogramar(c, lun9))).toBe('VALIDACION');

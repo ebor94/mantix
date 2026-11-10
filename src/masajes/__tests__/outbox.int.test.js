@@ -161,3 +161,23 @@ test('sin integraciones configuradas no procesa nada y avisa una sola vez', asyn
   expect(log.warn).toHaveBeenCalledTimes(1);
   expect(a.correo.enviar).not.toHaveBeenCalled();
 });
+
+test('carrera: el empleado cancela mientras el worker envía "nueva" al spa → el spa recibe la cancelación y el descarte no se pisa', async () => {
+  const a = adaptadores();
+  let soltar;
+  let enviando;
+  const yaEnvia = new Promise((r) => { enviando = r; });
+  a.correo.enviar.mockImplementation(async (para) => {
+    if (para === 'spa@ejemplo.co') { enviando(); await new Promise((r) => { soltar = r; }); }
+    return '<id@x>';
+  });
+  const c = await agendada();
+  const corrida = worker(a).procesarPendientes();
+  await yaEnvia; // el correo al spa está "saliendo"
+  await s.citas.cancelar({ citaId: c.id, actor: 'e', esAdmin: false, beneficiarioIdActor: c.beneficiario_id });
+  soltar();
+  await corrida;
+  const e = await estados(c.id);
+  expect(e['spa_nueva/email']).toBe('descartado'); // el worker no lo pasó a "enviado" encima del descarte
+  expect(e['spa_cancelada/email']).toBe('pendiente'); // y el spa sí recibe la cancelación
+});

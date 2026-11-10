@@ -96,3 +96,24 @@ Transporte nodemailer propio con las mismas variables `EMAIL_*` de Mantix y STAR
 
 ### Requisito de despliegue: `fix/npm-audit` antes que Masajes
 `npm audit` marca `jws@3.2.2` (la que usa `jsonwebtoken`) con *"Improperly Verifies HMAC Signature"* (< 3.2.3). Afecta la verificación HS256 del token de Masajes. La rama `fix/npm-audit` (commit `31a18f8`) la sube a 3.2.3. **Fusionar esa rama a `main` antes de desplegar Masajes**, y luego rebasar `feature/masajes` sobre ella. La copia `jws@4.0.1` que trae `google-auth-library` no está afectada.
+
+
+## 8. Revisión de seguridad (Tarea 17, 2026-11-10)
+
+Búsquedas automáticas del plan: sin secretos literales, `eval`, `v-html`, mensajes de BD en logs ni `req.body` pasado directo a servicios. Las interpolaciones en SQL son constantes del código o cantidades de `?`, nunca valores del usuario.
+
+Revisión independiente (agente aparte, sin acceso a las conclusiones propias): **sin hallazgos críticos ni altos**. Corregidos, con pruebas y mutaciones:
+
+| # | Hallazgo | Corrección |
+|---|---|---|
+| M1 | Login expuesto a fuerza bruta y a bloquear cuentas del AD (límite por usuario+IP, IPv6 sin agrupar) | 5 fallos por **cuenta** en 15 min desde cualquier IP (por debajo del bloqueo del AD); techo por IP de 200, con IPv6 por /64 |
+| M2 | El limitador global de Mantix por IP (1000/15 min) también cubría Masajes: una sede entera quedaba en 429 | `/api/masajes/` sale del limitador global; el módulo limita por usuario |
+| L1 | Cancelar mientras el worker enviaba "nueva" al spa: el spa nunca se enteraba de la cancelación | El worker solo cierra filas `pendiente`; un aviso reservado por el worker cuenta como "posiblemente enviado" y se encola `spa_cancelada` |
+| L2 | El rol admin dura lo que el token (8 h) | Token de admin de 2 h (`MASAJES_JWT_EXPIRES_ADMIN`). El resto queda como riesgo aceptado (spec §9.6) |
+| L3 | La lista de secretos distintos no tenía todos los del repositorio | Agregados `SV_JWT_*`, `IDENTIDAD_JWT_REFRESH_SECRET`, `VOTACION_JWT_SECRET`, `HASH_SECRET` |
+| L4 | Una celda suelta en la fila 1.048.576 hacía recorrer un millón de filas | Corte tras 200 filas vacías seguidas |
+| L5 | `ultimo_error` podía guardar correos de destinatarios | `redactar()` enmascara correos (`***@dominio`) |
+| L6 | Un usuario escrito como contraseña quedaba en el log | Solo se registran nombres con forma de usuario. **Pendiente fuera del módulo:** `ldap.service.js` (H360) imprime el usuario crudo con `console.log` |
+| — | Un empleado podía generar correos al spa en bucle (agendar/cancelar) | Máximo 4 cambios del empleado en 24 h (`MSJ_CAMBIOS_DIARIOS`) |
+
+Quedan como recomendaciones de despliegue (runbook §8b): puerto de Node accesible solo desde nginx (`trust proxy`), contadores en memoria por instancia y restringir el login a la red corporativa. Verificar también que el AD no permita a los usuarios editar su propio `mail` o `displayName` (de eso depende la autovinculación).

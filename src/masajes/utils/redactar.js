@@ -1,5 +1,5 @@
 // Proyección segura de un error de un adaptador para guardarlo en msj_notificaciones.ultimo_error y en logs
-// (spec §17.5): sin cabeceras de autenticación, API keys, tokens, query strings ni celulares completos.
+// (spec §17.5): sin cabeceras de autenticación, API keys, tokens, query strings, correos ni celulares completos.
 const MAX = 1000;
 
 // El orden importa: primero el token Bearer, si no el patrón de cabeceras se come la palabra "Bearer" y deja el token.
@@ -8,6 +8,7 @@ const PATRONES = [
   [/(x-hablame-key|authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)(\s*[:=]\s*)("?)[^"\s,&}]+/gi, '$1$2$3[REDACTADO]'],
   [/(https?:\/\/[^\s?"']+)\?[^\s"']*/gi, '$1?[REDACTADO]'],
   [/\b(57)?(3\d{2})\d{4}(\d{3})\b/g, (m, p57, a, b) => `${p57 || ''}${a}****${b}`],
+  [/[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g, (m) => `***@${m.split('@')[1]}`],
   [/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, '[CLAVE REDACTADA]'],
 ];
 

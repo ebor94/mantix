@@ -10,6 +10,23 @@ const { ROLES, rolDesdeGrupos, firmarToken, normalizarUsuario } = require('../se
 
 const CAMPOS_LOGIN = ['usuario', 'password'];
 const textoValido = (v, max) => typeof v === 'string' && v.trim() !== '' && v.length <= max;
+/** IPv4 tal cual; IPv6 por su /64 (un atacante con un bloque IPv6 tiene millones de direcciones). */
+function claveIp(ip) {
+  const s = String(ip || '');
+  if (!s.includes(':') || /^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(s)) return s.replace(/^::ffff:/i, '');
+  const [cabeza, cola = ''] = s.split('::');
+  const a = cabeza ? cabeza.split(':') : [];
+  const b = cola ? cola.split(':') : [];
+  const grupos = [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b];
+  return `${grupos.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
+/** Si alguien escribe su contraseña en el campo de usuario, no debe quedar en el log: solo nombres con forma de usuario. */
+const usuarioParaLog = (raw) => {
+  const u = normalizarUsuario(raw);
+  return /^[a-z0-9._-]{1,64}$/.test(u) ? u : '[formato no válido]';
+};
+
 const auditoriaDe = (req) => ({ ip: req.ip, userAgent: req.get('user-agent'), requestId: req.msjApiCodigo });
 
 function crearRouterAuth({ obtenerConfig, directorio, beneficiarios, autenticar, resolverBeneficiario }) {
@@ -26,22 +43,26 @@ function crearRouterAuth({ obtenerConfig, directorio, beneficiarios, autenticar,
       429, 'DEMASIADOS_INTENTOS', 'Demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.',
     )),
   };
-  // A: 10 fallos por usuario e IP. B: techo de 100 fallos por IP.
-  const limitadorUsuario = rateLimit({
+  // A: 5 fallos por CUENTA en 15 min, desde cualquier IP. Queda por debajo del umbral de bloqueo típico del AD:
+  //    un atacante no puede bloquear la cuenta de dominio de otra persona (como mucho, su acceso a Masajes 15 min).
+  // B: techo de 200 fallos por IP (o por /64 en IPv6, para que rotar direcciones no lo evada). Es alto a propósito:
+  //    en una sede todos salen por la misma IP. Los contadores viven en memoria de cada instancia de pm2.
+  const limitadorCuenta = rateLimit({
     ...opcionesLimite,
-    limit: 10,
-    keyGenerator: (req) => `${req.ip}|${normalizarUsuario(req.body && req.body.usuario)}`,
+    limit: 5,
+    keyGenerator: (req) => `u:${normalizarUsuario(req.body && req.body.usuario)}`,
+    validate: { ip: false },
   });
-  const limitadorIp = rateLimit({ ...opcionesLimite, limit: 100, keyGenerator: (req) => req.ip });
+  const limitadorIp = rateLimit({ ...opcionesLimite, limit: 200, keyGenerator: (req) => claveIp(req.ip), validate: { ip: false } });
 
-  router.post('/login', apiCodigo('MSJ-AUT-001'), limitadorIp, limitadorUsuario, aw(async (req, res) => {
+  router.post('/login', apiCodigo('MSJ-AUT-001'), limitadorIp, limitadorCuenta, aw(async (req, res) => {
     const cuerpo = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
     const extra = Object.keys(cuerpo).filter((k) => !CAMPOS_LOGIN.includes(k));
     const { usuario, password } = cuerpo;
     if (extra.length || !textoValido(usuario, 100) || !textoValido(password, 200)) {
       throw E.VALIDACION([{ campo: 'login', motivo: 'Usuario y contraseña son obligatorios' }]);
     }
-    const registrar = (resultado, mas = {}) => req.msjLog.info('masajes login', { usuario: normalizarUsuario(usuario), ip: req.ip, resultado, ...mas });
+    const registrar = (resultado, mas = {}) => req.msjLog.info('masajes login', { usuario: usuarioParaLog(usuario), ip: req.ip, resultado, ...mas });
 
     let datos;
     try {
@@ -83,4 +104,4 @@ function crearRouterAuth({ obtenerConfig, directorio, beneficiarios, autenticar,
   return router;
 }
 
-module.exports = { crearRouterAuth };
+module.exports = { crearRouterAuth, claveIp, usuarioParaLog };

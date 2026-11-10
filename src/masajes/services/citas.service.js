@@ -1,4 +1,5 @@
 // Citas: agendar (Tarea 8), reprogramar y cancelar (Tarea 9), asistencia (Tarea 10).
+const MasajesError = require('../utils/MasajesError');
 const { E } = require('../utils/MasajesError');
 const { enTransaccion, conReintentos } = require('../utils/transaccion');
 const { limpiar } = require('../utils/texto');
@@ -101,6 +102,13 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
     if (!cita) throw E.NO_ENCONTRADA();
     if (cita.estado !== 'agendada') throw E.ESTADO_INVALIDO();
     if (!reglas.puedeModificar({ ahora: reloj(), cita, esAdmin: admin })) throw E.ANTICIPACION_INSUFICIENTE(config.anticipacionModificarH);
+    // Cada cambio manda correos al spa e invitaciones: un empleado no puede hacer más de N al día (el admin sí).
+    if (!admin) {
+      const cambios = await historial.contarCambiosDelEmpleado(conn, cita.beneficiario_id);
+      if (cambios >= config.cambiosDiarios) {
+        throw new MasajesError(429, 'DEMASIADOS_CAMBIOS', `Ya hiciste ${config.cambiosDiarios} cambios en las últimas 24 horas. Intenta mañana o pide ayuda a Talento Humano.`);
+      }
+    }
     return cita;
   }
 
@@ -130,7 +138,7 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
         inicioAnterior: cita.inicio, inicioNuevo: nuevo, usuario: actor, esAdmin: admin, auditoria,
       });
 
-      const spaSabia = await notificacionesRepo.huboEnvioAlSpa(conn, cita.id);
+      const spaSabia = await notificacionesRepo.huboEnvioAlSpa(conn, cita.id, reloj());
       await notificacionesRepo.descartarPendientes(conn, cita.id);
       const movida = { ...cita, semana_id: hab.semanaId, inicio: nuevo, fin, periodo };
       await outbox.encolar(conn, movida, [
@@ -156,7 +164,7 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
         inicioAnterior: cita.inicio, motivo: m, usuario: actor, esAdmin: admin, auditoria,
       });
 
-      const spaSabia = await notificacionesRepo.huboEnvioAlSpa(conn, cita.id);
+      const spaSabia = await notificacionesRepo.huboEnvioAlSpa(conn, cita.id, reloj());
       await notificacionesRepo.descartarPendientes(conn, cita.id);
       const pares = [['calendar_delete', 'google'], ['empleado_cancelacion', 'email']];
       if (spaSabia) pares.push(['spa_cancelada', 'email']); // el spa no recibe cancelaciones de citas que nunca conoció

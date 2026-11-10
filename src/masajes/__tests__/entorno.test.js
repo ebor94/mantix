@@ -55,6 +55,18 @@ describe('leerEntorno', () => {
     expect(leer({ MASAJES_JWT_SECRET: 'a'.repeat(40) }).ok).toBe(false); // = JWT_SECRET
   });
 
+  test('el secreto no puede repetir el de ningún otro módulo del repositorio', () => {
+    for (const otro of ['SV_JWT_SECRET', 'SV_JWT_REFRESH_SECRET', 'IDENTIDAD_JWT_REFRESH_SECRET', 'VOTACION_JWT_SECRET', 'HASH_SECRET']) {
+      expect([otro, leer({ [otro]: 'm'.repeat(40) }).ok]).toEqual([otro, false]);
+    }
+  });
+
+  test('el token de admin dura menos (2 h por defecto) y se valida', () => {
+    expect(leer().config.jwtExpiresAdmin).toBe('2h');
+    expect(leer({ MASAJES_JWT_EXPIRES_ADMIN: '30m' }).config.jwtExpiresAdmin).toBe('30m');
+    expect(leer({ MASAJES_JWT_EXPIRES_ADMIN: '1d' }).ok).toBe(false);
+  });
+
   test('vigencia del token inválida → no ok', () => {
     expect(leer({ MASAJES_JWT_EXPIRES: '8' }).ok).toBe(false); // sin unidad jsonwebtoken lo leería como segundos
     expect(leer({ MASAJES_JWT_EXPIRES: '7d' }).ok).toBe(false);

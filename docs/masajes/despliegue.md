@@ -68,6 +68,12 @@ Ver `src/masajes/masajes.env.example`. Obligatorias para que el módulo arranque
 
 Comprobar: `/api/masajes/v1/health` → **200**. Si sigue en 503, el motivo exacto está en el log de pm2 (`masajes deshabilitado: …`).
 
+### 8b. Red
+
+- El puerto de Node de Mantix debe ser accesible **solo desde nginx**. Mantix usa `trust proxy 1`: si alguien llega directo al puerto, controla `X-Forwarded-For` y los límites por IP del login dejan de valer. El límite por cuenta (5 fallos en 15 min) sigue valiendo igual.
+- Los contadores de intentos viven en memoria de cada instancia de pm2. Con varias instancias, el límite efectivo se multiplica; si se pasa a cluster, considerar un almacén compartido.
+- Opcional, recomendado: restringir `/api/masajes/v1/auth/login` a la red corporativa en nginx.
+
 ## 9. Cargar el listado
 
 ```bash

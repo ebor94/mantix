@@ -15,6 +15,7 @@ const { normalizarCelular } = require('../dominio/telefono');
 const { limpiar } = require('../utils/texto');
 
 const MAX_FILAS = 500;
+const MAX_VACIAS_SEGUIDAS = 200;
 const FILAS_BUSQUEDA_ENCABEZADO = 10;
 const MAX_NOMBRE = 150;
 const MAX_CARGO = 150;
@@ -102,13 +103,17 @@ async function leerListado(buffer, { maxFilas = MAX_FILAS } = {}) {
   const vistas = new Set();
   let conDatos = 0;
 
-  for (let r = filaEncabezado + 1; r <= ws.rowCount; r++) {
+  // Una hoja con una celda suelta en la fila 1.048.576 haría crear un millón de filas vacías: tras
+  // MAX_VACIAS_SEGUIDAS filas vacías seguidas se da por terminado el listado.
+  let vaciasSeguidas = 0;
+  for (let r = filaEncabezado + 1; r <= ws.rowCount && vaciasSeguidas < MAX_VACIAS_SEGUIDAS; r++) {
     const row = ws.getRow(r);
     const celda = (campo) => (cols[campo] ? row.getCell(cols[campo]).value : null);
     const nombreTexto = limpiar(textoDeCelda(celda('nombre')));
     const celularCrudo = crudoDeCelda(celda('celular'));
     const otros = ['cargo', 'correo'].some((c) => limpiar(textoDeCelda(celda(c))) !== '');
-    if (nombreTexto === '' && limpiar(textoDeCelda(celularCrudo)) === '' && !otros) continue; // fila vacía
+    if (nombreTexto === '' && limpiar(textoDeCelda(celularCrudo)) === '' && !otros) { vaciasSeguidas += 1; continue; } // fila vacía
+    vaciasSeguidas = 0;
 
     conDatos += 1;
     if (conDatos > maxFilas) throw errorArchivo('DEMASIADAS_FILAS');

@@ -25,8 +25,9 @@ function normalizarUsuario(raw) {
   return u;
 }
 
-function firmarToken({ usuario, nombre, rol }, { jwtSecret, jwtExpires }) {
-  return jwt.sign({ scope: SCOPE, nombre, rol }, jwtSecret, { subject: usuario, algorithm: 'HS256', expiresIn: jwtExpires });
+function firmarToken({ usuario, nombre, rol }, { jwtSecret, jwtExpires, jwtExpiresAdmin }) {
+  const expiresIn = rol === ROLES.ADMIN && jwtExpiresAdmin ? jwtExpiresAdmin : jwtExpires;
+  return jwt.sign({ scope: SCOPE, nombre, rol }, jwtSecret, { subject: usuario, algorithm: 'HS256', expiresIn });
 }
 
 function verificarToken(token, jwtSecret) {

@@ -78,8 +78,9 @@ const limiter = rateLimit({
   // TRIKIPELUDOS: todo el evento comparte IP pública; el módulo aplica sus propios límites.
   // October Big Day: el evento también comparte Wi-Fi; el módulo aplica su propio límite en el POST.
   // Portería: las casetas de una sede pueden compartir IP; el módulo aplica su propio límite en el login.
+  // Agenda de Masajes: toda una sede sale por una IP; el módulo limita por usuario (y por cuenta en el login).
   skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
-    || req.originalUrl.startsWith('/api/porteria/')
+    || req.originalUrl.startsWith('/api/porteria/') || req.originalUrl.startsWith('/api/masajes/')
 });
 app.use('/api/', limiter);
 

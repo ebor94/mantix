@@ -73,14 +73,22 @@ describe('credenciales y directorio', () => {
     expect(directorio.validarCredenciales).not.toHaveBeenCalled();
   });
 
-  test('11 fallos del mismo usuario en 15 min → 429; los logins correctos no cuentan', async () => {
-    const id = await insertarBeneficiario(conn, { nombre: 'Edwin Ortega', ad_usuario: 'eortega' });
-    expect(id).toBeGreaterThan(0);
-    for (let i = 0; i < 5; i++) expect((await login('eortega')).status).toBe(200);
-    for (let i = 0; i < 10; i++) expect((await login('eortega', 'mala')).status).toBe(401);
-    const r = await login('eortega', 'mala');
+  test('5 fallos de una cuenta en 15 min → 429 desde CUALQUIER IP (protege la cuenta del AD de un bloqueo); los correctos no cuentan', async () => {
+    await insertarBeneficiario(conn, { nombre: 'Edwin Ortega', ad_usuario: 'eortega' });
+    const desde = async (ip, password = CLAVE) => request(await servir(app)).post('/api/masajes/v1/auth/login').set('X-Forwarded-For', ip).send({ usuario: 'eortega', password });
+    for (let i = 0; i < 5; i++) expect((await desde('10.0.0.1')).status).toBe(200);
+    for (let i = 0; i < 5; i++) expect((await desde(`10.0.0.${i + 10}`, 'mala')).status).toBe(401); // IPs distintas
+    const r = await desde('10.9.9.9', 'mala');
     expect(r.status).toBe(429);
     expect(r.body).toMatchObject({ error: 'MSJ-AUT-001', motivo: 'DEMASIADOS_INTENTOS' });
+    // Otra cuenta no se ve afectada.
+    expect((await request(await servir(app)).post('/api/masajes/v1/auth/login').set('X-Forwarded-For', '10.9.9.9').send({ usuario: 'aperez', password: 'mala' })).status).toBe(401);
+  });
+
+  test('una contraseña escrita en el campo de usuario no queda en el log', async () => {
+    await login('Clave#Secreta!2026', 'x');
+    expect(JSON.stringify(mockRegistros)).not.toContain('Clave#Secreta!2026');
+    expect(JSON.stringify(mockRegistros).toLowerCase()).not.toContain('clave#secreta!2026');
   });
 
   test('la contraseña nunca aparece en los logs, ni en un login fallido ni en uno correcto', async () => {

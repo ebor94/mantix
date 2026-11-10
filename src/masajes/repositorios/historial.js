@@ -26,4 +26,17 @@ async function inicioAnteriorDe(ejecutor, citaId, inicioActual) {
   return filas[0] ? filas[0].inicio_anterior : null;
 }
 
-module.exports = { registrar, inicioAnteriorDe };
+/**
+ * Cambios (reprogramar/cancelar) que hizo el propio empleado en las últimas 24 h. El corte se calcula con el
+ * reloj de la BD, el mismo que escribió created_at (comparar contra el reloj de la app mezclaría dos relojes).
+ */
+async function contarCambiosDelEmpleado(conn, beneficiarioId) {
+  const [[f]] = await conn.execute(
+    `SELECT COUNT(*) AS n FROM msj_cita_historial WHERE beneficiario_id = ? AND accion IN ('reprogramada', 'cancelada')
+       AND es_admin = 0 AND created_at >= NOW() - INTERVAL 24 HOUR`,
+    [beneficiarioId],
+  );
+  return Number(f.n);
+}
+
+module.exports = { registrar, inicioAnteriorDe, contarCambiosDelEmpleado };

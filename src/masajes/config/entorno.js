@@ -4,7 +4,10 @@ const recortada = (v) => (vacia(v) ? undefined : String(v).trim());
 
 const CONEXION = ['DB_HOST', 'DB_USER', 'DB_PASSWORD'];
 const LDAP = ['LDAP_URL', 'LDAP_BASE_DN', 'LDAP_BIND_USER', 'LDAP_BIND_PASS'];
-const OTROS_SECRETOS = ['JWT_SECRET', 'IDENTIDAD_JWT_SECRET', 'TRK_JWT_SECRET', 'PORTERIA_JWT_SECRET'];
+// Todos los secretos de firma del repositorio: si se repitiera uno, un token de Masajes (que tiene cualquier
+// beneficiario) podría pasar el jwt.verify de otro módulo que no revise sus claims.
+const OTROS_SECRETOS = ['JWT_SECRET', 'IDENTIDAD_JWT_SECRET', 'IDENTIDAD_JWT_REFRESH_SECRET', 'TRK_JWT_SECRET', 'PORTERIA_JWT_SECRET',
+  'SV_JWT_SECRET', 'SV_JWT_REFRESH_SECRET', 'VOTACION_JWT_SECRET', 'HASH_SECRET'];
 const FRANJAS_DEFECTO = '08:00,09:00,10:00,14:00,15:00,16:00';
 
 function entero(env, nombre, porDefecto, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
@@ -56,6 +59,9 @@ function leerEntorno(env = process.env) {
   }
   const jwtExpires = recortada(env.MASAJES_JWT_EXPIRES) ?? '8h';
   if (!/^([1-9]\d*)(m|h)$/.test(jwtExpires)) return { ok: false, motivo: 'MASAJES_JWT_EXPIRES inválido (usa p. ej. 8h)' };
+  // El rol admin sale del AD solo al iniciar sesión: con una vigencia corta, quitar a alguien del grupo surte efecto antes.
+  const jwtExpiresAdmin = recortada(env.MASAJES_JWT_EXPIRES_ADMIN) ?? '2h';
+  if (!/^([1-9]\d*)(m|h)$/.test(jwtExpiresAdmin)) return { ok: false, motivo: 'MASAJES_JWT_EXPIRES_ADMIN inválido (usa p. ej. 2h)' };
 
   // DN completo; se compara exacto y case-insensitive, nunca por CN ni por subcadena (spec §9.2).
   const grupoAdminDn = recortada(env.MSJ_GRUPO_ADMIN_DN);
@@ -71,6 +77,7 @@ function leerEntorno(env = process.env) {
     anticipacionAgendarH: entero(env, 'MSJ_ANTICIPACION_AGENDAR_H', 24, { max: 720 }),
     anticipacionModificarH: entero(env, 'MSJ_ANTICIPACION_MODIFICAR_H', 24, { max: 720 }),
     smsTopeDiario: entero(env, 'MSJ_SMS_TOPE_DIARIO', 100, { min: 1, max: 10000 }),
+    cambiosDiarios: entero(env, 'MSJ_CAMBIOS_DIARIOS', 4, { min: 1, max: 50 }),
   };
   const appUrl = recortada(env.MSJ_APP_URL) ?? 'https://mantix.losolivos.co/masajes';
   if (!/^https:\/\/[^\s"'<>]+$/.test(appUrl)) return { ok: false, motivo: 'MSJ_APP_URL debe ser una URL https' };
@@ -88,6 +95,7 @@ function leerEntorno(env = process.env) {
       ...valores,
       jwtSecret: secreto,
       jwtExpires,
+      jwtExpiresAdmin,
       grupoAdminDn: grupoAdminDn.toLowerCase(),
       dominiosAutovinculo: (recortada(env.MSJ_DOMINIOS_AUTOVINCULO) ?? 'losolivos.co')
         .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),

@@ -198,6 +198,7 @@ describe('redactar', () => {
     expect(r).not.toMatch(/abc123|eyJhbGciOi|apikey=zzz|573152884079|MIIE/);
     expect(r).toMatch(/ECONNRESET/);
     expect(r).toContain('57315****079');
+    expect(redactar(new Error('550 recipients rejected: <ana.perez@losolivos.co>'))).toBe('Error | 550 recipients rejected: <***@losolivos.co>');
     expect(redactar(new Error('x'.repeat(5000))).length).toBeLessThanOrEqual(1000);
     expect(redactar(null)).toBeNull();
   });

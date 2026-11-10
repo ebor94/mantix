@@ -137,6 +137,22 @@ describe('leerListado — errores (bloquean la importación) y advertencias (no 
   });
 });
 
+describe('leerListado — hoja dispersa', () => {
+  test('una celda suelta en la última fila de Excel no hace recorrer un millón de filas', async () => {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Listado');
+    ws.addRow(['NOMBRE', 'CELULAR']);
+    ws.addRow(['Ana', '3152884079']);
+    ws.getCell('A1048576').value = 'x';
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+    const t0 = Date.now();
+    const r = await leerListado(buf);
+    expect(r.filas.map((f) => f.nombre)).toEqual(['Ana']);
+    expect(Date.now() - t0).toBeLessThan(3000);
+  });
+});
+
 describe('leerListado — archivo completo inválido', () => {
   test('sin encabezados reconocibles → SIN_ENCABEZADOS', async () => {
     const buf = await crearXlsx({ titulo: null, encabezados: ['Columna A', 'Columna B'], filas: [['x', 'y']] });

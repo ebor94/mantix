@@ -39,6 +39,14 @@ describe('token propio (scope masajes, HS256)', () => {
     expect(verificarToken(t, CFG.jwtSecret)).toMatchObject({ usuario: 'eortega', nombre: 'Edwin', rol: 'empleado' });
   });
 
+  test('el token de admin vence antes que el de empleado', () => {
+    const cfg = { ...CFG, jwtExpiresAdmin: '2h' };
+    const adm = jwt.decode(firmarToken({ usuario: 'a', nombre: 'A', rol: ROLES.ADMIN }, cfg));
+    const emp = jwt.decode(firmarToken({ usuario: 'e', nombre: 'E', rol: ROLES.EMPLEADO }, cfg));
+    expect(adm.exp - adm.iat).toBe(7200);
+    expect(emp.exp - emp.iat).toBe(8 * 3600);
+  });
+
   test('el token no lleva datos personales ni ids internos', () => {
     const p = jwt.decode(firmarToken({ usuario: 'eortega', nombre: 'Edwin', rol: ROLES.EMPLEADO }, CFG));
     expect(Object.keys(p).sort()).toEqual(['exp', 'iat', 'nombre', 'rol', 'scope', 'sub']);
