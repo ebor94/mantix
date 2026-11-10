@@ -23,4 +23,39 @@ async function actualizarDatosListado(conn, id, { nombre, cargo, correo }, actor
   );
 }
 
-module.exports = { listarParaImportar, insertar, actualizarDatosListado };
+// ---- Identidad (login y cada petición) ----
+
+/** Beneficiario vinculado a ese usuario AD, activo o no (el login decide qué hacer con un inactivo). */
+async function buscarPorUsuario(ejecutor, usuario) {
+  const [filas] = await ejecutor.execute('SELECT id, nombre, activo FROM msj_beneficiarios WHERE ad_usuario = ?', [usuario]);
+  return filas[0] || null;
+}
+
+/** Solo activos: lo usa resolverBeneficiario en cada petición. */
+async function obtenerActivoPorUsuario(ejecutor, usuario) {
+  const [filas] = await ejecutor.execute('SELECT id, nombre FROM msj_beneficiarios WHERE ad_usuario = ? AND activo = 1', [usuario]);
+  return filas[0] || null;
+}
+
+/**
+ * TODOS los beneficiarios con ese correo (vinculados o no), bloqueados hasta el commit. Se cuentan todos a
+ * propósito: en un buzón compartido donde uno ya está vinculado, el otro no debe quedar para cualquiera.
+ */
+async function porCorreoParaVincular(conn, correo) {
+  const [filas] = await conn.execute('SELECT id, nombre, ad_usuario, activo FROM msj_beneficiarios WHERE correo = ? FOR UPDATE', [correo]);
+  return filas;
+}
+
+/** Vincula solo si sigue sin vincular; devuelve si se aplicó. */
+async function vincular(conn, id, usuario) {
+  const [r] = await conn.execute(
+    'UPDATE msj_beneficiarios SET ad_usuario = ?, updated_by = ? WHERE id = ? AND ad_usuario IS NULL',
+    [usuario, usuario, id],
+  );
+  return r.affectedRows === 1;
+}
+
+module.exports = {
+  listarParaImportar, insertar, actualizarDatosListado,
+  buscarPorUsuario, obtenerActivoPorUsuario, porCorreoParaVincular, vincular,
+};

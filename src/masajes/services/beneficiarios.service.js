@@ -1,6 +1,8 @@
-// Servicio de beneficiarios: importación del listado (Tarea 5). Vinculación AD y altas/bajas: Tareas 6 y 11.
+// Servicio de beneficiarios: importación del listado (Tarea 5) e identidad del login (Tarea 6). Altas/bajas: Tarea 11.
 const repo = require('../repositorios/beneficiarios');
+const historial = require('../repositorios/historial');
 const { leerListado, claveNombre } = require('./listadoXlsx');
+const { nombresCompatibles } = require('./auth.service');
 const { enTransaccion } = require('../utils/transaccion');
 
 const nulo = (v) => (v === undefined || v === '' ? null : v);
@@ -49,7 +51,44 @@ function crearServicioBeneficiarios({ bd }) {
     });
   }
 
-  return { importar };
+  /** Para cada petición autenticada: { id, nombre } del beneficiario activo vinculado, o null. */
+  async function obtenerActivoPorUsuario(usuario) {
+    if (!usuario) return null;
+    return repo.obtenerActivoPorUsuario(bd.obtener(), usuario);
+  }
+
+  /**
+   * Login (spec §9.3): devuelve { id, nombre } del beneficiario activo vinculado al usuario, o null.
+   * Si no hay vínculo, intenta UNA autovinculación por correo, solo si:
+   *  - el correo del AD es de un dominio corporativo (`dominios`),
+   *  - exactamente un beneficiario en total tiene ese correo (buzones compartidos nunca), sin vincular y activo,
+   *  - y el nombre de la cuenta del AD es compatible con el del beneficiario.
+   * Todo en una transacción con el beneficiario bloqueado: dos logins simultáneos vinculan una sola vez.
+   */
+  async function resolverParaLogin({ usuario, email, nombreAd, dominios = [], auditoria = {} }) {
+    if (!usuario) return null;
+    return enTransaccion(bd, async (conn) => {
+      const vinculado = await repo.buscarPorUsuario(conn, usuario);
+      if (vinculado) return vinculado.activo ? { id: vinculado.id, nombre: vinculado.nombre } : null;
+
+      const correo = String(email || '').trim().toLowerCase();
+      const dominio = correo.includes('@') ? correo.split('@').pop() : '';
+      if (!correo || !dominios.includes(dominio)) return null;
+
+      const candidatos = await repo.porCorreoParaVincular(conn, correo);
+      if (candidatos.length !== 1) return null;
+      const [b] = candidatos;
+      // Otro login simultáneo del mismo usuario ganó el bloqueo y ya lo vinculó.
+      if (b.ad_usuario === usuario) return b.activo ? { id: b.id, nombre: b.nombre } : null;
+      if (b.ad_usuario !== null || !b.activo || !nombresCompatibles(nombreAd, b.nombre)) return null;
+
+      if (!(await repo.vincular(conn, b.id, usuario))) return null;
+      await historial.registrar(conn, { beneficiarioId: b.id, accion: 'autovinculacion', usuario, auditoria });
+      return { id: b.id, nombre: b.nombre };
+    });
+  }
+
+  return { importar, obtenerActivoPorUsuario, resolverParaLogin };
 }
 
 module.exports = { crearServicioBeneficiarios };

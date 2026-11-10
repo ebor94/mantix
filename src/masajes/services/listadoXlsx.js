@@ -154,4 +154,4 @@ async function leerListado(buffer, { maxFilas = MAX_FILAS } = {}) {
   return { filas, errores, advertencias };
 }
 
-module.exports = { leerListado, formatearNombre, claveNombre, limpiar, MAX_FILAS };
+module.exports = { leerListado, formatearNombre, claveNombre, limpiar, PARTICULAS, MAX_FILAS };

@@ -9,14 +9,18 @@ const { crearBdPerezosa } = require('../db');
 const apiCodigo = require('../middleware/apiCodigo');
 const { masajesErrorHandler } = require('../middleware/errorHandler');
 const { errorParaLog } = require('../utils/errorSeguro');
+const { crearAutenticacion, crearResolverBeneficiario } = require('../middleware/autenticacion');
+const { crearServicioBeneficiarios } = require('../services/beneficiarios.service');
+const { crearRouterAuth } = require('./auth.routes');
 
 /**
- * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config.
- * Las rutas de sesión, empleado y admin se agregan en las Tareas 6 y 11.
+ * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
+ * `directorio` = { validarCredenciales } (AD). Las rutas de empleado y admin se agregan en la Tarea 11.
  */
-// eslint-disable-next-line no-unused-vars
-function crearRouterMasajes({ bd, obtenerConfig }) {
+function crearRouterMasajes({ bd, obtenerConfig, directorio, beneficiarios = crearServicioBeneficiarios({ bd }) }) {
   const router = express.Router();
+  const autenticar = crearAutenticacion(obtenerConfig);
+  const resolverBeneficiario = crearResolverBeneficiario({ beneficiarios });
 
   router.get('/health', apiCodigo('MSJ-SIS-001'), async (req, res) => {
     try {
@@ -27,6 +31,8 @@ function crearRouterMasajes({ bd, obtenerConfig }) {
       res.status(503).json({ success: false, message: 'La base de datos no responde' });
     }
   });
+
+  router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, beneficiarios, autenticar, resolverBeneficiario }));
 
   router.use(apiCodigo('MSJ-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
 
@@ -76,6 +82,8 @@ const real = crearRouterMasajes({
   bd,
   // Solo se llama detrás del guardián, cuando la configuración ya es válida.
   obtenerConfig: () => leerEntorno().config,
+  // El login reutiliza la conexión al AD de H360 (LDAP_URL, LDAP_BASE_DN, LDAP_BIND_USER, LDAP_BIND_PASS).
+  directorio: require('../../h360/services/ldap.service'),
 });
 const router = crearGuardian({ real });
 

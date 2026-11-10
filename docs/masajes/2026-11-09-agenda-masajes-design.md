@@ -177,7 +177,7 @@ La aplicación nunca hace UPDATE ni DELETE sobre esta tabla. El usuario de BD de
 ### Sesión
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/auth/login` | `{ usuario, contrasena }` → valida contra el AD y devuelve `{ token, usuario }` (ver §9) |
+| POST | `/auth/login` | `{ usuario, password }` (mismo formulario que Portería; cualquier otro campo → 400) → valida contra el AD y devuelve `{ token, usuario }` (ver §9) |
 | GET | `/auth/sesion` | Usuario en sesión, rol y beneficiario vinculado |
 | GET | `/health` | Ping a la BD (sin datos) |
 
@@ -229,13 +229,13 @@ Respuesta de error con el contrato de Portería: `{ success: false, error: 'MSJ-
 
 Se sigue el patrón de Portería (`src/porteria/services/auth.service.js`, `routes/auth.routes.js`). El auth principal de Mantix **no sirve**: su JWT no lleva grupos y resuelve el rol desde la tabla `usuarios`.
 
-1. **Login propio** `POST /auth/login { usuario, contrasena }`:
+1. **Login propio** `POST /auth/login { usuario, password }`:
    - El usuario se normaliza como en Portería (lo que va después de `\\` o antes de `@`, en minúsculas).
    - `ldapService.validarCredenciales` (H360) hace el bind contra el AD y devuelve `{ usuario, nombre, email, memberOf }`. El filtro del AD ya excluye cuentas deshabilitadas.
    - Rate limit igual al de Portería: 10 fallos por usuario+IP y 100 por IP en 15 min, contando **solo** las respuestas 401. Un AD caído responde 503 y no cuenta como fallo.
    - La contraseña nunca se registra en logs ni se guarda.
 2. **Rol:** `admin_masajes` si `memberOf` contiene `MSJ_GRUPO_ADMIN_DN` con **coincidencia exacta del DN** (case-insensitive; `memberOf` trae DNs completos como `CN=…,OU=Grupos,DC=olivos,DC=local`). No se compara por subcadena (el error que hoy tiene `detectarRoles` en H360) ni solo por CN. Si no es admin, el rol es `empleado`. Si la variable está vacía, nadie es admin.
-3. **Beneficiario:** se busca `msj_beneficiarios.ad_usuario = usuario` (normalizado). Si no hay vínculo, se intenta **autovinculación una sola vez** por `email` del AD, solo si coincide con exactamente un beneficiario sin `ad_usuario` y el dominio es corporativo (`MSJ_DOMINIOS_AUTOVINCULO`). Los buzones compartidos y los correos personales nunca autovinculan; los vincula el admin. Cada autovinculación queda en historial.
+3. **Beneficiario:** se busca `msj_beneficiarios.ad_usuario = usuario` (normalizado). Si no hay vínculo, se intenta **autovinculación una sola vez** por `email` del AD, solo si **en total** exactamente un beneficiario tiene ese correo (se cuentan también los ya vinculados), está sin `ad_usuario` y activo, el dominio es corporativo (`MSJ_DOMINIOS_AUTOVINCULO`) y el nombre de la cuenta del AD comparte al menos dos palabras con el del beneficiario. Los buzones compartidos y los correos personales nunca autovinculan; los vincula el admin. Cada autovinculación queda en historial.
 4. Si no es admin ni beneficiario activo → `403 NO_BENEFICIARIO` **en el login**, sin emitir token: "No estás en el listado de beneficiarios. Comunícate con Talento Humano."
 5. **Token** (`jsonwebtoken`, como `firmarToken` de Portería):
    - Payload `{ scope: 'masajes', sub: usuario, nombre, rol }`, `algorithm: 'HS256'`, `expiresIn: MASAJES_JWT_EXPIRES` (por defecto `8h`).
