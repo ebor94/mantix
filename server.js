@@ -34,6 +34,10 @@ sequelize.authenticate()
     // SP-3: cron cleanup OTPs (limpiar expirados > 24h cada hora)
     require('./src/sv/jobs/otpCleanup.job').start();
 
+    // H360: cron desinfecciones (00:05 BOG — vencer programaciones, inhabilitar
+    // vehiculos por vencimiento y mandar un solo aviso al espacio de operaciones)
+    require('./src/h360/jobs/desinfecciones.job').start();
+
     // Iniciar servidor
     // Servidor HTTP explícito: Mantix + Socket.IO de TRIKIPELUDOS (namespace /trk)
     const server = http.createServer(app);

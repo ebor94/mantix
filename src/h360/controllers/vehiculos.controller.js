@@ -60,6 +60,42 @@ async function actualizar(req, res, next) {
       const [dup] = await db.query('SELECT id FROM vehiculos WHERE placa = ? AND id <> ?', [updates.placa, id])
       if (dup.length) return res.status(409).json({ mensaje: 'Ya existe otro vehículo con esa placa' })
     }
+
+    // Mantener las columnas de inactivación cuando se mueve `activo`.
+    //
+    // Sin esto, bajar un vehículo desde esta pantalla lo dejaba con
+    // `inactivo_origen` en NULL, indistinguible de los anteriores a la
+    // migración, y subirlo dejaba el motivo viejo pegado a un vehículo que ya
+    // está en servicio. El módulo de desinfección decide por esa columna si
+    // puede reactivar un vehículo solo, así que un motivo rancio ahí es lo que
+    // separa «poner en servicio un carro al que le falta una desinfección» de
+    // «poner en servicio un carro accidentado».
+    //
+    // Solo se escriben en una TRANSICIÓN. Si alguien manda `activo: 0` sobre un
+    // vehículo que ya estaba abajo por vencimiento, pisarle el origen a MANUAL
+    // le quitaría al módulo la capacidad de volver a subirlo cuando por fin se
+    // registre la desinfección, y nadie entendería por qué.
+    if (updates.activo !== undefined) {
+      const [[previo]] = await db.query('SELECT activo FROM vehiculos WHERE id = ?', [id])
+      if (!previo) return res.status(404).json({ mensaje: 'Vehículo no encontrado' })
+
+      const seBaja  = previo.activo === 1 && updates.activo === 0
+      const seSube  = previo.activo === 0 && updates.activo === 1
+
+      if (seBaja) {
+        updates.inactivo_origen = 'MANUAL'
+        updates.inactivo_motivo = String(req.body.inactivo_motivo ?? '').trim().slice(0, 200)
+          || 'Inactivado a mano desde la gestión de vehículos'
+        updates.inactivo_at     = new Date()
+        updates.inactivo_por    = req.user?.usuario || null
+      } else if (seSube) {
+        updates.inactivo_origen = null
+        updates.inactivo_motivo = null
+        updates.inactivo_at     = null
+        updates.inactivo_por    = null
+      }
+    }
+
     await db.query('UPDATE vehiculos SET ? WHERE id = ?', [updates, id])
     const [rows] = await db.query('SELECT * FROM vehiculos WHERE id = ?', [id])
     res.json(rows[0])
@@ -72,6 +108,17 @@ async function eliminar(req, res, next) {
     const [uso] = await db.query('SELECT 1 FROM exequias WHERE vehiculo_id = ? LIMIT 1', [id])
     if (uso.length)
       return res.status(409).json({ mensaje: 'El vehículo ya tiene exequias asociadas; inactívalo en lugar de eliminar.' })
+
+    // La historia de desinfecciones es el único sitio donde queda la evidencia
+    // sanitaria del vehículo, y la llave foránea de h360_desinf_registro es
+    // RESTRICT justamente para que no se borre con él. Sin esta comprobación el
+    // DELETE revienta en la base y el usuario recibe un 500 sin explicación.
+    const [desinf] = await db.query(
+      'SELECT 1 FROM h360_desinf_registro WHERE vehiculo_id = ? LIMIT 1', [id])
+    if (desinf.length)
+      return res.status(409).json({
+        mensaje: 'El vehículo tiene desinfecciones registradas y esa historia no se puede borrar; inactívalo en lugar de eliminar.',
+      })
     await db.query('DELETE FROM vehiculos WHERE id = ?', [id])
     res.json({ ok: true })
   } catch (err) { next(err) }

@@ -21,6 +21,9 @@ const r34Routes                 = require('./r34.routes')
 const licenciasRoutes           = require('./licencias.routes')
 const reportesRoutes            = require('./reportes.routes')
 const dueloRoutes               = require('./duelo.routes')
+const desinfeccionesRoutes      = require('./desinfecciones.routes')
+const { requireWebhookToken }   = require('../middleware/webhookToken')
+const evidenciaDesinf           = require('../services/desinfeccionEvidencia.service')
 const exequiasCtrl              = require('../controllers/exequias.controller')
 
 // Auth H360 (login con LDAP — público)
@@ -45,6 +48,16 @@ router.use('/r34',                   verifyToken, r34Routes)
 router.use('/licencias',             verifyToken, licenciasRoutes)
 router.use('/reportes',              verifyToken, reportesRoutes)
 router.use('/duelo',                 verifyToken, dueloRoutes)
+
+// Desinfecciones del parque automotor. El callback de n8n va antes del montaje
+// con token y FUERA de el: n8n no puede mandar un JWT de usuario. Se autentica
+// con un secreto compartido por cabecera (DESINF_DRIVE_CALLBACK_TOKEN) en vez
+// de quedar abierto, que es como estan hoy los callbacks del R-44 — y la API
+// esta publicada en internet, asi que «es IP interna» no es una proteccion.
+// Va primero para que el comodin /evidencia/:id del router no se lo coma.
+router.post('/desinfecciones/evidencia/drive',
+  requireWebhookToken('DESINF_DRIVE_CALLBACK_TOKEN'), evidenciaDesinf.callbackDrive)
+router.use('/desinfecciones',        verifyToken, desinfeccionesRoutes)
 
 // Health H360
 router.get('/health', (_, res) => res.json({ ok: true, modulo: 'Homenajes360', version: '1.0.0' }))
