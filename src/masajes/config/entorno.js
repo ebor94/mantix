@@ -14,15 +14,19 @@ function entero(env, nombre, porDefecto, { min = 0, max = Number.MAX_SAFE_INTEGE
   return { ok: true, valor: n };
 }
 
-/** Solo la conexión (la usan también los scripts de migración e importación). */
-function leerConexion(env = process.env) {
+/**
+ * Solo la conexión (la usan también los scripts de migración e importación).
+ * `paraMigrar`: las migraciones crean y alteran tablas, así que van siempre con DB_USER; el usuario de
+ * mínimo privilegio MSJ_DB_USER (spec §17.8) no tiene DDL.
+ */
+function leerConexion(env = process.env, { paraMigrar = false } = {}) {
   const faltan = CONEXION.filter((n) => vacia(env[n]));
   if (faltan.length) return { ok: false, motivo: `Faltan variables: ${faltan.join(', ')}` };
-  // Usuario de mínimo privilegio para el módulo (spec §17.8); si no está, se usa el de Mantix con advertencia.
-  const propio = !vacia(env.MSJ_DB_USER) && !vacia(env.MSJ_DB_PASSWORD);
+  // Usuario de mínimo privilegio para el módulo; si no está, se usa el de Mantix con advertencia.
+  const propio = !paraMigrar && !vacia(env.MSJ_DB_USER) && !vacia(env.MSJ_DB_PASSWORD);
   return {
     ok: true,
-    advertencia: propio ? null : 'Masajes usa DB_USER de Mantix: define MSJ_DB_USER/MSJ_DB_PASSWORD con mínimo privilegio',
+    advertencia: propio || paraMigrar ? null : 'Masajes usa DB_USER de Mantix: define MSJ_DB_USER/MSJ_DB_PASSWORD con mínimo privilegio',
     db: {
       host: env.DB_HOST,
       port: parseInt(env.DB_PORT, 10) || 3306,

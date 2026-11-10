@@ -79,6 +79,12 @@ describe('leerConexion', () => {
     expect(propia.db).toEqual({ host: 'h', port: 3307, user: 'msj', password: 'x', database: 'otra' });
   });
 
+  test('para migrar usa siempre DB_USER (el de mínimo privilegio no puede crear tablas)', () => {
+    const c = leerConexion({ ...BASE, MSJ_DB_USER: 'msj', MSJ_DB_PASSWORD: 'x' }, { paraMigrar: true });
+    expect(c.db).toMatchObject({ user: 'u', password: 'p' });
+    expect(c.advertencia).toBeNull();
+  });
+
   test('faltan variables de conexión → no ok', () => {
     expect(leerConexion({ DB_HOST: 'h' })).toEqual({ ok: false, motivo: 'Faltan variables: DB_USER, DB_PASSWORD' });
   });

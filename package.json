@@ -21,7 +21,10 @@
     "porteria:db:test": "docker compose -f src/porteria/testing/docker-compose.yml up -d --wait",
     "porteria:migrate": "node src/porteria/scripts/migrar.js",
     "porteria:sembrar": "node src/porteria/scripts/sembrar.js",
-    "test:masajes": "jest src/masajes"
+    "test:masajes": "jest src/masajes",
+    "test:masajes:int": "jest -c jest.masajes-int.config.js --runInBand",
+    "masajes:db:test": "docker compose -f src/masajes/testing/docker-compose.yml up -d --wait",
+    "masajes:migrate": "node src/masajes/scripts/migrar.js"
   },
   "jest": {
     "testEnvironment": "node",

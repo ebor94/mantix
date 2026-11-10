@@ -24,3 +24,5 @@ uploads/
 !src/bigday/migrations/*.sql
 !src/porteria/migrations/*.sql
 !src/porteria/testing/sql/*.sql
+!src/masajes/migrations/*.sql
+!docs/masajes/*.sql

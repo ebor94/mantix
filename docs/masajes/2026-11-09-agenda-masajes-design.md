@@ -152,7 +152,9 @@ Las migraciones son archivos `src/masajes/migrations/NNN_*.sql`, aplicados en or
 > Los índices UNIQUE llevan **nombre explícito** porque el mapeo del error de concurrencia a `SLOT_OCUPADO` / `CUPO_MES_USADO` depende de ese nombre (ver §17.4).
 
 ### `msj_cita_historial` (solo inserción)
-`id, cita_id, accion ENUM('creada','reprogramada','cancelada','asistencia','autovinculacion'), inicio_anterior, inicio_nuevo, motivo, usuario, es_admin, ip, user_agent, request_id, created_at`
+`id, beneficiario_id, cita_id NULL, accion ENUM('creada','reprogramada','cancelada','asistencia','autovinculacion'), inicio_anterior, inicio_nuevo, motivo, usuario, es_admin, ip, user_agent, request_id, created_at`
+
+`cita_id` es NULL solo en `autovinculacion`, que no tiene cita asociada (`CHECK ck_msj_historial_cita`).
 
 La aplicación nunca hace UPDATE ni DELETE sobre esta tabla. El usuario de BD de la aplicación debería tener solo `INSERT, SELECT` sobre ella (ver §17.8).
 

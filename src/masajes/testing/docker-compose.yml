@@ -1,0 +1,19 @@
+# MySQL 8 efímero para las pruebas de integración de Masajes (npm run masajes:db:test).
+# Puerto 3309 para poder correr en paralelo con Portería (3308). Zona del servidor en UTC a propósito:
+# así las pruebas comprueban que el módulo fija time_zone -05:00 en cada conexión.
+services:
+  mysql-masajes-test:
+    image: mysql:8.0
+    container_name: mysql-masajes-test
+    environment:
+      MYSQL_ROOT_PASSWORD: msj_test
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    ports:
+      - "127.0.0.1:3309:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pmsj_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
