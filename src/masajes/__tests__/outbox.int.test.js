@@ -39,11 +39,14 @@ async function agendada(extra = {}) {
   return s.citas.agendar({ beneficiarioId: b, inicio: lun9, actor: 'e', esAdmin: false });
 }
 
-test('procesa las 3 tareas de una cita nueva: evento (guarda su id), correo al spa y al empleado', async () => {
+test('procesa las 4 tareas de una cita nueva: evento (guarda su id), correo al spa, correo y SMS al empleado', async () => {
   const a = adaptadores();
   const c = await agendada();
-  expect(await worker(a).procesarPendientes()).toMatchObject({ procesadas: 3, enviadas: 3 });
-  expect(await estados(c.id)).toEqual({ 'calendar_upsert/google': 'enviado', 'spa_nueva/email': 'enviado', 'empleado_confirmacion/email': 'enviado' });
+  expect(await worker(a).procesarPendientes()).toMatchObject({ procesadas: 4, enviadas: 4 });
+  expect(await estados(c.id)).toEqual({ 'calendar_upsert/google': 'enviado', 'spa_nueva/email': 'enviado', 'empleado_confirmacion/email': 'enviado', 'empleado_confirmacion/sms': 'enviado' });
+  expect(a.sms.enviar).toHaveBeenCalledTimes(1);
+  expect(a.sms.enviar.mock.calls[0][1]).toMatch(/^Los Olivos: masaje agendado el /);
+  expect(a.sms.enviar.mock.calls[0][1].length).toBeLessThanOrEqual(160);
   expect(await filas('SELECT google_event_id FROM msj_citas WHERE id = ?', [c.id])).toEqual([{ google_event_id: 'ev-1' }]);
   expect(a.correo.enviar.mock.calls.map(([para]) => para).sort()).toEqual(['ana@losolivos.co', 'spa@ejemplo.co']);
   expect(a.calendario.upsert.mock.calls[0][0]).toMatchObject({ googleEventId: null, beneficiario: { nombre: 'Ana Perez', correo: 'ana@losolivos.co' } });
@@ -146,8 +149,9 @@ test('dos workers a la vez no envían la misma tarea dos veces', async () => {
     await s.citas.agendar({ beneficiarioId: b, inicio: new Date(lun9.getTime() + i * 86400000), actor: 'e', esAdmin: false });
   }
   const [r1, r2] = await Promise.all([worker(a).procesarPendientes(), worker(a).procesarPendientes()]);
-  expect(r1.procesadas + r2.procesadas).toBe(12);
+  expect(r1.procesadas + r2.procesadas).toBe(16);
   expect(a.correo.enviar).toHaveBeenCalledTimes(8);
+  expect(a.sms.enviar).toHaveBeenCalledTimes(4);
   expect(a.calendario.upsert).toHaveBeenCalledTimes(4);
 });
 

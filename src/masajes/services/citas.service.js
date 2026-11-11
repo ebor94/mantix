@@ -87,7 +87,7 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
       }));
       await historial.registrar(conn, { beneficiarioId, citaId: id, accion: 'creada', inicioNuevo: ini, usuario: actor, esAdmin: admin, auditoria });
       const cita = { id, beneficiario_id: beneficiarioId, semana_id: hab.semanaId, inicio: ini, fin, periodo, estado: 'agendada' };
-      await outbox.encolar(conn, cita, [['calendar_upsert', 'google'], ['spa_nueva', 'email'], ['empleado_confirmacion', 'email']]);
+      await outbox.encolar(conn, cita, [['calendar_upsert', 'google'], ['spa_nueva', 'email'], ['empleado_confirmacion', 'email'], ['empleado_confirmacion', 'sms']]);
       return cita;
     }));
   }
@@ -142,7 +142,7 @@ function crearServicioCitas({ bd, obtenerConfig, disponibilidad, outbox, reloj =
       await notificacionesRepo.descartarPendientes(conn, cita.id);
       const movida = { ...cita, semana_id: hab.semanaId, inicio: nuevo, fin, periodo };
       await outbox.encolar(conn, movida, [
-        ['calendar_upsert', 'google'], [spaSabia ? 'spa_reprogramada' : 'spa_nueva', 'email'], ['empleado_confirmacion', 'email'],
+        ['calendar_upsert', 'google'], [spaSabia ? 'spa_reprogramada' : 'spa_nueva', 'email'], ['empleado_confirmacion', 'email'], ['empleado_confirmacion', 'sms'],
       ]);
       return { id: cita.id, beneficiario_id: cita.beneficiario_id, semana_id: hab.semanaId, inicio: nuevo, fin, periodo, estado: 'agendada' };
     }));

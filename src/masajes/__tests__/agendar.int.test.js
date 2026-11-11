@@ -21,7 +21,7 @@ const agendar = (beneficiarioId, inicio, extra = {}) => citas.agendar({ benefici
 const motivo = async (p) => { try { await p; } catch (e) { return e.motivo || e.code || e.message; } return 'NO_LANZO'; };
 const filas = async (sql, p = []) => (await conn.query(sql, p))[0];
 
-test('agenda: cita, historial y las 3 notificaciones del outbox, todo en una transacción', async () => {
+test('agenda: cita, historial y las 4 notificaciones del outbox, todo en una transacción', async () => {
   const b = await insertarBeneficiario(conn);
   const s = await insertarSemana(conn, { fecha_inicio: '2026-11-23' });
   const cita = await agendar(b, lun9);
@@ -37,7 +37,7 @@ test('agenda: cita, historial y las 3 notificaciones del outbox, todo en una tra
   const n = (await filas('SELECT tipo, canal, clave, estado FROM msj_notificaciones WHERE cita_id = ?', [cita.id]))
     .sort((x, y) => x.tipo.localeCompare(y.tipo));
   expect(n.map((x) => [x.tipo, x.canal, x.estado])).toEqual([
-    ['calendar_upsert', 'google', 'pendiente'], ['empleado_confirmacion', 'email', 'pendiente'], ['spa_nueva', 'email', 'pendiente'],
+    ['calendar_upsert', 'google', 'pendiente'], ['empleado_confirmacion', 'email', 'pendiente'], ['empleado_confirmacion', 'sms', 'pendiente'], ['spa_nueva', 'email', 'pendiente'],
   ]);
   expect(n[0].clave).toBe(`${cita.id}:calendar_upsert:google:2026-11-23T14:00:00.000Z`);
 });
@@ -52,7 +52,7 @@ test('dos personas, la misma franja, al mismo tiempo: solo una la obtiene (x5)',
     expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
     expect(r.find((x) => x.status === 'rejected').reason.motivo).toBe('SLOT_OCUPADO');
     expect(await filas('SELECT COUNT(*) AS n FROM msj_citas')).toEqual([{ n: 1 }]);
-    expect(await filas('SELECT COUNT(*) AS n FROM msj_notificaciones')).toEqual([{ n: 3 }]); // nada del perdedor
+    expect(await filas('SELECT COUNT(*) AS n FROM msj_notificaciones')).toEqual([{ n: 4 }]); // nada del perdedor
   }
 });
 

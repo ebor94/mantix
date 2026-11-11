@@ -2,7 +2,7 @@ const nock = require('nock');
 const { crearClienteHablame } = require('../adapters/hablameSms');
 const { crearCalendario, eventoDe, SCOPE } = require('../adapters/googleCalendar');
 const { crearCorreo } = require('../adapters/correo');
-const { CORREOS, recordatorioSms, esc } = require('../plantillas');
+const { CORREOS, SMS, recordatorioSms, confirmacionSms, esc } = require('../plantillas');
 const { redactar } = require('../utils/redactar');
 
 const URL = 'https://www.hablame.co/api/sms/v5/send';
@@ -177,6 +177,15 @@ describe('plantillas', () => {
     expect(s).not.toMatch(/[^\x20-\x7e]/);
     expect(recordatorioSms({ cita, spa: { nombre: 'Spa' }, appUrl: 'https://x.co/' + 'y'.repeat(200) }).length).toBeLessThanOrEqual(160);
   });
+});
+
+test('SMS de confirmación: ≤ 160, sin tildes, con fecha y spa; SMS cubre los dos tipos con canal sms', () => {
+  const t = confirmacionSms({ cita, spa: { nombre: 'Spa Armonía & Ñandú Relax Center Cúcuta Norte' }, appUrl });
+  expect(t).toMatch(/^Los Olivos: masaje agendado el jue 26\/11 a las 9:00am/);
+  expect(t.length).toBeLessThanOrEqual(160);
+  expect(t).not.toMatch(/[^\x20-\x7e]/);
+  expect(confirmacionSms({ cita, spa: { nombre: 'Spa' }, appUrl: 'https://x.co/' + 'y'.repeat(200) }).length).toBeLessThanOrEqual(160);
+  expect(Object.keys(SMS).sort()).toEqual(['empleado_confirmacion', 'recordatorio_2d']);
 });
 
 describe('correo', () => {

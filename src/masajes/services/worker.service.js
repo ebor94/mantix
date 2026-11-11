@@ -6,7 +6,7 @@ const historial = require('../repositorios/historial');
 const { enTransaccion } = require('../utils/transaccion');
 const { redactar } = require('../utils/redactar');
 const { errorParaLog } = require('../utils/errorSeguro');
-const { CORREOS, recordatorioSms } = require('../plantillas');
+const { CORREOS, SMS } = require('../plantillas');
 const { local } = require('../dominio/tiempo');
 
 const RESERVA_MS = 5 * 60000;
@@ -47,7 +47,8 @@ function crearWorkerOutbox({ bd, obtenerConfig, obtenerIntegraciones, adaptadore
     }
     if (n.canal === 'sms') {
       if (!beneficiario.celular) throw new FalloDefinitivo('SIN_CELULAR');
-      await adaptadores.sms.enviar(beneficiario.celular, recordatorioSms(datos));
+      if (!SMS[n.tipo]) throw new FalloDefinitivo(`SIN_PLANTILLA_SMS ${n.tipo}`);
+      await adaptadores.sms.enviar(beneficiario.celular, SMS[n.tipo](datos));
       return;
     }
     const para = AL_SPA.has(n.tipo) ? integ.spa.email : beneficiario.correo;

@@ -9,7 +9,7 @@ const CANALES = Object.freeze({
   spa_nueva: ['email'],
   spa_reprogramada: ['email'],
   spa_cancelada: ['email'],
-  empleado_confirmacion: ['email'],
+  empleado_confirmacion: ['email', 'sms'],
   empleado_cancelacion: ['email'],
   recordatorio_2d: ['email', 'sms'],
   es_hoy: ['email'],

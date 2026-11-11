@@ -55,7 +55,7 @@ describe('cancelar', () => {
     const { c } = await citaDe();
     await cancelar(c);
     expect(await pendientes(c.id)).toEqual(['calendar_delete@2026-11-23T14:00:00.000Z', 'empleado_cancelacion@2026-11-23T14:00:00.000Z']);
-    expect((await notifs(c.id)).filter((n) => n.estado === 'descartado').map((n) => n.tipo).sort()).toEqual(['calendar_upsert', 'empleado_confirmacion', 'spa_nueva']);
+    expect((await notifs(c.id)).filter((n) => n.estado === 'descartado').map((n) => n.tipo).sort()).toEqual(['calendar_upsert', 'empleado_confirmacion', 'empleado_confirmacion', 'spa_nueva']);
   });
 
   test('si el spa ya recibió la cita: se le avisa la cancelación', async () => {
@@ -130,7 +130,7 @@ describe('reprogramar', () => {
     const { c } = await citaDe();
     await reprogramar(c, mar9);
     expect(await pendientes(c.id)).toEqual([
-      'calendar_upsert@2026-11-24T14:00:00.000Z', 'empleado_confirmacion@2026-11-24T14:00:00.000Z', 'spa_nueva@2026-11-24T14:00:00.000Z',
+      'calendar_upsert@2026-11-24T14:00:00.000Z', 'empleado_confirmacion@2026-11-24T14:00:00.000Z', 'empleado_confirmacion@2026-11-24T14:00:00.000Z', 'spa_nueva@2026-11-24T14:00:00.000Z',
     ]);
   });
 
@@ -149,7 +149,7 @@ describe('reprogramar', () => {
     expect(await motivo(reprogramar(c, mar9))).toBe('SLOT_OCUPADO');
     const [f] = await filas('SELECT inicio, slot_key FROM msj_citas WHERE id = ?', [c.id]);
     expect([f.inicio.toISOString(), f.slot_key]).toEqual([lun9.toISOString(), '2026-11-23T09:00#1']);
-    expect(await pendientes(c.id)).toHaveLength(3); // ni descartó ni encoló nada
+    expect(await pendientes(c.id)).toHaveLength(4); // ni descartó ni encoló nada
   });
 
   test('a otro mes donde ya tiene cita → CUPO_MES_USADO; a otro mes libre → cambia periodo y cupo', async () => {

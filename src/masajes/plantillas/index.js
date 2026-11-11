@@ -144,19 +144,30 @@ const esHoy = ({ cita, beneficiario, spa, appUrl }) => correo(
 const SMS_MAX = 160;
 const aGsm = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ñ/gi, 'n').replace(/[^A-Za-z0-9 .,:;!?()/@#%&*+=_-]/g, '');
 const DIAS = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
-function recordatorioSms({ cita, spa, appUrl }) {
+function cuandoSms(inicio) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true })
-    .formatToParts(cita.inicio).map((x) => [x.type, x.value]));
+    .formatToParts(inicio).map((x) => [x.type, x.value]));
   const dia = DIAS[['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)];
-  const cuando = `${dia} ${p.day}/${p.month} a las ${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}`;
+  return `${dia} ${p.day}/${p.month} a las ${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}`;
+}
+
+/** Arma el SMS dentro de 160 caracteres: primero recorta el nombre del spa, después quita el enlace. */
+function smsAjustado({ cita, spa, appUrl }, inicioTexto, cierre) {
+  const cuando = cuandoSms(cita.inicio);
   const url = aGsm(appUrl);
-  const armar = (lugar) => `Los Olivos: tu masaje es el ${cuando}${lugar ? ` en ${lugar}` : ''}. Regalate este momento! Cambios 24h antes: ${url}`;
+  const armar = (lugar) => `Los Olivos: ${inicioTexto} ${cuando}${lugar ? ` en ${lugar}` : ''}. ${cierre} Cambios 24h antes: ${url}`;
   let lugar = aGsm(spa.nombre).slice(0, 40);
   let texto = armar(lugar);
   while (texto.length > SMS_MAX && lugar.length > 0) { lugar = lugar.slice(0, -1).trim(); texto = armar(lugar); }
-  if (texto.length > SMS_MAX) texto = `Los Olivos: tu masaje es el ${cuando}. Regalate este momento!`.slice(0, SMS_MAX);
+  if (texto.length > SMS_MAX) texto = `Los Olivos: ${inicioTexto} ${cuando}. ${cierre}`.slice(0, SMS_MAX);
   return texto;
 }
+
+const recordatorioSms = (datos) => smsAjustado(datos, 'tu masaje es el', 'Regalate este momento!');
+const confirmacionSms = (datos) => smsAjustado(datos, 'masaje agendado el', 'Te esperamos!');
+
+/** SMS por tipo de aviso (el worker elige con n.tipo). */
+const SMS = Object.freeze({ recordatorio_2d: recordatorioSms, empleado_confirmacion: confirmacionSms });
 
 const CORREOS = Object.freeze({
   spa_nueva: spaNueva, spa_reprogramada: spaReprogramada, spa_cancelada: spaCancelada,
@@ -164,4 +175,4 @@ const CORREOS = Object.freeze({
   recordatorio_2d: recordatorio2d, es_hoy: esHoy,
 });
 
-module.exports = { CORREOS, recordatorioSms, esc, asuntoSeguro, fechaLarga, hora, aGsm, SMS_MAX };
+module.exports = { CORREOS, SMS, recordatorioSms, confirmacionSms, esc, asuntoSeguro, fechaLarga, hora, aGsm, SMS_MAX };
