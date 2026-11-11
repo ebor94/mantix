@@ -118,3 +118,14 @@ Anotar evidencia de cada punto:
 6. Un festivo nunca aparece disponible.
 7. Un usuario del AD que no está en el listado recibe `NO_BENEFICIARIO`.
 8. Un empleado no ve, reprograma ni cancela la cita de otro, aunque cambie el id en la URL.
+
+## Anexo: vincular beneficiarios con su usuario del AD en bloque
+
+La autovinculación del primer ingreso solo funciona si el correo del listado es el corporativo del AD. Para quienes tienen correo personal o vacío ("No estás en el listado de beneficiarios"):
+
+```bash
+npm run masajes:vincular-ad -- --actor <tu_usuario_AD>            # simula: muestra la propuesta
+npm run masajes:vincular-ad -- --actor <tu_usuario_AD> --aplicar  # vincula solo las coincidencias seguras
+```
+
+Segura = el nombre más corto (AD o listado) cabe completo en el otro, con al menos dos palabras, sin homónimos en ningún sentido y con el usuario del AD libre. Lo demás sale como "revisar a mano" o "sin coincidencia" y se vincula en Beneficiarios. Cada vínculo queda en el historial (`vinculacion`, con el actor). Solo lee el AD.

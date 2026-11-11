@@ -517,4 +517,33 @@ async function buscarUsuarioPorSam(sam) {
   }
 }
 
-module.exports = { autenticarLDAP, validarCredenciales, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles, esDelGrupo, diagnosticarRolesPorSubcadena }
+/**
+ * Usuarios activos del dominio (solo lectura): { usuario, nombre, cn, mail }. Búsqueda paginada (AD corta en 1000
+ * por página). La usa el script de vinculación masiva de Masajes; nada de esto se expone por la API.
+ */
+async function listarUsuariosDirectorio({ pageSize = 500, timeoutMs = 60000 } = {}) {
+  const domainBase = (process.env.LDAP_BASE_DN || '').split(',').filter(p => p.trim().toUpperCase().startsWith('DC=')).join(',')
+  const base = domainBase || process.env.LDAP_BASE_DN
+  const cliente = createClient()
+  try {
+    await bindAsync(cliente, process.env.LDAP_BIND_USER, process.env.LDAP_BIND_PASS)
+    const entradas = await withTimeout(new Promise((resolve, reject) => {
+      cliente.search(base, { filter: USER_FILTER, scope: 'sub', attributes: ['sAMAccountName', 'displayName', 'cn', 'mail'], paged: { pageSize } }, (err, res) => {
+        if (err) return reject(err)
+        const lista = []
+        res.on('searchEntry', e => lista.push(e))
+        res.on('error', e => reject(e))
+        res.on('end', () => resolve(lista))
+      })
+    }), timeoutMs, 'Timeout listando usuarios del directorio')
+    return entradas.map((e) => {
+      const a = extraerAtributos(e)
+      const cn = (e.attributes || []).find(x => x.type?.toLowerCase() === 'cn')
+      return { usuario: String(a.sam || ''), nombre: String(a.displayName || ''), cn: cn ? String((cn.values || cn._vals || [])[0] || '') : '', mail: String(a.mail || '') }
+    }).filter(u => u.usuario)
+  } finally {
+    cliente.destroy()
+  }
+}
+
+module.exports = { autenticarLDAP, validarCredenciales, listarMiembrosGrupo, buscarUsuarioPorSam, detectarRoles, esDelGrupo, diagnosticarRolesPorSubcadena, listarUsuariosDirectorio }
