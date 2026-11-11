@@ -222,6 +222,13 @@
             }
           }
         }
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "<credencial Google Calendar de la cuenta de la agenda>",
+          "name": "Google Calendar account"
+        }
       }
     },
     {
@@ -249,6 +256,13 @@
             }
           }
         }
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "<credencial Google Calendar de la cuenta de la agenda>",
+          "name": "Google Calendar account"
+        }
       }
     },
     {
@@ -274,6 +288,13 @@
             }
           }
         }
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "<credencial Google Calendar de la cuenta de la agenda>",
+          "name": "Google Calendar account"
+        }
       }
     },
     {
@@ -290,6 +311,23 @@
         "responseBody": "={{ JSON.stringify({ origen: 'google', id: (typeof $json.body === 'object' && $json.body) ? ($json.body.id ?? null) : null, mensaje: (typeof $json.body === 'object' && $json.body && $json.body.error) ? String($json.body.error.message ?? '').slice(0, 200) : null }) }}",
         "options": {
           "responseCode": "={{ Number($json.statusCode) || 502 }}"
+        }
+      }
+    },
+    {
+      "id": "r-gerr",
+      "name": "Responder calendario falló",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ mensaje: String($json.error?.message ?? $json.error ?? 'Calendario falló en n8n').slice(0, 200) }) }}",
+        "options": {
+          "responseCode": 502
         }
       }
     }
@@ -375,6 +413,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Responder calendario falló",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -386,6 +431,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Responder calendario falló",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -394,6 +446,13 @@
         [
           {
             "node": "Responder Google",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder calendario falló",
             "type": "main",
             "index": 0
           }
