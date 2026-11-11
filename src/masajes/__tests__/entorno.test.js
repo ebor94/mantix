@@ -130,4 +130,31 @@ describe('leerIntegraciones', () => {
   test('Háblame solo por https', () => {
     expect(leerIntegraciones({ ...INTEG, MSJ_HABLAME_URL: 'http://api.hablame.co/x' }).ok).toBe(false);
   });
+
+  test('MSJ_SPA_EMAIL debe ser un solo correo (una coma al final lo rompe)', () => {
+    expect(leerIntegraciones({ ...INTEG, MSJ_SPA_EMAIL: 'spa@x.co,' })).toMatchObject({ ok: false, motivo: expect.stringMatching(/MSJ_SPA_EMAIL/) });
+    expect(leerIntegraciones({ ...INTEG, MSJ_SPA_EMAIL: 'a@x.co,b@x.co' }).ok).toBe(false);
+  });
+
+  describe('con n8n', () => {
+    const N8N = { MSJ_SPA_EMAIL: 'spa@x.co', MSJ_HABLAME_URL: 'https://api.hablame.co/x', MSJ_HABLAME_API_KEY: 'k',
+      MSJ_N8N_WEBHOOK_URL: 'http://192.9.17.10:5678/webhook/masajes-avisos', MSJ_N8N_SECRETO: 'z'.repeat(40) };
+
+    test('no exige las variables de Google y arma config.n8n', () => {
+      const r = leerIntegraciones(N8N);
+      expect(r.ok).toBe(true);
+      expect(r.config).toMatchObject({ n8n: { url: N8N.MSJ_N8N_WEBHOOK_URL, secreto: N8N.MSJ_N8N_SECRETO }, google: null });
+    });
+
+    test('exige el secreto, de 32 caracteres o más, y una URL http(s)', () => {
+      expect(leerIntegraciones({ ...N8N, MSJ_N8N_SECRETO: '' })).toMatchObject({ ok: false, motivo: expect.stringMatching(/MSJ_N8N_SECRETO/) });
+      expect(leerIntegraciones({ ...N8N, MSJ_N8N_SECRETO: 'corto' })).toMatchObject({ ok: false, motivo: expect.stringMatching(/32/) });
+      expect(leerIntegraciones({ ...N8N, MSJ_N8N_WEBHOOK_URL: 'ftp://x' }).ok).toBe(false);
+    });
+
+    test('sin n8n se siguen exigiendo las de Google', () => {
+      const { MSJ_N8N_WEBHOOK_URL, MSJ_N8N_SECRETO, ...sinN8n } = N8N;
+      expect(leerIntegraciones(sinN8n)).toMatchObject({ ok: false, motivo: expect.stringMatching(/MSJ_GOOGLE_CALENDAR_ID/) });
+    });
+  });
 });

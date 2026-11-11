@@ -106,17 +106,27 @@ function leerEntorno(env = process.env) {
   };
 }
 
-/** Integraciones externas: las exige el worker del outbox, no el router (Tarea 13). */
+/** Integraciones externas: las exige el worker del outbox, no el router (Tarea 13).
+ * Correo y calendario van por n8n si MSJ_N8N_WEBHOOK_URL está definida; si no, directo (SMTP de Mantix + Google). */
+const UN_CORREO = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i;
 function leerIntegraciones(env = process.env) {
-  const req = ['MSJ_SPA_EMAIL', 'MSJ_GOOGLE_CALENDAR_ID', 'MSJ_GOOGLE_IMPERSONAR', 'MSJ_GOOGLE_SA_JSON', 'MSJ_HABLAME_URL', 'MSJ_HABLAME_API_KEY'];
+  const conN8n = !vacia(env.MSJ_N8N_WEBHOOK_URL);
+  const req = ['MSJ_SPA_EMAIL', 'MSJ_HABLAME_URL', 'MSJ_HABLAME_API_KEY',
+    ...(conN8n ? ['MSJ_N8N_SECRETO'] : ['MSJ_GOOGLE_CALENDAR_ID', 'MSJ_GOOGLE_IMPERSONAR', 'MSJ_GOOGLE_SA_JSON'])];
   const faltan = req.filter((n) => vacia(env[n]));
   if (faltan.length) return { ok: false, motivo: `Faltan variables: ${faltan.join(', ')}` };
   if (!/^https:\/\//.test(env.MSJ_HABLAME_URL)) return { ok: false, motivo: 'MSJ_HABLAME_URL debe ser https' };
+  if (!UN_CORREO.test(env.MSJ_SPA_EMAIL.trim())) return { ok: false, motivo: 'MSJ_SPA_EMAIL debe ser un solo correo válido' };
+  if (conN8n) {
+    if (!/^https?:\/\/[^\s]+$/.test(env.MSJ_N8N_WEBHOOK_URL.trim())) return { ok: false, motivo: 'MSJ_N8N_WEBHOOK_URL debe ser una URL http(s)' };
+    if (env.MSJ_N8N_SECRETO.trim().length < 32) return { ok: false, motivo: 'MSJ_N8N_SECRETO debe tener al menos 32 caracteres' };
+  }
   return {
     ok: true,
     config: {
       spa: { nombre: recortada(env.MSJ_SPA_NOMBRE) ?? 'Spa', email: env.MSJ_SPA_EMAIL.trim(), direccion: recortada(env.MSJ_SPA_DIRECCION) ?? '', enEvento: env.MSJ_SPA_EN_EVENTO === 'true' },
-      google: { calendarId: env.MSJ_GOOGLE_CALENDAR_ID.trim(), impersonar: env.MSJ_GOOGLE_IMPERSONAR.trim(), credencialesPath: env.MSJ_GOOGLE_SA_JSON.trim() },
+      n8n: conN8n ? { url: env.MSJ_N8N_WEBHOOK_URL.trim(), secreto: env.MSJ_N8N_SECRETO.trim() } : null,
+      google: conN8n ? null : { calendarId: env.MSJ_GOOGLE_CALENDAR_ID.trim(), impersonar: env.MSJ_GOOGLE_IMPERSONAR.trim(), credencialesPath: env.MSJ_GOOGLE_SA_JSON.trim() },
       hablame: { url: env.MSJ_HABLAME_URL.trim(), cuenta: recortada(env.MSJ_HABLAME_CUENTA), apiKey: env.MSJ_HABLAME_API_KEY.trim(), token: recortada(env.MSJ_HABLAME_TOKEN) },
     },
   };

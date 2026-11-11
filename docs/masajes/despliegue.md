@@ -25,7 +25,19 @@ Crear el grupo de administradores (sugerido `GG-Masajes-Admin`) y anotar su **DN
 
 Deshacer: borrar el grupo.
 
-## 3. Google Workspace
+## 3. Correo y calendario por n8n (opción elegida)
+
+Flujo **"Masajes — avisos (correo y calendario)"** en n8n (copia versionada: `docs/masajes/n8n-avisos.json`). Un webhook `POST /webhook/masajes-avisos` que manda el correo con Gmail (credencial `emisiones`) y crea, actualiza o borra el evento con la API de Google Calendar en el calendario principal de su credencial. No guarda los datos de las ejecuciones exitosas.
+
+1. `openssl rand -hex 32` → el secreto compartido.
+2. En n8n: credencial **Header Auth** (`Masajes webhook`) con nombre `X-Masajes-Clave` y valor el secreto. Elegirla en el nodo *Webhook Masajes*.
+3. En n8n: credencial **Google Calendar OAuth2** con la cuenta de la agenda. Elegirla en los tres nodos *Calendario: …*.
+4. Activar el flujo.
+5. En el `.env`: `MSJ_N8N_WEBHOOK_URL=http://192.9.17.10:5678/webhook/masajes-avisos` y `MSJ_N8N_SECRETO=<el secreto>`. Las `MSJ_GOOGLE_*` sobran.
+
+Deshacer: desactivar el flujo y quitar las dos variables (el worker se detiene y los avisos esperan en la cola).
+
+## 3b. Google Workspace directo (alternativa sin n8n)
 
 1. Proyecto GCP dedicado; cuenta de servicio sin roles IAM; generar una llave JSON.
 2. Consola de administración de Workspace → Seguridad → Acceso a la API → Delegación de todo el dominio: autorizar el client ID de la cuenta de servicio **solo** con el scope `https://www.googleapis.com/auth/calendar.events`.

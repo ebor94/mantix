@@ -1,0 +1,411 @@
+{
+  "name": "Masajes — avisos (correo y calendario)",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Webhook Masajes",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "masajes-avisos",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "notes": "Lo llama el worker del outbox de la Agenda de Masajes (Mantix). Exige la cabecera X-Masajes-Clave (credencial Header Auth)."
+    },
+    {
+      "id": "val",
+      "name": "Validar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Solo pasa lo que el worker de Masajes envía. Cualquier otra cosa corta aquí.\nconst b = $input.first().json.body ?? {};\nconst ACCIONES = ['correo', 'cal_insertar', 'cal_actualizar', 'cal_eliminar'];\nconst ID = /^[a-z0-9_-]{1,1024}$/i;\nconst CORREO = /^[a-z0-9._%+-]+@[a-z0-9-]+(\\.[a-z0-9-]+)*\\.[a-z]{2,}$/i;\n\nif (!ACCIONES.includes(b.accion)) throw new Error('accion no válida');\n\nif (b.accion === 'correo') {\n  if (!CORREO.test(String(b.para || '')) || String(b.para).length > 150) throw new Error('para no válido');\n  const asunto = String(b.asunto || '').replace(/[\\r\\n]+/g, ' ').slice(0, 200);\n  if (!asunto || typeof b.html !== 'string' || !b.html) throw new Error('correo incompleto');\n  return [{ json: { accion: b.accion, para: b.para, asunto, html: b.html } }];\n}\n\nif (b.accion !== 'cal_insertar' && !ID.test(String(b.eventId || ''))) throw new Error('eventId no válido');\nif (b.accion !== 'cal_eliminar' && (!b.evento || typeof b.evento !== 'object')) throw new Error('evento no válido');\nreturn [{ json: { accion: b.accion, eventId: b.eventId ?? null, evento: b.evento ?? null } }];"
+      }
+    },
+    {
+      "id": "sw",
+      "name": "Según la acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -460,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "correo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "correo"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "cal_insertar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cal_insertar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "cal_actualizar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cal_actualizar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.accion }}",
+                    "rightValue": "cal_eliminar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cal_eliminar"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gm",
+      "name": "Enviar correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -180,
+        60
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "sendTo": "={{ $json.para }}",
+        "subject": "={{ $json.asunto }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Qt5QZNWTIEN9EzwC",
+          "name": "emisiones"
+        }
+      }
+    },
+    {
+      "id": "r-ok",
+      "name": "Responder correo enviado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ id: $json.id ?? null }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "r-err",
+      "name": "Responder correo falló",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        140
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ mensaje: String($json.error?.message ?? $json.error ?? 'Gmail falló').slice(0, 200) }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    },
+    {
+      "id": "ci",
+      "name": "Calendario: crear",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.evento) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ca",
+      "name": "Calendario: actualizar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        400
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://www.googleapis.com/calendar/v3/calendars/primary/events/' + encodeURIComponent($json.eventId) + '?sendUpdates=all' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.evento) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ce",
+      "name": "Calendario: eliminar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        540
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ 'https://www.googleapis.com/calendar/v3/calendars/primary/events/' + encodeURIComponent($json.eventId) + '?sendUpdates=all' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "r-g",
+      "name": "Responder Google",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ origen: 'google', id: (typeof $json.body === 'object' && $json.body) ? ($json.body.id ?? null) : null, mensaje: (typeof $json.body === 'object' && $json.body && $json.body.error) ? String($json.body.error.message ?? '').slice(0, 200) : null }) }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode) || 502 }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Masajes": {
+      "main": [
+        [
+          {
+            "node": "Validar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar": {
+      "main": [
+        [
+          {
+            "node": "Según la acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Según la acción": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendario: crear",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendario: actualizar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendario: eliminar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo": {
+      "main": [
+        [
+          {
+            "node": "Responder correo enviado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder correo falló",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendario: crear": {
+      "main": [
+        [
+          {
+            "node": "Responder Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendario: actualizar": {
+      "main": [
+        [
+          {
+            "node": "Responder Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendario: eliminar": {
+      "main": [
+        [
+          {
+            "node": "Responder Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
+  }
+}
