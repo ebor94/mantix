@@ -200,6 +200,15 @@ describe('validarCredenciales', () => {
     expect(escrito).toContain('[formato no válido]');
   });
 
+  test('un usuario válido en mayúsculas sí va al log tal cual', async () => {
+    jest.spyOn(console, 'log').mockClear();
+    directorio({ svc: cliente({ entradas: [] }) });
+    await validarCredenciales('SILVANAMEJIA', 'x').catch(() => {});
+    const escrito = console.log.mock.calls.flat().join(' ');
+    expect(escrito).toContain('Autenticando usuario: SILVANAMEJIA');
+    expect(escrito).not.toContain('[formato no válido]');
+  });
+
   test('directorio caído → AD_NO_DISPONIBLE', async () => {
     directorio({ svc: cliente({ bind: (dn, pw, cb) => cb(new Error('connect ECONNREFUSED')) }) });
     const err = await validarCredenciales('jperez', 'clave').catch((e) => e);

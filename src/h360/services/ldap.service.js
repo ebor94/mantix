@@ -70,7 +70,8 @@ function esDelGrupo(dn, grupo) {
 }
 
 /** Para el log: solo nombres con forma de usuario. Si alguien escribe su contraseña como usuario, no queda escrita. */
-const usuarioParaLog = (u) => (/^[a-z0-9._-]{1,64}$/.test(u) ? u : '[formato no válido]')
+// sAMAccountName en mayúsculas o minúsculas (SILVANAMEJIA); lo demás (espacios, símbolos: p. ej. una clave pegada) no va al log.
+const usuarioParaLog = (u) => (/^[a-z0-9._-]{1,64}$/i.test(u) ? u : '[formato no válido]')
 
 /** Pares [nombreDeGrupo, rol] de las variables que sí están definidas. */
 const ROLE_MAP = () => ROLES_POR_GRUPO
