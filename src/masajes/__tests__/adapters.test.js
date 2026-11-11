@@ -156,7 +156,10 @@ describe('plantillas', () => {
     const malo = { nombre: '<img src=x onerror=alert(1)>', cargo: '"><script>alert(1)</script>', celular: '<u>x</u>', correo: 'a@b.co' };
     for (const [tipo, f] of Object.entries(CORREOS)) {
       const m = f({ cita, antes: cita.inicio, beneficiario: malo, spa: { ...spa, nombre: '<svg onload=1>' }, appUrl: 'javascript:alert(1)" x="' });
-      expect([tipo, /<img|<script|<svg|<u>/.test(m.html)]).toEqual([tipo, false]);
+      expect([tipo, /<img src=x|<script|<svg|<u>/.test(m.html)]).toEqual([tipo, false]);
+      // Las únicas imágenes son la cabecera y el pie fijos de Los Olivos.
+      const imgs = [...m.html.matchAll(/<img src="([^"]+)"/g)].map((x) => x[1]);
+      expect([tipo, imgs.every((u) => u.startsWith('https://losolivoscucuta.com/difusiones/img/'))]).toEqual([tipo, true]);
       expect([tipo, /href="javascript/i.test(m.html)]).toEqual([tipo, false]);
       expect([tipo, /"\s*x="/.test(m.html)]).toEqual([tipo, false]);
     }
@@ -170,7 +173,7 @@ describe('plantillas', () => {
   test('SMS: ≤ 160 caracteres, sin tildes ni ñ, con fecha corta y hora', () => {
     const s = recordatorioSms({ cita, spa: { nombre: 'Spa Armonía & Ñandú Relax Center Cúcuta Norte' }, appUrl });
     expect(s.length).toBeLessThanOrEqual(160);
-    expect(s).toMatch(/^Serfunorte: recuerda tu masaje el jue 26\/11 a las 9:00am/);
+    expect(s).toMatch(/^Los Olivos: tu masaje es el jue 26\/11 a las 9:00am/);
     expect(s).not.toMatch(/[^\x20-\x7e]/);
     expect(recordatorioSms({ cita, spa: { nombre: 'Spa' }, appUrl: 'https://x.co/' + 'y'.repeat(200) }).length).toBeLessThanOrEqual(160);
   });

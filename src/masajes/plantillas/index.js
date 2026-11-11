@@ -7,56 +7,137 @@ const asuntoSeguro = (s) => String(s).replace(/[\r\n]+/g, ' ').slice(0, 200);
 const fechaLarga = (d) => new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: TZ }).format(d).replace(',', '');
 const hora = (d) => new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: TZ }).format(d);
 
-function marco(titulo, cuerpo, { appUrl, conEnlace = true }) {
-  return `<!doctype html><html lang="es"><body style="font-family:Arial,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:16px">
-<h2 style="color:#2f6b3f">${esc(titulo)}</h2>${cuerpo}
-${conEnlace && /^https:\/\//.test(String(appUrl)) ? `<p><a href="${esc(appUrl)}">Ver o cambiar tu cita</a> (hasta 24 horas antes).</p>` : ''}
-<hr><p style="font-size:12px;color:#6b7280">Agenda de masajes · Serfunorte Los Olivos. Mensaje automático: no respondas a este correo.</p>
-</body></html>`;
+// ---- Diseño (mismo estilo que los correos de H360: cabecera y pie de losolivoscucuta.com, tablas e estilos en línea) ----
+const VERDE = '#1a7a45';
+const CABECERA = 'https://losolivoscucuta.com/difusiones/img/cabecera%20olivos.png';
+const PIE = 'https://losolivoscucuta.com/difusiones/img/pie%20de%20pagina.png';
+const enlaceSeguro = (url) => (/^https:\/\//.test(String(url)) ? esc(url) : null);
+const primerNombre = (n) => String(n ?? '').trim().split(/\s+/)[0] || '';
+
+// Una frase por cita (estable: la misma cita siempre recibe la misma en sus correos).
+const FRASES = [
+  'Este espacio es para ti: respira, suelta y recarga energía.',
+  'Cuidarte también es parte de hacer bien tu trabajo. ¡Disfrútalo!',
+  'Una pausa a tiempo renueva el cuerpo y la mente.',
+  'Gracias por todo lo que entregas cada día. Ahora te toca recibir.',
+  'Tu bienestar nos importa: date este momento sin culpa.',
+];
+const fraseDe = (cita) => FRASES[Math.abs(Number(cita && cita.id) || 0) % FRASES.length];
+
+const CONSEJOS = ['Llega 10 minutos antes para empezar con calma.', 'Usa ropa cómoda.', 'Toma agua antes y después de la sesión.'];
+
+function marco({ insignia, saludo, intro, bloques = '', boton = null, appUrl, preencabezado = '', pie = 'Agenda de masajes · Bienestar Los Olivos.' }) {
+  const url = boton ? enlaceSeguro(appUrl) : null;
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>${esc(insignia)}</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'Segoe UI',Arial,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f4f4f4;">${esc(preencabezado)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:24px 0;">
+<tr><td align="center">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;background-color:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.10);">
+  <tr><td><img src="${CABECERA}" alt="Los Olivos" width="620" style="width:100%;max-width:620px;display:block;border:none;"/></td></tr>
+  <tr><td align="center" style="padding:28px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background-color:${VERDE};border-radius:50px;padding:10px 26px;">
+      <span style="color:#ffffff;font-size:14px;font-weight:700;letter-spacing:0.5px;">${esc(insignia)}</span>
+    </td></tr></table>
+  </td></tr>
+  <tr><td style="padding:24px 32px 0 32px;">
+    ${saludo ? `<p style="margin:0 0 10px 0;color:#1a4a1a;font-size:20px;font-weight:700;">${esc(saludo)}</p>` : ''}
+    <p style="margin:0;color:#555555;font-size:15px;line-height:1.6;">${intro}</p>
+  </td></tr>
+  ${bloques}
+  ${url ? `<tr><td align="center" style="padding:26px 32px 0 32px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background-color:${VERDE};border-radius:6px;">
+      <a href="${url}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;">${esc(boton)}</a>
+    </td></tr></table>
+    <p style="margin:8px 0 0 0;color:#888888;font-size:12px;">Puedes reprogramar o cancelar hasta 24 horas antes.</p>
+  </td></tr>` : ''}
+  <tr><td style="padding:28px 32px 0 32px;"></td></tr>
+  <tr><td><img src="${PIE}" alt="Los Olivos" width="620" style="width:100%;max-width:620px;display:block;border:none;"/></td></tr>
+  <tr><td style="padding:18px 32px;text-align:center;">
+    <p style="margin:0;color:#bbbbbb;font-size:11px;line-height:1.5;">${esc(pie)} Correo automático: por favor no respondas a este mensaje.<br/>© Los Olivos · Cúcuta, Norte de Santander</p>
+  </td></tr>
+</table></td></tr></table></body></html>`;
 }
 
-const detalleCita = (cita, spa) => `<ul>
-<li><b>Fecha:</b> ${esc(fechaLarga(cita.inicio))}</li>
-<li><b>Hora:</b> ${esc(hora(cita.inicio))}</li>
-<li><b>Lugar:</b> ${esc(spa.nombre)}${spa.direccion ? ` — ${esc(spa.direccion)}` : ''}</li></ul>`;
+const fila = (etiqueta, valor) => `<tr style="border-top:1px solid #e0e0e0;">
+<td style="color:#555555;font-size:13px;padding:10px 0;width:38%;vertical-align:top;">${esc(etiqueta)}</td>
+<td style="color:#1a4a1a;font-size:14px;font-weight:700;padding:10px 0;">${valor}</td></tr>`;
+const tabla = (filas) => `<tr><td style="padding:18px 32px 0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${filas}</table></td></tr>`;
 
-const datosPersona = (b) => `<ul>
-<li><b>Nombre:</b> ${esc(b.nombre)}</li><li><b>Cargo:</b> ${esc(b.cargo || '—')}</li><li><b>Celular:</b> ${esc(b.celular || '—')}</li></ul>`;
+const lugarDe = (spa) => `${esc(spa.nombre)}${spa.direccion ? `<br/><span style="font-weight:400;color:#555555;">${esc(spa.direccion)}</span>` : ''}`;
+const detalleCita = (cita, spa) => tabla(
+  fila('Fecha', esc(fechaLarga(cita.inicio))) + fila('Hora', esc(hora(cita.inicio))) + fila('Lugar', lugarDe(spa)),
+);
+const datosPersona = (b) => fila('Nombre', esc(b.nombre)) + fila('Cargo', esc(b.cargo || '—')) + fila('Celular', esc(b.celular || '—'));
 
-const textoPlano = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+const recuadro = (titulo, contenido, { fondo = '#f9fbe7', borde = '#2d7d2d', color = '#1a4a1a' } = {}) => `<tr><td style="padding:18px 32px 0 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${fondo};border-left:4px solid ${borde};border-radius:0 8px 8px 0;">
+<tr><td style="padding:14px 20px;color:${color};font-size:14px;line-height:1.6;">${titulo ? `<strong>${esc(titulo)}</strong><br/>` : ''}${contenido}</td></tr></table></td></tr>`;
+const frase = (cita) => recuadro('', `<em>${esc(fraseDe(cita))}</em>`);
+const consejos = () => recuadro('Para aprovecharla al máximo', CONSEJOS.map((c) => `• ${esc(c)}`).join('<br/>'));
+
+const textoPlano = (html) => html.replace(/<head>[\s\S]*?<\/head>/, '').replace(/<div style="display:none[^>]*>[\s\S]*?<\/div>/, '').replace(/<br\s*\/?>/g, '\n').replace(/<\/(tr|p)>/g, '\n').replace(/<[^>]+>/g, ' ')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+  .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 const correo = (asunto, html) => ({ asunto: asuntoSeguro(asunto), html, texto: textoPlano(html) });
 
-// ---- Al spa ----
-const spaNueva = ({ cita, beneficiario, spa, appUrl }) => correo(
+// ---- Al spa (ficha de trabajo, sin enlace a la agenda) ----
+const alSpa = (insignia, intro, b, extra, cita, spa) => marco({
+  insignia, intro, preencabezado: `${b.nombre} · ${fechaLarga(cita.inicio)} ${hora(cita.inicio)}`,
+  bloques: tabla(datosPersona(b)) + extra, pie: 'Agenda de masajes · Bienestar Los Olivos.',
+});
+const spaNueva = ({ cita, beneficiario, spa }) => correo(
   `Nueva cita de masaje: ${beneficiario.nombre} — ${fechaLarga(cita.inicio)} ${hora(cita.inicio)}`,
-  marco('Nueva cita agendada', `${datosPersona(beneficiario)}${detalleCita(cita, spa)}`, { appUrl, conEnlace: false }),
+  alSpa('Nueva cita agendada', 'Se agendó una nueva sesión de masaje:', beneficiario, detalleCita(cita, spa), cita, spa),
 );
-const spaReprogramada = ({ cita, antes, beneficiario, spa, appUrl }) => correo(
+const spaReprogramada = ({ cita, antes, beneficiario, spa }) => correo(
   `Cita reprogramada: ${beneficiario.nombre} — ahora ${fechaLarga(cita.inicio)} ${hora(cita.inicio)}`,
-  marco('Cita reprogramada', `${datosPersona(beneficiario)}<p><b>Antes:</b> ${antes ? `${esc(fechaLarga(antes))}, ${esc(hora(antes))}` : '—'}</p>
-<p><b>Ahora:</b></p>${detalleCita(cita, spa)}`, { appUrl, conEnlace: false }),
+  alSpa('Cita reprogramada', 'Una sesión cambió de horario:', beneficiario,
+    recuadro('Antes', antes ? `${esc(fechaLarga(antes))}, ${esc(hora(antes))}` : '—', { fondo: '#fff8e1', borde: '#f0a500', color: '#7f4f00' })
+    + recuadro('Ahora', `${esc(fechaLarga(cita.inicio))}, ${esc(hora(cita.inicio))}`) + detalleCita(cita, spa), cita, spa),
 );
-const spaCancelada = ({ cita, beneficiario, spa, appUrl }) => correo(
+const spaCancelada = ({ cita, beneficiario, spa }) => correo(
   `Cita cancelada: ${beneficiario.nombre} — ${fechaLarga(cita.inicio)} ${hora(cita.inicio)}`,
-  marco('Cita cancelada', `${datosPersona(beneficiario)}${detalleCita(cita, spa)}<p>La franja queda libre.</p>`, { appUrl, conEnlace: false }),
+  alSpa('Cita cancelada', 'Se canceló esta sesión. La franja queda libre.', beneficiario, detalleCita(cita, spa), cita, spa),
 );
 
-// ---- Al empleado ----
+// ---- Al empleado (mensaje cálido y motivador) ----
 const empleadoConfirmacion = ({ cita, beneficiario, spa, appUrl }) => correo(
   `Tu masaje quedó agendado: ${fechaLarga(cita.inicio)}, ${hora(cita.inicio)}`,
-  marco(`Hola, ${beneficiario.nombre}`, `<p>Tu sesión de masaje quedó agendada:</p>${detalleCita(cita, spa)}<p>Te llegará también la invitación de Google Calendar.</p>`, { appUrl }),
+  marco({
+    insignia: 'Tu masaje está agendado', saludo: `¡Hola, ${primerNombre(beneficiario.nombre)}!`, appUrl, boton: 'Ver o cambiar mi cita',
+    preencabezado: `Te esperamos el ${fechaLarga(cita.inicio)} a las ${hora(cita.inicio)}.`,
+    intro: 'Tu sesión de masaje del bono de este mes ya está reservada. Te llegará también la invitación a tu calendario.',
+    bloques: detalleCita(cita, spa) + frase(cita) + consejos(),
+  }),
 );
 const empleadoCancelacion = ({ cita, beneficiario, spa, appUrl }) => correo(
   `Tu masaje del ${fechaLarga(cita.inicio)} fue cancelado`,
-  marco(`Hola, ${beneficiario.nombre}`, `<p>Tu sesión fue cancelada:</p>${detalleCita(cita, spa)}<p>Si aún tienes bono este mes, puedes agendar otra franja.</p>`, { appUrl }),
+  marco({
+    insignia: 'Cita cancelada', saludo: `Hola, ${primerNombre(beneficiario.nombre)}`, appUrl, boton: 'Agendar otra fecha',
+    preencabezado: 'Si aún tienes tu bono de este mes, puedes elegir otra franja.',
+    intro: 'Tu sesión de masaje fue cancelada. Si aún tienes tu bono de este mes, puedes agendar otra franja: tu bienestar sigue siendo una prioridad.',
+    bloques: detalleCita(cita, spa),
+  }),
 );
 const recordatorio2d = ({ cita, beneficiario, spa, appUrl }) => correo(
   `Recordatorio: tu masaje es el ${fechaLarga(cita.inicio)} a las ${hora(cita.inicio)}`,
-  marco(`Hola, ${beneficiario.nombre}`, `<p>Te recordamos tu sesión de masaje:</p>${detalleCita(cita, spa)}`, { appUrl }),
+  marco({
+    insignia: 'Faltan 2 días para tu pausa', saludo: `¡Hola, ${primerNombre(beneficiario.nombre)}!`, appUrl, boton: 'Ver o cambiar mi cita',
+    preencabezado: `Tu masaje es el ${fechaLarga(cita.inicio)} a las ${hora(cita.inicio)}.`,
+    intro: 'Se acerca tu momento de descanso. Reserva ese tiempo en tu agenda: es tuyo.',
+    bloques: detalleCita(cita, spa) + frase(cita) + consejos(),
+  }),
 );
 const esHoy = ({ cita, beneficiario, spa, appUrl }) => correo(
   `¡Es hoy! ¡Es hoy! Tu masaje es a las ${hora(cita.inicio)}`,
-  marco('¡Es hoy! ¡Es hoy!', `<p>${esc(beneficiario.nombre)}, hoy es tu sesión de masaje:</p>${detalleCita(cita, spa)}`, { appUrl, conEnlace: false }),
+  marco({
+    insignia: '¡Es hoy! ¡Es hoy!', saludo: `${primerNombre(beneficiario.nombre)}, hoy te toca a ti`, appUrl,
+    preencabezado: `Tu masaje es hoy a las ${hora(cita.inicio)}.`,
+    intro: 'Hoy es tu sesión de masaje. Deja por un rato los pendientes y regálate este espacio.',
+    bloques: detalleCita(cita, spa) + frase(cita) + consejos(),
+  }),
 );
 
 // ---- SMS: ≤ 160 caracteres GSM-7, sin tildes ni ñ (evita UCS-2, que parte el mensaje en 70) ----
@@ -69,11 +150,11 @@ function recordatorioSms({ cita, spa, appUrl }) {
   const dia = DIAS[['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)];
   const cuando = `${dia} ${p.day}/${p.month} a las ${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}`;
   const url = aGsm(appUrl);
-  const armar = (lugar) => `Serfunorte: recuerda tu masaje el ${cuando}${lugar ? ` en ${lugar}` : ''}. Cambios hasta 24h antes en ${url}`;
+  const armar = (lugar) => `Los Olivos: tu masaje es el ${cuando}${lugar ? ` en ${lugar}` : ''}. Regalate este momento! Cambios 24h antes: ${url}`;
   let lugar = aGsm(spa.nombre).slice(0, 40);
   let texto = armar(lugar);
   while (texto.length > SMS_MAX && lugar.length > 0) { lugar = lugar.slice(0, -1).trim(); texto = armar(lugar); }
-  if (texto.length > SMS_MAX) texto = `Serfunorte: recuerda tu masaje el ${cuando}.`.slice(0, SMS_MAX);
+  if (texto.length > SMS_MAX) texto = `Los Olivos: tu masaje es el ${cuando}. Regalate este momento!`.slice(0, SMS_MAX);
   return texto;
 }
 
