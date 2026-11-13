@@ -1,0 +1,18 @@
+# MySQL 8 efímero para las pruebas de integración de Duelo (npm run duelo:db:test).
+# Puerto 3310 para convivir con Portería (3308) y Masajes (3309).
+services:
+  mysql-duelo-test:
+    image: mysql:8.0
+    container_name: mysql-duelo-test
+    environment:
+      MYSQL_ROOT_PASSWORD: duelo_test
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    ports:
+      - "127.0.0.1:3310:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pduelo_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
