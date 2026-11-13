@@ -79,8 +79,10 @@ const limiter = rateLimit({
   // October Big Day: el evento también comparte Wi-Fi; el módulo aplica su propio límite en el POST.
   // Portería: las casetas de una sede pueden compartir IP; el módulo aplica su propio límite en el login.
   // Agenda de Masajes: toda una sede sale por una IP; el módulo limita por usuario (y por cuenta en el login).
+  // Duelo Animal: los operadores móviles comparten IP entre muchos inscritos; el módulo aplica sus propios límites.
   skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
     || req.originalUrl.startsWith('/api/porteria/') || req.originalUrl.startsWith('/api/masajes/')
+    || req.originalUrl.startsWith('/api/duelo/')
 });
 app.use('/api/', limiter);
 
@@ -92,6 +94,8 @@ app.use('/api/bigday', express.json({ limit: '10kb' }));
 app.use('/api/bigday', express.urlencoded({ limit: '10kb', extended: false })); // tampoco urlencoded llega al límite de 10 MB
 // Agenda de Masajes: parsers de 10 KB + sus errores (413 / JSON inválido) con el contrato del módulo
 require('./masajes/middleware/parsers').montarParsersMasajes(app);
+// Duelo Animal: parsers de 10 KB + sus errores (413 / JSON inválido) con el contrato del módulo
+require('./duelo/middleware/parsers').montarParsersDuelo(app);
 // Mantix evidencias: upload de archivos en base64 puede llegar a ~55 MB (25 MB binario x 2 archivos + overhead base64)
 app.use(/^\/api\/mantenimientos\/\d+\/upload-evidencias$/, express.json({ limit: '60mb' }));
 // Mantix rutinas: pre-ejecución pública puede traer fotos y firma en base64 (hasta 10 fotos x ~1.5MB cada una + firma)

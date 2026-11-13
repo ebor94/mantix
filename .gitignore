@@ -25,6 +25,7 @@ uploads/
 !src/porteria/migrations/*.sql
 !src/porteria/testing/sql/*.sql
 !src/masajes/migrations/*.sql
+!src/duelo/migrations/*.sql
 !docs/masajes/*.sql
 
 # Evidencia fotográfica de las desinfecciones del parque automotor.

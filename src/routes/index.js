@@ -50,6 +50,7 @@ const porteriaRoutes = require('../porteria/routes').router; // ← Módulo Port
 const rutinasRoutes = require('./rutinasRoutes'); // Rutinas ejecución por QR (internas)
 const publicRutinasRoutes = require('./publicRoutinasRoutes'); // Rutinas público (sin auth)
 const masajesRoutes = require('../masajes/routes').router;   // ← Módulo Agenda de Masajes
+const dueloRoutes = require('../duelo/routes').router;       // ← Módulo Taller de Duelo Animal (inscripción)
 
 // Montar rutas
 router.use('/auth', authRoutes);
@@ -100,5 +101,6 @@ router.use('/trk/v1', trkRoutes);   // ← Módulo TRIKIPELUDOS (concurso de dis
 router.use('/bigday/v1', bigdayRoutes); // ← Módulo October Big Day (encuesta)
 router.use('/porteria/v1', porteriaRoutes); // ← Módulo Portería (ingresos y salidas de vehículos)
 router.use('/masajes/v1', masajesRoutes);   // ← Módulo Agenda de Masajes (bono mensual, login AD propio)
+router.use('/duelo/v1', dueloRoutes);       // ← Módulo Taller de Duelo Animal (formulario público + panel)
 
 module.exports = router;

@@ -26,7 +26,11 @@
     "masajes:db:test": "docker compose -f src/masajes/testing/docker-compose.yml up -d --wait",
     "masajes:migrate": "node src/masajes/scripts/migrar.js",
     "masajes:importar": "node src/masajes/scripts/importarBeneficiarios.js",
-    "masajes:vincular-ad": "node src/masajes/scripts/vincularPorAd.js"
+    "masajes:vincular-ad": "node src/masajes/scripts/vincularPorAd.js",
+    "test:duelo": "jest src/duelo",
+    "test:duelo:int": "jest -c jest.duelo-int.config.js --runInBand",
+    "duelo:db:test": "docker compose -f src/duelo/testing/docker-compose.yml up -d --wait",
+    "duelo:migrate": "node src/duelo/scripts/migrar.js"
   },
   "jest": {
     "testEnvironment": "node",
@@ -49,6 +53,7 @@
   "license": "MIT",
   "dependencies": {
     "@googleapis/calendar": "20.1.0",
+    "archiver": "^7.0.1",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",
@@ -61,6 +66,7 @@
     "express-rate-limit": "^7.5.1",
     "express-validator": "^7.2.1",
     "google-auth-library": "11.3.4",
+    "heic-convert": "^2.1.0",
     "helmet": "^7.2.0",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.2",
