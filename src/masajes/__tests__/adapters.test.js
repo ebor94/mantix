@@ -170,7 +170,7 @@ describe('plantillas', () => {
     expect(html).toContain('¡Hola, Ana!');
     expect(html).toContain('Tu sesión de masaje ya está reservada. También recibirás la invitación en tu calendario.');
     expect(html).toMatch(/Fecha:[\s\S]*Jueves<br\/>26 de noviembre[\s\S]*Hora:[\s\S]*9:00 a\. m\.[\s\S]*Lugar:/);
-    expect(html).toMatch(/Recomendaciones para tu cita:[\s\S]*Hombres:[\s\S]*Pantaloneta\.[\s\S]*Mujeres:[\s\S]*Traje de baño\./);
+    expect(html).toMatch(/Recomendaciones para tu cita:[\s\S]*Hombres:[\s\S]*Pantaloneta\.[\s\S]*👙[\s\S]*Mujeres:[\s\S]*Traje de baño de 2 piezas\./);
     expect(html).toContain('Llega 10 minutos antes de la hora programada.');
     expect(html).toContain(`href="${appUrl}"`);
     expect(html).toContain('Ver o cambiar mi cita');
@@ -222,7 +222,7 @@ test('evento: descripción con fecha y año, horario, lugar, recomendaciones y e
   expect(d).toContain('🕗 Horario: 9:00 a. m. a 10:00 a. m.');
   expect(d).toContain('📍 Lugar: SPA &lt;b&gt;X&lt;/b&gt; – ');
   expect(d).toMatch(/👨 Hombres:\n• Pantaloneta\.\n• Sandalias antideslizantes\.\n• Toalla personal\./);
-  expect(d).toMatch(/👩 Mujeres:\n• Traje de baño\./);
+  expect(d).toMatch(/👩 Mujeres:\n• Traje de baño de 2 piezas\./);
   expect(d).toContain(`🔗 ${appUrl}`);
   expect(d).not.toContain(beneficiario.celular);
 });

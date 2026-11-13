@@ -31,7 +31,7 @@ function descripcionEvento({ cita, spa, appUrl }) {
     '• Toalla personal.',
     '',
     '👩 Mujeres:',
-    '• Traje de baño.',
+    '• Traje de baño de 2 piezas.',
     '• Sandalias antideslizantes.',
     '• Toalla personal.',
     '',

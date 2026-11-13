@@ -29,7 +29,7 @@ const fraseDe = (cita) => FRASES[Math.abs(Number(cita && cita.id) || 0) % FRASES
 
 const RECOMENDACIONES = [
   { titulo: 'Hombres', icono: '🩳', items: ['Pantaloneta.', 'Sandalias antideslizantes.', 'Toalla personal.'] },
-  { titulo: 'Mujeres', icono: '🩱', items: ['Traje de baño.', 'Sandalias antideslizantes.', 'Toalla personal.'] },
+  { titulo: 'Mujeres', icono: '👙', items: ['Traje de baño de 2 piezas.', 'Sandalias antideslizantes.', 'Toalla personal.'] },
 ];
 
 /**
