@@ -128,3 +128,54 @@ test('si borrar falla durante la limpieza, no enmascara el 409 original', async 
     .rejects.toMatchObject({ statusCode: 409, motivo: 'CEDULA_DUPLICADA', message: expect.stringContaining('300 000 0000') });
   expect(deps.fotos.borrar).toHaveBeenCalledWith(['foto-1.jpg']);
 });
+
+describe('turnos para procesar fotos', () => {
+  const MENSAJE_OCUPADO = 'Estamos recibiendo muchas inscripciones en este momento. Inténtalo de nuevo en un minuto.';
+  const conFotos = (cedula) => ({
+    cuerpo: { ...conCompaneros(['Luna']), cedula }, archivos: { 1: Buffer.from('a') },
+  });
+
+  test('las fotos y su guardado corren dentro de un turno del limitador', async () => {
+    const limitador = { ejecutar: jest.fn(async (tarea) => tarea()) };
+    const { deps, servicio } = armar({ limitador });
+    await servicio.inscribir(conFotos('1090000001'));
+    expect(limitador.ejecutar).toHaveBeenCalledTimes(1);
+    expect(deps.fotos.procesar).toHaveBeenCalledTimes(1);
+  });
+
+  test('una inscripción sin fotos no ocupa turno', async () => {
+    const limitador = { ejecutar: jest.fn(async (tarea) => tarea()) };
+    const { servicio } = armar({ limitador });
+    await servicio.inscribir({ cuerpo: cuerpo(), archivos: {} });
+    expect(limitador.ejecutar).not.toHaveBeenCalled();
+  });
+
+  test('por defecto: 2 a la vez, 20 en espera y la siguiente recibe 503 OCUPADO sin tocar fotos', async () => {
+    let soltar;
+    const compuerta = new Promise((ok) => { soltar = ok; });
+    const { deps, servicio } = armar();
+    deps.fotos.procesar.mockImplementation(async (b) => { await compuerta; return b; });
+    const enCurso = [];
+    for (let i = 0; i < 22; i += 1) enCurso.push(servicio.inscribir(conFotos(String(1090000100 + i))));
+    await new Promise((ok) => { setImmediate(ok); });
+    expect(deps.fotos.procesar).toHaveBeenCalledTimes(2);
+
+    await expect(servicio.inscribir(conFotos('1090000999')))
+      .rejects.toMatchObject({ statusCode: 503, motivo: 'OCUPADO', message: MENSAJE_OCUPADO });
+    expect(deps.fotos.procesar).toHaveBeenCalledTimes(2);
+
+    soltar();
+    await Promise.all(enCurso);
+    expect(deps.repo.crear).toHaveBeenCalledTimes(22);
+  });
+
+  test('si una inscripción falla dentro de su turno, lo libera', async () => {
+    const { deps, servicio } = armar();
+    deps.fotos.procesar.mockRejectedValue(new Error('interno'));
+    for (let i = 0; i < 3; i += 1) {
+      await expect(servicio.inscribir(conFotos(String(1090000200 + i)))).rejects.toThrow('interno');
+    }
+    deps.fotos.procesar.mockImplementation(async (b) => b);
+    await expect(servicio.inscribir(conFotos('1090000299'))).resolves.toMatchObject({ id: 7 });
+  });
+});
