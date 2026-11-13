@@ -1,4 +1,7 @@
+const path = require('path');
 const { leerEntorno, leerConexion } = require('../config/entorno');
+
+const RAIZ = path.resolve(__dirname, '../../..');
 
 const BASE = {
   DB_HOST: '127.0.0.1', DB_USER: 'u', DB_PASSWORD: 'p',
@@ -56,4 +59,39 @@ test('el secreto del panel no puede repetir otro secreto JWT', () => {
 test('leerConexion solo exige las DB_*', () => {
   expect(leerConexion({ DB_HOST: 'h', DB_USER: 'u', DB_PASSWORD: 'p', DB_PORT: '3310', DB_NAME: 'x' }))
     .toEqual({ ok: true, db: { host: 'h', port: 3310, user: 'u', password: 'p', database: 'x' } });
+});
+
+describe('DUELO_FOTOS_PATH', () => {
+  const fotosPath = (valor) => leerEntorno({ ...BASE, DUELO_FOTOS_PATH: valor });
+
+  test('por defecto es absoluta: <raíz del backend>/datos/duelo/fotos, sin depender del cwd', () => {
+    const cwd = jest.spyOn(process, 'cwd').mockReturnValue('/otro/lugar');
+    try {
+      expect(leerEntorno(BASE).config.fotosPath).toBe(path.join(RAIZ, 'datos', 'duelo', 'fotos'));
+    } finally {
+      cwd.mockRestore();
+    }
+  });
+
+  test('un valor relativo se resuelve contra la raíz del backend', () => {
+    const r = fotosPath('almacen/duelo');
+    expect(r.ok).toBe(true);
+    expect(r.config.fotosPath).toBe(path.join(RAIZ, 'almacen', 'duelo'));
+  });
+
+  test('un valor absoluto se respeta', () => {
+    expect(fotosPath('/srv/duelo/fotos').config.fotosPath).toBe('/srv/duelo/fotos');
+  });
+
+  test('dentro de uploads/ (público) la configuración es inválida', () => {
+    for (const valor of ['uploads/duelo', path.join(RAIZ, 'uploads'), 'datos/../uploads/x']) {
+      const r = fotosPath(valor);
+      expect(r.ok).toBe(false);
+      expect(r.motivo).toMatch(/DUELO_FOTOS_PATH.*uploads/);
+    }
+  });
+
+  test('una carpeta que solo empieza por "uploads" no se confunde con uploads/', () => {
+    expect(fotosPath('uploads-privados/duelo').ok).toBe(true);
+  });
 });

@@ -5,6 +5,8 @@ const request = require('supertest');
 const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const { crearAppPrueba, CONFIG, ORIGEN } = require('../testing/appPrueba');
 const { firmarToken } = require('../middleware/autenticacion');
+const { crearServicioFotos } = require('../services/fotos.service');
+const { leerEntorno } = require('../config/entorno');
 
 afterEach(cerrarServidores);
 
@@ -21,7 +23,7 @@ test('login correcto devuelve un token que abre el listado', async () => {
     .set('Authorization', `Bearer ${r.body.data.token}`);
   expect(listado.status).toBe(200);
   expect(listado.body.data.totales).toEqual({ inscritos: 0, honran: 0, fotos: 0 });
-  expect(deps.repo.listar).toHaveBeenCalledWith('');
+  expect(deps.repo.listar).toHaveBeenCalledWith();
 });
 
 test('login con clave o usuario incorrectos: 401 sin pistas', async () => {
@@ -31,6 +33,20 @@ test('login con clave o usuario incorrectos: 401 sin pistas', async () => {
     expect(r.status).toBe(401);
     expect(r.body).toEqual({ success: false, motivo: 'CREDENCIALES', message: 'Usuario o clave incorrectos' });
   }
+});
+
+test('los inicios de sesión correctos no gastan el límite: seis seguidos entran', async () => {
+  const { app } = crearAppPrueba();
+  for (let i = 0; i < 6; i += 1) {
+    expect((await login(app, { usuario: 'panel', clave: 'clave-de-prueba' })).status).toBe(200);
+  }
+});
+
+test('cinco fallos bloquean aunque haya habido inicios correctos antes', async () => {
+  const { app } = crearAppPrueba();
+  for (let i = 0; i < 3; i += 1) await login(app, { usuario: 'panel', clave: 'clave-de-prueba' });
+  for (let i = 0; i < 5; i += 1) expect((await login(app, {})).status).toBe(401);
+  expect((await login(app, { usuario: 'panel', clave: 'clave-de-prueba' })).status).toBe(429);
 });
 
 test('seis intentos de login seguidos: 429', async () => {
@@ -49,10 +65,11 @@ test('sin token, con token inválido o de otro rol: 401', async () => {
   expect((await request(servidor).get(`${BASE}/inscripciones`).set('Authorization', `Bearer ${ajeno}`)).status).toBe(401);
 });
 
-test('el listado pasa el término de búsqueda al repositorio', async () => {
+test('el listado no busca en el servidor: ?q se ignora (cédula y correo no deben ir en la URL)', async () => {
   const { app, deps } = crearAppPrueba();
-  await request(await servir(app)).get(`${BASE}/inscripciones?q=ana`).set('Authorization', token());
-  expect(deps.repo.listar).toHaveBeenCalledWith('ana');
+  const r = await request(await servir(app)).get(`${BASE}/inscripciones?q=1090000001`).set('Authorization', token());
+  expect(r.status).toBe(200);
+  expect(deps.repo.listar).toHaveBeenCalledWith();
 });
 
 test('sirve la foto de un compañero sin caché compartida', async () => {
@@ -68,6 +85,24 @@ test('sirve la foto de un compañero sin caché compartida', async () => {
   expect(r.headers['cache-control']).toBe('private, no-store');
   expect(r.body.toString()).toBe('contenido-jpg');
   expect(deps.fotos.ruta).toHaveBeenCalledWith('uuid.jpg');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('sirve la foto aunque DUELO_FOTOS_PATH se haya dado como ruta relativa', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'duelo-relativa-'));
+  const nombre = '0123abcd-0000-4000-8000-000000000000.jpg';
+  fs.writeFileSync(path.join(dir, nombre), 'jpg-relativo');
+  const relativa = path.relative(path.resolve(__dirname, '../../..'), dir);
+  expect(path.isAbsolute(relativa)).toBe(false);
+  const { config } = leerEntorno({
+    DB_HOST: 'h', DB_USER: 'u', DB_PASSWORD: 'p', DUELO_PANEL_USUARIO: 'panel', DUELO_PANEL_CLAVE: 'c',
+    DUELO_JWT_SECRET: 'd'.repeat(40), DUELO_VERSION_POLITICA: 'borrador', DUELO_FOTOS_PATH: relativa,
+  });
+  const { app, deps } = crearAppPrueba({ fotos: crearServicioFotos({ dir: () => config.fotosPath }) });
+  deps.repo.companeroPorId.mockResolvedValue({ id: 5, foto_ruta: nombre });
+  const r = await request(await servir(app)).get(`${BASE}/fotos/5`).set('Authorization', token());
+  expect(r.status).toBe(200);
+  expect(r.body.toString()).toBe('jpg-relativo');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

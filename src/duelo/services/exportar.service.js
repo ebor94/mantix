@@ -29,12 +29,23 @@ async function libroExcel(inscripciones) {
   return Buffer.from(await libro.xlsx.writeBuffer());
 }
 
-/** Escribe en `salida` un ZIP con las entradas { ruta, nombre } cuyo archivo exista. */
+/**
+ * Escribe en `salida` un ZIP con las entradas { ruta, nombre } cuyo archivo exista. Si la salida se
+ * cierra antes de terminar (el cliente cortó la descarga), aborta el ZIP para soltar archivos y memoria
+ * y resuelve sin error: no hay a quién responder.
+ */
 function escribirZip(salida, entradas) {
   return new Promise((ok, mal) => {
     const zip = archiver('zip', { zlib: { level: 1 } }); // los JPG ya están comprimidos
-    zip.on('error', mal);
-    salida.on('finish', ok);
+    let listo = false;
+    const terminar = (fn, valor) => { if (!listo) { listo = true; fn(valor); } };
+    zip.on('error', (err) => terminar(mal, err));
+    salida.on('finish', () => terminar(ok));
+    salida.on('close', () => {
+      if (listo) return;
+      zip.abort();
+      terminar(ok);
+    });
     zip.pipe(salida);
     for (const { ruta, nombre } of entradas) {
       if (ruta && fs.existsSync(ruta)) zip.file(ruta, { name: nombre });

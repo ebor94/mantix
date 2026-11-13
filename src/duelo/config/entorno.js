@@ -12,6 +12,19 @@ const CANALES = ['n8n', 'ninguno'];
 
 const faltantesDe = (env, nombres) => nombres.filter((n) => vacia(env[n]));
 
+// Raíz del backend calculada desde este archivo (no desde process.cwd(), que depende de cómo arranque PM2).
+const RAIZ_BACKEND = path.resolve(__dirname, '../../..');
+// Mantix sirve <raíz>/uploads como estático público (app.js): las fotos nunca pueden quedar ahí.
+const UPLOADS = path.join(RAIZ_BACKEND, 'uploads');
+
+/** Carpeta absoluta de fotos (res.sendFile exige ruta absoluta), o null si cae dentro de uploads/. */
+function resolverFotosPath(valor) {
+  const ruta = path.resolve(RAIZ_BACKEND, valor ?? path.join('datos', 'duelo', 'fotos'));
+  const relativa = path.relative(UPLOADS, ruta);
+  const dentroDeUploads = relativa === '' || (relativa !== '..' && !relativa.startsWith(`..${path.sep}`) && !path.isAbsolute(relativa));
+  return dentroDeUploads ? null : ruta;
+}
+
 /** Solo la conexión (la usa también `npm run duelo:migrate`). */
 function leerConexion(env = process.env) {
   const faltantes = faltantesDe(env, CONEXION);
@@ -48,6 +61,9 @@ function leerEntorno(env = process.env) {
     correo.secreto = recortada(env.DUELO_N8N_SECRETO);
   }
 
+  const fotosPath = resolverFotosPath(recortada(env.DUELO_FOTOS_PATH));
+  if (!fotosPath) return { ok: false, motivo: 'DUELO_FOTOS_PATH no puede estar dentro de uploads/ (es público)' };
+
   const limite = parseInt(env.DUELO_LIMITE_INSCRIPCIONES, 10);
 
   return {
@@ -57,7 +73,7 @@ function leerEntorno(env = process.env) {
       versionPolitica: recortada(env.DUELO_VERSION_POLITICA),
       origenes: (recortada(env.DUELO_ORIGENES) ?? 'https://losolivoscucuta.com')
         .split(',').map((o) => o.trim()).filter(Boolean),
-      fotosPath: recortada(env.DUELO_FOTOS_PATH) ?? path.join(process.cwd(), 'datos', 'duelo', 'fotos'),
+      fotosPath,
       contacto: recortada(env.DUELO_CONTACTO) ?? 'nuestro equipo de Los Olivos',
       panel: { usuario: recortada(env.DUELO_PANEL_USUARIO), clave: env.DUELO_PANEL_CLAVE },
       jwtSecret: secreto,

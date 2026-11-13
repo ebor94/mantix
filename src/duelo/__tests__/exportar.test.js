@@ -75,3 +75,31 @@ test('las exportaciones exigen token', async () => {
   expect((await request(servidor).get('/api/duelo/v1/panel/exportar.xlsx')).status).toBe(401);
   expect((await request(servidor).get('/api/duelo/v1/panel/fotos.zip')).status).toBe(401);
 });
+
+describe('escribirZip cuando el cliente corta la descarga', () => {
+  const { Writable } = require('stream');
+  const crypto = require('crypto');
+  const Archiver = require('archiver/lib/core');
+  const { escribirZip } = require('../services/exportar.service');
+
+  test('termina la promesa y aborta el ZIP (no deja archivos abiertos)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'duelo-zip-corte-'));
+    const entradas = [1, 2, 3, 4].map((n) => {
+      const ruta = path.join(dir, `${n}.jpg`);
+      fs.writeFileSync(ruta, crypto.randomBytes(2 * 1024 * 1024));
+      return { ruta, nombre: `${n}.jpg` };
+    });
+    const abortar = jest.spyOn(Archiver.prototype, 'abort');
+    // Simula al navegador que cierra la conexión con la descarga a medias.
+    const salida = new Writable({ write(trozo, cod, listo) { listo(); this.destroy(); } });
+
+    const resultado = await Promise.race([
+      escribirZip(salida, entradas).then(() => 'terminó', () => 'terminó'),
+      new Promise((ok) => { setTimeout(() => ok('colgada'), 2000); }),
+    ]);
+    expect(resultado).toBe('terminó');
+    expect(abortar).toHaveBeenCalledTimes(1);
+    abortar.mockRestore();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

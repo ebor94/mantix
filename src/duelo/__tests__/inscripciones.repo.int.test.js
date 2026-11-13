@@ -51,7 +51,7 @@ test('marcarCorreo guarda el resultado', async () => {
   expect(fila).toEqual({ correo_enviado: 0, correo_error: 'timeout' });
 });
 
-test('listar filtra por nombre, cédula o correo y cuenta sobre el total', async () => {
+test('listar devuelve todas las inscripciones (id DESC) con sus compañeros y los totales', async () => {
   await repo.crear(persona(), []);
   await repo.crear(
     persona({ nombre_completo: 'Luis Gómez', cedula: '1090000002', correo: 'luis@correo.com', honra_companero: true }),
@@ -61,12 +61,8 @@ test('listar filtra por nombre, cédula o correo y cuenta sobre el total', async
   expect(todo.inscripciones.map((i) => i.cedula)).toEqual(['1090000002', '1090000001']);
   expect(todo.totales).toEqual({ inscritos: 2, honran: 1, fotos: 1 });
   expect(todo.inscripciones[0].companeros).toEqual([{ id: expect.any(Number), orden: 1, nombre: 'Luna' }]);
-
-  const filtrado = await repo.listar('gómez');
-  expect(filtrado.inscripciones).toHaveLength(1);
-  expect(filtrado.totales.inscritos).toBe(2);
-  expect((await repo.listar('1090000001')).inscripciones).toHaveLength(1);
-  expect((await repo.listar('luis@')).inscripciones).toHaveLength(1);
+  // La búsqueda la hace el panel en el navegador: el repositorio ya no recibe término.
+  expect((await repo.listar('gómez')).inscripciones).toHaveLength(2);
 });
 
 test('companeroPorId y fotosParaZip', async () => {

@@ -2,6 +2,7 @@ const express = require('express');
 const { crearOrigen } = require('../middleware/origen');
 const { crearLimites } = require('../middleware/limites');
 const { subida } = require('../middleware/subida');
+const { crearAbiertas } = require('../middleware/abiertas');
 const { crearTurnstile } = require('../middleware/turnstile');
 const logger = require('../../utils/logger');
 
@@ -15,13 +16,14 @@ function crearRouterPublico({ obtenerConfig, servicio, http }) {
   const origen = crearOrigen(obtenerConfig);
   const limites = crearLimites(obtenerConfig);
   const verificarTurnstile = crearTurnstile(obtenerConfig, http);
+  const abiertas = crearAbiertas(obtenerConfig);
 
   router.get('/estado', (req, res) => {
     const { abiertas, versionPolitica } = obtenerConfig();
     res.json({ success: true, data: { abiertas, versionPolitica } });
   });
 
-  router.post('/inscripciones', origen, limites.inscripciones, subida, async (req, res, next) => {
+  router.post('/inscripciones', origen, limites.inscripciones, abiertas, subida, async (req, res, next) => {
     try {
       // Sin multipart ni parser de cuerpo, Express deja req.body sin definir.
       if (!req.body) req.body = {};

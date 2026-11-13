@@ -26,7 +26,7 @@ function crearRouterPanel({ obtenerConfig, repo, fotos }) {
   router.use(autenticar);
 
   router.get('/inscripciones', envolver(async (req, res) => {
-    res.json({ success: true, data: await repo.listar(String(req.query.q || '')) });
+    res.json({ success: true, data: await repo.listar() });
   }));
 
   router.get('/fotos/:id', envolver(async (req, res) => {

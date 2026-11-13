@@ -49,15 +49,11 @@ function crearRepositorioInscripciones(bd) {
     );
   }
 
-  async function listar(q = '') {
+  // Todo el listado: el panel filtra en el navegador (cédula y correo nunca viajan en la URL).
+  async function listar() {
     const pool = bd.obtener();
-    const termino = String(q).trim();
-    const como = `%${termino}%`;
     const [inscripciones] = await pool.query(
-      `SELECT ${COLUMNAS_LISTADO} FROM duelo_inscripciones
-       WHERE (? = '' OR nombre_completo LIKE ? OR cedula LIKE ? OR correo LIKE ?)
-       ORDER BY id DESC`,
-      [termino, como, como, como],
+      `SELECT ${COLUMNAS_LISTADO} FROM duelo_inscripciones ORDER BY id DESC`,
     );
     const [companeros] = await pool.query(
       'SELECT id, inscripcion_id, orden, nombre FROM duelo_companeros ORDER BY inscripcion_id, orden',

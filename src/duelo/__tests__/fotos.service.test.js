@@ -131,6 +131,11 @@ describe('registro de fallos sin datos personales', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  test('sin archivo (undefined) sigue siendo un 422 controlado, no un 500', async () => {
+    await expect(servicio().procesar(undefined)).rejects.toMatchObject({ statusCode: 422, motivo: 'FOTO_INVALIDA' });
+    expect(logger.error.mock.calls[0][1]).toMatchObject({ heic: false, bytes: 0 });
+  });
+
   test('una foto válida no registra nada', async () => {
     await servicio().procesar(await jpg());
     expect(logger.error).not.toHaveBeenCalled();

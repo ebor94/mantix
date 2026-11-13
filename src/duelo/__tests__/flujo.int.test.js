@@ -10,6 +10,7 @@ const { crearBdDePrueba, abrirConexion } = require('../testing/bd');
 const { crearRouterDuelo } = require('../routes');
 const { leerEntorno } = require('../config/entorno');
 const { jpg, png } = require('../testing/imagenes');
+const logger = require('../../utils/logger');
 
 const ORIGEN = 'https://losolivoscucuta.com';
 const BASE = '/api/duelo/v1';
@@ -84,6 +85,31 @@ test('rama Sí con dos compañeros: guarda, notifica y aparece en el panel y en 
   expect((await request(servidor).get(`${BASE}/panel/exportar.xlsx`).set(auth)).status).toBe(200);
 });
 
+test.each([
+  ['un compañero', '1090000011', ['Luna']],
+  ['tres compañeros', '1090000013', ['Luna', 'Max', 'Kira']],
+])('rama Sí con %s: guarda cada compañero con su foto en orden', async (_caso, cedula, nombres) => {
+  const antes = fs.readdirSync(dir).length;
+  const fotos = {};
+  nombres.forEach((_n, i) => { fotos[`foto_${i + 1}`] = i % 2 ? png() : jpg(); });
+  for (const k of Object.keys(fotos)) fotos[k] = await fotos[k];
+  const r = await inscribir(
+    { cedula, honra_companero: 'si', companeros: JSON.stringify(nombres.map((nombre) => ({ nombre }))) }, fotos,
+  );
+  expect(r.status).toBe(201);
+  await esperarCorreo();
+
+  const [filas] = await conn.query(
+    `SELECT c.orden, c.nombre, c.foto_ruta, c.foto_mime FROM duelo_companeros c
+     JOIN duelo_inscripciones i ON i.id = c.inscripcion_id WHERE i.cedula = ? ORDER BY c.orden`, [cedula],
+  );
+  expect(filas.map((f) => [f.orden, f.nombre, f.foto_mime])).toEqual(nombres.map((n, i) => [i + 1, n, 'image/jpeg']));
+  expect(fs.readdirSync(dir)).toHaveLength(antes + nombres.length);
+  for (const f of filas) expect(fs.existsSync(path.join(dir, f.foto_ruta))).toBe(true);
+  expect(http.post).toHaveBeenCalledWith('https://n8n.prueba/hook',
+    expect.objectContaining({ companeros: nombres }), expect.any(Object));
+});
+
 test('rama No: se inscribe sin fotos', async () => {
   const r = await inscribir({ cedula: '1090000002', honra_companero: 'no' });
   expect(r.status).toBe(201);
@@ -112,7 +138,8 @@ test('sin aceptar la política: 422', async () => {
   expect(r.body.errores.acepta_politica).toBeTruthy();
 });
 
-test('un archivo que no es imagen: 422 en su campo y nada guardado', async () => {
+test('un archivo que no es imagen: 422 en su campo, nada guardado y una línea de log sin contenido', async () => {
+  const registro = jest.spyOn(logger, 'error').mockImplementation(() => {});
   const antes = fs.readdirSync(dir).length;
   const r = await inscribir(
     { cedula: '1090000005', honra_companero: 'si', companeros: JSON.stringify([{ nombre: 'Luna' }]) },
@@ -123,4 +150,7 @@ test('un archivo que no es imagen: 422 en su campo y nada guardado', async () =>
   expect(fs.readdirSync(dir)).toHaveLength(antes);
   const [[{ n }]] = await conn.query("SELECT COUNT(*) AS n FROM duelo_inscripciones WHERE cedula = '1090000005'");
   expect(n).toBe(0);
+  expect(registro).toHaveBeenCalledWith('duelo: no se pudo procesar una foto', expect.objectContaining({ heic: false }));
+  expect(JSON.stringify(registro.mock.calls)).not.toMatch(/PDF|documento|1090000005/);
+  registro.mockRestore();
 });

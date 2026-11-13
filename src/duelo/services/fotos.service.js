@@ -35,8 +35,10 @@ async function verificarDimensiones(buffer) {
 // worker aparte para no congelar el proceso compartido de Mantix (ver convertidorHeic.js).
 function crearServicioFotos({ dir, convertirHeic = crearConvertidorHeic(), logger = loggerMantix }) {
   async function procesar(buffer) {
-    const heic = esHeic(buffer);
+    const esBuffer = Buffer.isBuffer(buffer);
+    const heic = esBuffer && esHeic(buffer);
     try {
+      if (!esBuffer) throw new TypeError('sin archivo');
       await verificarDimensiones(buffer);
       const entrada = heic ? await convertirHeic(buffer) : buffer;
       const opciones = { limitInputPixels: MAX_PIXELES };
@@ -51,7 +53,7 @@ function crearServicioFotos({ dir, convertirHeic = crearConvertidorHeic(), logge
       if (err instanceof DueloError) throw err;
       // El usuario solo ve el 422; aquí queda la causa sin contenido ni nombre del archivo.
       logger.error('duelo: no se pudo procesar una foto', {
-        nombre: err && err.name, codigo: err && err.code, heic, bytes: buffer.length,
+        nombre: err && err.name, codigo: err && err.code, heic, bytes: esBuffer ? buffer.length : 0,
       });
       throw new DueloError(422, 'FOTO_INVALIDA', MENSAJE_FOTO);
     }

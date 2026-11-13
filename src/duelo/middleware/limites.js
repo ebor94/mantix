@@ -10,7 +10,8 @@ function crearLimites(obtenerConfig) {
   const comunes = { windowMs: VENTANA, standardHeaders: true, legacyHeaders: false, handler: excedido };
   return {
     inscripciones: rateLimit({ ...comunes, limit: () => obtenerConfig().limiteInscripciones }),
-    login: rateLimit({ ...comunes, limit: 5 }),
+    // Solo cuentan los fallos: el token vive en memoria y el personal comparte la IP de la oficina.
+    login: rateLimit({ ...comunes, limit: 5, skipSuccessfulRequests: true }),
   };
 }
 

@@ -87,6 +87,19 @@ test('supera el límite de envíos por IP: 429', async () => {
   expect(r.body.motivo).toBe('DEMASIADOS_INTENTOS');
 });
 
+test('inscripciones cerradas: 403 CERRADAS antes de recibir las fotos', async () => {
+  const { app, deps } = crearAppPrueba({ obtenerConfig: () => ({ ...CONFIG, abiertas: false }) });
+  // multipart roto: si Multer corriera primero la respuesta sería 400 FORMULARIO.
+  const r = await request(await servir(app)).post(RUTA).set('Origin', ORIGEN)
+    .set('Content-Type', 'multipart/form-data; boundary=xyz').send('--xyz\r\nbasura');
+  expect(r.status).toBe(403);
+  expect(r.body).toEqual({
+    success: false, motivo: 'CERRADAS',
+    message: 'Las inscripciones para este encuentro ya cerraron. Gracias por tu interés 🐾',
+  });
+  expect(deps.servicio.inscribir).not.toHaveBeenCalled();
+});
+
 test('Turnstile configurado: exige y verifica el token', async () => {
   const http = { post: jest.fn(async () => ({ data: { success: false } })) };
   const { app, deps } = crearAppPrueba({ http, obtenerConfig: () => ({ ...CONFIG, turnstileSecret: 'ts' }) });

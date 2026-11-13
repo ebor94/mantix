@@ -44,3 +44,48 @@ test('las rutas de duelo no consumen el limitador global de Mantix', async () =>
     expect((await request(servidor).get('/api/duelo/v1/estado')).status).toBe(200);
   }
 });
+
+describe('cuerpos JSON en /api/duelo (parser propio de 10 KB)', () => {
+  const PERSONAL = '1090000001';
+  const registros = () => JSON.stringify([
+    ...logger.error.mock.calls, ...logger.warn.mock.calls, ...console.error.mock.calls,
+  ]);
+  beforeEach(() => {
+    jest.spyOn(logger, 'error').mockImplementation(() => {});
+    jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  test('JSON mal formado: 400 con el contrato del módulo y sin registrar el cuerpo', async () => {
+    completas();
+    const r = await request(await servir(app)).post('/api/duelo/v1/panel/login')
+      .set('Content-Type', 'application/json').send(`{"usuario": "${PERSONAL}",`);
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ success: false, motivo: 'JSON_INVALIDO', message: 'No pudimos leer la solicitud.' });
+    expect(registros()).not.toContain(PERSONAL);
+  });
+
+  test('JSON de más de 10 KB: 413 con el contrato del módulo', async () => {
+    completas();
+    const r = await request(await servir(app)).post('/api/duelo/v1/panel/login')
+      .set('Content-Type', 'application/json').send(JSON.stringify({ usuario: PERSONAL, relleno: 'x'.repeat(11 * 1024) }));
+    expect(r.status).toBe(413);
+    expect(r.body).toEqual({ success: false, motivo: 'CUERPO_GRANDE', message: 'La solicitud es demasiado grande.' });
+    expect(registros()).not.toContain(PERSONAL);
+  });
+
+  test('multipart no pasa por estos parsers: la inscripción llega al router (aquí, 403 por origen)', async () => {
+    completas();
+    const r = await request(await servir(app)).post('/api/duelo/v1/inscripciones')
+      .field('nombre_completo', 'x'.repeat(12 * 1024));
+    expect(r.status).toBe(403);
+    expect(r.body.motivo).toBe('ORIGEN');
+  });
+
+  test('también aplica cuando el módulo está deshabilitado (el parser va antes del router)', async () => {
+    const r = await request(await servir(app)).post('/api/duelo/v1/panel/login')
+      .set('Content-Type', 'application/json').send('{malo');
+    expect(r.status).toBe(400);
+    expect(r.body.motivo).toBe('JSON_INVALIDO');
+  });
+});

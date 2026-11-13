@@ -81,4 +81,4 @@ function crearServicioInscripcion({
   return { inscribir, notificarInscripcion };
 }
 
-module.exports = { crearServicioInscripcion };
+module.exports = { crearServicioInscripcion, MENSAJE_CERRADAS };
