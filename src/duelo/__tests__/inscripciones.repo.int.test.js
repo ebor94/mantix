@@ -75,3 +75,55 @@ test('companeroPorId y fotosParaZip', async () => {
     { cedula: '1090000001', orden: 1, nombre: 'Luna', foto_ruta: companero(1).foto_ruta },
   ]);
 });
+
+describe('cupo máximo', () => {
+  const MENSAJE = 'Se completaron los cupos para este encuentro. Gracias por tu interés 🐾';
+  const cedula = (n) => String(1090000000 + n);
+
+  test('contar devuelve el total de inscripciones', async () => {
+    expect(await repo.contar()).toBe(0);
+    await repo.crear(persona(), []);
+    await repo.crear(persona({ cedula: cedula(2) }), []);
+    expect(await repo.contar()).toBe(2);
+  });
+
+  test('con cupo 2: las dos primeras entran y la tercera recibe 403 sin fila', async () => {
+    await repo.crear(persona({ cedula: cedula(1) }), [], { cupoMaximo: 2 });
+    await repo.crear(persona({ cedula: cedula(2) }), [], { cupoMaximo: 2 });
+    await expect(repo.crear(persona({ cedula: cedula(3), honra_companero: true }), [companero(1, 'Luna')], { cupoMaximo: 2 }))
+      .rejects.toMatchObject({ statusCode: 403, motivo: 'CERRADAS', message: MENSAJE });
+    expect(await repo.contar()).toBe(2);
+    const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM duelo_companeros');
+    expect(n).toBe(0);
+  });
+
+  test('concurrencia: 6 inscripciones simultáneas con cupo 2 → exactamente 2 entran', async () => {
+    const resultados = await Promise.allSettled(
+      [1, 2, 3, 4, 5, 6].map((n) => repo.crear(persona({ cedula: cedula(n) }), [], { cupoMaximo: 2 })),
+    );
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+    const rechazos = resultados.filter((r) => r.status === 'rejected');
+    expect(rechazos).toHaveLength(4);
+    rechazos.forEach((r) => expect(r.reason).toMatchObject({ statusCode: 403, motivo: 'CERRADAS' }));
+    expect(await repo.contar()).toBe(2);
+  });
+
+  test('el candado se libera: tras un rechazo otra conexión lo obtiene al instante', async () => {
+    await repo.crear(persona({ cedula: cedula(1) }), [], { cupoMaximo: 1 });
+    await expect(repo.crear(persona({ cedula: cedula(2) }), [], { cupoMaximo: 1 })).rejects.toMatchObject({ statusCode: 403 });
+    const [[{ libre }]] = await conn.query("SELECT IS_FREE_LOCK('duelo_cupo') AS libre");
+    expect(libre).toBe(1);
+  });
+
+  test('un fallo dentro de la transacción (cédula repetida) también libera el candado', async () => {
+    await repo.crear(persona(), [], { cupoMaximo: 5 });
+    await expect(repo.crear(persona(), [], { cupoMaximo: 5 })).rejects.toMatchObject({ statusCode: 409 });
+    const [[{ libre }]] = await conn.query("SELECT IS_FREE_LOCK('duelo_cupo') AS libre");
+    expect(libre).toBe(1);
+  });
+
+  test('sin cupo (null) no hay límite', async () => {
+    for (let n = 1; n <= 4; n += 1) await repo.crear(persona({ cedula: cedula(n) }), [], { cupoMaximo: null });
+    expect(await repo.contar()).toBe(4);
+  });
+});

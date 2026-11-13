@@ -1,5 +1,9 @@
 // Acceso a datos de las inscripciones. Todo el SQL del módulo vive aquí.
 const DueloError = require('../utils/DueloError');
+const { MENSAJE_CUPO } = require('../dominio/evento');
+
+const CANDADO_CUPO = 'duelo_cupo';
+const ESPERA_CANDADO_S = 10;
 
 const COLUMNAS_LISTADO = `id, nombre_completo, cedula, celular, correo, honra_companero, correo_enviado,
   utm_source, utm_medium, utm_campaign, utm_content, created_at`;
@@ -10,10 +14,35 @@ function crearRepositorioInscripciones(bd) {
     return filas.length > 0;
   }
 
-  async function crear(i, companeros) {
+  async function contar() {
+    const [[fila]] = await bd.obtener().query('SELECT COUNT(*) AS n FROM duelo_inscripciones');
+    return Number(fila.n);
+  }
+
+  // Con cupo, las inscripciones se serializan con un candado de MySQL tomado en la misma conexión que la
+  // transacción: contar e insertar no se pueden intercalar entre peticiones. El candado se suelta tras el
+  // commit/rollback (finally), nunca antes.
+  async function tomarCandado(conn) {
+    const [[fila]] = await conn.query('SELECT GET_LOCK(?, ?) AS ok', [CANDADO_CUPO, ESPERA_CANDADO_S]);
+    if (Number(fila.ok) !== 1) {
+      throw new DueloError(503, 'OCUPADO', 'Estamos recibiendo muchas inscripciones en este momento. Inténtalo de nuevo en un minuto.');
+    }
+  }
+
+  async function crear(i, companeros, { cupoMaximo = null } = {}) {
+    const conCupo = typeof cupoMaximo === 'number';
     const conn = await bd.obtener().getConnection();
+    let candado = false;
     try {
+      if (conCupo) {
+        await tomarCandado(conn);
+        candado = true;
+      }
       await conn.beginTransaction();
+      if (conCupo) {
+        const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM duelo_inscripciones');
+        if (Number(n) >= cupoMaximo) throw new DueloError(403, 'CERRADAS', MENSAJE_CUPO);
+      }
       const [r] = await conn.query(
         `INSERT INTO duelo_inscripciones
            (nombre_completo, cedula, celular, correo, honra_companero, acepta_politica, version_politica,
@@ -38,7 +67,15 @@ function crearRepositorioInscripciones(bd) {
       if (err.code === 'ER_DUP_ENTRY') throw new DueloError(409, 'CEDULA_DUPLICADA', 'Ya tenemos tu inscripción');
       throw err;
     } finally {
-      conn.release();
+      let descartar = false;
+      if (candado) {
+        try {
+          await conn.query('SELECT RELEASE_LOCK(?)', [CANDADO_CUPO]);
+        } catch (e) {
+          descartar = true; // sin poder soltarlo, cerrar la conexión lo libera
+        }
+      }
+      if (descartar) conn.destroy(); else conn.release();
     }
   }
 
@@ -93,7 +130,7 @@ function crearRepositorioInscripciones(bd) {
     return filas;
   }
 
-  return { existeCedula, crear, marcarCorreo, listar, companeroPorId, fotosParaZip };
+  return { existeCedula, contar, crear, marcarCorreo, listar, companeroPorId, fotosParaZip };
 }
 
 module.exports = { crearRepositorioInscripciones };

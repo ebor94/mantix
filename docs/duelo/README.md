@@ -89,6 +89,13 @@ En este orden (cada paso deja Mantix funcionando):
 
 ## Operación
 
+- **Cupo del evento:** `DUELO_CUPO_MAXIMO=120` y reiniciar. Vacía = sin límite; un valor que no sea entero positivo
+  (0, negativo, texto, decimal) deja el módulo en 503 (`duelo deshabilitado: …` en el log). Al llegar al cupo,
+  `GET /estado` informa `abiertas: false` y `POST /inscripciones` responde `403 CERRADAS` (el formulario muestra su
+  pantalla de cerrado); el conteo de `/estado` se guarda 5 s, pero el control al insertar es exacto aunque lleguen
+  muchas a la vez. **Las inscripciones de prueba cuentan:** bórralas antes del lanzamiento. Para ampliar el cupo,
+  sube el número y reinicia: las inscripciones se reabren. No confundir con `DUELO_LIMITE_INSCRIPCIONES`
+  (envíos por IP cada 15 minutos, antiabuso).
 - **Cerrar inscripciones:** `DUELO_INSCRIPCIONES_ABIERTAS=false` y reiniciar.
 - **Corregir una inscripción:** a mano en `duelo_inscripciones` / `duelo_companeros`. Al borrar una inscripción,
   sus compañeros se borran en cascada; los archivos de foto hay que borrarlos aparte.

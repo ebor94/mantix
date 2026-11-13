@@ -13,6 +13,7 @@ const CONFIG = Object.freeze({
   jwtSecret: 'secreto-de-prueba-duelo-0123456789abcdef',
   jwtExpires: '2h',
   correo: { canal: 'ninguno' },
+  cupoMaximo: null,
   limiteInscripciones: 30,
   turnstileSecret: null,
 });
@@ -24,6 +25,7 @@ function crearAppPrueba(deps = {}, opciones = {}) {
     obtenerConfig: () => CONFIG,
     http: { post: jest.fn(async () => ({ data: { success: true } })) },
     repo: {
+      contar: jest.fn(async () => 0),
       listar: jest.fn(async () => ({ inscripciones: [], totales: { inscritos: 0, honran: 0, fotos: 0 } })),
       companeroPorId: jest.fn(async () => null),
       fotosParaZip: jest.fn(async () => []),
