@@ -4,7 +4,7 @@ const DueloError = require('../utils/DueloError');
 
 const ROL = 'panel_duelo';
 
-const firmarToken = (config) => jwt.sign({ rol: ROL }, config.jwtSecret, { expiresIn: config.jwtExpires });
+const firmarToken = (config) => jwt.sign({ rol: ROL }, config.jwtSecret, { algorithm: 'HS256', expiresIn: config.jwtExpires });
 
 // Comparación en tiempo constante sobre el hash (timingSafeEqual exige la misma longitud).
 const huella = (v) => crypto.createHash('sha256').update(String(v ?? '')).digest();
@@ -19,7 +19,7 @@ function credencialesValidas(config, usuario, clave) {
 const crearAutenticacion = (obtenerConfig) => (req, res, next) => {
   try {
     const coincide = /^Bearer (.+)$/.exec(req.get('Authorization') || '');
-    const carga = jwt.verify(coincide[1], obtenerConfig().jwtSecret);
+    const carga = jwt.verify(coincide[1], obtenerConfig().jwtSecret, { algorithms: ['HS256'] });
     if (carga.rol !== ROL) throw new Error('rol');
     return next();
   } catch {

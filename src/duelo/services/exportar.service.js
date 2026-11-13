@@ -2,6 +2,7 @@
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 const archiver = require('archiver');
+const { formatearFechaColombia } = require('../dominio/fechaColombia');
 
 const COLUMNAS = [
   ['Nombre completo', 34], ['Cédula', 14], ['Celular', 14], ['Correo', 32], ['Honra a un compañero', 20],
@@ -21,10 +22,10 @@ async function libroExcel(inscripciones) {
     hoja.addRow([
       i.nombre_completo, String(i.cedula), String(i.celular), i.correo, siNo(i.honra_companero),
       ...nombres, siNo(i.correo_enviado),
-      i.utm_source, i.utm_medium, i.utm_campaign, i.utm_content, i.created_at,
+      i.utm_source, i.utm_medium, i.utm_campaign, i.utm_content,
+      formatearFechaColombia(i.created_at), // texto: ExcelJS serializa los Date en UTC
     ]);
   }
-  hoja.getColumn(14).numFmt = 'yyyy-mm-dd hh:mm';
   return Buffer.from(await libro.xlsx.writeBuffer());
 }
 

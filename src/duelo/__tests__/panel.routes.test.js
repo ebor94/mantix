@@ -77,3 +77,19 @@ test('foto inexistente o id no numérico: 404', async () => {
   expect((await request(servidor).get(`${BASE}/fotos/5`).set('Authorization', token())).status).toBe(404);
   expect((await request(servidor).get(`${BASE}/fotos/abc`).set('Authorization', token())).status).toBe(404);
 });
+
+test('token firmado con el secreto correcto pero con otro algoritmo (HS512): 401', async () => {
+  const jwt = require('jsonwebtoken');
+  const { app } = crearAppPrueba();
+  const otroAlgoritmo = jwt.sign({ rol: 'panel_duelo' }, CONFIG.jwtSecret, { algorithm: 'HS512', expiresIn: '1h' });
+  const r = await request(await servir(app)).get(`${BASE}/inscripciones`).set('Authorization', `Bearer ${otroAlgoritmo}`);
+  expect(r.status).toBe(401);
+});
+
+test('token vencido: 401', async () => {
+  const jwt = require('jsonwebtoken');
+  const { app } = crearAppPrueba();
+  const vencido = jwt.sign({ rol: 'panel_duelo' }, CONFIG.jwtSecret, { algorithm: 'HS256', expiresIn: -10 });
+  const r = await request(await servir(app)).get(`${BASE}/inscripciones`).set('Authorization', `Bearer ${vencido}`);
+  expect(r.status).toBe(401);
+});

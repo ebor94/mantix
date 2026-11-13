@@ -106,3 +106,53 @@ test('ruta desconocida responde 404 en JSON', async () => {
   expect(r.status).toBe(404);
   expect(r.body.success).toBe(false);
 });
+
+test('petición no multipart sin parser de cuerpo: no es 500 y el servicio recibe un objeto', async () => {
+  const { app, deps } = crearAppPrueba({}, { sinJson: true });
+  const r = await request(await servir(app)).post(RUTA).set('Origin', ORIGEN)
+    .set('Content-Type', 'text/plain').send('hola');
+  expect(r.status).not.toBe(500);
+  expect(deps.servicio.inscribir).toHaveBeenCalledTimes(1);
+  const { cuerpo } = deps.servicio.inscribir.mock.calls[0][0];
+  expect(typeof cuerpo).toBe('object');
+  expect(cuerpo).not.toBeNull();
+});
+
+describe('fallos del correo posteriores a la respuesta', () => {
+  beforeEach(() => { logger.error.mockClear(); });
+  const PERSONAL = ['Ana', 'ana@correo.com', '1090000001', 'smtp rechazó ana@correo.com'];
+  const sinDatosPersonales = () => {
+    const texto = JSON.stringify(logger.error.mock.calls);
+    for (const dato of PERSONAL) expect(texto).not.toContain(dato);
+  };
+  const inscribirOk = (deps) => deps.servicio.inscribir.mockResolvedValue({
+    id: 7, datos: { nombre_completo: 'Ana', correo: 'ana@correo.com', cedula: '1090000001' },
+  });
+  const esperarLog = () => new Promise((ok) => { setImmediate(ok); });
+
+  test('rechazo asíncrono: sigue el 201 y se registra una línea sin datos personales', async () => {
+    const { app, deps } = crearAppPrueba();
+    inscribirOk(deps);
+    const error = Object.assign(new Error('smtp rechazó ana@correo.com'), { code: 'EENVELOPE' });
+    deps.servicio.notificarInscripcion.mockRejectedValue(error);
+    const r = await enviar(app);
+    await esperarLog();
+    expect(r.status).toBe(201);
+    expect(r.body).toEqual({ success: true });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0][1]).toEqual({ inscripcion: 7, nombre: 'Error', codigo: 'EENVELOPE' });
+    sinDatosPersonales();
+  });
+
+  test('excepción síncrona: sigue el 201 y se registra una línea sin datos personales', async () => {
+    const { app, deps } = crearAppPrueba();
+    inscribirOk(deps);
+    deps.servicio.notificarInscripcion.mockImplementation(() => { throw new TypeError('smtp rechazó ana@correo.com'); });
+    const r = await enviar(app);
+    await esperarLog();
+    expect(r.status).toBe(201);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(logger.error.mock.calls)).toContain('TypeError');
+    sinDatosPersonales();
+  });
+});

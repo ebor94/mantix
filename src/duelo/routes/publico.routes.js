@@ -3,6 +3,12 @@ const { crearOrigen } = require('../middleware/origen');
 const { crearLimites } = require('../middleware/limites');
 const { subida } = require('../middleware/subida');
 const { crearTurnstile } = require('../middleware/turnstile');
+const logger = require('../../utils/logger');
+
+// Registra un fallo del correo sin datos personales: solo el id de la inscripción y la clase del error.
+const registrarFalloCorreo = (id) => (err) => {
+  logger.error('duelo: falló el envío del correo de confirmación', { inscripcion: id, nombre: err && err.name, codigo: err && err.code });
+};
 
 function crearRouterPublico({ obtenerConfig, servicio, http }) {
   const router = express.Router();
@@ -17,6 +23,8 @@ function crearRouterPublico({ obtenerConfig, servicio, http }) {
 
   router.post('/inscripciones', origen, limites.inscripciones, subida, async (req, res, next) => {
     try {
+      // Sin multipart ni parser de cuerpo, Express deja req.body sin definir.
+      if (!req.body) req.body = {};
       // Honeypot: los bots llenan el campo oculto; se les responde éxito sin guardar nada.
       if (String(req.body.sitio_web || '').trim()) return res.status(201).json({ success: true });
       await verificarTurnstile(req);
@@ -31,7 +39,12 @@ function crearRouterPublico({ obtenerConfig, servicio, http }) {
       });
       res.status(201).json({ success: true });
       // El correo va después de responder: su resultado no afecta la inscripción.
-      Promise.resolve(servicio.notificarInscripcion(id, datos)).catch(() => {});
+      // Tanto la excepción síncrona como el rechazo se registran; ninguno puede llegar a next() tras el 201.
+      try {
+        Promise.resolve(servicio.notificarInscripcion(id, datos)).catch(registrarFalloCorreo(id));
+      } catch (errCorreo) {
+        registrarFalloCorreo(id)(errCorreo);
+      }
       return undefined;
     } catch (err) {
       return next(err);

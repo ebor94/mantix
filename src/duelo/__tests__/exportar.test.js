@@ -18,7 +18,7 @@ const binario = (res, fin) => {
 };
 
 const INSCRIPCIONES = [{
-  id: 2, nombre_completo: 'Luis Gómez', cedula: '1090000002', celular: '3009999999', correo: 'luis@correo.com',
+  id: 2, nombre_completo: 'Luis Gómez', cedula: '0090000002', celular: '3009999999', correo: 'luis@correo.com',
   honra_companero: true, correo_enviado: false, utm_source: 'facebook', utm_medium: 'cpc', utm_campaign: 'taller',
   utm_content: null, created_at: new Date('2026-11-14T10:30:00-05:00'),
   companeros: [{ id: 1, orden: 1, nombre: 'Luna' }, { id: 2, orden: 2, nombre: 'Max' }],
@@ -40,8 +40,12 @@ test('exportar.xlsx: una fila por inscripción con los compañeros en columnas',
     'Compañero 3', 'Correo enviado', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'Fecha de inscripción',
   ]);
   const fila = hoja.getRow(2).values.slice(1);
-  expect(fila.slice(0, 9)).toEqual(['Luis Gómez', '1090000002', '3009999999', 'luis@correo.com', 'Sí', 'Luna', 'Max', undefined, 'No']);
+  expect(fila.slice(0, 9)).toEqual(['Luis Gómez', '0090000002', '3009999999', 'luis@correo.com', 'Sí', 'Luna', 'Max', undefined, 'No']);
   expect(hoja.getCell('B2').type).toBe(ExcelJS.ValueType.String);
+  expect(hoja.getCell('B2').value).toBe('0090000002');
+  // La fecha va como texto en hora de Colombia, sin depender de la zona del servidor.
+  expect(hoja.getCell('N2').type).toBe(ExcelJS.ValueType.String);
+  expect(hoja.getCell('N2').value).toBe('2026-11-14 10:30');
 });
 
 test('fotos.zip: nombra cada foto y omite las que no están en disco', async () => {

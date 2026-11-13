@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
 const { crearServicioFotos, esHeic, MENSAJE_FOTO } = require('../services/fotos.service');
-const { jpg, png, jpgConExif, heicFalso } = require('../testing/imagenes');
+const { jpg, png, webp, jpgOrientacion6, jpgConExif, heicFalso } = require('../testing/imagenes');
 
 let dir;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'duelo-fotos-')); });
@@ -14,6 +14,20 @@ const servicio = (extra = {}) => crearServicioFotos({ dir: () => path.join(dir, 
 test('convierte PNG a JPG', async () => {
   const salida = await servicio().procesar(await png());
   expect((await sharp(salida).metadata()).format).toBe('jpeg');
+});
+
+test('convierte WebP a JPG', async () => {
+  const salida = await servicio().procesar(await webp());
+  expect((await sharp(salida).metadata()).format).toBe('jpeg');
+});
+
+test('aplica la orientación EXIF: un JPG 40x30 con orientación 6 sale de 30x40', async () => {
+  const entrada = await jpgOrientacion6();
+  const original = await sharp(entrada).metadata();
+  expect([original.width, original.height, original.orientation]).toEqual([40, 30, 6]);
+  const salida = await sharp(await servicio().procesar(entrada)).metadata();
+  expect([salida.width, salida.height]).toEqual([30, 40]);
+  expect(salida.orientation).toBeUndefined();
 });
 
 test('limita el lado mayor a 2000 px sin agrandar', async () => {

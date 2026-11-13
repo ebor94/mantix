@@ -17,7 +17,8 @@ const CONFIG = Object.freeze({
   turnstileSecret: null,
 });
 
-function crearAppPrueba(deps = {}) {
+// opciones.sinJson: no monta express.json() (simula una petición no multipart sin parser de cuerpo).
+function crearAppPrueba(deps = {}, opciones = {}) {
   const todas = {
     bd: { ping: async () => {} },
     obtenerConfig: () => CONFIG,
@@ -36,7 +37,7 @@ function crearAppPrueba(deps = {}) {
   };
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json());
+  if (!opciones.sinJson) app.use(express.json());
   app.use('/api/duelo/v1', crearRouterDuelo(todas));
   return { app, deps: todas };
 }
