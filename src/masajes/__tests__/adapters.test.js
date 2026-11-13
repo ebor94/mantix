@@ -131,10 +131,10 @@ describe('Google Calendar', () => {
 });
 
 describe('plantillas', () => {
-  test('¡Es hoy!: frase exacta, fecha "jueves 26 de noviembre", hora "9:00 a. m." y dirección del spa', () => {
+  test('¡Es hoy!: frase exacta, fecha "Jueves / 26 de noviembre", hora "9:00 a. m." y dirección del spa', () => {
     const m = CORREOS.es_hoy({ cita, beneficiario, spa, appUrl });
     expect(m.asunto).toContain('¡Es hoy! ¡Es hoy!');
-    expect(m.html).toContain('jueves 26 de noviembre');
+    expect(m.html).toContain('Jueves<br/>26 de noviembre');
     expect(m.html).toContain('9:00 a. m.');
     expect(m.html).toContain(esc(spa.direccion));
   });
@@ -157,12 +157,25 @@ describe('plantillas', () => {
     for (const [tipo, f] of Object.entries(CORREOS)) {
       const m = f({ cita, antes: cita.inicio, beneficiario: malo, spa: { ...spa, nombre: '<svg onload=1>' }, appUrl: 'javascript:alert(1)" x="' });
       expect([tipo, /<img src=x|<script|<svg|<u>/.test(m.html)]).toEqual([tipo, false]);
-      // Las únicas imágenes son la cabecera y el pie fijos de Los Olivos.
+      // Las únicas imágenes son la cabecera y el pie fijos del spa.
       const imgs = [...m.html.matchAll(/<img src="([^"]+)"/g)].map((x) => x[1]);
-      expect([tipo, imgs.every((u) => u.startsWith('https://losolivoscucuta.com/difusiones/img/'))]).toEqual([tipo, true]);
+      expect([tipo, imgs]).toEqual([tipo, ['https://losolivoscucuta.com/img/head-masaje.jpg', 'https://losolivoscucuta.com/img/foot-masaje.jpg']]);
       expect([tipo, /href="javascript/i.test(m.html)]).toEqual([tipo, false]);
       expect([tipo, /"\s*x="/.test(m.html)]).toEqual([tipo, false]);
     }
+  });
+
+  test('correo al empleado con el diseño del spa: tarjeta de cita, frase, recomendaciones, nota y botón', () => {
+    const { html, texto } = CORREOS.empleado_confirmacion({ cita, beneficiario, spa, appUrl });
+    expect(html).toContain('¡Hola, Ana!');
+    expect(html).toContain('Tu sesión de masaje ya está reservada. También recibirás la invitación en tu calendario.');
+    expect(html).toMatch(/Fecha:[\s\S]*Jueves<br\/>26 de noviembre[\s\S]*Hora:[\s\S]*9:00 a\. m\.[\s\S]*Lugar:/);
+    expect(html).toMatch(/Recomendaciones para tu cita:[\s\S]*Hombres:[\s\S]*Pantaloneta\.[\s\S]*Mujeres:[\s\S]*Traje de baño\./);
+    expect(html).toContain('Llega 10 minutos antes de la hora programada.');
+    expect(html).toContain(`href="${appUrl}"`);
+    expect(html).toContain('Ver o cambiar mi cita');
+    expect(html).not.toContain('Tu masaje está agendado</span>'); // sin pastilla de insignia
+    expect(texto).toMatch(/Sandalias antideslizantes\./);
   });
 
   test('un nombre con saltos de línea no altera el asunto (inyección de cabeceras)', () => {
