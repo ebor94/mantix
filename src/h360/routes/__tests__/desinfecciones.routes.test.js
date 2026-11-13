@@ -24,9 +24,13 @@ jest.mock('../../config/db')
 
 const mockEspia = nombre => jest.fn((req, res) => res.status(200).json({ handler: nombre, params: req.params }))
 
+// `tableroPublico` va en la lista aunque no sea una ruta de este router: lo
+// monta routes/index.js (fuera de verifyToken) y este archivo carga ese index.
+// Sin el espía, router.get recibiría undefined y la suite ni arranca.
 const mockNombresCtrl = ['listarActividades', 'crearActividad', 'actualizarActividad',
   'listarReglas', 'crearRegla', 'actualizarRegla', 'sembrarVehiculo', 'tablero',
-  'actualizarProgramacion', 'registrar', 'listarRegistros', 'pendientes']
+  'actualizarProgramacion', 'registrar', 'listarRegistros', 'pendientes',
+  'tableroPublico']
 const mockNombresAut = ['solicitar', 'validar', 'listarAutorizaciones']
 
 jest.mock('../../controllers/desinfecciones.controller', () =>
@@ -129,6 +133,25 @@ describe('callback de n8n: /desinfecciones/evidencia/drive', () => {
   })
 })
 
+// ── El televisor del garaje ───────────────────────────────────────────────
+describe('tablero público /publico/desinfecciones/:token', () => {
+  test('no pasa por verifyToken: sin JWT llega al manejador', async () => {
+    const res = await (await pedir()).get('/api/h360/publico/desinfecciones/loquesea')
+
+    expect(res.body.handler).toBe('ctrl.tableroPublico')
+    expect(res.body.params.token).toBe('loquesea')
+  })
+
+  // El token lo valida el controlador, no la ruta. Lo que esta prueba fija es
+  // que ese endpoint NO abra el resto del módulo.
+  test('el público no abre las rutas con sesión', async () => {
+    const res = await (await pedir()).get('/api/h360/desinfecciones/tablero')
+
+    expect(res.status).toBe(401)
+    expect(ctrl.tablero).not.toHaveBeenCalled()
+  })
+})
+
 // ── Todo lo demás sí pasa por verifyToken ─────────────────────────────────
 describe('el resto del módulo exige JWT', () => {
   const RUTAS = [
@@ -160,7 +183,7 @@ describe('el resto del módulo exige JWT', () => {
 describe('compuertas de rol', () => {
   // El personal de laboratorio que no ejecuta estas actividades, y los roles
   // de otros módulos, no ven los valores pactados con el lavadero.
-  test.each(['asistente', 'tanatologo', 'recepcion', 'psicologia', 'tramitador'])(
+  test.each(['tanatologo', 'recepcion', 'psicologia', 'tramitador'])(
     'el rol %s no ve el tablero', async (rol) => {
       const res = await (await pedir())
         .get('/api/h360/desinfecciones/tablero').set('Authorization', `Bearer ${token(rol)}`)
@@ -169,7 +192,7 @@ describe('compuertas de rol', () => {
       expect(ctrl.tablero).not.toHaveBeenCalled()
     })
 
-  test.each(['asistente_tanatologo', 'asesor', 'supervisora', 'coordinador', 'contabilidad', 'admin'])(
+  test.each(['asistente_tanatologo', 'asistente', 'asesor', 'supervisora', 'coordinador', 'contabilidad', 'admin'])(
     'el rol %s sí ve el tablero', async (rol) => {
       const res = await (await pedir())
         .get('/api/h360/desinfecciones/tablero').set('Authorization', `Bearer ${token(rol)}`)
@@ -180,7 +203,7 @@ describe('compuertas de rol', () => {
 
   // Configurar el catálogo decide cada cuánto hay que hacer qué, y de ahí sale
   // la inhabilitación de un vehículo: es de coordinación.
-  test.each(['asistente_tanatologo', 'asesor', 'supervisora', 'contabilidad'])(
+  test.each(['asistente_tanatologo', 'asistente', 'asesor', 'supervisora', 'contabilidad'])(
     'el rol %s no configura reglas', async (rol) => {
       const res = await (await pedir())
         .post('/api/h360/desinfecciones/reglas').set('Authorization', `Bearer ${token(rol)}`).send({})
@@ -210,7 +233,7 @@ describe('compuertas de rol', () => {
     expect(ctrl.registrar).not.toHaveBeenCalled()
   })
 
-  test.each(['asistente_tanatologo', 'coordinador', 'admin'])(
+  test.each(['asistente_tanatologo', 'asistente', 'coordinador', 'admin'])(
     'el rol %s sí registra, y la subida corre antes del manejador', async (rol) => {
       const res = await (await pedir())
         .post('/api/h360/desinfecciones/registro').set('Authorization', `Bearer ${token(rol)}`).send({})

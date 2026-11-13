@@ -44,7 +44,10 @@ const MAX_PERIODICIDAD = 3650
 
 // Quién ejecuta la desinfección. El asesor NO está: ve la lista porque programa
 // servicios y necesita saber que la carroza se va a caer, pero no la ejecuta.
-const ROLES_QUE_REGISTRAN = ['asistente_tanatologo', 'coordinador', 'admin']
+// El `asistente` entra acá porque también conduce: en `usuarios.routes.js` los
+// conductores son los miembros de LDAP_GROUP_ASIST_TANATOLOGO y
+// LDAP_GROUP_ASISTENTE, y la desinfección la ejecuta quien tiene el vehículo.
+const ROLES_QUE_REGISTRAN = ['asistente_tanatologo', 'asistente', 'coordinador', 'admin']
 
 // ── Reloj del negocio ──────────────────────────────────────────────────────
 //
@@ -942,6 +945,70 @@ async function pendientes(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /publico/desinfecciones/:token — sin sesión, para el televisor del garaje.
+ *
+ * Responde UNA pregunta: qué vehículo no se puede usar y a cuál le toca algo
+ * pronto. Por eso no devuelve el parque completo sino solo lo que está
+ * vencido, vence hoy o vence dentro de la ventana de aviso: una pantalla que
+ * lista dieciocho placas al día no se lee de lejos, y la que importa se pierde
+ * entre las demás.
+ *
+ * La ventana es la MISMA del aviso diario por Chat (DESINF_AVISO_DIAS). Si
+ * fueran distintas, el televisor y el mensaje de la mañana se contradirían y
+ * nadie sabría a cuál creerle.
+ *
+ * Mismo mecanismo de la programación pública: un token compartido en la URL,
+ * 404 si no cuadra y 500 si el servidor no lo tiene configurado. No lleva dato
+ * personal —placas, actividades y fechas— pero el token igual evita que la
+ * dirección se adivine. Es un token PROPIO y no el de la programación: si se
+ * filtra uno, no hay que rotar los dos.
+ */
+async function tableroPublico(req, res, next) {
+  try {
+    const esperado = process.env.DESINF_PUBLICO_TOKEN
+    if (!esperado) return res.status(500).json({ mensaje: 'Servicio no configurado' })
+    if (req.params.token !== esperado) return res.status(404).json({ mensaje: 'No encontrado' })
+
+    const { dia: hoy, hora } = relojBogota()
+    const diasAviso = diasDeAviso()
+
+    // El «hoy» lo pone el servidor y no CURDATE(): así el televisor y el
+    // tablero interno cuentan los días desde la misma fecha.
+    const [rows] = await db.query(
+      `SELECT v.id AS vehiculo_id, v.placa, v.tipo,
+              (v.activo = 0 AND v.inactivo_origen = 'DESINFECCION') AS inhabilitado,
+              a.nombre AS actividad,
+              DATE_FORMAT(p.fecha_prox, '%Y-%m-%d') AS fecha_prox,
+              DATEDIFF(p.fecha_prox, ?) AS dias
+         FROM h360_desinf_programacion p
+         JOIN h360_desinf_regla r     ON r.id = p.regla_id AND r.activo = 1
+         JOIN h360_desinf_actividad a ON a.id = r.actividad_id
+         JOIN vehiculos v             ON v.id = p.vehiculo_id
+        WHERE p.estado <> 'NO_APLICA'
+          AND p.fecha_prox IS NOT NULL
+          AND p.fecha_prox <= DATE_ADD(?, INTERVAL ? DAY)
+        ORDER BY inhabilitado DESC, p.fecha_prox, v.placa, a.nombre`,
+      [hoy, hoy, diasAviso])
+
+    res.json({
+      generado: `${hoy} ${hora}`,
+      dias_aviso: diasAviso,
+      items: rows.map(f => ({
+        ...f,
+        inhabilitado: !!f.inhabilitado,
+        urgencia: f.dias < 0 ? 'VENCIDA' : f.dias === 0 ? 'HOY' : 'PROXIMA',
+      })),
+    })
+  } catch (err) { next(err) }
+}
+
+/** La ventana de aviso, con el mismo saneado que usa el job. */
+function diasDeAviso() {
+  const n = Number(process.env.DESINF_AVISO_DIAS)
+  return Number.isInteger(n) && n >= 1 && n <= 60 ? n : 3
+}
+
 module.exports = {
   listarActividades, crearActividad, actualizarActividad,
   listarReglas, crearRegla, actualizarRegla,
@@ -951,6 +1018,7 @@ module.exports = {
   registrar,
   listarRegistros,
   pendientes,
+  tableroPublico,
   // Expuestos para las pruebas y para quien tenga que calcular lo mismo.
   relojBogota, enVentanaDeAviso, fechaSolo, sumarDias, diasEntre,
 }

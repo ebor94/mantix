@@ -22,6 +22,7 @@ const licenciasRoutes           = require('./licencias.routes')
 const reportesRoutes            = require('./reportes.routes')
 const dueloRoutes               = require('./duelo.routes')
 const desinfeccionesRoutes      = require('./desinfecciones.routes')
+const desinfeccionesCtrl        = require('../controllers/desinfecciones.controller')
 const { requireWebhookToken }   = require('../middleware/webhookToken')
 const evidenciaDesinf           = require('../services/desinfeccionEvidencia.service')
 const exequiasCtrl              = require('../controllers/exequias.controller')
@@ -31,6 +32,9 @@ router.use('/auth', authRoutes)
 
 // Endpoint PÚBLICO — pantalla de programación de exequias (validado por token)
 router.get('/publico/programacion/:token', exequiasCtrl.programacionPublica)
+// Televisor del garaje: qué vehículo no se puede usar y a cuál le toca algo
+// pronto. Sin sesión, con token propio en la URL (DESINF_PUBLICO_TOKEN).
+router.get('/publico/desinfecciones/:token', desinfeccionesCtrl.tableroPublico)
 
 // Rutas protegidas con token H360
 router.use('/asistencias',           verifyToken, asistRoutes)
