@@ -104,3 +104,27 @@ test('notificarInscripcion envía solo lo necesario y guarda el resultado', asyn
   });
   expect(deps.repo.marcarCorreo).toHaveBeenCalledWith(7, true, null);
 });
+
+test('error interno al procesar una foto no se disfraza de 422: se propaga igual y borra lo guardado', async () => {
+  const { deps, servicio } = armar();
+  const interno = new Error('ENOMEM interno');
+  deps.fotos.procesar
+    .mockResolvedValueOnce(Buffer.from('a'))
+    .mockRejectedValueOnce(interno);
+  const resultado = servicio.inscribir({
+    cuerpo: conCompaneros(['Luna', 'Max']), archivos: { 1: Buffer.from('a'), 2: Buffer.from('b') },
+  });
+  await expect(resultado).rejects.toBe(interno);
+  await expect(resultado).rejects.not.toBeInstanceOf(DueloError);
+  expect(deps.repo.crear).not.toHaveBeenCalled();
+  expect(deps.fotos.borrar).toHaveBeenCalledWith(['foto-1.jpg']);
+});
+
+test('si borrar falla durante la limpieza, no enmascara el 409 original', async () => {
+  const { deps, servicio } = armar();
+  deps.repo.crear.mockRejectedValue(new DueloError(409, 'CEDULA_DUPLICADA', 'x'));
+  deps.fotos.borrar.mockRejectedValue(new Error('disco lleno'));
+  await expect(servicio.inscribir({ cuerpo: conCompaneros(['Luna']), archivos: { 1: Buffer.from('a') } }))
+    .rejects.toMatchObject({ statusCode: 409, motivo: 'CEDULA_DUPLICADA', message: expect.stringContaining('300 000 0000') });
+  expect(deps.fotos.borrar).toHaveBeenCalledWith(['foto-1.jpg']);
+});

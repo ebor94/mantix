@@ -29,6 +29,8 @@ function crearServicioInscripcion({ repo, fotos, obtenerConfig, notificar }) {
         try {
           jpg = await fotos.procesar(archivos[c.orden]);
         } catch (err) {
+          // Solo un error controlado de la foto es culpa del usuario; cualquier otro se propaga (500 genérico).
+          if (!(err instanceof DueloError)) throw err;
           throw new DueloError(422, 'VALIDACION', MENSAJE_VALIDACION, { [`companero_${c.orden}_foto`]: err.message });
         }
         const { nombre, bytes } = await fotos.guardar(jpg);
@@ -39,7 +41,8 @@ function crearServicioInscripcion({ repo, fotos, obtenerConfig, notificar }) {
       const id = await repo.crear({ ...datos, ip, user_agent: userAgent }, companeros);
       return { id, datos: v.datos };
     } catch (err) {
-      await fotos.borrar(guardadas);
+      // Limpieza de mejor esfuerzo: si falla, no debe tapar el error original.
+      if (guardadas.length) await fotos.borrar(guardadas).catch(() => {});
       if (err.motivo === 'CEDULA_DUPLICADA') throw yaInscrito(config);
       throw err;
     }
