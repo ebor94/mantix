@@ -79,8 +79,10 @@ const limiter = rateLimit({
   // October Big Day: el evento también comparte Wi-Fi; el módulo aplica su propio límite en el POST.
   // Portería: las casetas de una sede pueden compartir IP; el módulo aplica su propio límite en el login.
   // Agenda de Masajes: toda una sede sale por una IP; el módulo limita por usuario (y por cuenta en el login).
+  // Duelo Animal: los operadores móviles comparten IP entre muchos inscritos; el módulo aplica sus propios límites.
   skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
     || req.originalUrl.startsWith('/api/porteria/') || req.originalUrl.startsWith('/api/masajes/')
+    || req.originalUrl.startsWith('/api/duelo/')
 });
 app.use('/api/', limiter);
 

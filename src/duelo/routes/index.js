@@ -3,6 +3,9 @@
 // ============================================
 const express = require('express');
 const axios = require('axios');
+const logger = require('../../utils/logger');
+const { leerEntorno } = require('../config/entorno');
+const { crearBdPerezosa } = require('../db');
 const { dueloErrorHandler } = require('../middleware/errorHandler');
 const { crearRepositorioInscripciones } = require('../repositorios/inscripciones');
 const { crearServicioFotos } = require('../services/fotos.service');
@@ -34,4 +37,33 @@ function crearRouterDuelo({
   return router;
 }
 
-module.exports = { crearRouterDuelo };
+// Producción: el router se construye UNA vez al cargar (express-rate-limit exige crear los limitadores aquí).
+// Nada aquí toca la red ni lanza si faltan variables: el pool se crea al primer uso.
+const bd = crearBdPerezosa(() => {
+  const e = leerEntorno();
+  if (!e.ok) throw new Error(`Duelo sin configuración válida: ${e.motivo}`);
+  return e.config.db;
+});
+// obtenerConfig solo se llama detrás del guardián, cuando la configuración ya es válida.
+const real = crearRouterDuelo({ bd, obtenerConfig: () => leerEntorno().config });
+
+// Si la configuración no es válida responde 503 sin tumbar Mantix (se re-evalúa por petición, es barato).
+let avisado = false;
+function router(req, res, next) {
+  const entorno = leerEntorno();
+  if (!entorno.ok) {
+    if (!avisado) {
+      avisado = true;
+      logger.error(`duelo deshabilitado: ${entorno.motivo}`);
+    }
+    return res.status(503).json({
+      success: false,
+      motivo: 'DUELO_DESHABILITADO',
+      message: 'El formulario no está disponible en este momento. Inténtalo más tarde.',
+    });
+  }
+  avisado = false;
+  return real(req, res, next);
+}
+
+module.exports = { router, crearRouterDuelo, bd };
