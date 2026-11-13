@@ -144,30 +144,52 @@ const esHoy = ({ cita, beneficiario, spa, appUrl }) => correo(
 const SMS_MAX = 160;
 const aGsm = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ñ/gi, 'n').replace(/[^A-Za-z0-9 .,:;!?()/@#%&*+=_-]/g, '');
 const DIAS = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
-function cuandoSms(inicio) {
+function partesSms(inicio) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true })
     .formatToParts(inicio).map((x) => [x.type, x.value]));
   const dia = DIAS[['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)];
-  return `${dia} ${p.day}/${p.month} a las ${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}`;
+  return { fecha: `${dia} ${p.day}/${p.month}`, hora: `${p.hour}:${p.minute}${p.dayPeriod.toLowerCase()}` };
 }
 
-/** Arma el SMS dentro de 160 caracteres: primero recorta el nombre del spa, después quita el enlace. */
-function smsAjustado({ cita, spa, appUrl }, inicioTexto, cierre) {
-  const cuando = cuandoSms(cita.inicio);
-  const url = aGsm(appUrl);
-  const armar = (lugar) => `Los Olivos: ${inicioTexto} ${cuando}${lugar ? ` en ${lugar}` : ''}. ${cierre} Cambios 24h antes: ${url}`;
+/**
+ * Arma el SMS dentro de 160 caracteres GSM-7: `armar(lugar)` da el texto completo; si no cabe, primero recorta
+ * el nombre del spa y, si aun así no cabe, usa `corto` (sin lugar ni enlace).
+ */
+function smsAjustado({ spa }, armar, corto) {
   let lugar = aGsm(spa.nombre).slice(0, 40);
   let texto = armar(lugar);
   while (texto.length > SMS_MAX && lugar.length > 0) { lugar = lugar.slice(0, -1).trim(); texto = armar(lugar); }
-  if (texto.length > SMS_MAX) texto = `Los Olivos: ${inicioTexto} ${cuando}. ${cierre}`.slice(0, SMS_MAX);
-  return texto;
+  return texto.length <= SMS_MAX ? texto : corto.slice(0, SMS_MAX);
+}
+const en = (lugar) => (lugar ? ` en ${lugar}` : '');
+
+// Recordatorio 2 días antes.
+function recordatorioSms(datos) {
+  const { fecha, hora: h } = partesSms(datos.cita.inicio);
+  const url = aGsm(datos.appUrl);
+  return smsAjustado(datos, (l) => `Los Olivos: tu masaje es el ${fecha} a las ${h}${en(l)}. Regalate este momento! Cambios 24h antes: ${url}`,
+    `Los Olivos: tu masaje es el ${fecha} a las ${h}. Regalate este momento!`);
+}
+// Al agendar ("Tu momento de bienestar esta confirmado!").
+function confirmacionSms(datos) {
+  const { fecha, hora: h } = partesSms(datos.cita.inicio);
+  const url = aGsm(datos.appUrl);
+  return smsAjustado(datos, (l) => `Los Olivos: Tu momento de bienestar esta confirmado! Masaje ${fecha} ${h}${en(l)}. Cambios 24h antes: ${url}`,
+    `Los Olivos: Tu momento de bienestar esta confirmado! Masaje ${fecha} ${h}. Te esperamos!`);
+}
+// Al reprogramar: el worker pasa `antes` (inicio anterior) cuando la cita viene de una reprogramación.
+function reprogramacionSms(datos) {
+  const { fecha, hora: h } = partesSms(datos.cita.inicio);
+  const url = aGsm(datos.appUrl);
+  return smsAjustado(datos, (l) => `Los Olivos: Tu cita fue reprogramada! Masaje ${fecha} ${h}${en(l)}. Te esperamos! Cambios 24h antes: ${url}`,
+    `Los Olivos: Tu cita fue reprogramada! Masaje ${fecha} ${h}. Te esperamos!`);
 }
 
-const recordatorioSms = (datos) => smsAjustado(datos, 'tu masaje es el', 'Regalate este momento!');
-const confirmacionSms = (datos) => smsAjustado(datos, 'masaje agendado el', 'Te esperamos!');
-
 /** SMS por tipo de aviso (el worker elige con n.tipo). */
-const SMS = Object.freeze({ recordatorio_2d: recordatorioSms, empleado_confirmacion: confirmacionSms });
+const SMS = Object.freeze({
+  recordatorio_2d: recordatorioSms,
+  empleado_confirmacion: (datos) => (datos.antes ? reprogramacionSms(datos) : confirmacionSms(datos)),
+});
 
 const CORREOS = Object.freeze({
   spa_nueva: spaNueva, spa_reprogramada: spaReprogramada, spa_cancelada: spaCancelada,
@@ -175,4 +197,4 @@ const CORREOS = Object.freeze({
   recordatorio_2d: recordatorio2d, es_hoy: esHoy,
 });
 
-module.exports = { CORREOS, SMS, recordatorioSms, confirmacionSms, esc, asuntoSeguro, fechaLarga, hora, aGsm, SMS_MAX };
+module.exports = { CORREOS, SMS, recordatorioSms, confirmacionSms, reprogramacionSms, esc, asuntoSeguro, fechaLarga, hora, aGsm, SMS_MAX };

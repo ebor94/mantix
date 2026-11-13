@@ -2,7 +2,7 @@ const nock = require('nock');
 const { crearClienteHablame } = require('../adapters/hablameSms');
 const { crearCalendario, eventoDe, SCOPE } = require('../adapters/googleCalendar');
 const { crearCorreo } = require('../adapters/correo');
-const { CORREOS, SMS, recordatorioSms, confirmacionSms, esc } = require('../plantillas');
+const { CORREOS, SMS, recordatorioSms, confirmacionSms, reprogramacionSms, esc } = require('../plantillas');
 const { redactar } = require('../utils/redactar');
 
 const URL = 'https://www.hablame.co/api/sms/v5/send';
@@ -181,11 +181,37 @@ describe('plantillas', () => {
 
 test('SMS de confirmación: ≤ 160, sin tildes, con fecha y spa; SMS cubre los dos tipos con canal sms', () => {
   const t = confirmacionSms({ cita, spa: { nombre: 'Spa Armonía & Ñandú Relax Center Cúcuta Norte' }, appUrl });
-  expect(t).toMatch(/^Los Olivos: masaje agendado el jue 26\/11 a las 9:00am/);
+  expect(t).toMatch(/^Los Olivos: Tu momento de bienestar esta confirmado! Masaje jue 26\/11 9:00am/);
   expect(t.length).toBeLessThanOrEqual(160);
   expect(t).not.toMatch(/[^\x20-\x7e]/);
   expect(confirmacionSms({ cita, spa: { nombre: 'Spa' }, appUrl: 'https://x.co/' + 'y'.repeat(200) }).length).toBeLessThanOrEqual(160);
   expect(Object.keys(SMS).sort()).toEqual(['empleado_confirmacion', 'recordatorio_2d']);
+});
+
+test('SMS de reprogramación y elección por `antes`; todos ≤ 160 y GSM-7 con el spa real', () => {
+  const real = { cita, spa: { nombre: 'SPA Tatiana Forero' }, appUrl: 'https://losolivoscucuta.com/AgendaPromax' };
+  expect(reprogramacionSms(real)).toBe('Los Olivos: Tu cita fue reprogramada! Masaje jue 26/11 9:00am en SPA Tatiana Forero. Te esperamos! Cambios 24h antes: https://losolivoscucuta.com/AgendaPromax');
+  expect(SMS.empleado_confirmacion(real)).toBe(confirmacionSms(real));
+  expect(SMS.empleado_confirmacion({ ...real, antes: new Date('2026-11-25T14:00:00Z') })).toBe(reprogramacionSms(real));
+  for (const t of [confirmacionSms(real), reprogramacionSms(real), recordatorioSms(real)]) {
+    expect(t.length).toBeLessThanOrEqual(160);
+    expect(t).not.toMatch(/[^\x20-\x7e]/);
+    expect(t).toContain('SPA Tatiana Forero'); // con el spa real no se recorta nada
+    expect(t).toContain('https://losolivoscucuta.com/AgendaPromax');
+  }
+  const largo = { cita, spa: { nombre: 'Spa' }, appUrl: 'https://x.co/' + 'y'.repeat(200) };
+  expect(reprogramacionSms(largo).length).toBeLessThanOrEqual(160);
+});
+
+test('evento: descripción con fecha y año, horario, lugar, recomendaciones y enlace; datos escapados', () => {
+  const d = eventoDe({ cita, beneficiario, spa: { ...spa, nombre: 'SPA <b>X</b>' }, appUrl }).description;
+  expect(d).toContain('📅 Fecha: Jueves, 26 de noviembre de 2026');
+  expect(d).toContain('🕗 Horario: 9:00 a. m. a 10:00 a. m.');
+  expect(d).toContain('📍 Lugar: SPA &lt;b&gt;X&lt;/b&gt; – ');
+  expect(d).toMatch(/👨 Hombres:\n• Pantaloneta\.\n• Sandalias antideslizantes\.\n• Toalla personal\./);
+  expect(d).toMatch(/👩 Mujeres:\n• Traje de baño\./);
+  expect(d).toContain(`🔗 ${appUrl}`);
+  expect(d).not.toContain(beneficiario.celular);
 });
 
 describe('correo', () => {

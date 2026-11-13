@@ -48,7 +48,9 @@ function crearWorkerOutbox({ bd, obtenerConfig, obtenerIntegraciones, adaptadore
     if (n.canal === 'sms') {
       if (!beneficiario.celular) throw new FalloDefinitivo('SIN_CELULAR');
       if (!SMS[n.tipo]) throw new FalloDefinitivo(`SIN_PLANTILLA_SMS ${n.tipo}`);
-      await adaptadores.sms.enviar(beneficiario.celular, SMS[n.tipo](datos));
+      // La confirmación de una cita reprogramada dice "reprogramada": se sabe por su historial.
+      const antesSms = n.tipo === 'empleado_confirmacion' ? await historial.inicioAnteriorDe(ejecutor, cita.id, cita.inicio) : null;
+      await adaptadores.sms.enviar(beneficiario.celular, SMS[n.tipo]({ ...datos, antes: antesSms }));
       return;
     }
     const para = AL_SPA.has(n.tipo) ? integ.spa.email : beneficiario.correo;

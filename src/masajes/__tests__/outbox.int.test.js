@@ -45,7 +45,7 @@ test('procesa las 4 tareas de una cita nueva: evento (guarda su id), correo al s
   expect(await worker(a).procesarPendientes()).toMatchObject({ procesadas: 4, enviadas: 4 });
   expect(await estados(c.id)).toEqual({ 'calendar_upsert/google': 'enviado', 'spa_nueva/email': 'enviado', 'empleado_confirmacion/email': 'enviado', 'empleado_confirmacion/sms': 'enviado' });
   expect(a.sms.enviar).toHaveBeenCalledTimes(1);
-  expect(a.sms.enviar.mock.calls[0][1]).toMatch(/^Los Olivos: masaje agendado el /);
+  expect(a.sms.enviar.mock.calls[0][1]).toMatch(/^Los Olivos: Tu momento de bienestar esta confirmado! Masaje lun 23\/11 9:00am/);
   expect(a.sms.enviar.mock.calls[0][1].length).toBeLessThanOrEqual(160);
   expect(await filas('SELECT google_event_id FROM msj_citas WHERE id = ?', [c.id])).toEqual([{ google_event_id: 'ev-1' }]);
   expect(a.correo.enviar.mock.calls.map(([para]) => para).sort()).toEqual(['ana@losolivos.co', 'spa@ejemplo.co']);
@@ -113,6 +113,19 @@ test('reprogramada: el correo al spa trae el inicio anterior', async () => {
   const alSpa = a.correo.enviar.mock.calls.find(([para]) => para === 'spa@ejemplo.co');
   expect(alSpa[1].html).toMatch(/lunes 23 de noviembre[\s\S]*martes 24 de noviembre/);
   expect(a.calendario.upsert.mock.calls[1][0]).toMatchObject({ googleEventId: 'ev-1' });
+});
+
+test('reprogramada: el SMS al empleado dice "reprogramada" con la nueva fecha (la primera confirmación no)', async () => {
+  const a = adaptadores();
+  const c = await agendada();
+  await worker(a).procesarPendientes();
+  expect(a.sms.enviar.mock.calls[0][1]).toMatch(/^Los Olivos: Tu momento de bienestar esta confirmado!/);
+  await s.citas.reprogramar({ citaId: c.id, inicio: mar9, actor: 'e', esAdmin: false, beneficiarioIdActor: c.beneficiario_id });
+  a.sms.enviar.mockClear();
+  await worker(a).procesarPendientes();
+  expect(a.sms.enviar).toHaveBeenCalledTimes(1);
+  expect(a.sms.enviar.mock.calls[0][1]).toMatch(/^Los Olivos: Tu cita fue reprogramada! Masaje mar 24\/11 9:00am/);
+  expect(a.sms.enviar.mock.calls[0][1].length).toBeLessThanOrEqual(160);
 });
 
 test('empleado sin correo → su aviso se descarta (no falla en bucle)', async () => {
