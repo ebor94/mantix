@@ -2,6 +2,7 @@ const request = require('supertest');
 const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const { crearAppPrueba, CONFIG, ORIGEN } = require('../testing/appPrueba');
 const DueloError = require('../utils/DueloError');
+const { MENSAJE_CUPO } = require('../dominio/evento');
 const logger = require('../../utils/logger');
 
 // El 500 de la prueba correspondiente registra un error a propósito; se captura aquí para no ensuciar la salida.
@@ -167,5 +168,42 @@ describe('fallos del correo posteriores a la respuesta', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(logger.error.mock.calls)).toContain('TypeError');
     sinDatosPersonales();
+  });
+});
+
+describe('cupo del evento', () => {
+  const conCupo = (contar, extra = {}) => crearAppPrueba({
+    obtenerConfig: () => ({ ...CONFIG, cupoMaximo: 2 }),
+    repo: { ...crearAppPrueba().deps.repo, contar },
+    ...extra,
+  });
+
+  test('GET /estado informa abiertas:false con el cupo completo', async () => {
+    const { app } = conCupo(jest.fn(async () => 2));
+    const r = await request(await servir(app)).get('/api/duelo/v1/estado');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ success: true, data: { abiertas: false, versionPolitica: 'borrador' } });
+  });
+
+  test('GET /estado con cupo libre informa abiertas:true', async () => {
+    const { app } = conCupo(jest.fn(async () => 1));
+    const r = await request(await servir(app)).get('/api/duelo/v1/estado');
+    expect(r.body.data.abiertas).toBe(true);
+  });
+
+  test('GET /estado no falla si contar rechaza: 200 con config.abiertas', async () => {
+    const { app } = conCupo(jest.fn(async () => { throw new Error('bd caída'); }));
+    const r = await request(await servir(app)).get('/api/duelo/v1/estado');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ success: true, data: { abiertas: true, versionPolitica: 'borrador' } });
+  });
+
+  test('POST con el cupo completo: 403 CERRADAS con MENSAJE_CUPO antes de Multer y del servicio', async () => {
+    const { app, deps } = conCupo(jest.fn(async () => 2));
+    const r = await request(await servir(app)).post(RUTA).set('Origin', ORIGEN)
+      .set('Content-Type', 'multipart/form-data; boundary=xyz').send('--xyz\r\nbasura');
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ success: false, motivo: 'CERRADAS', message: MENSAJE_CUPO });
+    expect(deps.servicio.inscribir).not.toHaveBeenCalled();
   });
 });

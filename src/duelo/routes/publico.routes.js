@@ -11,16 +11,20 @@ const registrarFalloCorreo = (id) => (err) => {
   logger.error('duelo: falló el envío del correo de confirmación', { inscripcion: id, nombre: err && err.name, codigo: err && err.code });
 };
 
-function crearRouterPublico({ obtenerConfig, servicio, http }) {
+function crearRouterPublico({ obtenerConfig, servicio, http, disponibilidad }) {
   const router = express.Router();
   const origen = crearOrigen(obtenerConfig);
   const limites = crearLimites(obtenerConfig);
   const verificarTurnstile = crearTurnstile(obtenerConfig, http);
-  const abiertas = crearAbiertas(obtenerConfig);
+  const abiertas = crearAbiertas(disponibilidad);
 
-  router.get('/estado', (req, res) => {
-    const { abiertas, versionPolitica } = obtenerConfig();
-    res.json({ success: true, data: { abiertas, versionPolitica } });
+  router.get('/estado', async (req, res, next) => {
+    try {
+      const { abiertas } = await disponibilidad.estado();
+      res.json({ success: true, data: { abiertas, versionPolitica: obtenerConfig().versionPolitica } });
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.post('/inscripciones', origen, limites.inscripciones, abiertas, subida, async (req, res, next) => {

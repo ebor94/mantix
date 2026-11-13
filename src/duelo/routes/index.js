@@ -11,6 +11,7 @@ const { crearRepositorioInscripciones } = require('../repositorios/inscripciones
 const { crearServicioFotos } = require('../services/fotos.service');
 const { crearNotificador } = require('../services/notificador');
 const { crearServicioInscripcion } = require('../services/inscribir.service');
+const { crearDisponibilidad } = require('../services/disponibilidad');
 const { crearRouterPublico } = require('./publico.routes');
 const { crearRouterPanel } = require('./panel.routes');
 
@@ -26,10 +27,11 @@ function crearRouterDuelo({
     repo, fotos, obtenerConfig,
     notificar: (correo, datos) => crearNotificador(correo, http).notificar(datos),
   }),
+  disponibilidad = crearDisponibilidad({ repo, obtenerConfig }),
 }) {
   const router = express.Router();
 
-  router.use(crearRouterPublico({ obtenerConfig, servicio, http }));
+  router.use(crearRouterPublico({ obtenerConfig, servicio, http, disponibilidad }));
   router.use('/panel', crearRouterPanel({ obtenerConfig, repo, fotos }));
 
   router.use((req, res) => res.status(404).json({ success: false, motivo: 'NO_ENCONTRADO', message: 'Ruta no encontrada' }));

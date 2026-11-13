@@ -9,6 +9,8 @@ const { servir, cerrarServidores } = require('../../testing/servidorPrueba');
 const { crearBdDePrueba, abrirConexion } = require('../testing/bd');
 const { crearRouterDuelo } = require('../routes');
 const { leerEntorno } = require('../config/entorno');
+const { crearRepositorioInscripciones } = require('../repositorios/inscripciones');
+const { crearDisponibilidad } = require('../services/disponibilidad');
 const { jpg, png } = require('../testing/imagenes');
 const logger = require('../../utils/logger');
 
@@ -153,4 +155,43 @@ test('un archivo que no es imagen: 422 en su campo, nada guardado y una línea d
   expect(registro).toHaveBeenCalledWith('duelo: no se pudo procesar una foto', expect.objectContaining({ heic: false }));
   expect(JSON.stringify(registro.mock.calls)).not.toMatch(/PDF|documento|1090000005/);
   registro.mockRestore();
+});
+
+describe('cupo del evento (HTTP + MySQL real)', () => {
+  const MENSAJE = 'Se completaron los cupos para este encuentro. Gracias por tu interés 🐾';
+  let appCupo;
+  beforeAll(() => {
+    const config = { ...leerEntorno().config, fotosPath: dir, contacto: '300 000 0000', correo: { canal: 'ninguno' }, cupoMaximo: 2 };
+    appCupo = express();
+    appCupo.set('trust proxy', 1);
+    appCupo.use(express.json());
+    // Reloj que avanza 10 s por consulta: la caché de 5 s nunca sirve un conteo viejo en esta prueba.
+    let reloj = 0;
+    const repo = crearRepositorioInscripciones(bd);
+    const disponibilidad = crearDisponibilidad({ repo, obtenerConfig: () => config, ahora: () => { reloj += 10000; return reloj; } });
+    appCupo.use(BASE, crearRouterDuelo({ bd, obtenerConfig: () => config, http, repo, disponibilidad }));
+  });
+  const enviar = async (n) => request(await servir(appCupo)).post(`${BASE}/inscripciones`).set('Origin', ORIGEN)
+    .field('nombre_completo', 'Ana Pérez').field('celular', '3001234567').field('correo', 'ana@correo.com')
+    .field('acepta_politica', 'true').field('version_politica', 'borrador')
+    .field('cedula', String(1090000000 + n)).field('honra_companero', 'no');
+  const filas = async () => (await conn.query('SELECT COUNT(*) AS n FROM duelo_inscripciones'))[0][0].n;
+
+  test('dos inscripciones entran, la tercera recibe 403 y no deja fila; /estado pasa a cerrado', async () => {
+    expect((await enviar(1)).status).toBe(201);
+    expect((await enviar(2)).status).toBe(201);
+    const tercera = await enviar(3);
+    expect(tercera.status).toBe(403);
+    expect(tercera.body).toEqual({ success: false, motivo: 'CERRADAS', message: MENSAJE });
+    expect(await filas()).toBe(2);
+    const estado = await request(await servir(appCupo)).get(`${BASE}/estado`);
+    expect(estado.body.data.abiertas).toBe(false);
+  });
+
+  test('concurrencia: 6 inscripciones distintas a la vez con cupo 2 → 2 con 201, 4 con 403, 2 filas', async () => {
+    const respuestas = await Promise.all([1, 2, 3, 4, 5, 6].map(enviar));
+    const estados = respuestas.map((r) => r.status).sort();
+    expect(estados).toEqual([201, 201, 403, 403, 403, 403]);
+    expect(await filas()).toBe(2);
+  });
 });

@@ -2,7 +2,7 @@
 // escribir archivos, los borra. El correo se dispara aparte, después de responder al usuario.
 const DueloError = require('../utils/DueloError');
 const { validarInscripcion } = require('../dominio/validaciones');
-const { EVENTO } = require('../dominio/evento');
+const { EVENTO, MENSAJE_CUPO } = require('../dominio/evento');
 const { crearLimitador } = require('./limitadorConcurrencia');
 
 const MENSAJE_VALIDACION = 'Revisa los datos marcados e inténtalo de nuevo.';
@@ -44,6 +44,9 @@ function crearServicioInscripcion({
   async function inscribir({ cuerpo, archivos = {}, ip = null, userAgent = null }) {
     const config = obtenerConfig();
     if (!config.abiertas) throw new DueloError(403, 'CERRADAS', MENSAJE_CERRADAS);
+    const cupoMaximo = config.cupoMaximo ?? null;
+    // Rechazo barato antes de validar o procesar fotos; la verificación autoritativa es la de repo.crear.
+    if (cupoMaximo !== null && (await repo.contar()) >= cupoMaximo) throw new DueloError(403, 'CERRADAS', MENSAJE_CUPO);
 
     const ordenesConFoto = new Set(Object.keys(archivos).map(Number));
     const v = validarInscripcion(cuerpo, { versionPolitica: config.versionPolitica, ordenesConFoto });
@@ -58,7 +61,7 @@ function crearServicioInscripcion({
       const companeros = lista.length === 0 ? []
         : await limitador.ejecutar(() => procesarYGuardar(lista, archivos, guardadas));
       const { companeros: _descartados, ...datos } = v.datos;
-      const id = await repo.crear({ ...datos, ip, user_agent: userAgent }, companeros);
+      const id = await repo.crear({ ...datos, ip, user_agent: userAgent }, companeros, { cupoMaximo });
       return { id, datos: v.datos };
     } catch (err) {
       // Limpieza de mejor esfuerzo: si falla, no debe tapar el error original.

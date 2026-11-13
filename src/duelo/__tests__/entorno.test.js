@@ -95,3 +95,24 @@ describe('DUELO_FOTOS_PATH', () => {
     expect(fotosPath('uploads-privados/duelo').ok).toBe(true);
   });
 });
+
+describe('DUELO_CUPO_MAXIMO', () => {
+  const cupo = (valor) => leerEntorno({ ...BASE, DUELO_CUPO_MAXIMO: valor });
+
+  test('ausente o vacío: sin límite (null)', () => {
+    expect(leerEntorno(BASE).config.cupoMaximo).toBeNull();
+    expect(cupo('').config.cupoMaximo).toBeNull();
+    expect(cupo('   ').config.cupoMaximo).toBeNull();
+  });
+
+  test('un entero positivo es el cupo', () => {
+    expect(cupo('120').config.cupoMaximo).toBe(120);
+    expect(cupo(' 5 ').config.cupoMaximo).toBe(5);
+  });
+
+  test.each(['0', '-5', 'abc', '12.5', '1e3', '12abc'])('%s invalida la configuración (nunca significa «sin límite»)', (valor) => {
+    const r = cupo(valor);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain('DUELO_CUPO_MAXIMO');
+  });
+});

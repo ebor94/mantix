@@ -6,4 +6,8 @@ const EVENTO = Object.freeze({
   lugar: 'Auditorio Carlos Corredor, Sede 4, Universidad Simón Bolívar, Cúcuta',
 });
 
-module.exports = { EVENTO };
+// Mensaje cuando se llena el cupo. Viaja con el motivo 'CERRADAS' a propósito: el frontend ya cambia a su
+// pantalla de cerrado con ese motivo.
+const MENSAJE_CUPO = 'Se completaron los cupos para este encuentro. Gracias por tu interés 🐾';
+
+module.exports = { EVENTO, MENSAJE_CUPO };

@@ -66,6 +66,13 @@ function leerEntorno(env = process.env) {
 
   const limite = parseInt(env.DUELO_LIMITE_INSCRIPCIONES, 10);
 
+  // Vacío = sin cupo. Cualquier otra cosa que no sea un entero positivo invalida la configuración:
+  // un error de digitación nunca debe significar «sin límite».
+  const cupoTexto = recortada(env.DUELO_CUPO_MAXIMO);
+  if (cupoTexto !== undefined && !/^[1-9]\d*$/.test(cupoTexto)) {
+    return { ok: false, motivo: 'DUELO_CUPO_MAXIMO debe ser un entero positivo (o quedar vacía para no limitar)' };
+  }
+
   return {
     ok: true,
     config: {
@@ -79,6 +86,7 @@ function leerEntorno(env = process.env) {
       jwtSecret: secreto,
       jwtExpires: '2h',
       correo,
+      cupoMaximo: cupoTexto === undefined ? null : parseInt(cupoTexto, 10),
       limiteInscripciones: limite > 0 ? limite : 30,
       turnstileSecret: recortada(env.DUELO_TURNSTILE_SECRET) ?? null,
       db: leerConexion(env).db,

@@ -1,6 +1,6 @@
 const { crearServicioInscripcion } = require('../services/inscribir.service');
 const DueloError = require('../utils/DueloError');
-const { EVENTO } = require('../dominio/evento');
+const { EVENTO, MENSAJE_CUPO } = require('../dominio/evento');
 
 const CONFIG = { abiertas: true, versionPolitica: 'borrador', contacto: '300 000 0000', correo: { canal: 'ninguno' } };
 const cuerpo = (extra = {}) => ({
@@ -37,7 +37,7 @@ test('rama No: guarda sin tocar fotos', async () => {
   expect(r.id).toBe(7);
   expect(deps.fotos.procesar).not.toHaveBeenCalled();
   expect(deps.repo.crear).toHaveBeenCalledWith(
-    expect.objectContaining({ cedula: '1090000001', honra_companero: false, ip: '1.2.3.4', user_agent: 'ua' }), [],
+    expect.objectContaining({ cedula: '1090000001', honra_companero: false, ip: '1.2.3.4', user_agent: 'ua' }), [], { cupoMaximo: null },
   );
 });
 
@@ -177,5 +177,50 @@ describe('turnos para procesar fotos', () => {
     }
     deps.fotos.procesar.mockImplementation(async (b) => b);
     await expect(servicio.inscribir(conFotos('1090000299'))).resolves.toMatchObject({ id: 7 });
+  });
+});
+
+describe('cupo del evento', () => {
+  const CON_CUPO = { ...CONFIG, cupoMaximo: 2 };
+
+  test('cupo completo: 403 CERRADAS antes de revisar cédula o procesar fotos', async () => {
+    const { deps, servicio } = armar({
+      obtenerConfig: () => CON_CUPO,
+      repo: { existeCedula: jest.fn(async () => false), crear: jest.fn(), contar: jest.fn(async () => 2) },
+    });
+    await expect(servicio.inscribir({ cuerpo: conCompaneros(['Luna']), archivos: { 1: Buffer.from('a') } }))
+      .rejects.toMatchObject({ statusCode: 403, motivo: 'CERRADAS', message: MENSAJE_CUPO });
+    expect(deps.repo.existeCedula).not.toHaveBeenCalled();
+    expect(deps.fotos.procesar).not.toHaveBeenCalled();
+    expect(deps.repo.crear).not.toHaveBeenCalled();
+  });
+
+  test('con cupo libre pasa { cupoMaximo } a repo.crear', async () => {
+    const { deps, servicio } = armar({
+      obtenerConfig: () => CON_CUPO,
+      repo: { existeCedula: jest.fn(async () => false), crear: jest.fn(async () => 7), contar: jest.fn(async () => 1) },
+    });
+    await servicio.inscribir({ cuerpo: cuerpo(), archivos: {} });
+    expect(deps.repo.contar).toHaveBeenCalledTimes(1);
+    expect(deps.repo.crear.mock.calls[0][2]).toEqual({ cupoMaximo: 2 });
+  });
+
+  test('sin cupo no cuenta y pasa cupoMaximo null', async () => {
+    const { deps, servicio } = armar({ repo: { existeCedula: jest.fn(async () => false), crear: jest.fn(async () => 7), contar: jest.fn() } });
+    await servicio.inscribir({ cuerpo: cuerpo(), archivos: {} });
+    expect(deps.repo.contar).not.toHaveBeenCalled();
+    expect(deps.repo.crear.mock.calls[0][2]).toEqual({ cupoMaximo: null });
+  });
+
+  test('si repo.crear pierde la carrera (403) tras guardar fotos, las borra', async () => {
+    const perdida = new DueloError(403, 'CERRADAS', MENSAJE_CUPO);
+    const { deps, servicio } = armar({
+      obtenerConfig: () => CON_CUPO,
+      repo: { existeCedula: jest.fn(async () => false), crear: jest.fn(async () => { throw perdida; }), contar: jest.fn(async () => 1) },
+    });
+    await expect(servicio.inscribir({ cuerpo: conCompaneros(['Luna', 'Max']), archivos: { 1: Buffer.from('a'), 2: Buffer.from('b') } }))
+      .rejects.toBe(perdida);
+    expect(deps.fotos.guardar).toHaveBeenCalledTimes(2);
+    expect(deps.fotos.borrar).toHaveBeenCalledWith(['foto-1.jpg', 'foto-2.jpg']);
   });
 });
