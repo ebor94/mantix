@@ -9,6 +9,7 @@ const { crearServicioFotos } = require('../services/fotos.service');
 const { crearNotificador } = require('../services/notificador');
 const { crearServicioInscripcion } = require('../services/inscribir.service');
 const { crearRouterPublico } = require('./publico.routes');
+const { crearRouterPanel } = require('./panel.routes');
 
 /**
  * Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `obtenerConfig()` devuelve leerEntorno().config;
@@ -26,6 +27,7 @@ function crearRouterDuelo({
   const router = express.Router();
 
   router.use(crearRouterPublico({ obtenerConfig, servicio, http }));
+  router.use('/panel', crearRouterPanel({ obtenerConfig, repo, fotos }));
 
   router.use((req, res) => res.status(404).json({ success: false, motivo: 'NO_ENCONTRADO', message: 'Ruta no encontrada' }));
   router.use(dueloErrorHandler);
