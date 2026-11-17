@@ -72,7 +72,10 @@ async function identidadDeCuentaAd(adUsuario, emailAd) {
 }
 
 async function login({ usuario, password, ua, ip }) {
-  const entrada = String(usuario || '').trim();
+  if (typeof usuario !== 'string' || typeof password !== 'string') {
+    throw new IdentidadError('VALIDATION_ERROR', 'Usuario y contraseña son requeridos');
+  }
+  const entrada = usuario.trim();
   if (!entrada || !password) throw new IdentidadError('VALIDATION_ERROR', 'Usuario y contraseña son requeridos');
 
   const t0 = Date.now();

@@ -51,6 +51,19 @@ afterEach(() => console.log.mockRestore());
 
 const AD_OK = { usuario: 'PSANTAFE', nombre: 'Patricia Santafé', email: 'psantafe@losolivos.co', memberOf: [] };
 
+describe('identidad.login con credenciales que no son texto', () => {
+  test('password numérico → VALIDATION_ERROR sin consultar el AD', async () => {
+    await expect(identidadSvc.login({ usuario: 'psantafe', password: 1 }))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(ldap.validarCredenciales).not.toHaveBeenCalled();
+  });
+  test('usuario objeto → VALIDATION_ERROR', async () => {
+    await expect(identidadSvc.login({ usuario: { $ne: '' }, password: 'clave' }))
+      .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(ldap.validarCredenciales).not.toHaveBeenCalled();
+  });
+});
+
 describe('identidad.login contra el AD', () => {
   test('usuario de red: valida en el AD y emite tokens', async () => {
     const i = identidad();
