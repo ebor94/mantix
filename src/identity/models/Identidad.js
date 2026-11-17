@@ -3,10 +3,11 @@ module.exports = (sequelize, DataTypes) => {
   const Identidad = sequelize.define('OrgIdentidad', {
     id_identidad:        { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     email_norm:          { type: DataTypes.STRING(150), allowNull: false, unique: true },
+    ad_usuario:          { type: DataTypes.STRING(64) },
     nombre:              { type: DataTypes.STRING(100) },
     apellido:            { type: DataTypes.STRING(100) },
     telefono:            { type: DataTypes.STRING(20) },
-    password_hash:       { type: DataTypes.STRING(255), allowNull: false },
+    password_hash:       { type: DataTypes.STRING(255), allowNull: true },
     password_changed_at: { type: DataTypes.DATE },
     must_reset:          { type: DataTypes.TINYINT, defaultValue: 0 },
     activo:              { type: DataTypes.TINYINT, defaultValue: 1 },
