@@ -1,17 +1,25 @@
 /**
  * identity/services/identidad.service.js
- * Lógica de SSO: login, lookup de identidad y aplicaciones disponibles.
+ * Lógica de SSO: login contra el directorio activo, refresh/logout de sesión
+ * y aplicaciones disponibles para una identidad.
  */
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { QueryTypes } = require('sequelize');
 const { sequelize, OrgIdentidad, OrgSesion, OrgAplicacion } = require('../models');
 const jwtId = require('../config/jwt');
+const ldap = require('../../h360/services/ldap.service');
+const { normalizarAdUsuario, vincularAdUsuario } = require('./vinculoAd.service');
 
 class IdentidadError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
+
+const MSG_CREDENCIALES = 'Usuario o contraseña incorrectos';
+// ldap.service usa estos textos para clave errada y para cuenta inexistente; se
+// unifican para no revelar qué cuentas existen. Sus demás mensajes (cuenta
+// bloqueada, clave vencida…) están escritos para mostrarse tal cual.
+const MENSAJES_AD_GENERICOS = new Set([MSG_CREDENCIALES, 'Usuario no encontrado en el directorio']);
 
 function normalizarEmail(email) {
   return (email || '').toString().trim().toLowerCase();
@@ -19,17 +27,68 @@ function normalizarEmail(email) {
 function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
+function usuarioParaLog(u) {
+  return /^[a-z0-9._-]{1,64}$/i.test(u || '') ? u : '[formato no válido]';
+}
+function log(tag, campos) {
+  console.log(JSON.stringify({ tag, ...campos }));
+}
 
-async function login({ email, password, ua, ip }) {
-  const emailNorm = normalizarEmail(email);
-  if (!emailNorm || !password) throw new IdentidadError('VALIDATION_ERROR', 'Email y contraseña son requeridos');
+async function resolverSam(entrada) {
+  if (!entrada.includes('@')) return entrada;
+  const identidad = await OrgIdentidad.findOne({ where: { email_norm: normalizarEmail(entrada) } });
+  if (!identidad) throw new IdentidadError('CREDENCIALES_INVALIDAS', MSG_CREDENCIALES);
+  if (!identidad.ad_usuario) {
+    throw new IdentidadError('NO_VINCULADO', 'Inicia sesión con tu usuario de red (el de Windows).');
+  }
+  return identidad.ad_usuario;
+}
 
-  const identidad = await OrgIdentidad.findOne({ where: { email_norm: emailNorm } });
-  if (!identidad)           throw new IdentidadError('CREDENTIALS_INVALID', 'Credenciales inválidas');
-  if (!identidad.activo)    throw new IdentidadError('USER_INACTIVE', 'Usuario inactivo');
+async function validarEnDirectorio(sam, password) {
+  try {
+    return await ldap.validarCredenciales(sam, password);
+  } catch (e) {
+    if (e.codigo === 'AD_NO_DISPONIBLE') {
+      log('AUTH_AD_UNAVAILABLE', { detalle: String(e.message || '').slice(0, 200) });
+      throw new IdentidadError('AD_NO_DISPONIBLE', 'No hay conexión con el directorio activo, intenta en unos minutos.');
+    }
+    log('AUTH_AD_FAIL', { ad_usuario: usuarioParaLog(normalizarAdUsuario(sam)), codigo: e.codigo || 'DESCONOCIDO' });
+    const mensaje = e.codigo === 'CREDENCIALES_INVALIDAS' && e.message && !MENSAJES_AD_GENERICOS.has(e.message)
+      ? e.message
+      : MSG_CREDENCIALES;
+    throw new IdentidadError('CREDENCIALES_INVALIDAS', mensaje);
+  }
+}
 
-  const ok = await bcrypt.compare(password, identidad.password_hash);
-  if (!ok) throw new IdentidadError('CREDENTIALS_INVALID', 'Credenciales inválidas');
+async function identidadDeCuentaAd(adUsuario, emailAd) {
+  const vinculada = await OrgIdentidad.findOne({ where: { ad_usuario: adUsuario } });
+  if (vinculada) return vinculada;
+  if (!emailAd) return null;
+  const libre = await OrgIdentidad.findOne({ where: { email_norm: normalizarEmail(emailAd), ad_usuario: null } });
+  if (!libre) return null;
+  await vincularAdUsuario(libre, adUsuario);
+  log('AUTH_AD_VINCULADO_AUTO', { ad_usuario: usuarioParaLog(adUsuario), id_identidad: libre.id_identidad });
+  return libre;
+}
+
+async function login({ usuario, password, ua, ip }) {
+  if (typeof usuario !== 'string' || typeof password !== 'string') {
+    throw new IdentidadError('VALIDATION_ERROR', 'Usuario y contraseña son requeridos');
+  }
+  const entrada = usuario.trim();
+  if (!entrada || !password) throw new IdentidadError('VALIDATION_ERROR', 'Usuario y contraseña son requeridos');
+
+  const t0 = Date.now();
+  const sam = await resolverSam(entrada);
+  const ad = await validarEnDirectorio(sam, password);
+  const adUsuario = normalizarAdUsuario(ad.usuario);
+
+  const identidad = await identidadDeCuentaAd(adUsuario, ad.email);
+  if (!identidad) {
+    log('AUTH_AD_SIN_ACCESO', { ad_usuario: usuarioParaLog(adUsuario) });
+    throw new IdentidadError('SIN_ACCESO', 'Tu usuario de red no tiene acceso a GenFlow.');
+  }
+  if (!identidad.activo) throw new IdentidadError('USER_INACTIVE', 'Usuario inactivo');
 
   const accessToken  = jwtId.signAccess ({ id_identidad: identidad.id_identidad, email: identidad.email_norm });
   const refreshToken = jwtId.signRefresh({ id_identidad: identidad.id_identidad });
@@ -46,13 +105,9 @@ async function login({ email, password, ua, ip }) {
   });
 
   await identidad.update({ ultimo_login: new Date() });
+  log('AUTH_AD_OK', { ad_usuario: usuarioParaLog(adUsuario), id_identidad: identidad.id_identidad, ms: Date.now() - t0 });
 
-  return {
-    accessToken,
-    refreshToken,
-    identidad: publicIdentidad(identidad),
-    must_reset: !!identidad.must_reset
-  };
+  return { accessToken, refreshToken, identidad: publicIdentidad(identidad) };
 }
 
 async function refresh(refreshToken) {
@@ -141,45 +196,22 @@ async function aplicacionesDisponibles(idIdentidad) {
   return resultado;
 }
 
-async function cambiarPassword(idIdentidad, { actual, nueva }) {
-  const identidad = await OrgIdentidad.findByPk(idIdentidad);
-  if (!identidad) throw new IdentidadError('NOT_FOUND', 'Identidad no encontrada');
-  if (!nueva || nueva.length < 6) throw new IdentidadError('VALIDATION_ERROR', 'La nueva contraseña debe tener al menos 6 caracteres');
-
-  // Si NO está en must_reset, exigir password actual
-  if (!identidad.must_reset) {
-    if (!actual) throw new IdentidadError('VALIDATION_ERROR', 'Contraseña actual requerida');
-    const ok = await bcrypt.compare(actual, identidad.password_hash);
-    if (!ok)    throw new IdentidadError('CREDENTIALS_INVALID', 'Contraseña actual incorrecta');
-  }
-
-  const hash = await bcrypt.hash(nueva, 10);
-  await identidad.update({
-    password_hash:       hash,
-    password_changed_at: new Date(),
-    must_reset:          0
-  });
-  // Invalidar todas las sesiones (logout en otros dispositivos)
-  await OrgSesion.destroy({ where: { sesion_identidad_id: idIdentidad } });
-  return { ok: true };
-}
-
 function publicIdentidad(i) {
   return {
     id_identidad: i.id_identidad,
     email:        i.email_norm,
+    ad_usuario:   i.ad_usuario || null,
     nombre:       i.nombre,
     apellido:     i.apellido,
     telefono:     i.telefono,
     activo:       !!i.activo,
-    ultimo_login: i.ultimo_login,
-    must_reset:   !!i.must_reset
+    ultimo_login: i.ultimo_login
   };
 }
 
 module.exports = {
   login, refresh, logout, me,
-  aplicacionesDisponibles, cambiarPassword,
+  aplicacionesDisponibles,
   normalizarEmail, sha256, publicIdentidad,
   IdentidadError
 };

@@ -1,13 +1,35 @@
 /**
  * sv/controllers/usuarios.controller.js
- * CRUD de usuarios SerVentas + reset password + toggle activo.
+ * CRUD de usuarios SerVentas + toggle activo + búsqueda en el directorio activo.
  */
 const { Op } = require('sequelize');
 const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto } = require('../models');
-const { hash } = require('../utils/password');
 const { ok, created, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
 const { usuariosAccesibles } = require('../utils/acceso');
+
+const usuariosAd  = require('../services/usuariosAd.service');
+const directorioAd = require('../services/directorioAd.service');
+
+const HTTP_AD = {
+  AD_USUARIO_NO_EXISTE: 422,
+  AD_USUARIO_INVALIDO:  422,
+  AD_USUARIO_TOMADO:    409,
+  CORREO_CON_OTRO_AD:   409,
+  IDENTIDAD_EN_USO:     409,
+  AD_NO_DISPONIBLE:     503
+};
+
+function manejarErrorAd(res, e, next) {
+  const status = HTTP_AD[e.code];
+  if (!status) return next(e);
+  return fail(res, status, status === 422 ? ERROR_CODES.VALIDATION_ERROR : e.code, e.message);
+}
+
+async function conAdUsuario(rows) {
+  const mapa = await usuariosAd.adUsuariosPorIdentidad(rows.map(r => r.usr_id_identidad));
+  return rows.map(r => ({ ...r.toJSON(), ad_usuario: mapa.get(r.usr_id_identidad) ?? null }));
+}
 
 function adminAreaFilter(req) {
   const c = req.user.rol?.rol_codigo;
@@ -35,7 +57,8 @@ function adminAreaFilter(req) {
   return null;
 }
 
-async function list(req, res) {
+async function list(req, res, next) {
+  try {
   const scopeWhere = adminAreaFilter(req);
   if (scopeWhere === null) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Sin permiso');
 
@@ -62,10 +85,12 @@ async function list(req, res) {
     ],
     order: [['usr_id', 'ASC']]
   });
-  return ok(res, usuarios);
+  return ok(res, await conAdUsuario(usuarios));
+  } catch (e) { return next(e); }
 }
 
-async function getOne(req, res) {
+async function getOne(req, res, next) {
+  try {
   const id = parseInt(req.params.id);
   const u = await SvUsuario.findByPk(id, {
     include: [
@@ -79,18 +104,36 @@ async function getOne(req, res) {
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
   }
-  return ok(res, u);
+  return ok(res, (await conAdUsuario([u]))[0]);
+  } catch (e) { return next(e); }
 }
 
-async function create(req, res) {
-  const data = { ...req.body };
+async function create(req, res, next) {
+  try {
+  const { ad_usuario: adUsuario, ...data } = req.body;
   // ADMIN_AREA solo puede crear usuarios de su propia área
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
     data.usr_area_id = req.user.usr_area_id;
   }
   data.usr_email = data.usr_email.toLowerCase().trim();
-  data.usr_password_hash = await hash(data.usr_password);
-  delete data.usr_password;
+
+  // Antes de tocar la identidad: un email ya registrado no puede dejar efectos.
+  if (await SvUsuario.findOne({ where: { usr_email: data.usr_email } })) {
+    return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
+  }
+
+  try {
+    data.usr_id_identidad = await usuariosAd.resolverIdentidad({
+      adUsuario,
+      email:          data.usr_email,
+      nombre:         data.usr_nombre,
+      apellido:       data.usr_apellido,
+      telefono:       data.usr_telefono,
+      permitirCambio: false,
+      usrIdActual:    null,
+      actorUsrId:     req.user.usr_id
+    });
+  } catch (e) { return manejarErrorAd(res, e, next); }
 
   try {
     const u = await SvUsuario.create(data);
@@ -101,25 +144,47 @@ async function create(req, res) {
     if (e.name === 'SequelizeUniqueConstraintError') {
       return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
     }
-    throw e;
+    return next(e);
   }
+  } catch (e) { return next(e); }
 }
 
-async function update(req, res) {
+async function update(req, res, next) {
+  try {
   const id = parseInt(req.params.id);
   const u  = await SvUsuario.findByPk(id);
   if (!u) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Usuario no encontrado');
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
   }
-  const data = { ...req.body };
+  const { ad_usuario: adUsuario, ...data } = req.body;
   if (data.usr_email) data.usr_email = data.usr_email.toLowerCase().trim();
   // ADMIN_AREA no puede mover usuarios fuera de su área
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
     delete data.usr_area_id;
   }
+  if (data.usr_email && data.usr_email !== u.usr_email) {
+    const otro = await SvUsuario.findOne({ where: { usr_email: data.usr_email, usr_id: { [Op.ne]: u.usr_id } } });
+    if (otro) return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
+  }
+  if (adUsuario !== undefined) {
+    try {
+      data.usr_id_identidad = await usuariosAd.resolverIdentidad({
+        adUsuario,
+        email:             data.usr_email    || u.usr_email,
+        nombre:            data.usr_nombre   || u.usr_nombre,
+        apellido:          data.usr_apellido || u.usr_apellido,
+        telefono:          data.usr_telefono ?? u.usr_telefono,
+        idIdentidadActual: u.usr_id_identidad || null,
+        permitirCambio:    !!u.usr_id_identidad,
+        usrIdActual:       u.usr_id,
+        actorUsrId:        req.user.usr_id
+      });
+    } catch (e) { return manejarErrorAd(res, e, next); }
+  }
   await u.update(data);
   return ok(res, u);
+  } catch (e) { return next(e); }
 }
 
 async function toggle(req, res) {
@@ -131,17 +196,6 @@ async function toggle(req, res) {
   }
   await u.update({ usr_activo: u.usr_activo ? 0 : 1 });
   return ok(res, u);
-}
-
-async function resetPassword(req, res) {
-  const id = parseInt(req.params.id);
-  const u  = await SvUsuario.findByPk(id);
-  if (!u) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Usuario no encontrado');
-  if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
-    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
-  }
-  await u.update({ usr_password_hash: await hash(req.body.nueva) });
-  return ok(res, { ok: true });
 }
 
 /**
@@ -166,4 +220,17 @@ async function accesibles(req, res) {
   return ok(res, rows);
 }
 
-module.exports = { list, getOne, create, update, toggle, resetPassword, accesibles };
+/**
+ * GET /usuarios/directorio?q=
+ * Busca cuentas del directorio activo para el alta (roles admin).
+ */
+async function directorio(req, res, next) {
+  try {
+    return ok(res, await directorioAd.buscar(req.query.q));
+  } catch (e) {
+    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
+    return manejarErrorAd(res, e, next);
+  }
+}
+
+module.exports = { list, getOne, create, update, toggle, accesibles, directorio };

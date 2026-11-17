@@ -62,21 +62,10 @@ const ERROR_CODES = {
   CONFLICT:         'CONFLICT'
 };
 
-const JWT = {
-  ACCESS_SECRET:        process.env.SV_JWT_SECRET         || process.env.JWT_SECRET,
-  REFRESH_SECRET:       process.env.SV_JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh',
-  ACCESS_EXPIRES_IN:    process.env.SV_JWT_EXPIRES_IN         || '15m',
-  REFRESH_EXPIRES_IN:   process.env.SV_JWT_REFRESH_EXPIRES_IN || '7d'
-};
-
-const BCRYPT_ROUNDS = parseInt(process.env.SV_BCRYPT_ROUNDS || '10');
-
 module.exports = {
   ROLES,
   NIVELES,
   ROLES_SUPERVISORES,
   AREAS,
-  ERROR_CODES,
-  JWT,
-  BCRYPT_ROUNDS
+  ERROR_CODES
 };

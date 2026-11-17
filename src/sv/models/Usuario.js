@@ -10,7 +10,8 @@ module.exports = (sequelize, DataTypes) => {
     usr_nombre:        { type: DataTypes.STRING(100), allowNull: false },
     usr_apellido:      { type: DataTypes.STRING(100), allowNull: false },
     usr_telefono:      { type: DataTypes.STRING(20) },
-    usr_password_hash: { type: DataTypes.STRING(255), allowNull: false },
+    usr_password_hash: { type: DataTypes.STRING(255), allowNull: true },
+    usr_id_identidad:  { type: DataTypes.INTEGER },
     usr_2fa_secret:    { type: DataTypes.STRING(100) },
     usr_preferencias:  { type: DataTypes.JSON },
     usr_activo:        { type: DataTypes.TINYINT, defaultValue: 1 },
@@ -26,9 +27,6 @@ module.exports = (sequelize, DataTypes) => {
     updatedAt: 'usr_updated_at',
     defaultScope: {
       attributes: { exclude: ['usr_password_hash', 'usr_2fa_secret'] }
-    },
-    scopes: {
-      withPassword: { attributes: { include: ['usr_password_hash'] } }
     }
   });
 

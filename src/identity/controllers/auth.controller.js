@@ -11,24 +11,33 @@ function fail(res, status, code, message) {
   return res.status(status).json({ success: false, error: code, message });
 }
 
-async function login(req, res) {
+const HTTP_LOGIN = {
+  VALIDATION_ERROR:       422,
+  CREDENCIALES_INVALIDAS: 401,
+  NO_VINCULADO:           401,
+  SIN_ACCESO:             403,
+  USER_INACTIVE:          403,
+  AD_NO_DISPONIBLE:       503
+};
+
+async function login(req, res, next) {
   try {
+    const body = req.body || {};
     const r = await identidad.login({
-      email:    req.body.email,
-      password: req.body.password,
+      usuario:  body.usuario ?? body.email,
+      password: body.password,
       ua:       req.headers['user-agent'] || '',
       ip:       req.ip || req.connection?.remoteAddress
     });
     return ok(res, r);
   } catch (e) {
-    if (e.code === 'VALIDATION_ERROR')   return fail(res, 422, e.code, e.message);
-    if (e.code === 'CREDENTIALS_INVALID')return fail(res, 401, e.code, e.message);
-    if (e.code === 'USER_INACTIVE')      return fail(res, 403, e.code, e.message);
-    throw e;
+    const status = HTTP_LOGIN[e.code];
+    if (status) return fail(res, status, e.code, e.message);
+    return next(e);
   }
 }
 
-async function refresh(req, res) {
+async function refresh(req, res, next) {
   try {
     const r = await identidad.refresh(req.body.refreshToken);
     return ok(res, r);
@@ -36,7 +45,7 @@ async function refresh(req, res) {
     if (['REFRESH_INVALID','REFRESH_REVOKED','REFRESH_EXPIRED','USER_INACTIVE'].includes(e.code)) {
       return fail(res, 401, e.code, e.message);
     }
-    throw e;
+    return next(e);
   }
 }
 
@@ -49,18 +58,4 @@ async function me(req, res) {
   return ok(res, identidad.publicIdentidad(req.identidad));
 }
 
-async function cambiarPassword(req, res) {
-  try {
-    const r = await identidad.cambiarPassword(req.identidad.id_identidad, {
-      actual: req.body.actual,
-      nueva:  req.body.nueva
-    });
-    return ok(res, r);
-  } catch (e) {
-    if (e.code === 'VALIDATION_ERROR')    return fail(res, 422, e.code, e.message);
-    if (e.code === 'CREDENTIALS_INVALID') return fail(res, 401, e.code, e.message);
-    throw e;
-  }
-}
-
-module.exports = { login, refresh, logout, me, cambiarPassword };
+module.exports = { login, refresh, logout, me };

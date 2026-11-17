@@ -6,15 +6,17 @@ const router = require('express').Router();
 const auth = require('../controllers/auth.controller');
 const apps = require('../controllers/aplicaciones.controller');
 const { verifyIdentidad } = require('../middleware/verifyIdentidad');
+const { crearLimitadoresLogin } = require('../middleware/limitadoresLogin');
+
+const { limitadorIp, limitadorUsuario } = crearLimitadoresLogin();
 
 // Auth — públicas
-router.post('/login',   auth.login);
+router.post('/login',   limitadorIp, limitadorUsuario, auth.login);
 router.post('/refresh', auth.refresh);
 router.post('/logout',  auth.logout);
 
 // Perfil identidad — requiere token de identidad
 router.get ('/me',                verifyIdentidad, auth.me);
-router.post('/cambiar-password',  verifyIdentidad, auth.cambiarPassword);
 
 // Aplicaciones del ecosistema
 router.get('/aplicaciones',       verifyIdentidad, apps.listarParaIdentidad);

@@ -10,7 +10,7 @@ module.exports = {
     usr_nombre:   Joi.string().min(2).max(100).required(),
     usr_apellido: Joi.string().min(2).max(100).required(),
     usr_telefono: Joi.string().max(20).allow('', null),
-    usr_password: Joi.string().min(6).max(200).required(),
+    ad_usuario:   Joi.string().trim().min(2).max(64).required(),
     usr_activo:   Joi.number().valid(0, 1).default(1)
   }),
   update: Joi.object({
@@ -22,9 +22,7 @@ module.exports = {
     usr_nombre:   Joi.string().min(2).max(100),
     usr_apellido: Joi.string().min(2).max(100),
     usr_telefono: Joi.string().max(20).allow('', null),
-    usr_activo:   Joi.number().valid(0, 1)
-  }).min(1),
-  resetPassword: Joi.object({
-    nueva: Joi.string().min(6).max(200).required()
-  })
+    usr_activo:   Joi.number().valid(0, 1),
+    ad_usuario:   Joi.string().trim().min(2).max(64)
+  }).min(1)
 };
