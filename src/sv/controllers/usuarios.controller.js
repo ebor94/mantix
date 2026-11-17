@@ -158,7 +158,7 @@ async function update(req, res) {
         apellido:          data.usr_apellido || u.usr_apellido,
         telefono:          data.usr_telefono ?? u.usr_telefono,
         idIdentidadActual: u.usr_id_identidad || null,
-        permitirCambio:    true
+        permitirCambio:    !!u.usr_id_identidad
       });
     } catch (e) { return manejarErrorAd(res, e); }
   }

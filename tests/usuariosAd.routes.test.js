@@ -99,6 +99,18 @@ describe('PUT /:id', () => {
     }));
     expect(u.update).toHaveBeenCalledWith(expect.objectContaining({ usr_id_identidad: 77 }));
   });
+
+  test('sin identidad: se resuelve como en el alta (no permite cambiar la cuenta)', async () => {
+    const u = { usr_id: 6, usr_area_id: 1, usr_email: 'beto@x.co', usr_nombre: 'Beto', usr_apellido: 'R', usr_id_identidad: null, update: jest.fn() };
+    SvUsuario.findByPk.mockResolvedValue(u);
+    usuariosAd.resolverIdentidad.mockResolvedValue(88);
+    const r = await request(app()).put('/api/sv/usuarios/6').send({ ad_usuario: 'brodriguez' });
+    expect(r.status).toBe(200);
+    expect(usuariosAd.resolverIdentidad).toHaveBeenCalledWith(expect.objectContaining({
+      adUsuario: 'brodriguez', idIdentidadActual: null, permitirCambio: false
+    }));
+    expect(u.update).toHaveBeenCalledWith(expect.objectContaining({ usr_id_identidad: 88 }));
+  });
 });
 
 describe('GET /', () => {
