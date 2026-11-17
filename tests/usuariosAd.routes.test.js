@@ -2,7 +2,7 @@ const express = require('express');
 const request = require('supertest');
 
 jest.mock('../src/sv/models', () => ({
-  SvUsuario: { findAll: jest.fn(), findByPk: jest.fn(), create: jest.fn() },
+  SvUsuario: { findAll: jest.fn(), findByPk: jest.fn(), create: jest.fn(), findOne: jest.fn() },
   SvRol: {}, SvArea: {}, SvGrupo: {}, SvPunto: {}
 }));
 jest.mock('../src/sv/services/directorioAd.service', () => ({ buscar: jest.fn() }));
@@ -30,7 +30,11 @@ const BASE = {
   usr_rol_id: 4, usr_email: 'Ana@X.co', usr_nombre: 'Ana', usr_apellido: 'Gomez', ad_usuario: 'agomez'
 };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  SvUsuario.findOne.mockReset();
+  SvUsuario.findOne.mockResolvedValue(null);
+});
 
 describe('GET /directorio', () => {
   test('200 con resultados', async () => {
@@ -85,6 +89,48 @@ describe('POST /', () => {
     const r = await request(app()).post('/api/sv/usuarios').send(BASE);
     expect(r.status).toBe(status);
     expect(r.body.message).toBe(`mensaje ${code}`);
+  });
+});
+
+describe('identidad ajena (no se puede apropiar)', () => {
+  test('POST /: email ya registrado → 409 sin tocar la identidad', async () => {
+    SvUsuario.findOne.mockResolvedValue({ usr_id: 9 });
+    const r = await request(app()).post('/api/sv/usuarios').send(BASE);
+    expect(r.status).toBe(409);
+    expect(r.body.message).toBe('Email ya registrado');
+    expect(usuariosAd.resolverIdentidad).not.toHaveBeenCalled();
+    expect(SvUsuario.create).not.toHaveBeenCalled();
+  });
+
+  test('PUT /:id: cambiar el email a uno de otro usuario → 409 sin identidad ni update', async () => {
+    const u = { usr_id: 5, usr_area_id: 1, usr_email: 'ana@x.co', usr_nombre: 'Ana', usr_apellido: 'G', usr_id_identidad: 77, update: jest.fn() };
+    SvUsuario.findByPk.mockResolvedValue(u);
+    SvUsuario.findOne.mockResolvedValue({ usr_id: 9 });
+    const r = await request(app()).put('/api/sv/usuarios/5').send({ usr_email: 'Otro@x.co', ad_usuario: 'agomez' });
+    expect(r.status).toBe(409);
+    expect(r.body.message).toBe('Email ya registrado');
+    expect(usuariosAd.resolverIdentidad).not.toHaveBeenCalled();
+    expect(u.update).not.toHaveBeenCalled();
+  });
+
+  test('IDENTIDAD_EN_USO del servicio → 409 con su mensaje', async () => {
+    usuariosAd.resolverIdentidad.mockRejectedValue(errorCon('IDENTIDAD_EN_USO', 'La identidad de ana@x.co ya pertenece a otro usuario de GenFlow.'));
+    const r = await request(app()).post('/api/sv/usuarios').send(BASE);
+    expect(r.status).toBe(409);
+    expect(r.body.message).toBe('La identidad de ana@x.co ya pertenece a otro usuario de GenFlow.');
+  });
+
+  test('POST / pasa usrIdActual null y actorUsrId; PUT pasa usrIdActual', async () => {
+    usuariosAd.resolverIdentidad.mockResolvedValue(77);
+    SvUsuario.create.mockResolvedValue({ usr_id: 5 });
+    SvUsuario.findByPk.mockResolvedValue({ usr_id: 5 });
+    await request(app()).post('/api/sv/usuarios').send(BASE);
+    expect(usuariosAd.resolverIdentidad).toHaveBeenLastCalledWith(expect.objectContaining({ usrIdActual: null, actorUsrId: 1 }));
+
+    const u = { usr_id: 5, usr_area_id: 1, usr_email: 'ana@x.co', usr_nombre: 'Ana', usr_apellido: 'G', usr_id_identidad: 77, update: jest.fn() };
+    SvUsuario.findByPk.mockResolvedValue(u);
+    await request(app()).put('/api/sv/usuarios/5').send({ ad_usuario: 'agomez' });
+    expect(usuariosAd.resolverIdentidad).toHaveBeenLastCalledWith(expect.objectContaining({ usrIdActual: 5, actorUsrId: 1 }));
   });
 });
 

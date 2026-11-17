@@ -16,6 +16,7 @@ const HTTP_AD = {
   AD_USUARIO_INVALIDO:  422,
   AD_USUARIO_TOMADO:    409,
   CORREO_CON_OTRO_AD:   409,
+  IDENTIDAD_EN_USO:     409,
   AD_NO_DISPONIBLE:     503
 };
 
@@ -116,6 +117,11 @@ async function create(req, res, next) {
   }
   data.usr_email = data.usr_email.toLowerCase().trim();
 
+  // Antes de tocar la identidad: un email ya registrado no puede dejar efectos.
+  if (await SvUsuario.findOne({ where: { usr_email: data.usr_email } })) {
+    return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
+  }
+
   try {
     data.usr_id_identidad = await usuariosAd.resolverIdentidad({
       adUsuario,
@@ -123,7 +129,9 @@ async function create(req, res, next) {
       nombre:         data.usr_nombre,
       apellido:       data.usr_apellido,
       telefono:       data.usr_telefono,
-      permitirCambio: false
+      permitirCambio: false,
+      usrIdActual:    null,
+      actorUsrId:     req.user.usr_id
     });
   } catch (e) { return manejarErrorAd(res, e, next); }
 
@@ -155,6 +163,10 @@ async function update(req, res, next) {
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
     delete data.usr_area_id;
   }
+  if (data.usr_email && data.usr_email !== u.usr_email) {
+    const otro = await SvUsuario.findOne({ where: { usr_email: data.usr_email, usr_id: { [Op.ne]: u.usr_id } } });
+    if (otro) return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
+  }
   if (adUsuario !== undefined) {
     try {
       data.usr_id_identidad = await usuariosAd.resolverIdentidad({
@@ -164,7 +176,9 @@ async function update(req, res, next) {
         apellido:          data.usr_apellido || u.usr_apellido,
         telefono:          data.usr_telefono ?? u.usr_telefono,
         idIdentidadActual: u.usr_id_identidad || null,
-        permitirCambio:    !!u.usr_id_identidad
+        permitirCambio:    !!u.usr_id_identidad,
+        usrIdActual:       u.usr_id,
+        actorUsrId:        req.user.usr_id
       });
     } catch (e) { return manejarErrorAd(res, e, next); }
   }
