@@ -94,15 +94,19 @@ function gruposSupervisados(u) {
   return lista;
 }
 
-async function me(req, res) {
-  const mapa = await adUsuariosPorIdentidad([req.user.usr_id_identidad]);
-  return ok(res, { ...publicUser(req.user), ad_usuario: mapa.get(req.user.usr_id_identidad) ?? null });
+async function me(req, res, next) {
+  try {
+    const mapa = await adUsuariosPorIdentidad([req.user.usr_id_identidad]);
+    return ok(res, { ...publicUser(req.user), ad_usuario: mapa.get(req.user.usr_id_identidad) ?? null });
+  } catch (e) { return next(e); }
 }
 
-async function updatePreferencias(req, res) {
-  const prefs = req.body || {};
-  await SvUsuario.update({ usr_preferencias: prefs }, { where: { usr_id: req.user.usr_id } });
-  return ok(res, { usr_preferencias: prefs });
+async function updatePreferencias(req, res, next) {
+  try {
+    const prefs = req.body || {};
+    await SvUsuario.update({ usr_preferencias: prefs }, { where: { usr_id: req.user.usr_id } });
+    return ok(res, { usr_preferencias: prefs });
+  } catch (e) { return next(e); }
 }
 
 module.exports = { me, updatePreferencias };

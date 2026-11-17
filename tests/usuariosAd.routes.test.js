@@ -22,6 +22,7 @@ function app() {
   a.use(express.json());
   a.use((req, res, next) => { req.user = { usr_id: 1, usr_area_id: 1, rol: { rol_codigo: 'SUPER_ADMIN' } }; next(); });
   a.use('/api/sv/usuarios', require('../src/sv/routes/usuarios.routes'));
+  a.use((err, req, res, next) => res.status(500).json({ success: false, error: 'INTERNAL_ERROR' }));
   return a;
 }
 
@@ -85,6 +86,29 @@ describe('POST /', () => {
     expect(r.status).toBe(status);
     expect(r.body.message).toBe(`mensaje ${code}`);
   });
+});
+
+describe('errores inesperados (no tumban el proceso)', () => {
+  test('POST /: SvUsuario.create rechaza → 500', async () => {
+    usuariosAd.resolverIdentidad.mockResolvedValue(77);
+    SvUsuario.create.mockRejectedValue(new Error('DB caída'));
+    const r = await request(app()).post('/api/sv/usuarios').send(BASE);
+    expect(r.status).toBe(500);
+  }, 2000);
+
+  test('PUT /:id: u.update rechaza → 500', async () => {
+    const u = { usr_id: 5, usr_area_id: 1, usr_email: 'ana@x.co', usr_nombre: 'Ana', usr_apellido: 'G', usr_id_identidad: 77, update: jest.fn().mockRejectedValue(new Error('DB caída')) };
+    SvUsuario.findByPk.mockResolvedValue(u);
+    const r = await request(app()).put('/api/sv/usuarios/5').send({ usr_nombre: 'Otro' });
+    expect(r.status).toBe(500);
+  }, 2000);
+
+  test('GET /: adUsuariosPorIdentidad rechaza → 500', async () => {
+    SvUsuario.findAll.mockResolvedValue([{ usr_id: 5, usr_id_identidad: 77, toJSON() { return {}; } }]);
+    usuariosAd.adUsuariosPorIdentidad.mockRejectedValueOnce(new Error('DB caída'));
+    const r = await request(app()).get('/api/sv/usuarios');
+    expect(r.status).toBe(500);
+  }, 2000);
 });
 
 describe('PUT /:id', () => {

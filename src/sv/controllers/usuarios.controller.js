@@ -19,9 +19,9 @@ const HTTP_AD = {
   AD_NO_DISPONIBLE:     503
 };
 
-function manejarErrorAd(res, e) {
+function manejarErrorAd(res, e, next) {
   const status = HTTP_AD[e.code];
-  if (!status) throw e;
+  if (!status) return next(e);
   return fail(res, status, status === 422 ? ERROR_CODES.VALIDATION_ERROR : e.code, e.message);
 }
 
@@ -56,7 +56,8 @@ function adminAreaFilter(req) {
   return null;
 }
 
-async function list(req, res) {
+async function list(req, res, next) {
+  try {
   const scopeWhere = adminAreaFilter(req);
   if (scopeWhere === null) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Sin permiso');
 
@@ -84,9 +85,11 @@ async function list(req, res) {
     order: [['usr_id', 'ASC']]
   });
   return ok(res, await conAdUsuario(usuarios));
+  } catch (e) { return next(e); }
 }
 
-async function getOne(req, res) {
+async function getOne(req, res, next) {
+  try {
   const id = parseInt(req.params.id);
   const u = await SvUsuario.findByPk(id, {
     include: [
@@ -101,9 +104,11 @@ async function getOne(req, res) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
   }
   return ok(res, (await conAdUsuario([u]))[0]);
+  } catch (e) { return next(e); }
 }
 
-async function create(req, res) {
+async function create(req, res, next) {
+  try {
   const { ad_usuario: adUsuario, ...data } = req.body;
   // ADMIN_AREA solo puede crear usuarios de su propia área
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
@@ -120,7 +125,7 @@ async function create(req, res) {
       telefono:       data.usr_telefono,
       permitirCambio: false
     });
-  } catch (e) { return manejarErrorAd(res, e); }
+  } catch (e) { return manejarErrorAd(res, e, next); }
 
   try {
     const u = await SvUsuario.create(data);
@@ -131,11 +136,13 @@ async function create(req, res) {
     if (e.name === 'SequelizeUniqueConstraintError') {
       return fail(res, 409, ERROR_CODES.DUPLICATE_EMAIL, 'Email ya registrado');
     }
-    throw e;
+    return next(e);
   }
+  } catch (e) { return next(e); }
 }
 
-async function update(req, res) {
+async function update(req, res, next) {
+  try {
   const id = parseInt(req.params.id);
   const u  = await SvUsuario.findByPk(id);
   if (!u) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Usuario no encontrado');
@@ -159,10 +166,11 @@ async function update(req, res) {
         idIdentidadActual: u.usr_id_identidad || null,
         permitirCambio:    !!u.usr_id_identidad
       });
-    } catch (e) { return manejarErrorAd(res, e); }
+    } catch (e) { return manejarErrorAd(res, e, next); }
   }
   await u.update(data);
   return ok(res, u);
+  } catch (e) { return next(e); }
 }
 
 async function toggle(req, res) {
@@ -202,12 +210,12 @@ async function accesibles(req, res) {
  * GET /usuarios/directorio?q=
  * Busca cuentas del directorio activo para el alta (roles admin).
  */
-async function directorio(req, res) {
+async function directorio(req, res, next) {
   try {
     return ok(res, await directorioAd.buscar(req.query.q));
   } catch (e) {
     if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    return manejarErrorAd(res, e);
+    return manejarErrorAd(res, e, next);
   }
 }
 

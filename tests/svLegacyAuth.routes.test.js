@@ -28,6 +28,7 @@ function app() {
   a.use('/api/sv/auth', require('../src/sv/routes/auth.routes'));
   a.use('/api/sv/usuarios', (req, res, next) => { req.user = { usr_id: 1, rol: { rol_codigo: 'SUPER_ADMIN' } }; next(); },
     require('../src/sv/routes/usuarios.routes'));
+  a.use((err, req, res, next) => res.status(500).json({ success: false, error: 'INTERNAL_ERROR' }));
   return a;
 }
 
@@ -47,3 +48,10 @@ test('GET /api/sv/auth/me sigue respondiendo con ad_usuario', async () => {
   expect(r.status).toBe(200);
   expect(r.body.data.ad_usuario).toBe('agomez');
 });
+
+test('GET /api/sv/auth/me: si falla la consulta responde 500 sin tumbar el proceso', async () => {
+  const { adUsuariosPorIdentidad } = require('../src/sv/services/usuariosAd.service');
+  adUsuariosPorIdentidad.mockRejectedValueOnce(new Error('DB caída'));
+  const r = await request(app()).get('/api/sv/auth/me');
+  expect(r.status).toBe(500);
+}, 2000);
