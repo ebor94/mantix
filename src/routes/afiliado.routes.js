@@ -169,6 +169,10 @@ router.post('/:id/reenviar-firma', auth, controller.reenviarFirma);
 //    El controlador valida que sea el asesor dueño o super_admin.
 router.post('/:id/validar-firma', auth, controller.validarFirma);
 
+// ── POST /afiliados/:id/reenviar-carnets-mascotas — reenvía los carnés de mascota ─
+//    por WhatsApp (afiliación aprobada). El controlador valida dueño/super_admin.
+router.post('/:id/reenviar-carnets-mascotas', auth, controller.reenviarCarnetsMascotas);
+
 // ── GET /afiliados/mis-del-dia — afiliaciones del asesor del día (todos los estados) ─
 router.get('/mis-del-dia',
   auth,

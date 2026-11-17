@@ -109,9 +109,10 @@ async function emitirCarnetsMascotas(afiliado) {
       const m = mascotas[idx];
       try {
         // Espaciar los envíos: WhatsApp descarta/limita mensajes en ráfaga a un
-        // mismo número (por eso antes solo llegaba un carné de dos). ~2.5s entre
+        // mismo número (por eso antes solo llegaba un carné de dos). ~6s entre
         // cada envío. También da margen tras el carné del afiliado (enviado antes).
-        await new Promise(r => setTimeout(r, 2500));
+        // Es fire-and-forget: el delay no afecta la respuesta de la aprobación.
+        await new Promise(r => setTimeout(r, 6000));
         const carnet = await pdfService.generarCarnetMascotaImagen(m.toJSON(), afiliadoPlain, base);
         const url = buildPublicPdfUrl(carnet.url);
         await sendTemplateImagenTexto(afiliado.celular, url, captionCarnetMascota(afiliado, m));
@@ -759,6 +760,41 @@ async function validarFirma(req, res, next) {
   }
 }
 
+/**
+ * Reenvía por WhatsApp los carnés de mascota de una afiliación aprobada (a
+ * demanda). Útil cuando WhatsApp descartó alguno en ráfaga tras la aprobación.
+ * Solo el asesor dueño o super_admin, afiliación aprobada, con WhatsApp y al
+ * menos una mascota. Fire-and-forget: responde de inmediato y los carnés salen
+ * en segundo plano con el mismo espaciado anti-ráfaga.
+ */
+async function reenviarCarnetsMascotas(req, res, next) {
+  try {
+    const { id } = req.params;
+    const afiliado = await Afiliado.findByPk(id);
+    if (!afiliado) throw new AppError('Afiliado no encontrado', 404);
+
+    const esDueno = Number(afiliado.asesorId) === Number(req.usuario.id);
+    if (!esDueno && !req.usuario.es_super_admin) {
+      throw new AppError('No tienes permiso para reenviar los carnés de esta afiliación', 403);
+    }
+    if (Number(afiliado.estadoRegistro) !== 1) {
+      throw new AppError('Solo se pueden reenviar carnés de afiliaciones aprobadas', 400);
+    }
+    if (Number(afiliado.celularTieneWhatsapp) !== 1 || !afiliado.celular) {
+      throw new AppError('El afiliado no tiene WhatsApp registrado; no se pueden enviar los carnés', 400);
+    }
+    const nMascotas = await Beneficiario.count({
+      where: { afiliadoId: afiliado.id, tipoBeneficiario: 'MASCOTA' }
+    });
+    if (nMascotas === 0) throw new AppError('Esta afiliación no tiene mascotas', 400);
+
+    emitirCarnetsMascotas(afiliado).catch(() => {});
+    res.json({ success: true, message: `Reenvío iniciado: ${nMascotas} carné(s) de mascota a WhatsApp ${afiliado.celular}` });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getRechazados(req, res, next) {
   try {
     const afiliados = await afiliadoService.getRechazados(req.usuario);
@@ -1302,6 +1338,7 @@ module.exports = {
   getAprobados,
   reenviarFirma,
   validarFirma,
+  reenviarCarnetsMascotas,
   aprobar,
   rechazar,
   rechazarParcial,
