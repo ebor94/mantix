@@ -9,6 +9,28 @@ const { ok, created, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
 const { usuariosAccesibles } = require('../utils/acceso');
 
+const usuariosAd  = require('../services/usuariosAd.service');
+const directorioAd = require('../services/directorioAd.service');
+
+const HTTP_AD = {
+  AD_USUARIO_NO_EXISTE: 422,
+  AD_USUARIO_INVALIDO:  422,
+  AD_USUARIO_TOMADO:    409,
+  CORREO_CON_OTRO_AD:   409,
+  AD_NO_DISPONIBLE:     503
+};
+
+function manejarErrorAd(res, e) {
+  const status = HTTP_AD[e.code];
+  if (!status) throw e;
+  return fail(res, status, status === 422 ? ERROR_CODES.VALIDATION_ERROR : e.code, e.message);
+}
+
+async function conAdUsuario(rows) {
+  const mapa = await usuariosAd.adUsuariosPorIdentidad(rows.map(r => r.usr_id_identidad));
+  return rows.map(r => ({ ...r.toJSON(), ad_usuario: mapa.get(r.usr_id_identidad) ?? null }));
+}
+
 function adminAreaFilter(req) {
   const c = req.user.rol?.rol_codigo;
   // Visión absolutamente global: solo SUPER_ADMIN.
@@ -62,7 +84,7 @@ async function list(req, res) {
     ],
     order: [['usr_id', 'ASC']]
   });
-  return ok(res, usuarios);
+  return ok(res, await conAdUsuario(usuarios));
 }
 
 async function getOne(req, res) {
@@ -79,18 +101,27 @@ async function getOne(req, res) {
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
   }
-  return ok(res, u);
+  return ok(res, (await conAdUsuario([u]))[0]);
 }
 
 async function create(req, res) {
-  const data = { ...req.body };
+  const { ad_usuario: adUsuario, ...data } = req.body;
   // ADMIN_AREA solo puede crear usuarios de su propia área
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
     data.usr_area_id = req.user.usr_area_id;
   }
   data.usr_email = data.usr_email.toLowerCase().trim();
-  data.usr_password_hash = await hash(data.usr_password);
-  delete data.usr_password;
+
+  try {
+    data.usr_id_identidad = await usuariosAd.resolverIdentidad({
+      adUsuario,
+      email:          data.usr_email,
+      nombre:         data.usr_nombre,
+      apellido:       data.usr_apellido,
+      telefono:       data.usr_telefono,
+      permitirCambio: false
+    });
+  } catch (e) { return manejarErrorAd(res, e); }
 
   try {
     const u = await SvUsuario.create(data);
@@ -112,11 +143,24 @@ async function update(req, res) {
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
   }
-  const data = { ...req.body };
+  const { ad_usuario: adUsuario, ...data } = req.body;
   if (data.usr_email) data.usr_email = data.usr_email.toLowerCase().trim();
   // ADMIN_AREA no puede mover usuarios fuera de su área
   if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA) {
     delete data.usr_area_id;
+  }
+  if (adUsuario !== undefined) {
+    try {
+      data.usr_id_identidad = await usuariosAd.resolverIdentidad({
+        adUsuario,
+        email:             data.usr_email    || u.usr_email,
+        nombre:            data.usr_nombre   || u.usr_nombre,
+        apellido:          data.usr_apellido || u.usr_apellido,
+        telefono:          data.usr_telefono ?? u.usr_telefono,
+        idIdentidadActual: u.usr_id_identidad || null,
+        permitirCambio:    true
+      });
+    } catch (e) { return manejarErrorAd(res, e); }
   }
   await u.update(data);
   return ok(res, u);
@@ -166,4 +210,17 @@ async function accesibles(req, res) {
   return ok(res, rows);
 }
 
-module.exports = { list, getOne, create, update, toggle, resetPassword, accesibles };
+/**
+ * GET /usuarios/directorio?q=
+ * Busca cuentas del directorio activo para el alta (roles admin).
+ */
+async function directorio(req, res) {
+  try {
+    return ok(res, await directorioAd.buscar(req.query.q));
+  } catch (e) {
+    if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
+    return manejarErrorAd(res, e);
+  }
+}
+
+module.exports = { list, getOne, create, update, toggle, resetPassword, accesibles, directorio };

@@ -10,6 +10,7 @@ const { sha256 } = require('../utils/hashRefresh');
 const { ok, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, JWT } = require('../config/constants');
 const { enriquecerAccesoCruzado } = require('../utils/accesoCruzado');
+const { adUsuariosPorIdentidad } = require('../services/usuariosAd.service');
 
 // Parser ligero de duraciones tipo "7d", "15m", "12h", "30s"
 function parseDuration(str) {
@@ -221,7 +222,8 @@ async function logout(req, res) {
 }
 
 async function me(req, res) {
-  return ok(res, publicUser(req.user));
+  const mapa = await adUsuariosPorIdentidad([req.user.usr_id_identidad]);
+  return ok(res, { ...publicUser(req.user), ad_usuario: mapa.get(req.user.usr_id_identidad) ?? null });
 }
 
 async function changePassword(req, res) {
