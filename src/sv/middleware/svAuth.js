@@ -1,16 +1,10 @@
 /**
  * sv/middleware/svAuth.js
- * Verifica el access token del módulo SerVentas. Acepta DOS formatos:
- *   1. JWT propio SV (legacy)  — payload { usr_id }, secret SV_JWT_SECRET.
- *   2. JWT del SSO de identidad — payload { kind:'identidad', id_identidad },
- *      secret IDENTIDAD_JWT_SECRET. Se resuelve el usuario SV vía la FK
- *      usr_id_identidad.
- *
- * Esto permite hacer login centralizado en /portal sin romper los flujos
- * que ya tienen tokens SV viejos en localStorage.
+ * Verifica el access token del SSO de identidad — payload
+ * { kind:'identidad', id_identidad }, secret IDENTIDAD_JWT_SECRET — y resuelve
+ * el usuario de ventas vía la FK usr_id_identidad.
  */
 const jwt = require('jsonwebtoken');
-const { verifyAccess } = require('../utils/jwt');
 const { fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
 const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto } = require('../models');
@@ -28,15 +22,6 @@ const INCLUDE_USUARIO = [
 ];
 
 async function resolverUsuarioSv(token) {
-  // Intento 1: JWT propio SV (verifyAccess usa SV_JWT_SECRET)
-  try {
-    const decoded = verifyAccess(token);
-    if (decoded && decoded.usr_id) {
-      return SvUsuario.findByPk(decoded.usr_id, { include: INCLUDE_USUARIO });
-    }
-  } catch (_) { /* fall through */ }
-
-  // Intento 2: JWT del SSO de identidad
   try {
     const decoded = jwt.verify(token, IDENTIDAD_JWT_SECRET);
     if (decoded && decoded.kind === 'identidad' && decoded.id_identidad) {
@@ -45,8 +30,7 @@ async function resolverUsuarioSv(token) {
         include: INCLUDE_USUARIO
       });
     }
-  } catch (_) { /* fall through */ }
-
+  } catch (_) { /* token inválido o expirado */ }
   return null;
 }
 

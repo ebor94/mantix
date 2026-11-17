@@ -1,33 +1,11 @@
 /**
  * sv/controllers/auth.controller.js
- * Login + refresh + logout + me (SerVentas).
+ * Perfil del usuario de ventas (me + preferencias). El login es del SSO de
+ * identidad contra el directorio activo (/api/identidad/login).
  */
-const { Op } = require('sequelize');
-const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto, SvSesion } = require('../models');
-const { signAccess, signRefresh, verifyRefresh } = require('../utils/jwt');
-const { compare } = require('../utils/password');
-const { sha256 } = require('../utils/hashRefresh');
-const { ok, fail, noContent } = require('../utils/response');
-const { ERROR_CODES, JWT } = require('../config/constants');
-const { enriquecerAccesoCruzado } = require('../utils/accesoCruzado');
+const { SvUsuario } = require('../models');
+const { ok } = require('../utils/response');
 const { adUsuariosPorIdentidad } = require('../services/usuariosAd.service');
-
-// Parser ligero de duraciones tipo "7d", "15m", "12h", "30s"
-function parseDuration(str) {
-  const m = String(str).match(/^(\d+)\s*(s|m|h|d)$/i);
-  if (!m) return 7 * 24 * 60 * 60 * 1000; // default 7d
-  const n = parseInt(m[1], 10);
-  const unit = m[2].toLowerCase();
-  const mult = unit === 's' ? 1000
-            : unit === 'm' ? 60 * 1000
-            : unit === 'h' ? 60 * 60 * 1000
-            : 24 * 60 * 60 * 1000;
-  return n * mult;
-}
-
-function refreshExpiresAt() {
-  return new Date(Date.now() + parseDuration(JWT.REFRESH_EXPIRES_IN));
-}
 
 function publicUser(u) {
   return {
@@ -116,126 +94,9 @@ function gruposSupervisados(u) {
   return lista;
 }
 
-async function login(req, res) {
-  const { email, password } = req.body;
-
-  const usuario = await SvUsuario.scope('withPassword').findOne({
-    where: { usr_email: email.toLowerCase().trim() },
-    include: [
-      { model: SvRol,   as: 'rol' },
-      { model: SvArea,  as: 'area' },
-      { model: SvGrupo, as: 'grupo' },
-      { model: SvPunto, as: 'punto' },
-      { model: SvGrupo, as: 'gruposExtra' },
-      { model: SvArea,  as: 'areasExtra' }
-    ]
-  });
-
-  if (!usuario || !usuario.usr_activo) {
-    return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Credenciales inválidas');
-  }
-
-  const okPwd = await compare(password, usuario.usr_password_hash);
-  if (!okPwd) {
-    return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Credenciales inválidas');
-  }
-
-  await enriquecerAccesoCruzado(usuario);
-
-  const accessToken  = signAccess({
-    usr_id:       usuario.usr_id,
-    rol_codigo:   usuario.rol?.rol_codigo,
-    rol_nivel:    usuario.rol?.rol_nivel,
-    usr_area_id:  usuario.usr_area_id,
-    usr_grupo_id: usuario.usr_grupo_id
-  });
-  const refreshToken = signRefresh({ usr_id: usuario.usr_id });
-
-  await SvSesion.create({
-    sesion_usuario_id:  usuario.usr_id,
-    sesion_token_hash:  sha256(refreshToken),
-    sesion_dispositivo: (req.headers['user-agent'] || '').slice(0, 200),
-    sesion_ip:          req.ip,
-    sesion_expires_at:  refreshExpiresAt()
-  });
-
-  await usuario.update({ usr_ultimo_login: new Date() }, { silent: true });
-
-  return ok(res, {
-    accessToken,
-    refreshToken,
-    user: publicUser(usuario)
-  });
-}
-
-async function refresh(req, res) {
-  const { refreshToken } = req.body;
-
-  let decoded;
-  try { decoded = verifyRefresh(refreshToken); }
-  catch { return fail(res, 401, ERROR_CODES.REFRESH_INVALID, 'Refresh token inválido o expirado'); }
-
-  const hash   = sha256(refreshToken);
-  const sesion = await SvSesion.findOne({
-    where: {
-      sesion_usuario_id: decoded.usr_id,
-      sesion_token_hash: hash,
-      sesion_expires_at: { [Op.gt]: new Date() }
-    }
-  });
-  if (!sesion) {
-    return fail(res, 401, ERROR_CODES.REFRESH_INVALID, 'Sesión no encontrada o expirada');
-  }
-
-  const usuario = await SvUsuario.findByPk(decoded.usr_id, { include: [{ model: SvRol, as: 'rol' }] });
-  if (!usuario || !usuario.usr_activo) {
-    return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Usuario inactivo');
-  }
-
-  const accessToken = signAccess({
-    usr_id:       usuario.usr_id,
-    rol_codigo:   usuario.rol?.rol_codigo,
-    rol_nivel:    usuario.rol?.rol_nivel,
-    usr_area_id:  usuario.usr_area_id,
-    usr_grupo_id: usuario.usr_grupo_id
-  });
-  return ok(res, { accessToken });
-}
-
-async function logout(req, res) {
-  const { refreshToken } = req.body || {};
-  let usuarioId = null;
-  if (refreshToken) {
-    const hash = sha256(refreshToken);
-    const sesion = await SvSesion.findOne({ where: { sesion_token_hash: hash } });
-    if (sesion) {
-      usuarioId = sesion.sesion_usuario_id;
-      await sesion.destroy();
-    }
-  }
-  // Regenerar snapshot del día para el usuario que cierra sesión (best-effort, no bloquea)
-  if (usuarioId) {
-    const { generarSnapshot } = require('../services/snapshot.service');
-    generarSnapshot(null, usuarioId).catch(() => { /* logueado dentro del service */ });
-  }
-  return noContent(res);
-}
-
 async function me(req, res) {
   const mapa = await adUsuariosPorIdentidad([req.user.usr_id_identidad]);
   return ok(res, { ...publicUser(req.user), ad_usuario: mapa.get(req.user.usr_id_identidad) ?? null });
-}
-
-async function changePassword(req, res) {
-  const { actual, nueva } = req.body;
-  const usuario = await SvUsuario.scope('withPassword').findByPk(req.user.usr_id);
-  const okPwd = await compare(actual, usuario.usr_password_hash);
-  if (!okPwd) return fail(res, 401, ERROR_CODES.UNAUTHORIZED, 'Contraseña actual incorrecta');
-  const { hash } = require('../utils/password');
-  await usuario.update({ usr_password_hash: await hash(nueva) });
-  // Invalidar todas las sesiones del usuario al cambiar password
-  await SvSesion.destroy({ where: { sesion_usuario_id: usuario.usr_id } });
-  return ok(res, { ok: true });
 }
 
 async function updatePreferencias(req, res) {
@@ -244,4 +105,4 @@ async function updatePreferencias(req, res) {
   return ok(res, { usr_preferencias: prefs });
 }
 
-module.exports = { login, refresh, logout, me, changePassword, updatePreferencias };
+module.exports = { me, updatePreferencias };

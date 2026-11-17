@@ -27,9 +27,6 @@ module.exports = (sequelize, DataTypes) => {
     updatedAt: 'usr_updated_at',
     defaultScope: {
       attributes: { exclude: ['usr_password_hash', 'usr_2fa_secret'] }
-    },
-    scopes: {
-      withPassword: { attributes: { include: ['usr_password_hash'] } }
     }
   });
 

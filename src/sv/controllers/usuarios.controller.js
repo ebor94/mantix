@@ -1,10 +1,9 @@
 /**
  * sv/controllers/usuarios.controller.js
- * CRUD de usuarios SerVentas + reset password + toggle activo.
+ * CRUD de usuarios SerVentas + toggle activo + búsqueda en el directorio activo.
  */
 const { Op } = require('sequelize');
 const { SvUsuario, SvRol, SvArea, SvGrupo, SvPunto } = require('../models');
-const { hash } = require('../utils/password');
 const { ok, created, fail, noContent } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
 const { usuariosAccesibles } = require('../utils/acceso');
@@ -177,17 +176,6 @@ async function toggle(req, res) {
   return ok(res, u);
 }
 
-async function resetPassword(req, res) {
-  const id = parseInt(req.params.id);
-  const u  = await SvUsuario.findByPk(id);
-  if (!u) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Usuario no encontrado');
-  if (req.user.rol?.rol_codigo === ROLES.ADMIN_AREA && u.usr_area_id !== req.user.usr_area_id) {
-    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
-  }
-  await u.update({ usr_password_hash: await hash(req.body.nueva) });
-  return ok(res, { ok: true });
-}
-
 /**
  * GET /usuarios/accesibles
  * Devuelve EXACTAMENTE el scope de usuariosAccesibles(actor) — el mismo
@@ -223,4 +211,4 @@ async function directorio(req, res) {
   }
 }
 
-module.exports = { list, getOne, create, update, toggle, resetPassword, accesibles, directorio };
+module.exports = { list, getOne, create, update, toggle, accesibles, directorio };

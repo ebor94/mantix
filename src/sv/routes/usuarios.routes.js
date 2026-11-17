@@ -26,6 +26,5 @@ router.get   ('/:id',  lectura, ctrl.getOne);
 router.post  ('/',     admin, validate(v.create), ctrl.create);
 router.put   ('/:id',  admin, validate(v.update), ctrl.update);
 router.patch ('/:id/toggle',         admin, ctrl.toggle);
-router.post  ('/:id/reset-password', admin, validate(v.resetPassword), ctrl.resetPassword);
 
 module.exports = router;

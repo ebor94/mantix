@@ -24,8 +24,5 @@ module.exports = {
     usr_telefono: Joi.string().max(20).allow('', null),
     usr_activo:   Joi.number().valid(0, 1),
     ad_usuario:   Joi.string().trim().min(2).max(64)
-  }).min(1),
-  resetPassword: Joi.object({
-    nueva: Joi.string().min(6).max(200).required()
-  })
+  }).min(1)
 };
