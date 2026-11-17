@@ -20,7 +20,7 @@ const HTTP_LOGIN = {
   AD_NO_DISPONIBLE:       503
 };
 
-async function login(req, res) {
+async function login(req, res, next) {
   try {
     const body = req.body || {};
     const r = await identidad.login({
@@ -33,11 +33,11 @@ async function login(req, res) {
   } catch (e) {
     const status = HTTP_LOGIN[e.code];
     if (status) return fail(res, status, e.code, e.message);
-    throw e;
+    return next(e);
   }
 }
 
-async function refresh(req, res) {
+async function refresh(req, res, next) {
   try {
     const r = await identidad.refresh(req.body.refreshToken);
     return ok(res, r);
@@ -45,7 +45,7 @@ async function refresh(req, res) {
     if (['REFRESH_INVALID','REFRESH_REVOKED','REFRESH_EXPIRED','USER_INACTIVE'].includes(e.code)) {
       return fail(res, 401, e.code, e.message);
     }
-    throw e;
+    return next(e);
   }
 }
 

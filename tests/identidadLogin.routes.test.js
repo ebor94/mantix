@@ -22,6 +22,7 @@ function app() {
   const a = express();
   a.use(express.json());
   a.use('/api/identidad', require('../src/identity/routes'));
+  a.use((err, req, res, next) => res.status(500).json({ success: false, error: 'INTERNAL_ERROR' }));
   return a;
 }
 
@@ -73,6 +74,13 @@ describe('POST /api/identidad/login', () => {
     expect(otro.status).toBe(401);
   });
 
+  test('error inesperado se reenvía al manejador global (500, no cuelga)', async () => {
+    svc.login.mockRejectedValue(new Error('DB caída'));
+    const r = await request(app()).post('/api/identidad/login').send({ usuario: 'err-login', password: 'x' });
+    expect(r.status).toBe(500);
+    expect(r.body.error).toBe('INTERNAL_ERROR');
+  }, 2000);
+
   test('los 503 no cuentan para el límite', async () => {
     svc.login.mockRejectedValue(errorCon('AD_NO_DISPONIBLE', 'sin AD'));
     const a = app();
@@ -81,6 +89,14 @@ describe('POST /api/identidad/login', () => {
       expect(r.status).toBe(503);
     }
   });
+});
+
+describe('POST /api/identidad/refresh', () => {
+  test('error inesperado se reenvía al manejador global (500, no cuelga)', async () => {
+    svc.refresh.mockRejectedValue(new Error('DB caída'));
+    const r = await request(app()).post('/api/identidad/refresh').send({ refreshToken: 'r' });
+    expect(r.status).toBe(500);
+  }, 2000);
 });
 
 describe('rutas retiradas', () => {
