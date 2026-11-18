@@ -81,7 +81,9 @@ frente al comportamiento actual de `getOne`:
 - **Sin alcance**: hoy un usuario sin `areaId`/`grupoId`/`asesorId` ni
   `crossArea` ve cualquier prospecto; pasa a recibir 403.
 
-Los mensajes del 403 de `getOne` no cambian.
+Los mensajes del 403 de `getOne` no cambian. Como se reescribe, `getOne`
+también queda con `try { … } catch (e) { next(e); }`, y el import de
+`areaIdsAccesibles` sale de `prospectos.controller.js` porque deja de usarse.
 
 ### 2. Carga liviana del prospecto
 
@@ -168,13 +170,20 @@ Jest + `supertest` + `jest.mock`. Sin conexión a base de datos y sin
    - `resumen-dia`: asesor con `asesor_id` ajeno → su propio resumen;
      supervisor con asesor de su grupo → 200; fuera de su grupo → 403.
    - Error del servicio en `create`, `list` y `resumenDia` → 500 vía
-     `next(e)`, y un listener de `unhandledRejection` instalado en la prueba
-     no se dispara.
+     `next(e)` (la respuesta llega del manejador de errores de la prueba).
+   - Los mismos tres handlers llamados directamente con el servicio
+     rechazando: la promesa del handler se resuelve (no se rechaza) y
+     `next` recibe el error. Una promesa que no se rechaza no puede generar
+     un `unhandledRejection`, así que esto prueba que el proceso no cae.
+     (Un listener de `unhandledRejection` dentro de Jest no es confiable.)
 3. **`tests/gestiones.service.test.js`** — `crear({ gest_asesor_id: 99, … }, 7)`
    llama a `SvGestion.create` con `gest_asesor_id: 7` (mocks de modelos,
    `sequelize.transaction` y `recuperacionAuto`).
 4. **`tests/prospectosGetOne.test.js`** — regresión de `getOne` con el helper:
-   asesor ajeno → 403; JEFE_PAP sobre PAP → 200; inexistente → 404.
+   asesor ajeno → 403; JEFE_PAP sobre PAP → 200; inexistente → 404; error del
+   servicio → `next(e)`.
+5. **`tests/prospectosObtenerAlcance.test.js`** — `obtenerAlcance(id)` llama a
+   `SvProspecto.findByPk` con los cuatro atributos y sin `include`.
 
 Criterio de cierre: la suite completa solo falla en las cinco suites que ya
 fallaban antes (`test/grupoIndivII`, `tests/invitacion.service`, las dos de
