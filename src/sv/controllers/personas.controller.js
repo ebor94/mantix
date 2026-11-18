@@ -18,25 +18,25 @@ const { fueraDeAlcancePersona } = require('../utils/alcancePersona');
  * Middleware de ruta para /:id. Valida el id, verifica la relación del usuario
  * con la persona y deja el id numérico en req.personaId. Para quien no es
  * cross-área, una persona inexistente responde 403 (no tiene prospectos) y no
- * 404: el código no revela qué ids existen.
+ * 404: el código no revela qué ids existen. Todo el cuerpo va dentro del try:
+ * en un handler async de Express 4 un throw sin atrapar tumba el proceso.
  */
 async function exigirRelacion(req, res, next) {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
-  }
-  req.personaId = id;
-  if (req.scope?.crossArea) return next();
-
-  let prospectos;
   try {
-    prospectos = await personas.alcancesDePersona(id);
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
+    }
+    req.personaId = id;
+    if (req.scope?.crossArea) return next();
+
+    const prospectos = await personas.alcancesDePersona(id);
+    const motivo = fueraDeAlcancePersona(req.user, req.scope, prospectos);
+    if (motivo) return fail(res, 403, ERROR_CODES.FORBIDDEN, motivo);
+    return next();
   } catch (e) {
     return next(e);
   }
-  const motivo = fueraDeAlcancePersona(req.user, req.scope, prospectos);
-  if (motivo) return fail(res, 403, ERROR_CODES.FORBIDDEN, motivo);
-  return next();
 }
 
 async function buscar(req, res, next) {

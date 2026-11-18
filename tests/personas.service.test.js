@@ -7,7 +7,7 @@ jest.mock('../src/sv/models', () => ({
   SvProspecto: { findAll: jest.fn() },
   SvGestion:   { findAll: jest.fn() },
   SvArea: {}, SvGrupo: {}, SvEstado: {}, SvUsuario: {},
-  SvResultado: {}, SvFuente: {}, SvEmpresa: {}
+  SvResultado: {}, SvEmpresa: {}
 }));
 
 const { Op } = require('sequelize');

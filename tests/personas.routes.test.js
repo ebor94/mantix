@@ -59,12 +59,11 @@ beforeEach(() => {
   personas.crear.mockResolvedValue(PERSONA);
 });
 
-describe('GET /:id, GET /:id/prospectos-activos y PUT /:id exigen relación', () => {
+describe('GET /:id y GET /:id/prospectos-activos exigen relación', () => {
   // [nombre, método, ruta, cuerpo, función del servicio que lee o escribe]
   const RUTAS = [
     ['GET /:id',                     'get', (id) => `/api/sv/personas/${id}`,                     undefined,                       'obtener'],
-    ['GET /:id/prospectos-activos',  'get', (id) => `/api/sv/personas/${id}/prospectos-activos`,  undefined,                       'prospectosActivos'],
-    ['PUT /:id',                     'put', (id) => `/api/sv/personas/${id}`,                     { persona_nombre: 'Ana María' }, 'actualizar']
+    ['GET /:id/prospectos-activos',  'get', (id) => `/api/sv/personas/${id}/prospectos-activos`,  undefined,                       'prospectosActivos']
   ];
 
   describe.each(RUTAS)('%s', (_, metodo, ruta, cuerpo, servicio) => {
@@ -140,18 +139,90 @@ describe('GET /:id, GET /:id/prospectos-activos y PUT /:id exigen relación', ()
     expect(r.body).toEqual({ success: false, error: 'NOT_FOUND', message: 'Persona no encontrada' });
   });
 
-  test('PUT /:id sin relación → 403 antes de validar el cuerpo', async () => {
-    const r = await request(app(ASESOR)).put('/api/sv/personas/2').send({});
+});
+
+describe('PUT /:id: supervisión con relación', () => {
+  const url = (id) => `/api/sv/personas/${id}`;
+  const CUERPO = { persona_nombre: 'Ana María' };
+  const NIVEL = { success: false, error: 'FORBIDDEN', message: 'Nivel insuficiente (requerido: <= 3)' };
+
+  test('asesor, aun con un prospecto propio de la persona → 403 de nivel', async () => {
+    const r = await request(app(ASESOR)).put(url(1)).send(CUERPO);
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual(NIVEL);
+    expect(personas.alcancesDePersona).not.toHaveBeenCalled();
+    expect(personas.actualizar).not.toHaveBeenCalled();
+  });
+
+  test('asesor con cuerpo inválido → 403 de nivel, no 422', async () => {
+    const r = await request(app(ASESOR)).put(url(1)).send({});
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual(NIVEL);
+  });
+
+  test('supervisor con un prospecto de la persona en su grupo → 200', async () => {
+    const r = await request(app(SUPERVISOR)).put(url(1)).send(CUERPO);
+    expect(r.status).toBe(200);
+    expect(personas.actualizar).toHaveBeenCalledWith(1, CUERPO);
+  });
+
+  test('supervisor con prospectos de la persona solo en otro grupo → 403', async () => {
+    const r = await request(app(SUPERVISOR)).put(url(2)).send(CUERPO);
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual(SIN_RELACION);
+    expect(personas.actualizar).not.toHaveBeenCalled();
+  });
+
+  test('ADMIN_AREA con un prospecto de la persona en su área → 200', async () => {
+    const r = await request(app(ADMIN_AREA)).put(url(2)).send(CUERPO);
+    expect(r.status).toBe(200);
+  });
+
+  test('GERENTE_GENERAL → 200 sin consultar la relación', async () => {
+    const r = await request(app(GERENTE)).put(url(3)).send(CUERPO);
+    expect(r.status).toBe(200);
+    expect(personas.alcancesDePersona).not.toHaveBeenCalled();
+  });
+
+  test('persona inexistente sin cross-área → 403, no 404', async () => {
+    const r = await request(app(SUPERVISOR)).put(url(999)).send(CUERPO);
     expect(r.status).toBe(403);
     expect(r.body).toEqual(SIN_RELACION);
   });
 
-  test('PUT /:id con teléfono duplicado → 409 con la persona y sus prospectos', async () => {
+  test('id no numérico → 404 sin consultar', async () => {
+    const r = await request(app(SUPERVISOR)).put(url('abc')).send(CUERPO);
+    expect(r.status).toBe(404);
+    expect(r.body).toEqual({ success: false, error: 'NOT_FOUND', message: 'Persona no encontrada' });
+    expect(personas.alcancesDePersona).not.toHaveBeenCalled();
+    expect(personas.actualizar).not.toHaveBeenCalled();
+  });
+
+  test('error al consultar la relación → 500 vía next(e)', async () => {
+    personas.alcancesDePersona.mockRejectedValue(new Error('ECONNRESET'));
+    const r = await request(app(SUPERVISOR)).put(url(1)).send(CUERPO);
+    expect(r.status).toBe(500);
+    expect(personas.actualizar).not.toHaveBeenCalled();
+  });
+
+  test('error del servicio de datos → 500 vía next(e)', async () => {
+    personas.actualizar.mockRejectedValue(new Error('ER_LOCK_WAIT_TIMEOUT'));
+    const r = await request(app(SUPERVISOR)).put(url(1)).send(CUERPO);
+    expect(r.status).toBe(500);
+  });
+
+  test('sin relación → 403 antes de validar el cuerpo', async () => {
+    const r = await request(app(SUPERVISOR)).put(url(2)).send({});
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual(SIN_RELACION);
+  });
+
+  test('con teléfono duplicado → 409 con la persona y sus prospectos', async () => {
     const e = Object.assign(new Error('DUPLICATE_PHONE'), {
       code: 'DUPLICATE_PHONE', persona: { persona_id: 5 }, prospectos_activos: [{ prosp_id: 500 }]
     });
     personas.actualizar.mockRejectedValue(e);
-    const r = await request(app(ASESOR)).put('/api/sv/personas/1').send({ persona_telefono_principal: '3001234567' });
+    const r = await request(app(SUPERVISOR)).put(url(1)).send({ persona_telefono_principal: '3001234567' });
     expect(r.status).toBe(409);
     expect(r.body).toEqual({
       success: false, error: 'DUPLICATE_PHONE', message: 'Teléfono ya existe',
@@ -159,9 +230,9 @@ describe('GET /:id, GET /:id/prospectos-activos y PUT /:id exigen relación', ()
     });
   });
 
-  test('PUT /:id con persona borrada entre la verificación y la escritura → 404', async () => {
+  test('persona borrada entre la verificación y la escritura → 404', async () => {
     personas.actualizar.mockRejectedValue(Object.assign(new Error('Persona no encontrada'), { code: 'NOT_FOUND' }));
-    const r = await request(app(GERENTE)).put('/api/sv/personas/1').send({ persona_nombre: 'Ana María' });
+    const r = await request(app(GERENTE)).put(url(1)).send(CUERPO);
     expect(r.status).toBe(404);
   });
 });
