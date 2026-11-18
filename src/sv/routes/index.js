@@ -50,4 +50,7 @@ router.use('/tracking',     svAuth, svAreaGuard, require('./tracking.routes'));
 // ─── Renovaciones anuales B2B (Fase 8) ───
 router.use('/renovaciones', svAuth, svAreaGuard, require('./renovaciones.routes'));
 
+// ─── Salas de velación: visitas de Prenecesidad (migración 023) ───
+router.use('/salas',        svAuth, svAreaGuard, require('./salas.routes'));
+
 module.exports = router;
