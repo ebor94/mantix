@@ -4,7 +4,8 @@
 const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES, ROLES_SUPERVISORES } = require('../config/constants');
-const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
+const { grupoIdsAccesibles } = require('../utils/acceso');
+const { fueraDeAlcance } = require('../utils/alcanceProspecto');
 
 // Supervisor+ puede filtrar por un asesor específico vía ?asesor_id=.
 // Los ASESOR / AGENTE_SVC ya tienen scope.asesorId forzado al propio usr_id
@@ -49,19 +50,19 @@ async function agendaMes(req, res) {
   return ok(res, r);
 }
 
-async function getOne(req, res) {
-  const p = await prospectos.obtenerCompleto(parseInt(req.params.id));
-  if (!p) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Prospecto no encontrado');
+async function getOne(req, res, next) {
+  try {
+    const p = await prospectos.obtenerCompleto(parseInt(req.params.id));
+    if (!p) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Prospecto no encontrado');
 
-  // Verificar scope (respetando multi-grupo y multi-área del usuario)
-  const s = req.scope;
-  const gruposOk = grupoIdsAccesibles(req.user); // null = SUPER_ADMIN (acceso total)
-  const areasOk  = areaIdsAccesibles(req.user);
-  if (s.asesorId && p.prosp_asesor_id !== s.asesorId) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu alcance');
-  if (s.grupoId  && !s.asesorId && gruposOk !== null && !gruposOk.includes(p.prosp_grupo_id)) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu grupo');
-  if (s.areaId   && !s.grupoId  && areasOk  !== null && !areasOk.includes(p.prosp_area_id))  return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu área');
+    // Regla única de alcance (asesor / grupo / área), ver utils/alcanceProspecto.
+    const motivo = fueraDeAlcance(req.user, req.scope, p);
+    if (motivo) return fail(res, 403, ERROR_CODES.FORBIDDEN, motivo);
 
-  return ok(res, p);
+    return ok(res, p);
+  } catch (e) {
+    return next(e);
+  }
 }
 
 async function create(req, res) {

@@ -109,7 +109,8 @@ const prospectos = {
 const gestiones = {
   create: Joi.object({
     gest_prosp_id:        Joi.number().integer().required(),
-    gest_asesor_id:       Joi.number().integer(),
+    // gest_asesor_id no se acepta: la gestión queda a nombre de quien la
+    // registra (validate usa stripUnknown, así que si llega se descarta).
     gest_resultado_id:    Joi.number().integer().allow(null),
     gest_estado_nuevo_id: Joi.number().integer().allow(null),
     gest_canal:           Joi.string().valid('llamada', 'presencial', 'correo').default('llamada'),
