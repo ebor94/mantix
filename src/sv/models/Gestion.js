@@ -14,7 +14,8 @@ module.exports = (sequelize, DataTypes) => {
     gest_prox_hora:        { type: DataTypes.TIME },
     gest_recordatorio_env: { type: DataTypes.TINYINT, defaultValue: 0 },
     gest_ubicacion_lat:    { type: DataTypes.DECIMAL(10, 8) },
-    gest_ubicacion_lng:    { type: DataTypes.DECIMAL(11, 8) }
+    gest_ubicacion_lng:    { type: DataTypes.DECIMAL(11, 8) },
+    gest_homenaje_sala_id: { type: DataTypes.INTEGER }   // homenaje en sala de Homenajes360 (migración 023)
   }, {
     tableName: 'sv_crm_gestiones',
     freezeTableName: true,

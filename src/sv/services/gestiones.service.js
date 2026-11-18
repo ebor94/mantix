@@ -26,6 +26,7 @@ async function crear(payload, asesorId) {
       gest_prox_hora:       payload.gest_prox_hora  || null,
       gest_ubicacion_lat:   payload.gest_ubicacion_lat || null,
       gest_ubicacion_lng:   payload.gest_ubicacion_lng || null,
+      gest_homenaje_sala_id: payload.gest_homenaje_sala_id || null,
       gest_fecha_hora:      payload.gest_fecha_hora || new Date()
     }, { transaction: t });
 

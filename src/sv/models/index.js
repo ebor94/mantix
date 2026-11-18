@@ -51,7 +51,9 @@ const db = {
   SvTipoDocumento:           require('./TipoDocumento')(sequelize, Sequelize.DataTypes),
   SvEmpresaDocumento:        require('./EmpresaDocumento')(sequelize, Sequelize.DataTypes),
   SvEmpresaPropuestaArchivo: require('./EmpresaPropuestaArchivo')(sequelize, Sequelize.DataTypes),
-  SvFidelizMovimiento:       require('./FidelizMovimiento')(sequelize, Sequelize.DataTypes)
+  SvFidelizMovimiento:       require('./FidelizMovimiento')(sequelize, Sequelize.DataTypes),
+  // ─── Salas de velación: visitas de Prenecesidad (migración 023) ───
+  SvSalaContratante:         require('./SalaContratante')(sequelize, Sequelize.DataTypes)
 };
 
 // Asociaciones
