@@ -206,6 +206,14 @@ async function obtenerCompleto(id) {
   });
 }
 
+// Solo los campos que decide el alcance (utils/alcanceProspecto). Sin include:
+// lo usan endpoints que no devuelven la ficha, como las gestiones.
+async function obtenerAlcance(id) {
+  return SvProspecto.findByPk(id, {
+    attributes: ['prosp_id', 'prosp_asesor_id', 'prosp_grupo_id', 'prosp_area_id']
+  });
+}
+
 async function crear(payload, asesorId) {
   const t = await sequelize.transaction();
   try {
@@ -481,7 +489,7 @@ async function contadorSinAsignar(areaId) {
 }
 
 module.exports = {
-  list, panelDia, agendaMes, obtenerCompleto, crear, actualizar, actualizarProductos,
+  list, panelDia, agendaMes, obtenerCompleto, obtenerAlcance, crear, actualizar, actualizarProductos,
   reasignar, reasignacionMasiva, prospectosPorAsesor,
   sinAsignar, contadorSinAsignar, buildScopeWhere
 };
