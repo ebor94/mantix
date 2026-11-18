@@ -113,10 +113,12 @@ Orden:
 
 El middleware deja el id ya convertido en `req.personaId` para los handlers.
 
-`historial-completo` lleva antes un segundo middleware, `soloSupervision`:
-`req.scope.nivel > NIVELES.SUPERVISOR` (3) → 403 `FORBIDDEN`
-`'Solo supervisores o superiores'`, sin consultar la base. `svAreaGuard`
-asigna nivel 4 cuando el rol no trae `rol_nivel`, así que falla cerrado.
+`historial-completo` lleva antes el middleware existente
+`authorizeLevel(NIVELES.SUPERVISOR)` de `src/sv/middleware/svAuthorize.js`:
+`req.user.rol.rol_nivel > 3` → 403 `FORBIDDEN`
+`'Nivel insuficiente (requerido: <= 3)'`, sin consultar la base. Un rol sin
+`rol_nivel` cuenta como 99, así que falla cerrado. Los niveles sembrados en
+`sv_org_roles` coinciden con `NIVELES` (ASESOR y AGENTE_SVC = 4).
 
 Rutas resultantes:
 
@@ -124,7 +126,7 @@ Rutas resultantes:
 router.get ('/buscar',                 validate(v.personas.buscar, 'query'), ctrl.buscar);
 router.get ('/:id',                    ctrl.exigirRelacion, ctrl.getOne);
 router.get ('/:id/prospectos-activos', ctrl.exigirRelacion, ctrl.prospectosActivos);
-router.get ('/:id/historial-completo', ctrl.soloSupervision, ctrl.exigirRelacion, ctrl.historialCompleto);
+router.get ('/:id/historial-completo', authorizeLevel(NIVELES.SUPERVISOR), ctrl.exigirRelacion, ctrl.historialCompleto);
 router.post('/',                       validate(v.personas.create), ctrl.create);
 router.put ('/:id',                    ctrl.exigirRelacion, validate(v.personas.update), ctrl.update);
 ```
@@ -174,8 +176,8 @@ que responde 500.
     prospectos de otro grupo → 403; GERENTE_GENERAL → 200 sin llamar
     `alcancesDePersona`; id no numérico → 404.
   - `GET /:id/historial-completo`: asesor con prospecto propio → 403 sin
-    llamar `alcancesDePersona`; supervisor dentro → 200; supervisor fuera →
-    403; ADMIN_AREA dentro de su área → 200; GERENTE_GENERAL con persona
+    llamar `alcancesDePersona`; rol sin `rol_nivel` → 403; supervisor
+    dentro → 200; supervisor fuera → 403; ADMIN_AREA dentro de su área → 200; GERENTE_GENERAL con persona
     inexistente → 404.
   - `PUT /:id` con `DUPLICATE_PHONE` → 409 con `prospectos_activos`.
   - Error del servicio → 500 (vía `next(e)`) en las seis rutas, también en el
