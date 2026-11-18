@@ -11,6 +11,7 @@ const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
 const { fueraDeAlcance } = require('../utils/alcanceProspecto');
+const { usuariosAccesibles } = require('../utils/acceso');
 
 // Carga el prospecto y verifica el alcance. Devuelve el prospecto, o null si
 // ya respondió 404 / 403.
@@ -49,9 +50,24 @@ async function list(req, res, next) {
   }
 }
 
+// De quién es el resumen que se pide. ASESOR / AGENTE_SVC: siempre el propio
+// (se ignora asesor_id, igual que aplicarFiltroAsesor en prospectos). Resto:
+// el propio, o el de un asesor que esté en usuariosAccesibles(actor).
+// Devuelve null si el asesor pedido está fuera del alcance.
+async function resolverAsesorResumen(req) {
+  const propio = req.user.usr_id;
+  if (req.scope?.asesorId) return propio;
+  const pedido = req.query.asesor_id ? parseInt(req.query.asesor_id) : null;
+  if (!pedido || pedido === propio) return propio;
+  const ids = await usuariosAccesibles(req.user); // null = SUPER_ADMIN, sin filtro
+  if (ids === null || ids.map(Number).includes(pedido)) return pedido;
+  return null;
+}
+
 async function resumenDia(req, res, next) {
   try {
-    const asesorId = req.query.asesor_id ? parseInt(req.query.asesor_id) : req.user.usr_id;
+    const asesorId = await resolverAsesorResumen(req);
+    if (asesorId === null) return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Fuera de tu alcance');
     const r = await gestiones.resumenDia(asesorId, req.query.fecha);
     return ok(res, r);
   } catch (e) {

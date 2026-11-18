@@ -182,3 +182,69 @@ describe('POST /api/sv/gestiones — gest_asesor_id', () => {
     expect(autor).toBe(20);
   });
 });
+
+describe('GET /api/sv/gestiones/resumen-dia', () => {
+  const SUPER_ADMIN = { usr_id: 1, usr_area_id: 1, rol: { rol_codigo: 'SUPER_ADMIN' } };
+
+  test('asesor sin asesor_id → su propio resumen', async () => {
+    const r = await request(app(ASESOR)).get('/api/sv/gestiones/resumen-dia');
+    expect(r.status).toBe(200);
+    expect(gestiones.resumenDia).toHaveBeenCalledWith(10, undefined);
+  });
+
+  test('asesor que pide el resumen de otro asesor → recibe el suyo', async () => {
+    const r = await request(app(ASESOR)).get('/api/sv/gestiones/resumen-dia?asesor_id=11');
+    expect(r.status).toBe(200);
+    expect(gestiones.resumenDia).toHaveBeenCalledWith(10, undefined);
+    expect(SvUsuario.findAll).not.toHaveBeenCalled();
+  });
+
+  test('supervisor con un asesor de su grupo → 200 con el resumen de ese asesor', async () => {
+    SvUsuario.findAll.mockResolvedValue([{ usr_id: 10 }, { usr_id: 11 }, { usr_id: 20 }]);
+    const r = await request(app(SUPERVISOR)).get('/api/sv/gestiones/resumen-dia?asesor_id=11');
+    expect(r.status).toBe(200);
+    expect(gestiones.resumenDia).toHaveBeenCalledWith(11, undefined);
+  });
+
+  test('supervisor con un asesor fuera de su grupo → 403 y no consulta', async () => {
+    SvUsuario.findAll.mockResolvedValue([{ usr_id: 10 }, { usr_id: 11 }, { usr_id: 20 }]);
+    const r = await request(app(SUPERVISOR)).get('/api/sv/gestiones/resumen-dia?asesor_id=30');
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ success: false, error: 'FORBIDDEN', message: 'Fuera de tu alcance' });
+    expect(gestiones.resumenDia).not.toHaveBeenCalled();
+  });
+
+  test('supervisor sin asesor_id → su propio resumen, sin consultar usuarios', async () => {
+    const r = await request(app(SUPERVISOR)).get('/api/sv/gestiones/resumen-dia');
+    expect(r.status).toBe(200);
+    expect(gestiones.resumenDia).toHaveBeenCalledWith(20, undefined);
+    expect(SvUsuario.findAll).not.toHaveBeenCalled();
+  });
+
+  test('SUPER_ADMIN puede pedir el resumen de cualquier asesor', async () => {
+    const r = await request(app(SUPER_ADMIN)).get('/api/sv/gestiones/resumen-dia?asesor_id=30');
+    expect(r.status).toBe(200);
+    expect(gestiones.resumenDia).toHaveBeenCalledWith(30, undefined);
+  });
+
+  test('error del servicio → 500 del manejador de errores', async () => {
+    gestiones.resumenDia.mockRejectedValue(new Error('ER_LOCK_WAIT_TIMEOUT'));
+    const r = await request(app(ASESOR)).get('/api/sv/gestiones/resumen-dia');
+    expect(r.status).toBe(500);
+  });
+
+  test('error al consultar usuarios accesibles → 500', async () => {
+    SvUsuario.findAll.mockRejectedValue(new Error('ECONNRESET'));
+    const r = await request(app(SUPERVISOR)).get('/api/sv/gestiones/resumen-dia?asesor_id=11');
+    expect(r.status).toBe(500);
+    expect(gestiones.resumenDia).not.toHaveBeenCalled();
+  });
+
+  test('resumenDia: la promesa se resuelve y next recibe el error', async () => {
+    const err = new Error('ER_LOCK_WAIT_TIMEOUT');
+    gestiones.resumenDia.mockRejectedValue(err);
+    const next = jest.fn();
+    await expect(ctrl.resumenDia(reqDe(ASESOR), resFalso(), next)).resolves.toBeUndefined();
+    expect(next).toHaveBeenCalledWith(err);
+  });
+});
