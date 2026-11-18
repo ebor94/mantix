@@ -1,37 +1,88 @@
 /**
  * sv/controllers/personas.controller.js
+ * Leer o modificar una persona exige relación con ella: ser cross-área o
+ * tener al menos un prospecto suyo en el alcance (utils/alcancePersona). El
+ * historial cross-área además exige nivel ≤ 3 (authorizeLevel en la ruta).
+ * buscar y create no exigen relación: son el anti-duplicado del alta.
+ *
+ * Los errores se reenvían con next(e): en Express 4 una promesa rechazada en
+ * un handler async no llega al middleware de errores y server.js termina el
+ * proceso ante un unhandledRejection.
  */
 const personas = require('../services/personas.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
+const { fueraDeAlcancePersona } = require('../utils/alcancePersona');
 
-async function buscar(req, res) {
-  const { telefono } = req.query;
-  const persona = await personas.buscarPorTelefono(telefono);
-  if (!persona) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
-  // Cross-área: incluir prospectos activos del cliente para que el frontend muestre el warning
-  const prospectos = await personas.prospectosActivos(persona.persona_id);
-  return ok(res, { persona, prospectos_activos: prospectos });
+/**
+ * Middleware de ruta para /:id. Valida el id, verifica la relación del usuario
+ * con la persona y deja el id numérico en req.personaId. Para quien no es
+ * cross-área, una persona inexistente responde 403 (no tiene prospectos) y no
+ * 404: el código no revela qué ids existen.
+ */
+async function exigirRelacion(req, res, next) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
+  }
+  req.personaId = id;
+  if (req.scope?.crossArea) return next();
+
+  let prospectos;
+  try {
+    prospectos = await personas.alcancesDePersona(id);
+  } catch (e) {
+    return next(e);
+  }
+  const motivo = fueraDeAlcancePersona(req.user, req.scope, prospectos);
+  if (motivo) return fail(res, 403, ERROR_CODES.FORBIDDEN, motivo);
+  return next();
 }
 
-async function getOne(req, res) {
-  const persona = await personas.obtener(parseInt(req.params.id));
-  if (!persona) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
-  return ok(res, persona);
+async function buscar(req, res, next) {
+  try {
+    const { telefono } = req.query;
+    const persona = await personas.buscarPorTelefono(telefono);
+    if (!persona) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
+    // Cross-área: prospectos activos del cliente (campos recortados) para que
+    // el frontend muestre el aviso antes de crear otro.
+    const prospectos = await personas.prospectosActivos(persona.persona_id);
+    return ok(res, { persona, prospectos_activos: prospectos });
+  } catch (e) {
+    return next(e);
+  }
 }
 
-async function prospectosActivos(req, res) {
-  const p = await personas.prospectosActivos(parseInt(req.params.id));
-  return ok(res, p);
+async function getOne(req, res, next) {
+  try {
+    const persona = await personas.obtener(req.personaId);
+    if (!persona) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
+    return ok(res, persona);
+  } catch (e) {
+    return next(e);
+  }
 }
 
-async function historialCompleto(req, res) {
-  const r = await personas.historialCompleto(parseInt(req.params.id));
-  if (!r) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
-  return ok(res, r);
+async function prospectosActivos(req, res, next) {
+  try {
+    const p = await personas.prospectosActivos(req.personaId);
+    return ok(res, p);
+  } catch (e) {
+    return next(e);
+  }
 }
 
-async function create(req, res) {
+async function historialCompleto(req, res, next) {
+  try {
+    const r = await personas.historialCompleto(req.personaId);
+    if (!r) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Persona no encontrada');
+    return ok(res, r);
+  } catch (e) {
+    return next(e);
+  }
+}
+
+async function create(req, res, next) {
   try {
     const persona = await personas.crear(req.body);
     return created(res, persona);
@@ -43,23 +94,25 @@ async function create(req, res) {
       });
     }
     if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    throw e;
+    return next(e);
   }
 }
 
-async function update(req, res) {
+async function update(req, res, next) {
   try {
-    const persona = await personas.actualizar(parseInt(req.params.id), req.body);
+    const persona = await personas.actualizar(req.personaId, req.body);
     return ok(res, persona);
   } catch (e) {
-    if (e.code === 'DUPLICATE_PHONE') return fail(res, 409, ERROR_CODES.DUPLICATE_PHONE, 'Teléfono ya existe', {
-      persona: e.persona,
-      prospectos_activos: e.prospectos_activos || []
-    });
+    if (e.code === 'DUPLICATE_PHONE') {
+      return fail(res, 409, ERROR_CODES.DUPLICATE_PHONE, 'Teléfono ya existe', {
+        persona: e.persona,
+        prospectos_activos: e.prospectos_activos || []
+      });
+    }
     if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
     if (e.code === 'VALIDATION_ERROR') return fail(res, 422, ERROR_CODES.VALIDATION_ERROR, e.message);
-    throw e;
+    return next(e);
   }
 }
 
-module.exports = { buscar, getOne, prospectosActivos, historialCompleto, create, update };
+module.exports = { exigirRelacion, buscar, getOne, prospectosActivos, historialCompleto, create, update };
