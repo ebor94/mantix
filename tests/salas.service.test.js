@@ -154,7 +154,7 @@ describe('atender', () => {
   }
 
   beforeEach(() => {
-    t.commit.mockReset(); t.rollback.mockReset();
+    t.commit.mockReset(); t.rollback.mockReset(); delete t.finished;
     M.sequelize.transaction.mockResolvedValue(t);
     repo.obtener.mockResolvedValue(H(55));
     M.SvSalaContratante.findOne.mockResolvedValue(null);
@@ -307,6 +307,60 @@ describe('atender', () => {
     expect(t.commit).not.toHaveBeenCalled();
     expect(r.prosp_id).toBe(901);
     expect(r.creado).toBe(false);
+  });
+
+  test('si el COMMIT falla no intenta revertir y propaga el error real', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 905 });
+    const perdido = new Error('commit perdido');
+    t.commit.mockImplementation(async () => { t.finished = 'commit'; throw perdido; });
+    await expect(salas.atender(55, ASESOR, {})).rejects.toBe(perdido);
+    expect(t.rollback).not.toHaveBeenCalled();
+  });
+
+  test('si el rollback falla tras un choque de clave única, igual devuelve el ganador', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    const logger = require('../src/utils/logger');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 901 });
+    const choque = new Error('Duplicate entry'); choque.name = 'SequelizeUniqueConstraintError';
+    M.SvSalaContratante.create.mockRejectedValue(choque);
+    t.rollback.mockRejectedValue(new Error('conexión caída'));
+    M.SvSalaContratante.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ sc_homenaje_sala_id: 55, sc_prosp_id: 901 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(901, 8));
+
+    const r = await salas.atender(55, ASESOR, {});
+
+    expect(r.prosp_id).toBe(901);
+    expect(r.creado).toBe(false);
+    expect(logger.warn.mock.calls.map((c) => c[0]).some((l) => l.includes('rollback falló'))).toBe(true);
+  });
+
+  test('persona creada al mismo tiempo (clave única): reutiliza la persona encontrada', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ persona_id: 502 });
+    const choque = new Error('Duplicate entry'); choque.name = 'SequelizeUniqueConstraintError';
+    personas.crear.mockRejectedValue(choque);
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    M.SvProspecto.create.mockResolvedValue({ prosp_id: 908 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(908, 7));
+    await salas.atender(55, ASESOR, {});
+    expect(M.SvProspecto.create.mock.calls[0][0].prosp_persona_id).toBe(502);
+  });
+
+  test('un choque de clave única sin ganador se propaga', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 901 });
+    const choque = new Error('Duplicate entry'); choque.name = 'SequelizeUniqueConstraintError';
+    M.SvSalaContratante.create.mockRejectedValue(choque);
+    M.SvSalaContratante.findOne.mockResolvedValue(null);
+    await expect(salas.atender(55, ASESOR, {})).rejects.toBe(choque);
   });
 
   test('un error inesperado revierte y se propaga', async () => {

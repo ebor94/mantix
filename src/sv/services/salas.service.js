@@ -185,6 +185,17 @@ async function personaPorTelefono(telefono, nombre) {
   }
 }
 
+// Revierte sin tapar el error original: si la transacción ya terminó (p. ej. falló el
+// COMMIT) no hay nada que revertir, y si el rollback falla solo se registra.
+async function revertirSinTapar(t) {
+  if (t.finished) return;
+  try {
+    await t.rollback();
+  } catch (err) {
+    logger.warn('[SALA_ATENDER] rollback falló: ' + err.message);
+  }
+}
+
 async function atender(homenajeId, user, body = {}) {
   const cat = await catalogos();
   exigirAsesor(user, cat);
@@ -229,7 +240,7 @@ async function atender(homenajeId, user, body = {}) {
     );
     await t.commit();
   } catch (e) {
-    await t.rollback();
+    await revertirSinTapar(t);
     if (e.name === 'SequelizeUniqueConstraintError') {
       const ganador = await SvSalaContratante.findOne({ where: { sc_homenaje_sala_id: homenajeId } });
       if (ganador) return respuestaVinculo(ganador.sc_prosp_id, user, false);
