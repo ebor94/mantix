@@ -216,6 +216,8 @@ async function atender(homenajeId, user, body = {}) {
   let prospId;
   let creado = false;
   try {
+    // Serializa a quienes atienden a la misma persona: evita dos prospectos PRENEC activos.
+    await SvPersona.findByPk(persona.persona_id, { transaction: t, lock: true });
     const activo = await SvProspecto.findOne({
       where: { prosp_persona_id: persona.persona_id, prosp_area_id: cat.areaId, prosp_activo: 1 },
       order: [['prosp_created_at', 'DESC']],

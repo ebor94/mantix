@@ -7,7 +7,7 @@ jest.mock('../src/sv/models', () => ({
   SvEstado: { findOne: jest.fn() },
   SvResultado: { findOne: jest.fn() },
   SvProspecto: { findOne: jest.fn(), findByPk: jest.fn(), create: jest.fn() },
-  SvPersona: {},
+  SvPersona: { findByPk: jest.fn() },
   SvUsuario: {},
   SvGestion: { findAll: jest.fn(), findOne: jest.fn() },
   SvSalaContratante: { findAll: jest.fn(), findOne: jest.fn(), create: jest.fn() }
@@ -122,6 +122,25 @@ describe('listar', () => {
   });
 });
 
+describe('listar con áreas extra', () => {
+  const EXTRA = [{ area_id: 1, area_codigo: 'PRENEC' }];
+
+  test('un asesor de otra área con acceso extra a Prenecesidad lista y puede atender', async () => {
+    repo.listarEnCurso.mockResolvedValue([H(55)]);
+    const user = { usr_id: 9, usr_area_id: 2, areasExtra: EXTRA, rol: { rol_codigo: 'ASESOR' } };
+    const r = await salas.listar(user);
+    expect(r).toHaveLength(1);
+    expect(r[0].puede_atender).toBe(true);
+  });
+
+  test('un supervisor con ese acceso extra lista sin poder atender', async () => {
+    repo.listarEnCurso.mockResolvedValue([H(55)]);
+    const user = { usr_id: 10, usr_area_id: 2, areasExtra: EXTRA, rol: { rol_codigo: 'SUPERVISOR' } };
+    const r = await salas.listar(user);
+    expect(r[0].puede_atender).toBe(false);
+  });
+});
+
 describe('obtener', () => {
   test('404 si el homenaje no existe', async () => {
     repo.obtener.mockResolvedValue(null);
@@ -214,6 +233,10 @@ describe('atender', () => {
     expect(t.commit).toHaveBeenCalled();
     expect(r.creado).toBe(true);
     expect(r.es_mio).toBe(true);
+    // Bloquea la fila de la persona antes de buscar el prospecto activo (evita duplicados concurrentes).
+    expect(M.SvPersona.findByPk).toHaveBeenCalledWith(500, { transaction: t, lock: true });
+    expect(M.SvPersona.findByPk.mock.invocationCallOrder[0])
+      .toBeLessThan(M.SvProspecto.findOne.mock.invocationCallOrder[0]);
   });
 
   test('toma el primer número válido cuando la asistencia trae varios', async () => {
