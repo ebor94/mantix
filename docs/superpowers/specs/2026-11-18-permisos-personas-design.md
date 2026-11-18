@@ -62,7 +62,13 @@ Fecha: 2026-11-18 · Rama: `fix/permisos-personas` (apilada sobre
 - `prospectos-activos`: se mantiene el aviso cross-área para todos los roles,
   con los campos recortados a lo que pinta la tarjeta, y exige relación.
   `buscar` y el 409 no exigen relación pero devuelven la lista recortada.
-- `GET` y `PUT /personas/:id` exigen relación.
+- `GET /personas/:id` exige relación.
+- Tras la revisión final, `PUT /personas/:id` también exige nivel ≤ 3
+  (`authorizeLevel(NIVELES.SUPERVISOR)` antes de `exigirRelacion`), igual que
+  el historial: `POST /prospectos` deja a cualquier usuario ganar una relación
+  con una persona (acepta cualquier `prosp_persona_id`), y con solo la relación
+  un asesor podría reescribir nombre, teléfono o documento de una persona
+  compartida entre áreas. Ningún frontend llama PUT.
 - GERENTE_GENERAL y DIRECTOR_COMERCIAL siguen sin restricción (decisión de
   `fix/permisos-gestiones`).
 - Enfoque A: función pura + middleware de ruta en el controlador + carga
@@ -98,8 +104,8 @@ cerrado conserva el aviso cross-área.
 
 ### 3. Middleware `exigirRelacion` (en `personas.controller`)
 
-Se aplica en `personas.routes.js` a `GET /:id`, `PUT /:id` (antes de
-`validate`), `GET /:id/prospectos-activos` y `GET /:id/historial-completo`.
+Se aplica en `personas.routes.js` a `GET /:id`, `PUT /:id` (después de
+`authorizeLevel` y antes de `validate`), `GET /:id/prospectos-activos` y `GET /:id/historial-completo`.
 Orden:
 
 1. `req.params.id` no es entero positivo → 404 `NOT_FOUND`
@@ -113,7 +119,7 @@ Orden:
 
 El middleware deja el id ya convertido en `req.personaId` para los handlers.
 
-`historial-completo` lleva antes el middleware existente
+`historial-completo` y `PUT /:id` llevan antes el middleware existente
 `authorizeLevel(NIVELES.SUPERVISOR)` de `src/sv/middleware/svAuthorize.js`:
 `req.user.rol.rol_nivel > 3` → 403 `FORBIDDEN`
 `'Nivel insuficiente (requerido: <= 3)'`, sin consultar la base. Un rol sin
@@ -128,7 +134,7 @@ router.get ('/:id',                    ctrl.exigirRelacion, ctrl.getOne);
 router.get ('/:id/prospectos-activos', ctrl.exigirRelacion, ctrl.prospectosActivos);
 router.get ('/:id/historial-completo', authorizeLevel(NIVELES.SUPERVISOR), ctrl.exigirRelacion, ctrl.historialCompleto);
 router.post('/',                       validate(v.personas.create), ctrl.create);
-router.put ('/:id',                    ctrl.exigirRelacion, validate(v.personas.update), ctrl.update);
+router.put ('/:id',                    authorizeLevel(NIVELES.SUPERVISOR), ctrl.exigirRelacion, validate(v.personas.update), ctrl.update);
 ```
 
 ### 4. Recorte de campos en `personas.service.prospectosActivos`
@@ -170,7 +176,7 @@ que responde 500.
   supervisor dentro y fuera de su grupo; ADMIN_AREA dentro y fuera de su área;
   JEFE_PAP sobre PAP; lista vacía sin crossArea; rol sin alcance.
 - `tests/personas.routes.test.js`:
-  - `GET /:id`, `GET /:id/prospectos-activos`, `PUT /:id`: asesor con
+  - `GET /:id`, `GET /:id/prospectos-activos`: asesor con
     prospecto propio → 200; asesor sin él → 403 y el servicio de datos no se
     llama; supervisor con prospecto en su grupo → 200; supervisor solo con
     prospectos de otro grupo → 403; GERENTE_GENERAL → 200 sin llamar
@@ -179,7 +185,14 @@ que responde 500.
     llamar `alcancesDePersona`; rol sin `rol_nivel` → 403; supervisor
     dentro → 200; supervisor fuera → 403; ADMIN_AREA dentro de su área → 200; GERENTE_GENERAL con persona
     inexistente → 404.
-  - `PUT /:id` con `DUPLICATE_PHONE` → 409 con `prospectos_activos`.
+  - `PUT /:id`: asesor, aun con prospecto propio → 403 de nivel sin llamar
+    `alcancesDePersona` ni `actualizar`, y con cuerpo inválido también 403 (no
+    422); supervisor con prospecto en su grupo → 200 con `actualizar(1, cuerpo)`;
+    supervisor solo con prospectos de otro grupo → 403 `SIN_RELACION`;
+    ADMIN_AREA dentro de su área → 200; GERENTE_GENERAL → 200 sin llamar
+    `alcancesDePersona`; persona inexistente → 403; id no numérico → 404; sin
+    relación → 403 antes de validar el cuerpo; error al consultar la relación
+    o de `actualizar` → 500; `DUPLICATE_PHONE` → 409 con `prospectos_activos`.
   - Error del servicio → 500 (vía `next(e)`) en las seis rutas, también en el
     middleware.
 - `tests/personas.service.test.js`: `prospectosActivos` pide los atributos
@@ -197,6 +210,8 @@ que responde 500.
   recibe 403. Desde la UI solo se llega desde la ficha de un prospecto que el
   usuario ya puede ver (con `getOne` cerrado en `fix/permisos-gestiones`), así
   que no debería ocurrir en uso normal.
+- `PUT /personas/:id` pasa a exigir nivel ≤ 3: un asesor recibe 403. Ningún
+  frontend lo llama, así que no debería notarse.
 - Esta rama contiene `fix/permisos-gestiones`: se mergea después de ella o
   junto con ella.
 
@@ -210,3 +225,22 @@ que responde 500.
   del anti-duplicado del alta; recortarlo exige revisar qué precarga
   `NuevoProspecto.vue`.
 - Los demás seguimientos de `fix/permisos-gestiones` siguen abiertos.
+- `POST /prospectos` acepta cualquier `prosp_persona_id` /
+  `prosp_contacto_empresa_id` (`src/sv/validations/crm.validation.js`
+  `prospectos.create`, `prospectos.service.crear`): cualquier usuario que crea
+  un prospecto para una persona gana relación con ella, y con eso
+  `GET /personas/:id` para todos y el historial cross-área para nivel ≤ 3.
+  Arreglo: resolver o verificar la persona en el servidor (por teléfono) en vez
+  de confiar en un id crudo. Los ids se pueden enumerar porque la FK hace que
+  el insert falle si la persona no existe.
+- El 409 `DUPLICATE_PHONE` de `POST /personas` y `PUT /personas/:id` devuelve
+  el registro completo de otra persona (`e.persona`), la misma exposición que
+  `buscar`.
+- `prospectos.controller.create` (async, sin try/catch) y
+  `fidelizacion.controller.crearContacto` / `actualizarContacto` (terminan en
+  `throw err`) siguen con el camino de caída de Express 4.
+- `tests/gestiones.routes.test.js` (de `fix/permisos-gestiones`) es
+  intermitente: "historial de un prospecto ajeno → 403" a veces recibe 404; se
+  reproduce en la rama base sin estos cambios. Una prueba de permisos
+  inestable puede esconder una regresión; hay que revisarla antes de mergear
+  la pila.
