@@ -384,3 +384,81 @@ describe('atender', () => {
     expect(linea).not.toMatch(/3001234567|Marta/i);
   });
 });
+
+describe('registrarVisita', () => {
+  const RESULTADO = { resultado_id: 3, resultado_requiere_fecha: 0 };
+  const BODY = { gest_resultado_id: 3, gest_comentario: 'Habló con la hija' };
+
+  beforeEach(() => {
+    repo.obtener.mockResolvedValue(H(57));
+    M.SvSalaContratante.findOne.mockResolvedValue({ sc_homenaje_sala_id: 57, sc_prosp_id: 901 });
+    M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 901, prosp_activo: 1 });
+    M.SvResultado.findOne.mockResolvedValue(RESULTADO);
+    require('../src/sv/services/gestiones.service').crear.mockResolvedValue({ gest_id: 77 });
+  });
+
+  test('403 para supervisor', async () => {
+    await esperarError(salas.registrarVisita(57, SUPERVISOR, BODY), 'FORBIDDEN', 403);
+  });
+
+  test('409 HOMENAJE_CERRADO', async () => {
+    repo.obtener.mockResolvedValue(H(57, { estado: 'FINALIZADO' }));
+    await esperarError(salas.registrarVisita(57, ASESOR, BODY), 'HOMENAJE_CERRADO', 409);
+  });
+
+  test('409 SIN_ATENDER', async () => {
+    M.SvSalaContratante.findOne.mockResolvedValue(null);
+    await esperarError(salas.registrarVisita(57, ASESOR, BODY), 'SIN_ATENDER', 409);
+  });
+
+  test('409 CLIENTE_INACTIVO', async () => {
+    M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 901, prosp_activo: 0 });
+    await esperarError(salas.registrarVisita(57, ASESOR, BODY), 'CLIENTE_INACTIVO', 409);
+  });
+
+  test('422 RESULTADO_INVALIDO si no es de telemercadeo', async () => {
+    M.SvResultado.findOne.mockResolvedValue(null);
+    await esperarError(salas.registrarVisita(57, ASESOR, BODY), 'RESULTADO_INVALIDO', 422);
+    expect(M.SvResultado.findOne).toHaveBeenCalledWith({
+      where: { resultado_id: 3, resultado_grupo_id: 1, resultado_activo: 1 }
+    });
+  });
+
+  test('422 ESTADO_INVALIDO si el estado no es de telemercadeo', async () => {
+    await esperarError(salas.registrarVisita(57, ASESOR, { ...BODY, gest_estado_nuevo_id: 99 }), 'ESTADO_INVALIDO', 422);
+  });
+
+  test('422 PROX_FECHA_REQUERIDA cuando el resultado la pide', async () => {
+    M.SvResultado.findOne.mockResolvedValue({ resultado_id: 3, resultado_requiere_fecha: 1 });
+    await esperarError(salas.registrarVisita(57, ASESOR, BODY), 'PROX_FECHA_REQUERIDA', 422);
+  });
+
+  test('crea la gestión con visita_sala, el homenaje y el asesor de la sesión', async () => {
+    const gestiones = require('../src/sv/services/gestiones.service');
+    M.SvEstado.findOne.mockImplementation(async ({ where }) => (where.estado_id === 12 ? { estado_id: 12 } : { estado_id: 11 }));
+
+    const g = await salas.registrarVisita(57, ASESOR, {
+      ...BODY, gest_estado_nuevo_id: 12, gest_prox_fecha: '2026-11-25', gest_prox_hora: '10:00',
+      gest_prosp_id: 1, gest_asesor_id: 99, gest_canal: 'llamada'
+    });
+
+    expect(g).toEqual({ gest_id: 77 });
+    expect(gestiones.crear).toHaveBeenCalledWith({
+      gest_prosp_id: 901,
+      gest_canal: 'visita_sala',
+      gest_homenaje_sala_id: 57,
+      gest_resultado_id: 3,
+      gest_estado_nuevo_id: 12,
+      gest_comentario: 'Habló con la hija',
+      gest_prox_fecha: '2026-11-25',
+      gest_prox_hora: '10:00'
+    }, 7);
+  });
+
+  test('el log lleva solo identificadores', async () => {
+    const logger = require('../src/utils/logger');
+    await salas.registrarVisita(57, ASESOR, BODY);
+    const linea = logger.info.mock.calls.map((c) => c[0]).find((l) => l.includes('SALA_VISITA'));
+    expect(linea).toBe('[SALA_VISITA] homenaje_sala_id=57 prosp_id=901 usr_id=7');
+  });
+});

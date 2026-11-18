@@ -14,6 +14,7 @@ const { areaIdsAccesibles } = require('../utils/acceso');
 const { primerTelefonoValido, formatearNombre } = require('../utils/contratante');
 const repo = require('./homenajesSala.repo');
 const personas = require('./personas.service');
+const gestiones = require('./gestiones.service');
 const SalaError = require('./salaError');
 const logger = require('../../utils/logger');
 
@@ -252,4 +253,48 @@ async function atender(homenajeId, user, body = {}) {
   return respuestaVinculo(prospId, user, creado);
 }
 
-module.exports = { listar, obtener, atender, SalaError };
+async function registrarVisita(homenajeId, user, body = {}) {
+  const cat = await catalogos();
+  exigirAsesor(user, cat);
+  await homenajeEnCurso(homenajeId);
+
+  const vinculo = await SvSalaContratante.findOne({ where: { sc_homenaje_sala_id: homenajeId } });
+  if (!vinculo) throw new SalaError('SIN_ATENDER', 409, 'Primero atiende al contratante de este homenaje');
+
+  const p = await SvProspecto.findByPk(vinculo.sc_prosp_id);
+  if (!p || !p.prosp_activo) {
+    throw new SalaError('CLIENTE_INACTIVO', 409, 'El cliente está inactivo; pide al supervisor reactivarlo');
+  }
+
+  const resultado = await SvResultado.findOne({
+    where: { resultado_id: body.gest_resultado_id, resultado_grupo_id: cat.grupoId, resultado_activo: 1 }
+  });
+  if (!resultado) throw new SalaError('RESULTADO_INVALIDO', 422, 'El resultado no es de telemercadeo');
+
+  if (body.gest_estado_nuevo_id) {
+    const estado = await SvEstado.findOne({
+      where: { estado_id: body.gest_estado_nuevo_id, estado_grupo_id: cat.grupoId, estado_activo: 1 }
+    });
+    if (!estado) throw new SalaError('ESTADO_INVALIDO', 422, 'El estado no es de telemercadeo');
+  }
+
+  if (resultado.resultado_requiere_fecha && !body.gest_prox_fecha) {
+    throw new SalaError('PROX_FECHA_REQUERIDA', 422, 'Este resultado requiere agendar la próxima gestión');
+  }
+
+  const g = await gestiones.crear({
+    gest_prosp_id: p.prosp_id,
+    gest_canal: 'visita_sala',
+    gest_homenaje_sala_id: homenajeId,
+    gest_resultado_id: resultado.resultado_id,
+    gest_estado_nuevo_id: body.gest_estado_nuevo_id || null,
+    gest_comentario: body.gest_comentario || null,
+    gest_prox_fecha: body.gest_prox_fecha || null,
+    gest_prox_hora: body.gest_prox_hora || null
+  }, user.usr_id);
+
+  logger.info(`[SALA_VISITA] homenaje_sala_id=${homenajeId} prosp_id=${p.prosp_id} usr_id=${user.usr_id}`);
+  return g;
+}
+
+module.exports = { listar, obtener, atender, registrarVisita, SalaError };
