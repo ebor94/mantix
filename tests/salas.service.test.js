@@ -140,3 +140,193 @@ describe('obtener', () => {
     expect(item.puede_atender).toBe(true);
   });
 });
+
+describe('atender', () => {
+  const t = { commit: jest.fn(), rollback: jest.fn() };
+
+  function prospectoCompleto(prosp_id, prosp_asesor_id) {
+    return {
+      prosp_id, prosp_area_id: 1, prosp_grupo_id: 1, prosp_asesor_id, prosp_prox_gestion_fecha: '2026-11-20',
+      persona: { persona_nombre: 'Marta Gomez', persona_apellido: null, persona_telefono_principal: '3001234567' },
+      asesor: prosp_asesor_id === 7 ? { usr_nombre: 'Denis', usr_apellido: 'Moreno' } : { usr_nombre: 'Carmen', usr_apellido: 'Contreras' },
+      estado: { estado_nombre: 'Nuevo' }
+    };
+  }
+
+  beforeEach(() => {
+    t.commit.mockReset(); t.rollback.mockReset();
+    M.sequelize.transaction.mockResolvedValue(t);
+    repo.obtener.mockResolvedValue(H(55));
+    M.SvSalaContratante.findOne.mockResolvedValue(null);
+    M.SvGestion.findOne.mockResolvedValue(null);
+  });
+
+  test('403 para supervisor', async () => {
+    await esperarError(salas.atender(55, SUPERVISOR, {}), 'FORBIDDEN', 403);
+  });
+
+  test('404 si el homenaje no existe', async () => {
+    repo.obtener.mockResolvedValue(null);
+    await esperarError(salas.atender(55, ASESOR, {}), 'HOMENAJE_NO_ENCONTRADO', 404);
+  });
+
+  test('409 si el homenaje finalizó', async () => {
+    repo.obtener.mockResolvedValue(H(55, { estado: 'FINALIZADO' }));
+    await esperarError(salas.atender(55, ASESOR, {}), 'HOMENAJE_CERRADO', 409);
+  });
+
+  test('con vínculo existente lo devuelve sin crear nada', async () => {
+    M.SvSalaContratante.findOne.mockResolvedValue({ sc_homenaje_sala_id: 55, sc_prosp_id: 901 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(901, 8));
+    M.SvGestion.findOne.mockResolvedValue({ gest_fecha_hora: '2026-11-18T10:40:00', gest_canal: 'visita_sala', resultado: { resultado_nombre: 'No interesado' } });
+
+    const r = await salas.atender(55, ASESOR, {});
+
+    expect(r).toEqual({
+      prosp_id: 901, prosp_area_id: 1, prosp_grupo_id: 1, es_mio: false, creado: false,
+      persona_nombre: 'Marta Gomez', persona_telefono: '3001234567',
+      resumen: {
+        duenio_nombre: 'Carmen Contreras', estado_nombre: 'Nuevo', prox_gestion_fecha: '2026-11-20',
+        ultima_gestion: { fecha_hora: '2026-11-18T10:40:00', canal: 'visita_sala', resultado_nombre: 'No interesado' }
+      }
+    });
+    expect(M.sequelize.transaction).not.toHaveBeenCalled();
+  });
+
+  test('cliente nuevo: crea persona, prospecto y vínculo', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue(null);
+    personas.crear.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    M.SvProspecto.create.mockResolvedValue({ prosp_id: 905 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(905, 7));
+
+    const r = await salas.atender(55, ASESOR, {});
+
+    expect(personas.buscarPorTelefono).toHaveBeenCalledWith('3001234567');
+    expect(personas.crear).toHaveBeenCalledWith({ persona_nombre: 'Marta Gomez', persona_telefono_principal: '3001234567' });
+    expect(M.SvProspecto.create).toHaveBeenCalledWith({
+      prosp_area_id: 1, prosp_grupo_id: 1, prosp_persona_id: 500, prosp_asesor_id: 7,
+      prosp_estado_id: 11, prosp_fuente_id: 40
+    }, { transaction: t });
+    expect(M.SvSalaContratante.create).toHaveBeenCalledWith(
+      { sc_homenaje_sala_id: 55, sc_prosp_id: 905, sc_usr_id: 7 }, { transaction: t });
+    expect(t.commit).toHaveBeenCalled();
+    expect(r.creado).toBe(true);
+    expect(r.es_mio).toBe(true);
+  });
+
+  test('toma el primer número válido cuando la asistencia trae varios', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    repo.obtener.mockResolvedValue(H(55, { contratante_telefono: 'fijo / 310 987 6543 / 3001234567' }));
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 905 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(905, 7));
+    await salas.atender(55, ASESOR, {});
+    expect(personas.buscarPorTelefono).toHaveBeenCalledWith('3109876543');
+  });
+
+  test('usa el teléfono escrito cuando la asistencia no trae uno válido', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    repo.obtener.mockResolvedValue(H(55, { contratante_telefono: '' }));
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 905 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(905, 7));
+    await salas.atender(55, ASESOR, { telefono: '312 555 0101' });
+    expect(personas.buscarPorTelefono).toHaveBeenCalledWith('3125550101');
+  });
+
+  test('422 TELEFONO_REQUERIDO sin teléfono válido', async () => {
+    repo.obtener.mockResolvedValue(H(55, { contratante_telefono: 'no tiene' }));
+    await esperarError(salas.atender(55, ASESOR, { telefono: '12' }), 'TELEFONO_REQUERIDO', 422);
+  });
+
+  test('422 NOMBRE_REQUERIDO sin nombre', async () => {
+    repo.obtener.mockResolvedValue(H(55, { contratante_nombre: '  ' }));
+    await esperarError(salas.atender(55, ASESOR, {}), 'NOMBRE_REQUERIDO', 422);
+  });
+
+  test('usa el nombre escrito cuando la asistencia no trae', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    repo.obtener.mockResolvedValue(H(55, { contratante_nombre: null }));
+    personas.buscarPorTelefono.mockResolvedValue(null);
+    personas.crear.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 905 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(905, 7));
+    await salas.atender(55, ASESOR, { nombre: 'ana lucía rojas' });
+    expect(personas.crear).toHaveBeenCalledWith({ persona_nombre: 'Ana Lucía Rojas', persona_telefono_principal: '3001234567' });
+  });
+
+  test('cliente de Prenecesidad de otro asesor: lo vincula sin crear prospecto', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 901 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(901, 8));
+
+    const r = await salas.atender(55, ASESOR, {});
+
+    expect(M.SvProspecto.findOne).toHaveBeenCalledWith({
+      where: { prosp_persona_id: 500, prosp_area_id: 1, prosp_activo: 1 },
+      order: [['prosp_created_at', 'DESC']],
+      transaction: t
+    });
+    expect(M.SvProspecto.create).not.toHaveBeenCalled();
+    expect(M.SvSalaContratante.create).toHaveBeenCalledWith(
+      { sc_homenaje_sala_id: 55, sc_prosp_id: 901, sc_usr_id: 7 }, { transaction: t });
+    expect(r.es_mio).toBe(false);
+    expect(r.creado).toBe(false);
+  });
+
+  test('persona creada al mismo tiempo (DUPLICATE_PHONE): reutiliza la existente', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue(null);
+    const dup = new Error('DUPLICATE_PHONE'); dup.code = 'DUPLICATE_PHONE'; dup.persona = { persona_id: 501 };
+    personas.crear.mockRejectedValue(dup);
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    M.SvProspecto.create.mockResolvedValue({ prosp_id: 906 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(906, 7));
+    await salas.atender(55, ASESOR, {});
+    expect(M.SvProspecto.create.mock.calls[0][0].prosp_persona_id).toBe(501);
+  });
+
+  test('dos asesores al mismo tiempo: revierte y devuelve el vínculo ganador', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    M.SvProspecto.create.mockResolvedValue({ prosp_id: 907 });
+    const choque = new Error('Duplicate entry'); choque.name = 'SequelizeUniqueConstraintError';
+    M.SvSalaContratante.create.mockRejectedValue(choque);
+    M.SvSalaContratante.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ sc_homenaje_sala_id: 55, sc_prosp_id: 901 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(901, 8));
+
+    const r = await salas.atender(55, ASESOR, {});
+
+    expect(t.rollback).toHaveBeenCalled();
+    expect(t.commit).not.toHaveBeenCalled();
+    expect(r.prosp_id).toBe(901);
+    expect(r.creado).toBe(false);
+  });
+
+  test('un error inesperado revierte y se propaga', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockRejectedValue(new Error('db caída'));
+    await expect(salas.atender(55, ASESOR, {})).rejects.toThrow('db caída');
+    expect(t.rollback).toHaveBeenCalled();
+  });
+
+  test('el log lleva solo identificadores', async () => {
+    const personas = require('../src/sv/services/personas.service');
+    const logger = require('../src/utils/logger');
+    personas.buscarPorTelefono.mockResolvedValue({ persona_id: 500 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    M.SvProspecto.create.mockResolvedValue({ prosp_id: 905 });
+    M.SvProspecto.findByPk.mockResolvedValue(prospectoCompleto(905, 7));
+    await salas.atender(55, ASESOR, {});
+    const linea = logger.info.mock.calls.map((c) => c[0]).find((l) => l.includes('SALA_ATENDER'));
+    expect(linea).toBe('[SALA_ATENDER] homenaje_sala_id=55 prosp_id=905 usr_id=7 creado=true');
+    expect(linea).not.toMatch(/3001234567|Marta/i);
+  });
+});

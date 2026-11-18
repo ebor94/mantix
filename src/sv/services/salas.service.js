@@ -6,12 +6,16 @@
  */
 const { Op } = require('sequelize');
 const {
-  SvArea, SvGrupo, SvFuente, SvEstado, SvProspecto, SvUsuario, SvGestion, SvSalaContratante
+  sequelize, SvArea, SvGrupo, SvFuente, SvEstado, SvResultado, SvProspecto, SvPersona,
+  SvUsuario, SvGestion, SvSalaContratante
 } = require('../models');
 const { ROLES, AREAS } = require('../config/constants');
 const { areaIdsAccesibles } = require('../utils/acceso');
+const { primerTelefonoValido, formatearNombre } = require('../utils/contratante');
 const repo = require('./homenajesSala.repo');
+const personas = require('./personas.service');
 const SalaError = require('./salaError');
+const logger = require('../../utils/logger');
 
 const GRUPO_TELEMERCADEO = 'TELEMERCADEO';
 const FUENTE_SALA = 'SALA_VELACION';
@@ -124,4 +128,117 @@ async function obtener(homenajeId, user) {
   return (await armar([h], user, cat))[0];
 }
 
-module.exports = { listar, obtener, SalaError };
+async function homenajeEnCurso(homenajeId) {
+  const h = await repo.obtener(homenajeId);
+  if (!h) throw new SalaError('HOMENAJE_NO_ENCONTRADO', 404, 'Homenaje no encontrado');
+  if (!repo.estaEnCurso(h)) throw new SalaError('HOMENAJE_CERRADO', 409, 'Este homenaje ya finalizó');
+  return h;
+}
+
+async function respuestaVinculo(prospId, user, creado) {
+  const p = await SvProspecto.findByPk(prospId, {
+    include: [
+      { model: SvPersona, as: 'persona', attributes: ['persona_nombre', 'persona_apellido', 'persona_telefono_principal'] },
+      { model: SvUsuario, as: 'asesor',  attributes: ['usr_nombre', 'usr_apellido'] },
+      { model: SvEstado,  as: 'estado',  attributes: ['estado_nombre'] }
+    ]
+  });
+  const ultima = await SvGestion.findOne({
+    where: { gest_prosp_id: prospId },
+    order: [['gest_fecha_hora', 'DESC'], ['gest_id', 'DESC']],
+    include: [{ model: SvResultado, as: 'resultado', attributes: ['resultado_nombre'] }]
+  });
+  return {
+    prosp_id: p.prosp_id,
+    prosp_area_id: p.prosp_area_id,
+    prosp_grupo_id: p.prosp_grupo_id,
+    es_mio: p.prosp_asesor_id === user.usr_id,
+    creado,
+    persona_nombre: [p.persona?.persona_nombre, p.persona?.persona_apellido].filter(Boolean).join(' '),
+    persona_telefono: p.persona?.persona_telefono_principal || null,
+    resumen: {
+      duenio_nombre: nombreDe(p.asesor),
+      estado_nombre: p.estado?.estado_nombre || null,
+      prox_gestion_fecha: p.prosp_prox_gestion_fecha || null,
+      ultima_gestion: ultima ? {
+        fecha_hora: ultima.gest_fecha_hora,
+        canal: ultima.gest_canal,
+        resultado_nombre: ultima.resultado?.resultado_nombre || null
+      } : null
+    }
+  };
+}
+
+// Persona fuera de la transacción: una persona sin prospecto es inofensiva.
+async function personaPorTelefono(telefono, nombre) {
+  const existente = await personas.buscarPorTelefono(telefono);
+  if (existente) return existente;
+  try {
+    return await personas.crear({ persona_nombre: nombre, persona_telefono_principal: telefono });
+  } catch (e) {
+    if (e.code === 'DUPLICATE_PHONE' && e.persona) return e.persona;
+    if (e.name === 'SequelizeUniqueConstraintError') {
+      const otra = await personas.buscarPorTelefono(telefono);
+      if (otra) return otra;
+    }
+    throw e;
+  }
+}
+
+async function atender(homenajeId, user, body = {}) {
+  const cat = await catalogos();
+  exigirAsesor(user, cat);
+  const h = await homenajeEnCurso(homenajeId);
+
+  const existente = await SvSalaContratante.findOne({ where: { sc_homenaje_sala_id: homenajeId } });
+  if (existente) return respuestaVinculo(existente.sc_prosp_id, user, false);
+
+  const telefono = primerTelefonoValido(h.contratante_telefono) || primerTelefonoValido(body.telefono);
+  if (!telefono) throw new SalaError('TELEFONO_REQUERIDO', 422, 'Escribe un teléfono válido del contratante');
+  const nombre = formatearNombre(h.contratante_nombre) || formatearNombre(body.nombre);
+  if (!nombre) throw new SalaError('NOMBRE_REQUERIDO', 422, 'Escribe el nombre del contratante');
+
+  const persona = await personaPorTelefono(telefono, nombre);
+
+  const t = await sequelize.transaction();
+  let prospId;
+  let creado = false;
+  try {
+    const activo = await SvProspecto.findOne({
+      where: { prosp_persona_id: persona.persona_id, prosp_area_id: cat.areaId, prosp_activo: 1 },
+      order: [['prosp_created_at', 'DESC']],
+      transaction: t
+    });
+    if (activo) {
+      prospId = activo.prosp_id;
+    } else {
+      const nuevo = await SvProspecto.create({
+        prosp_area_id: cat.areaId,
+        prosp_grupo_id: cat.grupoId,
+        prosp_persona_id: persona.persona_id,
+        prosp_asesor_id: user.usr_id,
+        prosp_estado_id: cat.estadoInicialId,
+        prosp_fuente_id: cat.fuenteId
+      }, { transaction: t });
+      prospId = nuevo.prosp_id;
+      creado = true;
+    }
+    await SvSalaContratante.create(
+      { sc_homenaje_sala_id: homenajeId, sc_prosp_id: prospId, sc_usr_id: user.usr_id },
+      { transaction: t }
+    );
+    await t.commit();
+  } catch (e) {
+    await t.rollback();
+    if (e.name === 'SequelizeUniqueConstraintError') {
+      const ganador = await SvSalaContratante.findOne({ where: { sc_homenaje_sala_id: homenajeId } });
+      if (ganador) return respuestaVinculo(ganador.sc_prosp_id, user, false);
+    }
+    throw e;
+  }
+
+  logger.info(`[SALA_ATENDER] homenaje_sala_id=${homenajeId} prosp_id=${prospId} usr_id=${user.usr_id} creado=${creado}`);
+  return respuestaVinculo(prospId, user, creado);
+}
+
+module.exports = { listar, obtener, atender, SalaError };
