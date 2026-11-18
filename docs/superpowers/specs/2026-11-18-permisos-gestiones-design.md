@@ -133,8 +133,9 @@ Handlers, todos con `try { … } catch (e) { next(e); }`:
   `gest_asesor_id` es siempre el `asesorId` que recibe la función (el usuario
   autenticado desde la ruta, o el asesor que pasa `propuestas.service`).
 - Consecuencia: si un supervisor registra una gestión sobre el cliente de un
-  asesor, queda a nombre del supervisor, que es quien la hizo; los reportes
-  por asesor no se inflan.
+  asesor, queda a nombre del supervisor, que es quien la hizo; nadie puede
+  atribuirle gestiones a otro asesor. (La fecha de la gestión sigue
+  viniendo del cliente; ver seguimientos.)
 
 ### 5. Errores
 
@@ -198,6 +199,41 @@ fallaban antes (`test/grupoIndivII`, `tests/invitacion.service`, las dos de
   `sv_org_usuario_areas` en todo el módulo (listados, ficha y gestiones).
 - `gest_estado_nuevo_id` no se valida contra los estados del grupo del
   prospecto.
+- **El historial de gestiones sigue abierto por otra ruta.**
+  `GET /api/sv/personas/:id/historial-completo`
+  (`personas.controller.historialCompleto` → `personas.service.historialCompleto`)
+  devuelve todas las gestiones de todos los prospectos de una persona, de
+  todas las áreas, sin verificar rol ni alcance y sin `try/catch`. El
+  frontend solo lo muestra a nivel ≤ 3, pero un ASESOR puede llamarlo
+  directo. Lo mismo aplica a `/personas/:id` y
+  `/personas/:id/prospectos-activos`. Es la próxima rama a cerrar.
+- Listados más amplios que `fueraDeAlcance`: `prospectos.list` deja que
+  `filtros.grupo_id`/`area_id` reemplacen el scope, `aplicarFiltroAsesor`
+  acepta cualquier `asesor_id`, `buildScopeWhere` con scope vacío devuelve
+  todo y `pap._asesoresVisibles` devuelve todo el grupo PAP a cualquier no
+  asesor. Pueden mostrar prospectos sobre los que ahora el POST de gestión
+  responde 403.
+- `gest_fecha_hora` lo fija el cliente: un asesor puede fechar hacia atrás
+  sus propias gestiones y mover `resumen-dia` y reportes.
+- Un SUPERVISOR o COORDINADOR sin `usr_grupo_id` cae en la rama de área y
+  ve toda su área (comportamiento heredado de `getOne`). El JEFE_PAP
+  conserva, además de PAP, el grupo de su `usr_grupo_id`.
+- `usuariosAccesibles` para JEFE_PAP usa su `usr_grupo_id`, no el grupo PAP
+  fijo: un JEFE_PAP con otro `usr_grupo_id` recibe 403 al pedir el
+  `resumen-dia` de un asesor PAP.
+
+## Antes de desplegar
+
+El cierre es intencional, pero hay usuarios que van a empezar a ver 403 al
+registrar gestiones sobre prospectos fuera de su grupo o área (Kanban de
+Empresariales, visitas PAP). Antes de desplegar conviene:
+
+- Una consulta solo de lectura de las gestiones de los últimos 30–60 días
+  cuyo autor, por rol, hoy fallaría `fueraDeAlcance`, y de los usuarios
+  activos sin alcance (ADMIN_AREA sin `usr_area_id`, SUPERVISOR o
+  COORDINADOR sin grupo ni área). Las gestiones creadas por propuestas, PAP
+  y renovaciones no pasan por este endpoint y meten ruido.
+- Avisar en la nota de despliegue que esos 403 son esperados.
 
 ## Restricciones de trabajo
 
