@@ -16,7 +16,7 @@ async function crear(payload, asesorId) {
   try {
     const gest = await SvGestion.create({
       gest_prosp_id:        payload.gest_prosp_id,
-      gest_asesor_id:       payload.gest_asesor_id || asesorId,
+      gest_asesor_id:       asesorId, // siempre quien registra; el payload no decide el autor
       gest_resultado_id:    payload.gest_resultado_id || null,
       gest_estado_nuevo_id: payload.gest_estado_nuevo_id || null,
       gest_canal:           payload.gest_canal || 'llamada',

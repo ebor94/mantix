@@ -163,3 +163,22 @@ describe('errores en POST y GET → next(e), el proceso sigue vivo', () => {
     expect(next).toHaveBeenCalledWith(err);
   });
 });
+
+describe('POST /api/sv/gestiones — gest_asesor_id', () => {
+  test('asesor con gest_asesor_id ajeno: se descarta y la gestión queda a su nombre', async () => {
+    const r = await request(app(ASESOR)).post('/api/sv/gestiones').send({ ...GESTION, gest_asesor_id: 11 });
+    expect(r.status).toBe(201);
+    const [payload, autor] = gestiones.crear.mock.calls[0];
+    expect(payload).not.toHaveProperty('gest_asesor_id');
+    expect(autor).toBe(10);
+  });
+
+  test('supervisor con gest_asesor_id de un asesor: queda a nombre del supervisor', async () => {
+    const r = await request(app(SUPERVISOR)).post('/api/sv/gestiones')
+      .send({ ...GESTION, gest_prosp_id: 101, gest_asesor_id: 11 });
+    expect(r.status).toBe(201);
+    const [payload, autor] = gestiones.crear.mock.calls[0];
+    expect(payload).not.toHaveProperty('gest_asesor_id');
+    expect(autor).toBe(20);
+  });
+});
