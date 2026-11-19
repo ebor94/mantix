@@ -3,7 +3,7 @@ const EVENTO = Object.freeze({
   titulo: 'II Taller de Duelo Animal "Tu huella sigue conmigo"',
   fecha: 'Sábado 21 de noviembre de 2026',
   hora: '09:00 a. m.',
-  lugar: 'Auditorio Carlos Corredor, Sede 4, Universidad Simón Bolívar, Cúcuta',
+  lugar: 'Auditorio José Consuegra Higgins, Sede 1, Universidad Simón Bolívar. Avenida 3 # 13-34, Barrio La Playa, Cúcuta',
 });
 
 // Mensaje cuando se llena el cupo. Viaja con el motivo 'CERRADAS' a propósito: el frontend ya cambia a su
