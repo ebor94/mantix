@@ -58,6 +58,39 @@ test('AD caído responde 503', async () => {
   expect(r.body.motivo).toBe('AD_NO_DISPONIBLE');
 });
 
+test('tras 10 fallos de un usuario, el 11.º intento responde 429 con el contrato del módulo', async () => {
+  const { app, deps } = crearAppPrueba();
+  deps.directorio.validarCredenciales.mockRejectedValue(errorAd('CREDENCIALES_INVALIDAS'));
+  for (let i = 0; i < 10; i++) {
+    const r = await login(app, { usuario: 'jperez', password: 'mala' });
+    expect(r.status).toBe(401);
+  }
+  const r = await login(app, { usuario: 'jperez', password: 'mala' });
+  expect(r.status).toBe(429);
+  expect(r.body).toMatchObject({ success: false, error: 'HOR-AUT-001', motivo: 'DEMASIADOS_INTENTOS' });
+  expect(deps.directorio.validarCredenciales).toHaveBeenCalledTimes(10);
+});
+
+test('las respuestas 403 no cuentan para el límite: 12 intentos fuera del grupo siguen dando 403', async () => {
+  const { app, deps } = crearAppPrueba();
+  deps.directorio.validarCredenciales.mockResolvedValue(datosAd(['CN=OTRO,OU=Grupos,DC=olivos,DC=local']));
+  for (let i = 0; i < 12; i++) {
+    const r = await login(app, { usuario: 'jperez', password: 'clave' });
+    expect(r.status).toBe(403);
+  }
+});
+
+test('los fallos de un usuario no bloquean el login de otro desde la misma IP', async () => {
+  const { app, deps } = crearAppPrueba();
+  deps.directorio.validarCredenciales.mockRejectedValue(errorAd('CREDENCIALES_INVALIDAS'));
+  for (let i = 0; i < 10; i++) {
+    await login(app, { usuario: 'jperez', password: 'mala' });
+  }
+  const r = await login(app, { usuario: 'mlopez', password: 'mala' });
+  expect(r.status).toBe(401);
+  expect(deps.directorio.validarCredenciales).toHaveBeenLastCalledWith('mlopez', 'mala');
+});
+
 test('/auth/me con token devuelve el usuario', async () => {
   const { app } = crearAppPrueba();
   const r = await me(app, tokenDe());
