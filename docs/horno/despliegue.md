@@ -26,9 +26,17 @@ grupo no da acceso). Deshacer: quitar al usuario del grupo (el token vigente ven
 
 ## 4. Variables en el `.env` del backend
 
-Copiar las de `src/horno/horno.env.example`, con `HORNO_DB_PASSWORD` del paso 2 y
-`HORNO_JWT_SECRET=$(openssl rand -hex 32)`. Agregar `http://192.9.17.11` a `CORS_ORIGIN`
-(lista separada por comas). Deshacer: borrar las `HORNO_*` (el módulo queda en 503, Mantix sigue igual).
+Copiar las de `src/horno/horno.env.example`, con `HORNO_DB_PASSWORD` del paso 2.
+
+Para `HORNO_JWT_SECRET`, generar el valor en la shell con `openssl rand -hex 32` y pegar el resultado en el
+`.env` como `HORNO_JWT_SECRET=<valor>`. No escribir `$(...)` en el archivo: dotenv no lo expande.
+
+`CORS_ORIGIN` (lista separada por comas): si está vacía, Mantix usa sus valores por defecto
+(`https://losolivoscucuta.com`, `http://localhost:5173`). Si está sin definir, escribir la lista completa con
+los orígenes existentes más `http://192.9.17.11`, no solo el nuevo. Si ya tiene valores, agregar
+`http://192.9.17.11` al final.
+
+Deshacer: borrar las `HORNO_*` (el módulo queda en 503, Mantix sigue igual).
 
 ## 5. Código
 
@@ -36,7 +44,20 @@ Copiar las de `src/horno/horno.env.example`, con `HORNO_DB_PASSWORD` del paso 2 
 cd /ruta/mantix-backend && ./scripts/deploy-mantix.sh
 ```
 
-El script hace `git reset --hard origin/main`, `pm2 restart` y revierte solo si `/api-docs/` no responde.
+El script despliega `origin/main`, no `feat/horno`: la rama debe estar mergeada y subida a `main` antes de
+ejecutarlo. Hace `git reset --hard origin/main`, `pm2 restart` y revierte solo si `/api-docs/` no responde
+(ese es su único chequeo; el `/health` de abajo es el del módulo y no dispara rollback).
+
+Si el script dice `sin cambios` (HEAD ya es `origin/main`), sale sin reiniciar pm2. Si editaste el `.env` en el
+paso 4, reiniciar para que carguen las `HORNO_*`:
+
+```bash
+pm2 restart mantix-backend --update-env
+```
+
+Deshacer: el script imprime el SHA anterior. Para volver a mano: `git reset --hard <SHA anterior>` y
+`pm2 restart mantix-backend --update-env`.
+
 Comprobar:
 
 ```bash
