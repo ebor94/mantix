@@ -123,8 +123,9 @@ Estructura:
 
 ```
 src/api/        http.js (axios + Bearer + 401 → login), hornoApi.js
-src/stores/     useAuthStore.js (token en localStorage), useLecturasStore.js
+src/stores/     useAuthStore.js (token en localStorage; cada vista guarda sus propios datos)
 src/config/     variables.js (etiqueta, unidad, color, decimales de las 8 variables)
+src/utils/      estado.js, rangos.js, descarga.js
 src/components/ layout/AppSidebar.vue, layout/AppHeader.vue, KpiCard.vue, EstadoRegistro.vue,
                 FiltroRango.vue, GraficaSerie.vue, TablaLecturas.vue
 src/views/      LoginView.vue, MonitoreoView.vue, GraficasView.vue, RegistrosView.vue
