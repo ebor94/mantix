@@ -27,7 +27,7 @@ function leerRango(query = {}, { maxDias = 366 } = {}) {
   if (!desde || !hasta) {
     throw new HornoError(400, 'VALIDACION', 'Indica desde y hasta con formato AAAA-MM-DD o AAAA-MM-DD HH:mm:ss');
   }
-  if (hasta.ms < desde.ms) throw new HornoError(400, 'VALIDACION', 'La fecha final debe ser posterior a la inicial');
+  if (hasta.ms < desde.ms) throw new HornoError(400, 'VALIDACION', 'La fecha final no puede ser anterior a la inicial');
   const dias = (hasta.ms - desde.ms) / 86400000;
   if (dias > maxDias) throw new HornoError(400, 'VALIDACION', `El rango no puede superar ${maxDias} días`);
   return { desde: desde.texto, hasta: hasta.texto, dias };

@@ -38,7 +38,7 @@ test('ultima convierte los DECIMAL a número y devuelve los minutos sin datos', 
     },
   });
   expect(query.mock.calls[0][1]).toEqual(['HORNO-INCOL']);
-  expect(query.mock.calls[0][0]).toMatch(/ORDER BY registrado_en DESC/);
+  expect(query.mock.calls[0][0]).toMatch(/ORDER BY lecturas\.registrado_en DESC, lecturas\.id_local DESC LIMIT 1/);
 });
 
 test('ultima sin datos devuelve lectura null', async () => {
@@ -80,7 +80,7 @@ test('listar pagina de más reciente a más antiguo con total', async () => {
   expect(r.pagina).toBe(3);
   expect(r.tamano).toBe(50);
   expect(r.filas[0].oxigeno).toBe(18.63);
-  expect(query.mock.calls[1][0]).toMatch(/ORDER BY registrado_en DESC, id_local DESC LIMIT \? OFFSET \?/);
+  expect(query.mock.calls[1][0]).toMatch(/ORDER BY lecturas\.registrado_en DESC, lecturas\.id_local DESC LIMIT \? OFFSET \?/);
   expect(query.mock.calls[1][1]).toEqual(['HORNO-INCOL', 'a', 'b', 50, 100]);
 });
 
@@ -88,5 +88,5 @@ test('filasParaExcel ordena de más antiguo a más reciente', async () => {
   const { bd, query } = bdFalsa([fila()]);
   const filas = await crearServicioLecturas({ bd }).filasParaExcel({ desde: 'a', hasta: 'b' });
   expect(filas).toHaveLength(1);
-  expect(query.mock.calls[0][0]).toMatch(/ORDER BY registrado_en, id_local$/);
+  expect(query.mock.calls[0][0]).toMatch(/ORDER BY lecturas\.registrado_en, lecturas\.id_local$/);
 });

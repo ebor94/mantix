@@ -18,6 +18,8 @@ const CAMPOS = VARIABLES.map((v) => v.campo).join(', ');
 const COLUMNAS = `id_local, DATE_FORMAT(registrado_en, '%Y-%m-%d %H:%i:%s') AS registrado_en, `
   + `DATE_FORMAT(fecha_hmi, '%Y-%m-%d %H:%i:%s') AS fecha_hmi, ${CAMPOS}`;
 const EN_RANGO = 'equipo = ? AND registrado_en BETWEEN ? AND ?';
+// ORDER BY va calificado con el nombre de la tabla: COLUMNAS aliasa registrado_en como texto, y MySQL resolvería
+// un ORDER BY sin calificar contra ese alias en vez de la columna DATETIME, lo que impide usar su índice.
 const FORMATO_GRUPO = Object.freeze({ hora: '%Y-%m-%d %H:00:00', dia: '%Y-%m-%d' });
 
 // mysql2 entrega DECIMAL como texto.
@@ -57,7 +59,7 @@ function crearServicioLecturas({ bd, equipo = EQUIPO }) {
     async ultima() {
       const filas = await consultar(
         `SELECT ${COLUMNAS}, TIMESTAMPDIFF(MINUTE, registrado_en, NOW()) AS minutos_sin_datos `
-        + 'FROM lecturas WHERE equipo = ? ORDER BY registrado_en DESC, id_local DESC LIMIT 1',
+        + 'FROM lecturas WHERE equipo = ? ORDER BY lecturas.registrado_en DESC, lecturas.id_local DESC LIMIT 1',
         [equipo],
       );
       if (filas.length === 0) return { lectura: null, minutosSinDatos: null };
@@ -111,7 +113,7 @@ function crearServicioLecturas({ bd, equipo = EQUIPO }) {
     async listar({ desde, hasta, pagina, tamano }) {
       const total = await contar({ desde, hasta });
       const filas = await consultar(
-        `SELECT ${COLUMNAS} FROM lecturas WHERE ${EN_RANGO} ORDER BY registrado_en DESC, id_local DESC LIMIT ? OFFSET ?`,
+        `SELECT ${COLUMNAS} FROM lecturas WHERE ${EN_RANGO} ORDER BY lecturas.registrado_en DESC, lecturas.id_local DESC LIMIT ? OFFSET ?`,
         [equipo, desde, hasta, tamano, (pagina - 1) * tamano],
       );
       return { filas: filas.map(lectura), total, pagina, tamano };
@@ -119,7 +121,7 @@ function crearServicioLecturas({ bd, equipo = EQUIPO }) {
 
     async filasParaExcel({ desde, hasta }) {
       const filas = await consultar(
-        `SELECT ${COLUMNAS} FROM lecturas WHERE ${EN_RANGO} ORDER BY registrado_en, id_local`,
+        `SELECT ${COLUMNAS} FROM lecturas WHERE ${EN_RANGO} ORDER BY lecturas.registrado_en, lecturas.id_local`,
         [equipo, desde, hasta],
       );
       return filas.map(lectura);
