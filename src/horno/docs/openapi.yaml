@@ -1,0 +1,150 @@
+# Documentación del módulo Horno INCOL (/api/horno/v1). Token propio del módulo: POST /auth/login.
+components:
+  securitySchemes:
+    HornoBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de POST /api/horno/v1/auth/login (scope horno)
+  parameters:
+    HornoDesde:
+      in: query
+      name: desde
+      required: true
+      schema: { type: string, example: '2026-11-22 00:00:00' }
+      description: AAAA-MM-DD o AAAA-MM-DD HH:mm:ss (hora de Colombia)
+    HornoHasta:
+      in: query
+      name: hasta
+      required: true
+      schema: { type: string, example: '2026-11-22' }
+      description: AAAA-MM-DD (incluye todo el día) o AAAA-MM-DD HH:mm:ss. Máximo 366 días después de desde.
+  schemas:
+    HornoError:
+      type: object
+      required: [success, error, motivo, message]
+      properties:
+        success: { type: boolean, example: false }
+        error: { type: string, example: HOR-AUT-001, description: Código de la API que respondió }
+        motivo: { type: string, example: SIN_ACCESO }
+        message: { type: string }
+    HornoLectura:
+      type: object
+      properties:
+        id: { type: integer, example: 16 }
+        registrado_en: { type: string, example: '2026-11-22 14:05:30' }
+        fecha_hmi: { type: string, nullable: true }
+        temp_combustion: { type: number, nullable: true }
+        temp_postcombustion: { type: number, nullable: true }
+        temp_chimenea: { type: number, nullable: true }
+        co: { type: number, nullable: true }
+        oxigeno: { type: number, nullable: true }
+        co_mg_m3: { type: number, nullable: true }
+        ccr: { type: number, nullable: true }
+        ccr_o2_ref: { type: number, nullable: true }
+  responses:
+    HornoErrorResp:
+      description: Error del módulo
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/HornoError' }
+paths:
+  /api/horno/v1/health:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-SIS-001 · Estado del módulo y de la base del horno
+      responses:
+        '200': { description: Base disponible }
+        '503': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/auth/login:
+    post:
+      tags: [Horno INCOL]
+      summary: HOR-AUT-001 · Login con usuario de red (grupo INCOL_APP)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usuario, password]
+              properties:
+                usuario: { type: string, example: jperez }
+                password: { type: string, format: password }
+      responses:
+        '200': { description: 'data: { token, user: { usuario, nombre, email } }' }
+        '400': { $ref: '#/components/responses/HornoErrorResp' }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+        '403': { $ref: '#/components/responses/HornoErrorResp' }
+        '429': { $ref: '#/components/responses/HornoErrorResp' }
+        '503': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/auth/me:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-AUT-002 · Usuario de la sesión
+      security: [{ HornoBearer: [] }]
+      responses:
+        '200': { description: 'data: { user }' }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/lecturas/ultima:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-LEC-001 · Última lectura y minutos sin datos
+      security: [{ HornoBearer: [] }]
+      responses:
+        '200':
+          description: 'data: { lectura (null si no hay), minutosSinDatos }'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      lectura: { $ref: '#/components/schemas/HornoLectura' }
+                      minutosSinDatos: { type: integer, nullable: true }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/lecturas/serie:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-LEC-002 · Serie para gráficas (crudo ≤ 2 días, por hora ≤ 31 días, por día)
+      security: [{ HornoBearer: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HornoDesde'
+        - $ref: '#/components/parameters/HornoHasta'
+      responses:
+        '200': { description: 'data: { agrupacion: crudo|hora|dia, puntos: [{ t, <variable>: { prom, min, max } }] }' }
+        '400': { $ref: '#/components/responses/HornoErrorResp' }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/lecturas:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-LEC-003 · Lecturas paginadas (más recientes primero)
+      security: [{ HornoBearer: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HornoDesde'
+        - $ref: '#/components/parameters/HornoHasta'
+        - { in: query, name: pagina, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: tamano, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+      responses:
+        '200': { description: 'data: { filas: HornoLectura[], total, pagina, tamano }' }
+        '400': { $ref: '#/components/responses/HornoErrorResp' }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+  /api/horno/v1/lecturas.xlsx:
+    get:
+      tags: [Horno INCOL]
+      summary: HOR-LEC-004 · Descarga en Excel (máximo 100 000 filas)
+      security: [{ HornoBearer: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HornoDesde'
+        - $ref: '#/components/parameters/HornoHasta'
+      responses:
+        '200':
+          description: Archivo horno_incol_AAAAMMDD_AAAAMMDD.xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/HornoErrorResp' }
+        '401': { $ref: '#/components/responses/HornoErrorResp' }
+        '413': { $ref: '#/components/responses/HornoErrorResp' }

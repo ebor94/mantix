@@ -80,9 +80,10 @@ const limiter = rateLimit({
   // Portería: las casetas de una sede pueden compartir IP; el módulo aplica su propio límite en el login.
   // Agenda de Masajes: toda una sede sale por una IP; el módulo limita por usuario (y por cuenta en el login).
   // Duelo Animal: los operadores móviles comparten IP entre muchos inscritos; el módulo aplica sus propios límites.
+  // Horno INCOL: varios operadores de planta salen por la misma IP; el módulo aplica su propio límite en el login.
   skip: (req) => req.originalUrl.startsWith('/api/trk/') || req.originalUrl.startsWith('/api/bigday/')
     || req.originalUrl.startsWith('/api/porteria/') || req.originalUrl.startsWith('/api/masajes/')
-    || req.originalUrl.startsWith('/api/duelo/')
+    || req.originalUrl.startsWith('/api/duelo/') || req.originalUrl.startsWith('/api/horno/')
 });
 app.use('/api/', limiter);
 
@@ -108,6 +109,8 @@ app.use('/api/trk', require('./trk/middleware/errorHandler').trkErrorHandler);
 app.use('/api/bigday', require('./bigday/middleware/errorHandler').bigdayErrorHandler);
 // Portería: errores del body parser en /api/porteria/* con el contrato del módulo
 app.use('/api/porteria', require('./porteria/middleware/errorHandler').porteriaErrorHandler);
+// Horno INCOL: errores del body parser en /api/horno/* con el contrato del módulo
+app.use('/api/horno', require('./horno/middleware/errorHandler').hornoErrorHandler);
 app.use(compression());
 
 // ============================================

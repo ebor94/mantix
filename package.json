@@ -30,7 +30,8 @@
     "test:duelo": "jest src/duelo",
     "test:duelo:int": "jest -c jest.duelo-int.config.js --runInBand",
     "duelo:db:test": "docker compose -f src/duelo/testing/docker-compose.yml up -d --wait",
-    "duelo:migrate": "node src/duelo/scripts/migrar.js"
+    "duelo:migrate": "node src/duelo/scripts/migrar.js",
+    "test:horno": "jest src/horno"
   },
   "jest": {
     "testEnvironment": "node",
