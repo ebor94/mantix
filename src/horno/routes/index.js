@@ -11,9 +11,11 @@ const { hornoErrorHandler } = require('../middleware/errorHandler');
 const { crearAutenticacion } = require('../middleware/autenticacion');
 const { errorParaLog } = require('../../porteria/utils/errorSeguro');
 const { crearRouterAuth } = require('./auth.routes');
+const { crearRouterLecturas } = require('./lecturas.routes');
+const { crearServicioLecturas } = require('../services/lecturas.service');
 
-/** Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `directorio` = { validarCredenciales }. */
-function crearRouterHorno({ bd, obtenerConfig, directorio }) {
+/** Fábrica inyectable (tests). `bd` = { ping(), obtener() }; `directorio` = { validarCredenciales }; `lecturas` se construye desde `bd`. */
+function crearRouterHorno({ bd, obtenerConfig, directorio, lecturas = crearServicioLecturas({ bd }) }) {
   const router = express.Router();
   const autenticar = crearAutenticacion(obtenerConfig);
 
@@ -28,6 +30,7 @@ function crearRouterHorno({ bd, obtenerConfig, directorio }) {
   });
 
   router.use('/auth', crearRouterAuth({ obtenerConfig, directorio, autenticar }));
+  router.use(crearRouterLecturas({ autenticar, lecturas }));
 
   router.use(apiCodigo('HOR-SIS-002'), (req, res) => res.status(404).json({ success: false, message: 'Ruta no encontrada' }));
   router.use(hornoErrorHandler);

@@ -10,6 +10,13 @@ function crearAppPrueba(deps = {}) {
     bd: { ping: async () => {} },
     obtenerConfig: () => CONFIG,
     directorio: { validarCredenciales: jest.fn() },
+    lecturas: {
+      ultima: jest.fn(async () => ({ lectura: null, minutosSinDatos: null })),
+      serie: jest.fn(async () => ({ agrupacion: 'crudo', puntos: [] })),
+      listar: jest.fn(async () => ({ filas: [], total: 0, pagina: 1, tamano: 50 })),
+      contar: jest.fn(async () => 0),
+      filasParaExcel: jest.fn(async () => []),
+    },
     ...deps,
   };
   const app = express();
