@@ -51,7 +51,8 @@ const options = {
     './src/controllers/*.js',
     './src/models/*.js',
     './src/porteria/docs/*.yaml',
-    './src/masajes/docs/*.yaml'
+    './src/masajes/docs/*.yaml',
+    './src/horno/docs/*.yaml'
   ]
 };
 
