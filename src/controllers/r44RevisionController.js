@@ -601,6 +601,15 @@ const r44RevisionController = {
       const por_anio = groupCount(data, 'anio');
       const por_tipo = groupCount(data, 'tipo_persona');
 
+      // Universo real: todos los proveedores INSCRITOS en el portal (cuentas
+      // activas), incluidos los que aún no iniciaron su formulario. Los
+      // indicadores se calculan sobre esta base.
+      const [[{ inscritos }]] = await sequelize.query(
+        "SELECT COUNT(*) AS inscritos FROM r44_usuarios WHERE rol = 'proveedor' AND activo = 1"
+      );
+      const totalInscritos = Number(inscritos) || 0;
+      const sinIniciar = Math.max(totalInscritos - total, 0);
+
       const anios = [...new Set(data.map(d => d.anio).filter(a => a != null))].sort((a, b) => b - a);
 
       const aprobados = por_estado['aprobado'] || 0;
@@ -615,19 +624,26 @@ const r44RevisionController = {
       return res.json({
         ok: true,
         data: {
-          total,
+          total,                   // proveedores con formulario (cualquier estado)
+          inscritos: totalInscritos, // TODOS los inscritos en el portal
+          sin_iniciar: sinIniciar,   // inscritos que aún no abrieron el formulario
           anios,
           por_estado,
           por_anio,
           por_tipo,
           matriz: data,            // [{anio, estado, tipo_persona, total}] para filtrar en el front
           kpis: {
+            inscritos: totalInscritos,
+            sin_iniciar: sinIniciar,
             aprobados,
             rechazados,
             pendientes,
             correccion,
             en_proceso,
-            tasa_aprobacion: decididos ? Math.round((aprobados / decididos) * 100) : null,
+            // % de aprobados sobre el total INSCRITO en el portal.
+            tasa_aprobacion: totalInscritos ? Math.round((aprobados / totalInscritos) * 100) : null,
+            // Tasa de aprobación clásica (solo sobre los ya decididos), por si se requiere.
+            tasa_aprobacion_decididos: decididos ? Math.round((aprobados / decididos) * 100) : null,
           },
         },
       });
