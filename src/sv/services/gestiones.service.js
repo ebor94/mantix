@@ -9,6 +9,7 @@ const {
 } = require('../models');
 const { rangoDia } = require('../utils/fechas');
 const recuperacionAuto = require('./recuperacionAuto.service');
+const ventas = require('./ventas.service');
 const logger = require('../../utils/logger');
 
 async function crear(payload, asesorId) {
@@ -56,6 +57,18 @@ async function crear(payload, asesorId) {
 
     if (Object.keys(prospUpdate).length) {
       await SvProspecto.update(prospUpdate, { where: { prosp_id: payload.gest_prosp_id }, transaction: t });
+    }
+
+    // Venta: obligatoria al cerrar el contrato en las áreas que venden por producto.
+    if (payload.venta || estadoNuevoAdvance?.estado_es_ganado) {
+      await ventas.registrarAlCerrar({
+        prospecto: await SvProspecto.findByPk(payload.gest_prosp_id, { transaction: t }),
+        gestId: gest.gest_id,
+        estadoNuevo: estadoNuevoAdvance,
+        venta: payload.venta || null,
+        usuarioId: asesorId,
+        transaction: t
+      });
     }
 
     // Hook cross-área: si pasó a estado final NO ganado en Previsión, disparar recuperación SVC

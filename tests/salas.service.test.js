@@ -478,6 +478,26 @@ describe('registrarVisita', () => {
     }, 7);
   });
 
+  describe('cerrar el contrato', () => {
+    const gestiones = require('../src/sv/services/gestiones.service');
+    const VENTA = { items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }] };
+    beforeEach(() => {
+      M.SvEstado.findOne.mockImplementation(async ({ where }) => (where.estado_id === 5 ? { estado_id: 5, estado_es_ganado: 1 } : { estado_id: 11 }));
+    });
+
+    test('el dueño del cliente puede, con su venta', async () => {
+      M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 901, prosp_activo: 1, prosp_asesor_id: 7 });
+      await salas.registrarVisita(57, ASESOR, { ...BODY, gest_estado_nuevo_id: 5, venta: VENTA });
+      expect(gestiones.crear.mock.calls[0][0]).toEqual(expect.objectContaining({ gest_estado_nuevo_id: 5, venta: VENTA }));
+    });
+
+    test.each([['otro asesor', 8], ['nadie', null]])('403 CLIENTE_DE_OTRO_ASESOR si el cliente es de %s', async (_n, duenio) => {
+      M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 901, prosp_activo: 1, prosp_asesor_id: duenio });
+      await esperarError(salas.registrarVisita(57, ASESOR, { ...BODY, gest_estado_nuevo_id: 5, venta: VENTA }), 'CLIENTE_DE_OTRO_ASESOR', 403);
+      expect(gestiones.crear).not.toHaveBeenCalled();
+    });
+  });
+
   test('el log lleva solo identificadores', async () => {
     const logger = require('../src/utils/logger');
     await salas.registrarVisita(57, ASESOR, BODY);

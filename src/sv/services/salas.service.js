@@ -278,6 +278,9 @@ async function registrarVisita(homenajeId, user, body = {}) {
       where: { estado_id: body.gest_estado_nuevo_id, estado_grupo_id: cat.grupoId, estado_activo: 1 }
     });
     if (!estado) throw new SalaError('ESTADO_INVALIDO', 422, 'El estado no es de telemercadeo');
+    if (estado.estado_es_ganado && Number(p.prosp_asesor_id) !== Number(user.usr_id)) {
+      throw new SalaError('CLIENTE_DE_OTRO_ASESOR', 403, 'Este cliente es de otro asesor: solo quien lo tiene asignado puede cerrar el contrato');
+    }
   }
 
   if (resultado.resultado_requiere_fecha && !body.gest_prox_fecha) {
@@ -292,7 +295,8 @@ async function registrarVisita(homenajeId, user, body = {}) {
     gest_estado_nuevo_id: body.gest_estado_nuevo_id || null,
     gest_comentario: body.gest_comentario || null,
     gest_prox_fecha: body.gest_prox_fecha || null,
-    gest_prox_hora: body.gest_prox_hora || null
+    gest_prox_hora: body.gest_prox_hora || null,
+    venta: body.venta
   }, user.usr_id);
 
   logger.info(`[SALA_VISITA] homenaje_sala_id=${homenajeId} prosp_id=${p.prosp_id} usr_id=${user.usr_id}`);
