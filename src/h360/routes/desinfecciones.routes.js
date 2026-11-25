@@ -40,6 +40,13 @@ const ROLES_AUTORIZAR = ['asesor', 'supervisora', 'coordinador', 'admin']
 // El rastro de las excepciones: quién levantó qué vehículo, cuándo y por qué.
 const ROLES_AUDITAR = ['coordinador', 'contabilidad', 'admin']
 
+// Las cifras del estado de la flota las lee quien responde por el área; el
+// listado de registros sigue abierto a quien opera (ROLES_VER). Es una lista
+// propia y no `ROLES_CONFIG`: hoy tienen los mismos miembros, pero una
+// gobierna el catálogo y la otra un informe, y mezclarlas haría que mañana
+// alguien cambie una creyendo que mueve la otra.
+const ROLES_FLOTA = ['coordinador', 'admin']
+
 // ── Catálogo de actividades y la matriz de reglas ──────────────────────────
 router.get  ('/actividades',     requireRol(...ROLES_VER),    ctrl.listarActividades)
 router.post ('/actividades',     requireRol(...ROLES_CONFIG), ctrl.crearActividad)
@@ -58,6 +65,15 @@ router.patch('/programacion/:id', requireRol(...ROLES_CONFIG), ctrl.actualizarPr
 // controlador decide si la actividad los exigía.
 router.post('/registro',  requireRol(...ROLES_REGISTRAR), evid.subidaEvidencia, ctrl.registrar)
 router.get ('/registros', requireRol(...ROLES_VER),       ctrl.listarRegistros)
+
+// ── Informes ──────────────────────────────────────────────────────────────
+// Las cifras del estado de la flota, de toda la flota y de ahora: el 403 para
+// los demás roles ES la restricción del panel, y por eso el frontend no repite
+// ninguna lista de roles para decidir si lo pinta.
+// No hay ninguna ruta con parámetro en este router que pueda capturar
+// `/informes/flota` (el único comodín es `/evidencia/:id`), pero igual queda
+// declarada antes de él.
+router.get('/informes/flota', requireRol(...ROLES_FLOTA), ctrl.informeFlota)
 
 // ── Lo que alimenta el aviso de las 5 pm ──────────────────────────────────
 // La ventana horaria la decide el servidor, no el navegador.

@@ -55,12 +55,15 @@ const mockNombresCtrl = ['listarLaboratorios',
 // `GET /registros`.
 const mockNombresInf = ['cumplimiento', 'porPersona', 'historial']
 
-// `tableroPublico` va en la lista aunque no sea una ruta de este router: lo
-// monta routes/index.js (fuera de verifyToken) y este archivo carga ese index.
+// El módulo de vehículos no es el de este archivo, pero routes/index.js monta
+// los dos y este archivo carga ese index: cada manejador que monte el router
+// de vehículos tiene que estar en la lista o `router.get` recibe undefined y
+// la suite no arranca. `tableroPublico` va aunque no sea una ruta de ese
+// router: lo monta el index, fuera de verifyToken.
 const mockNombresVehiculos = ['listarActividades', 'crearActividad', 'actualizarActividad',
   'listarReglas', 'crearRegla', 'actualizarRegla', 'sembrarVehiculo', 'tablero',
-  'actualizarProgramacion', 'registrar', 'listarRegistros', 'pendientes',
-  'tableroPublico']
+  'actualizarProgramacion', 'registrar', 'listarRegistros', 'informeFlota',
+  'pendientes', 'tableroPublico']
 
 jest.mock('../../controllers/laboratorio.controller', () => ({
   ...Object.fromEntries(mockNombresCtrl.map(n => [n, mockEspia(`ctrl.${n}`)])),

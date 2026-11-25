@@ -998,6 +998,65 @@ async function listarRegistros(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /desinfecciones/informes/flota
+ *
+ * Las cifras del estado de la programación AHORA, no del período que el
+ * usuario tenga filtrado en la pantalla. Van en su propio endpoint y no dentro
+ * del tablero porque el tablero responde un arreglo pelado que la vista
+ * desplegada ya consume (`tablero.value = data || []`), así que agregarle
+ * claves lo rompe; y porque el rol que ve estas cifras es más estrecho.
+ * Tampoco se toca `SELECT_PROGRAMACION`: la comparten cuatro llamadas, dos de
+ * ellas de escritura.
+ *
+ * El «hoy» lo pone el servidor con relojBogota() y no CURDATE(): la zona del
+ * motor de base de datos no es necesariamente la del negocio.
+ */
+async function informeFlota(req, res, next) {
+  try {
+    const { dia: hoy } = relojBogota()
+
+    // `vencida` repite la expresión canónica del tablero en lugar de confiar
+    // en `estado`: el barrido nocturno pone VENCIDA, pero entre que la fecha
+    // pasa y el barrido corre hay una ventana en la que el estado miente. Por
+    // simetría, `programada` tampoco cuenta una fila cuya fecha ya pasó.
+    const [[t]] = await db.query(
+      `SELECT
+         COALESCE(SUM(p.estado = 'PROGRAMADA'
+                      AND NOT (p.fecha_prox IS NOT NULL AND p.fecha_prox < ?)), 0) AS programada,
+         COALESCE(SUM(p.estado = 'VENCIDA'
+                      OR (p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
+                          AND p.fecha_prox < ?)), 0) AS vencida,
+         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NULL), 0) AS sin_fecha,
+         COALESCE(SUM(p.estado = 'NO_APLICA'), 0) AS no_aplica
+       FROM h360_desinf_programacion p`, [hoy, hoy])
+
+    // Solo los que bajó este módulo: `inactivo_origen` existe para no contar
+    // como propio el vehículo que alguien inactivó a mano por un choque o un
+    // mantenimiento.
+    const [[fila]] = await db.query(
+      `SELECT COUNT(*) AS inactivos FROM vehiculos
+        WHERE activo = 0 AND inactivo_origen = 'DESINFECCION'`)
+    const inactivos = Number(fila?.inactivos ?? 0)
+
+    // `t?.campo ?? 0` y no `const [[{ programada }]]`: con cero filas,
+    // desestructurar un objeto de `undefined` lanza un TypeError que se va por
+    // `next(err)` y el 500 llega sin que se vea la causa. `Number()` porque
+    // mysql2 entrega `SUM`/`COUNT` como texto o `Decimal` según el driver y el
+    // panel los suma.
+    res.json({
+      fecha: hoy,
+      totales: {
+        programada: Number(t?.programada ?? 0),
+        vencida:    Number(t?.vencida ?? 0),
+        sin_fecha:  Number(t?.sin_fecha ?? 0),
+        no_aplica:  Number(t?.no_aplica ?? 0),
+        vehiculos_inactivos_por_desinfeccion: inactivos,
+      },
+    })
+  } catch (err) { next(err) }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Aviso del final de la jornada
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1124,6 +1183,7 @@ module.exports = {
   actualizarProgramacion,
   registrar,
   listarRegistros,
+  informeFlota,
   pendientes,
   tableroPublico,
   // Expuestos para las pruebas y para quien tenga que calcular lo mismo.

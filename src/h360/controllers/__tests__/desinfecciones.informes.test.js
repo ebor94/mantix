@@ -1,4 +1,5 @@
-// Informes de desinfección de vehículos — `GET /desinfecciones/registros`.
+// Informes de desinfección de vehículos — `GET /desinfecciones/registros` y
+// `GET /desinfecciones/informes/flota`.
 //
 // Lo que se cuida acá, en orden de qué pasa si se rompe:
 //
@@ -19,16 +20,30 @@
 //     diez claves que la pantalla pinta, los agregados como números y las dos
 //     fechas como texto o `null`. Un resumen calculado sobre la página pone
 //     «1 registro» encima de una tabla que dice 8.
+//  7. Que `vencida` del panel de flota NO se crea la columna `estado`. El
+//     barrido nocturno pone VENCIDA, pero entre que la fecha pasa y el barrido
+//     corre hay una ventana en la que el estado almacenado miente, y una cifra
+//     que la herede dice «0 vencidas» con vehículos vencidos en el patio.
 
 jest.mock('../../config/db', () => ({ query: jest.fn(), getConnection: jest.fn() }))
 jest.mock('../../services/desinfeccionEvidencia.service', () => ({
   guardarEvidencias: jest.fn(),
   descartarEvidencias: jest.fn(),
   enviarEvidenciasADrive: jest.fn(),
+  // Estas dos no las usa el controlador sino el ROUTER, que el bloque de
+  // `/informes/flota` monta de verdad (ver el comentario de ese describe). Sin
+  // ellas `router.post('/registro', …, undefined)` lanza al cargar el archivo
+  // y la suite entera no arranca, con el error en una línea que no es de acá.
+  subidaEvidencia: jest.fn((req, res, next) => next()),
+  servirEvidencia: jest.fn((req, res) => res.status(200).end()),
 }))
 
+const express = require('express')
+const request = require('supertest')
+const { servir, cerrarServidores } = require('../../../testing/servidorPrueba')
 const db = require('../../config/db')
 const ctrl = require('../desinfecciones.controller')
+const rutasDesinfecciones = require('../../routes/desinfecciones.routes')
 
 // ── Dobles de Express ──────────────────────────────────────────────────────
 const COORD = { usuario: 'COORD1', nombre: 'Coordinadora', rol: 'coordinador' }
@@ -449,5 +464,174 @@ describe('GET /desinfecciones/registros — resumen del período', () => {
     const [sql] = consultaDelResumen()
     expect(sql).toMatch(/DATE_FORMAT\(MIN\(reg\.fecha_ejecucion\), *'%Y-%m-%d'\) AS primera_ejecucion/)
     expect(sql).toMatch(/DATE_FORMAT\(MAX\(reg\.fecha_ejecucion\), *'%Y-%m-%d'\) AS ultima_ejecucion/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /desinfecciones/informes/flota
+//
+// Este bloque monta el ROUTER de verdad en vez de llamar al controlador como
+// el resto del archivo, y la razón es la restricción misma: el 403 lo pone
+// `requireRol` EN LA RUTA, y ese 403 *es* la protección del panel —el frontend
+// no repite ninguna lista de roles para decidir si lo pinta (repetirla fue la
+// causa raíz del bug 46899d2). Llamando al controlador directo, el 403 nunca
+// aparecería y una ruta a la que se le olvidara el `requireRol` pasaría las
+// pruebas igual.
+//
+// `verifyToken` no se monta acá: lo pone routes/index.js y su compuerta la
+// cubre desinfecciones.routes.test.js. Acá el usuario se inyecta a mano para
+// que lo único que decida el acceso sea la lista de roles de la ruta.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Como los entrega mysql2: `SUM(...)` llega como texto o `Decimal` según el
+// driver, nunca garantizado como número. Las cifras de producción medidas el
+// 2026-11-25: 21 programadas, 31 sin fecha, 2 NO_APLICA.
+const FLOTA = { programada: '21', vencida: '0', sin_fecha: '31', no_aplica: '2' }
+
+const CLAVES_FLOTA = ['programada', 'vencida', 'sin_fecha', 'no_aplica',
+  'vehiculos_inactivos_por_desinfeccion']
+
+// El enrutado discrimina por los alias `AS inactivos` y `AS programada`, NUNCA
+// por `/COUNT\(\*\)/`: las dos consultas llevan conteos y un patrón genérico le
+// devolvería a una la cifra de la otra.
+function prepararFlota({ totales = FLOTA, inactivos = '0' } = {}) {
+  db.query.mockImplementation(async sql => {
+    if (/AS inactivos/i.test(sql))  return [[{ inactivos }]]
+    if (/AS programada/i.test(sql)) return [[totales]]
+    return [[]]
+  })
+}
+
+let rolDelUsuario = 'coordinador'
+const app = express()
+app.use(express.json())
+app.use((req, res, next) => {
+  req.user = { usuario: 'U1', nombre: 'Usuaria', rol: rolDelUsuario }
+  next()
+})
+app.use('/desinfecciones', rutasDesinfecciones)
+
+/** Pide el informe de flota con ese rol y devuelve `{ status, body }`. */
+async function pedirFlota({ rol = 'coordinador' } = {}) {
+  rolDelUsuario = rol
+  const res = await request(await servir(app)).get('/desinfecciones/informes/flota')
+  return { status: res.status, body: res.body }
+}
+
+describe('GET /desinfecciones/informes/flota', () => {
+  // Con paréntesis y no `beforeEach(prepararFlota)`: así el hook nunca recibe
+  // el `done` de jest donde la función espera sus opciones.
+  beforeEach(() => prepararFlota())
+  afterEach(() => cerrarServidores())
+
+  test('el coordinador recibe las cifras', async () => {
+    const res = await pedirFlota({ rol: 'coordinador' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.fecha).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(res.body.totales).toEqual(expect.objectContaining({
+      programada: expect.any(Number), vencida: expect.any(Number),
+      sin_fecha: expect.any(Number), no_aplica: expect.any(Number),
+      vehiculos_inactivos_por_desinfeccion: expect.any(Number),
+    }))
+  })
+
+  test('el admin también', async () => {
+    expect((await pedirFlota({ rol: 'admin' })).status).toBe(200)
+  })
+
+  test.each(['asistente', 'asistente_tanatologo', 'asesor', 'supervisora'])(
+    'responde 403 al rol %s, que solo opera', async (rol) => {
+      const res = await pedirFlota({ rol })
+
+      expect(res.status).toBe(403)
+      // El 403 sale antes de tocar la base: no se cuentan cifras para
+      // descartarlas después.
+      expect(db.query).not.toHaveBeenCalled()
+    })
+
+  test('trae las cinco claves que pinta el panel, sin ninguna más', async () => {
+    const res = await pedirFlota({ rol: 'coordinador' })
+
+    expect(Object.keys(res.body.totales).sort()).toEqual([...CLAVES_FLOTA].sort())
+  })
+
+  test('las cifras llegan como números aunque la base las dé como texto', async () => {
+    // Sin Number(), el panel concatena cadenas: «21» + «0» da «210».
+    const { totales } = (await pedirFlota({ rol: 'coordinador' })).body
+
+    for (const clave of CLAVES_FLOTA) expect(typeof totales[clave]).toBe('number')
+    expect(totales.programada).toBe(21)
+    expect(totales.sin_fecha).toBe(31)
+    expect(totales.no_aplica).toBe(2)
+  })
+
+  test('cuenta vencida la fecha pasada aunque el estado diga PROGRAMADA', async () => {
+    // Entre que la fecha pasa y el barrido nocturno corre, el estado
+    // almacenado miente. La cifra no puede heredar esa mentira.
+    await pedirFlota({ rol: 'coordinador' })
+    const sql = db.query.mock.calls.map(c => c[0]).join('\n')
+    expect(sql).toMatch(/p\.fecha_prox < \?/)
+  })
+
+  test('no cuenta como programada una fila con fecha pasada', async () => {
+    await pedirFlota({ rol: 'coordinador' })
+    const sql = db.query.mock.calls.map(c => c[0]).join('\n')
+    expect(sql).toMatch(/NOT \(p\.fecha_prox IS NOT NULL AND p\.fecha_prox < \?\)/)
+  })
+
+  test('sin_fecha cuenta las que no tienen fecha y no son NO_APLICA', async () => {
+    await pedirFlota({ rol: 'coordinador' })
+    const sql = db.query.mock.calls.map(c => c[0]).join('\n')
+    expect(sql).toMatch(/p\.estado <> 'NO_APLICA' AND p\.fecha_prox IS NULL/)
+  })
+
+  test('el hoy lo manda el servidor y no CURDATE()', async () => {
+    // La zona del motor de base de datos no es la del negocio: con la base en
+    // UTC, después de las 19:00 de Cúcuta CURDATE() ya es mañana y las cifras
+    // se corren un día.
+    const res = await pedirFlota({ rol: 'coordinador' })
+
+    const [sqlTotales, params] = db.query.mock.calls.find(c => /AS programada/i.test(c[0]))
+    expect(sqlTotales).not.toMatch(/CURDATE\(\)/i)
+    expect(params).toEqual([res.body.fecha, res.body.fecha])
+  })
+
+  test('los inactivos son solo los que bajó la desinfección', async () => {
+    // `inactivo_origen` existe para que el módulo no cuente como suyo el
+    // vehículo que alguien bajó a mano por un choque o un mantenimiento.
+    prepararFlota({ inactivos: '3' })
+
+    const res = await pedirFlota({ rol: 'coordinador' })
+
+    expect(res.body.totales.vehiculos_inactivos_por_desinfeccion).toBe(3)
+    const [sqlInactivos] = db.query.mock.calls.find(c => /AS inactivos/i.test(c[0]))
+    expect(sqlInactivos).toMatch(/activo = 0 AND inactivo_origen = 'DESINFECCION'/)
+  })
+
+  test('si la base no devuelve filas, las cifras salen en ceros y no en 500', async () => {
+    // `const [[fila]]` con `fila?.campo ?? 0` y no `const [[{ campo }]]`:
+    // desestructurar un objeto de `undefined` lanza un TypeError que se va por
+    // `next(err)` y el 500 llega sin que se vea la causa.
+    db.query.mockImplementation(async () => [[]])
+
+    const res = await pedirFlota({ rol: 'coordinador' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.totales).toEqual({
+      programada: 0, vencida: 0, sin_fecha: 0, no_aplica: 0,
+      vehiculos_inactivos_por_desinfeccion: 0,
+    })
+  })
+
+  test('no consulta la programación con la plantilla del tablero', async () => {
+    // El endpoint es nuevo justamente para no tocar `SELECT_PROGRAMACION`, que
+    // comparten cuatro llamadas —dos de escritura— ni el tablero, que responde
+    // un arreglo pelado que la vista en producción ya consume.
+    await pedirFlota({ rol: 'coordinador' })
+
+    const sql = db.query.mock.calls.map(c => c[0]).join('\n')
+    expect(sql).not.toMatch(/JOIN h360_desinf_regla/)
+    expect(sql).not.toMatch(/dias_para_vencer/)
   })
 })
