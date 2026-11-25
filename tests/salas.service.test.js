@@ -480,7 +480,7 @@ describe('registrarVisita', () => {
 
   describe('cerrar el contrato', () => {
     const gestiones = require('../src/sv/services/gestiones.service');
-    const VENTA = { items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }] };
+    const VENTA = { clave: 'abcdefgh-1', items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }] };
     beforeEach(() => {
       M.SvEstado.findOne.mockImplementation(async ({ where }) => (where.estado_id === 5 ? { estado_id: 5, estado_es_ganado: 1 } : { estado_id: 11 }));
     });

@@ -8,6 +8,7 @@ const {
   SvFuente, SvPunto, SvLista, SvGestion, SvResultado, SvEmpresa
 } = require('../models');
 const { aISO, hoyISO, rangoDia } = require('../utils/fechas');
+const ventas = require('./ventas.service');
 
 // Construye WHERE base según el scope del usuario
 function buildScopeWhere(scope) {
@@ -241,6 +242,14 @@ async function preciosVigentes(prodIds, transaction) {
 }
 
 async function crear(payload, asesorId) {
+  // Donde se registra la venta, un contrato se cierra con una gestión, no al crear el cliente.
+  const estado = await SvEstado.findByPk(payload.prosp_estado_id, { attributes: ['estado_es_ganado'] });
+  if (estado?.estado_es_ganado && await ventas.areaRegistraVentas(payload.prosp_area_id)) {
+    const e = new Error('Un cliente nuevo no puede quedar cerrado: créalo y cierra el contrato con una gestión');
+    e.code = 'VALIDATION_ERROR';
+    throw e;
+  }
+
   const t = await sequelize.transaction();
   try {
     const intereses = interesesUnicos(payload.productos); // [{prod_id, es_principal, nota}]

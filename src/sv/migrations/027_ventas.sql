@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS sv_crm_ventas (
   venta_id         INT           AUTO_INCREMENT PRIMARY KEY,
   venta_prosp_id   INT           NOT NULL,
   venta_gest_id    BIGINT        NOT NULL,
+  venta_clave      VARCHAR(40)   NOT NULL,   -- una por formulario: evita registrar dos veces
   venta_asesor_id  INT           NOT NULL,
   venta_area_id    INT           NOT NULL,
   venta_fecha      DATE          NOT NULL,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS sv_crm_ventas (
   venta_created_at DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   venta_updated_at DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_venta_gestion (venta_gest_id),
+  UNIQUE KEY uq_venta_clave (venta_clave),
   INDEX idx_venta_prosp (venta_prosp_id),
   INDEX idx_venta_asesor_fecha (venta_asesor_id, venta_fecha),
   INDEX idx_venta_area_fecha (venta_area_id, venta_fecha),

@@ -14,8 +14,10 @@ const logger = require('../../utils/logger');
 
 async function crear(payload, asesorId) {
   const t = await sequelize.transaction();
+  let gest;
+  let recuperacionGenerada = null;
   try {
-    const gest = await SvGestion.create({
+    gest = await SvGestion.create({
       gest_prosp_id:        payload.gest_prosp_id,
       gest_asesor_id:       asesorId, // siempre quien registra; el payload no decide el autor
       gest_resultado_id:    payload.gest_resultado_id || null,
@@ -72,7 +74,6 @@ async function crear(payload, asesorId) {
     }
 
     // Hook cross-área: si pasó a estado final NO ganado en Previsión, disparar recuperación SVC
-    let recuperacionGenerada = null;
     if (payload.gest_estado_nuevo_id) {
       const [prospecto, estadoNuevo] = await Promise.all([
         SvProspecto.findByPk(payload.gest_prosp_id, { transaction: t }),
@@ -91,26 +92,27 @@ async function crear(payload, asesorId) {
     }
 
     await t.commit();
-
-    // Devolver con relaciones cargadas + info de recuperación generada (si aplica)
-    const result = await SvGestion.findByPk(gest.gest_id, {
-      include: [
-        { model: SvResultado, as: 'resultado' },
-        { model: SvEstado,    as: 'estadoNuevo' },
-        { model: SvUsuario,   as: 'asesor', attributes: ['usr_id', 'usr_nombre', 'usr_apellido'] }
-      ]
-    });
-    if (recuperacionGenerada) {
-      result.dataValues.recuperacion_svc = {
-        prosp_id: recuperacionGenerada.prosp_id,
-        mensaje: 'Se generó un prospecto SVC para recuperación de este cliente.'
-      };
-    }
-    return result;
   } catch (e) {
     await t.rollback();
     throw e;
   }
+
+  // Ya quedó guardada: si esta lectura falla no hay nada que revertir.
+  // Devolver con relaciones cargadas + info de recuperación generada (si aplica)
+  const result = await SvGestion.findByPk(gest.gest_id, {
+    include: [
+      { model: SvResultado, as: 'resultado' },
+      { model: SvEstado,    as: 'estadoNuevo' },
+      { model: SvUsuario,   as: 'asesor', attributes: ['usr_id', 'usr_nombre', 'usr_apellido'] }
+    ]
+  });
+  if (recuperacionGenerada) {
+    result.dataValues.recuperacion_svc = {
+      prosp_id: recuperacionGenerada.prosp_id,
+      mensaje: 'Se generó un prospecto SVC para recuperación de este cliente.'
+    };
+  }
+  return result;
 }
 
 async function historial(prospId, { page = 1, limit = 20 } = {}) {

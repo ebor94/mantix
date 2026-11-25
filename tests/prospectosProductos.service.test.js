@@ -3,12 +3,15 @@ jest.mock('../src/sv/models', () => ({
   SvProspecto: { create: jest.fn(), findByPk: jest.fn() },
   SvProspectoProducto: { create: jest.fn(), findAll: jest.fn(), destroy: jest.fn() },
   SvProducto: { findAll: jest.fn() },
-  SvPersona: {}, SvUsuario: {}, SvEstado: {}, SvFuente: {}, SvPunto: {},
+  SvEstado: { findByPk: jest.fn() },
+  SvPersona: {}, SvUsuario: {}, SvFuente: {}, SvPunto: {},
   SvLista: {}, SvGestion: {}, SvResultado: {}, SvEmpresa: {}
 }));
+jest.mock('../src/sv/services/ventas.service', () => ({ areaRegistraVentas: jest.fn() }));
 
 const { Op } = require('sequelize');
 const M = require('../src/sv/models');
+const ventas = require('../src/sv/services/ventas.service');
 const prospectos = require('../src/sv/services/prospectos.service');
 
 const t = { commit: jest.fn(), rollback: jest.fn() };
@@ -21,6 +24,7 @@ beforeEach(() => {
   M.SvProspecto.create.mockResolvedValue({ prosp_id: 900 });
   M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 900 });
   M.SvProspectoProducto.findAll.mockResolvedValue([]);
+  M.SvEstado.findByPk.mockResolvedValue({ estado_es_ganado: 0 });
   M.SvProducto.findAll.mockImplementation(async ({ where }) =>
     where.prod_id[Op.in].filter((id) => id in PRECIOS).map((id) => ({ prod_id: id, prod_precio_base: PRECIOS[id], prod_es_generico: GENERICOS.has(id) ? 1 : 0 })));
 });
@@ -70,6 +74,35 @@ describe('crear', () => {
     await prospectos.crear({ ...BASE }, 7);
     expect(M.SvProducto.findAll).not.toHaveBeenCalled();
     expect(M.SvProspectoProducto.create).not.toHaveBeenCalled();
+  });
+
+  test('un cliente no nace cerrado en un área que registra ventas: VALIDATION_ERROR y sin transacción', async () => {
+    M.SvEstado.findByPk.mockResolvedValue({ estado_es_ganado: 1 });
+    ventas.areaRegistraVentas.mockResolvedValue(true);
+    const e = await prospectos.crear({ ...BASE, prosp_estado_id: 5 }, 7).catch((x) => x);
+    expect(e.code).toBe('VALIDATION_ERROR');
+    expect(e.message).toBe('Un cliente nuevo no puede quedar cerrado: créalo y cierra el contrato con una gestión');
+    expect(M.SvEstado.findByPk.mock.calls[0][0]).toBe(5);
+    expect(ventas.areaRegistraVentas).toHaveBeenCalledWith(1);
+    expect(M.sequelize.transaction).not.toHaveBeenCalled();
+    expect(M.SvProspecto.create).not.toHaveBeenCalled();
+  });
+
+  test('en un área que no registra ventas sí puede nacer en un estado ganado', async () => {
+    M.SvEstado.findByPk.mockResolvedValue({ estado_es_ganado: 1 });
+    ventas.areaRegistraVentas.mockResolvedValue(false);
+    await prospectos.crear({ ...BASE, prosp_area_id: 3 }, 7);
+    expect(ventas.areaRegistraVentas).toHaveBeenCalledWith(3);
+    expect(M.SvProspecto.create).toHaveBeenCalledTimes(1);
+    expect(t.commit).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([['no ganado', { estado_es_ganado: 0 }], ['que no existe', null]])('con un estado %s crea sin preguntar por el área', async (_n, estado) => {
+    M.SvEstado.findByPk.mockResolvedValue(estado);
+    ventas.areaRegistraVentas.mockResolvedValue(true);
+    await prospectos.crear({ ...BASE }, 7);
+    expect(ventas.areaRegistraVentas).not.toHaveBeenCalled();
+    expect(M.SvProspecto.create).toHaveBeenCalledTimes(1);
   });
 });
 

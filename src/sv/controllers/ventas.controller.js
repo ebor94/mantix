@@ -8,9 +8,10 @@ const { ok, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES_SUPERVISORES } = require('../config/constants');
 const { fueraDeAlcance } = require('../utils/alcanceProspecto');
 
+// Solo cifras: Number() también acepta '1e3', '0x10' o ' 40'.
 const idDe = (req) => {
-  const id = Number(req.params.id);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  const id = /^\d{1,10}$/.test(req.params.id) ? Number(req.params.id) : 0;
+  return id > 0 ? id : null;
 };
 
 // Verifica el alcance sobre el cliente. Devuelve false si ya respondió 404 / 403.

@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     venta_id:         { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     venta_prosp_id:   { type: DataTypes.INTEGER, allowNull: false },
     venta_gest_id:    { type: DataTypes.BIGINT, allowNull: false, unique: 'uq_venta_gestion' },
+    venta_clave:      { type: DataTypes.STRING(40), allowNull: false, unique: 'uq_venta_clave' }, // una por formulario
     venta_asesor_id:  { type: DataTypes.INTEGER, allowNull: false },   // dueño del cliente: a él le suma
     venta_area_id:    { type: DataTypes.INTEGER, allowNull: false },
     venta_fecha:      { type: DataTypes.DATEONLY, allowNull: false },  // día en Colombia

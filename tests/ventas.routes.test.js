@@ -19,6 +19,9 @@ const ASESOR     = { usr_id: 7, usr_area_id: 1, usr_grupo_id: 1, rol: { rol_codi
 const OTRO       = { ...ASESOR, usr_id: 8 };
 const SUPERVISOR = { usr_id: 3, usr_area_id: 1, usr_grupo_id: 1, gruposExtra: [], rol: { rol_codigo: 'SUPERVISOR' } };
 const AJENO      = { ...SUPERVISOR, usr_id: 4, usr_grupo_id: 2 };
+const ADMIN      = { usr_id: 5, usr_area_id: 1, areasExtra: [], rol: { rol_codigo: 'ADMIN_AREA' } };
+const ADMIN_OTRA = { ...ADMIN, usr_id: 6, usr_area_id: 2 };
+const AGENTE     = { ...ASESOR, rol: { rol_codigo: 'AGENTE_SVC' } }; // el cliente es suyo: solo lo frena el rol
 const BODY = { items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }], motivo: 'precio mal', cambios_vistos: 0 };
 
 function app(user) {
@@ -49,7 +52,10 @@ describe('ver las ventas del cliente', () => {
   test.each([
     ['su asesor', ASESOR, 900, 200], ['su supervisor', SUPERVISOR, 900, 200],
     ['otro asesor', OTRO, 900, 403], ['un supervisor de otro grupo', AJENO, 900, 403],
-    ['un cliente que no existe', ASESOR, 901, 404], ['un id inválido', ASESOR, 'abc', 404]
+    ['un cliente que no existe', ASESOR, 901, 404], ['un id inválido', ASESOR, 'abc', 404],
+    ['900 en otra notación (9e2)', ASESOR, '9e2', 404], ['900 en hexadecimal (0x384)', ASESOR, '0x384', 404],
+    ['900 con decimales', ASESOR, '900.0', 404], ['900 con signo', ASESOR, '+900', 404],
+    ['900 con espacio', ASESOR, '%20900', 404], ['más de 10 cifras', ASESOR, '00000000900', 404], ['cero', ASESOR, '0', 404]
   ])('%s', async (_n, user, id, estado) => {
     const r = await request(await app(user)).get(`/api/sv/prospectos/${id}/ventas`);
     expect(r.status).toBe(estado);
@@ -78,8 +84,32 @@ describe.each([['corregir', 'put', '/ventas/40', BODY], ['anular', 'post', '/ven
     expect(ventas[accion]).not.toHaveBeenCalled();
   });
 
+  test('el administrador de su área puede; el de otra área no', async () => {
+    expect((await pedir(ADMIN)).status).toBe(200);
+    expect(ventas[accion]).toHaveBeenCalledTimes(1);
+    const r = await pedir(ADMIN_OTRA);
+    expect(r.status).toBe(403);
+    expect(r.body.message).toBe('Fuera de tu área');
+    expect(ventas[accion]).toHaveBeenCalledTimes(1);
+  });
+
+  test('el agente de SVC no puede, aunque sea su cliente', async () => {
+    const r = await pedir(AGENTE);
+    expect(r.status).toBe(403);
+    expect(r.body.message).toBe('Solo el supervisor puede corregir o anular una venta');
+    expect(ventas[accion]).not.toHaveBeenCalled();
+  });
+
   test('una venta que no existe → 404', async () => {
     expect((await pedir(SUPERVISOR, ruta.replace('40', '41'))).status).toBe(404);
+  });
+
+  test.each(['abc', '4e1', '0x28', '40.0', '+40', '%2040', '00000000040', '0'])('un id inválido (%s) → 404, sin consultar', async (id) => {
+    const r = await pedir(SUPERVISOR, ruta.replace('40', id));
+    expect(r.status).toBe(404);
+    expect(r.body.error).toBe('NOT_FOUND');
+    expect(ventas.obtener).not.toHaveBeenCalled();
+    expect(ventas[accion]).not.toHaveBeenCalled();
   });
 
   test('sin motivo → 422', async () => {

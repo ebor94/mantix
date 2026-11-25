@@ -5,6 +5,7 @@
  *  - Se guarda en la misma transacción que la gestión que cierra el contrato.
  *  - Suma al asesor dueño del cliente, aunque la registre otra persona.
  *  - El total y el precio ofrecido los pone el servidor; nunca llegan del cliente.
+ *  - Cada venta lleva la clave de su formulario: reenviarlo no la registra dos veces.
  * Los errores llevan `code` y los responde svErrorHandler.
  */
 const { Op, QueryTypes } = require('sequelize');
@@ -74,6 +75,17 @@ function filasDe(ventaId, items, ofrecido) {
   }));
 }
 
+// La gestión es nueva en esta transacción, así que de las llaves únicas solo puede chocar la
+// clave: la persona reenvió un formulario que ya se había guardado.
+async function crearUnaVez(datos, transaction) {
+  try {
+    return await SvVenta.create(datos, { transaction });
+  } catch (e) {
+    if (e.name !== 'SequelizeUniqueConstraintError') throw e;
+    throw error('CONFLICT', 'Esta venta ya quedó registrada. Recarga la ficha para verla');
+  }
+}
+
 async function registrarAlCerrar({ prospecto, gestId, estadoNuevo, venta, usuarioId, transaction }) {
   const aplica = !!prospecto && !!estadoNuevo?.estado_es_ganado
     && await areaRegistraVentas(prospecto.prosp_area_id, transaction);
@@ -87,15 +99,16 @@ async function registrarAlCerrar({ prospecto, gestId, estadoNuevo, venta, usuari
 
   const { porId, total } = await validarItems(venta.items, prospecto.prosp_area_id, transaction);
   const ofrecido = await preciosOfrecidos(prospecto.prosp_id, porId, transaction);
-  const v = await SvVenta.create({
+  const v = await crearUnaVez({
     venta_prosp_id: prospecto.prosp_id,
     venta_gest_id: gestId,
+    venta_clave: venta.clave,
     venta_asesor_id: prospecto.prosp_asesor_id || usuarioId,
     venta_area_id: prospecto.prosp_area_id,
     venta_fecha: hoyBogotaISO(),
     venta_total: total,
     venta_created_by: usuarioId
-  }, { transaction });
+  }, transaction);
   await SvVentaItem.bulkCreate(filasDe(v.venta_id, venta.items, ofrecido), { transaction });
   return v;
 }
@@ -106,18 +119,22 @@ const DETALLE = [
   { model: SvVentaCambio, as: 'cambios', include: [{ model: SvUsuario, as: 'usuario', attributes: ['usr_id', 'usr_nombre', 'usr_apellido'] }] }
 ];
 
+// Productos como se registraron; cambios, del más reciente al más antiguo.
+const ORDEN_DETALLE = [
+  [{ model: SvVentaItem, as: 'items' }, 'vi_id', 'ASC'],
+  [{ model: SvVentaCambio, as: 'cambios' }, 'vc_id', 'DESC']
+];
+
 async function listarDeProspecto(prospId) {
   return SvVenta.findAll({
     where: { venta_prosp_id: prospId },
     include: DETALLE,
-    order: [['venta_fecha', 'DESC'], ['venta_id', 'DESC'],
-      [{ model: SvVentaItem, as: 'items' }, 'vi_id', 'ASC'],
-      [{ model: SvVentaCambio, as: 'cambios' }, 'vc_id', 'DESC']]
+    order: [['venta_fecha', 'DESC'], ['venta_id', 'DESC'], ...ORDEN_DETALLE]
   });
 }
 
 async function obtener(ventaId) {
-  return SvVenta.findByPk(ventaId, { include: DETALLE });
+  return SvVenta.findByPk(ventaId, { include: DETALLE, order: ORDEN_DETALLE });
 }
 
 // Bloquea la venta y comprueba que siga como la vio quien la está cambiando.
@@ -145,7 +162,10 @@ async function enTransaccion(fn) {
 }
 
 const resumen = (filas) => filas.map((f) => ({
-  prod_id: f.vi_prod_id, cantidad: f.vi_cantidad, precio_unitario: Number(f.vi_precio_unitario)
+  prod_id: f.vi_prod_id,
+  cantidad: f.vi_cantidad,
+  precio_unitario: Number(f.vi_precio_unitario),
+  precio_ofrecido: f.vi_precio_ofrecido == null ? null : Number(f.vi_precio_ofrecido)
 }));
 
 async function corregir(ventaId, { items, motivo, cambios_vistos: vistos }, usuarioId) {
