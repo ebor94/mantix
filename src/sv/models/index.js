@@ -53,7 +53,11 @@ const db = {
   SvEmpresaPropuestaArchivo: require('./EmpresaPropuestaArchivo')(sequelize, Sequelize.DataTypes),
   SvFidelizMovimiento:       require('./FidelizMovimiento')(sequelize, Sequelize.DataTypes),
   // ─── Salas de velación: visitas de Prenecesidad (migración 023) ───
-  SvSalaContratante:         require('./SalaContratante')(sequelize, Sequelize.DataTypes)
+  SvSalaContratante:         require('./SalaContratante')(sequelize, Sequelize.DataTypes),
+  // ─── Ventas al cerrar el contrato (migración 027) ───
+  SvVenta:                   require('./Venta')(sequelize, Sequelize.DataTypes),
+  SvVentaItem:               require('./VentaItem')(sequelize, Sequelize.DataTypes),
+  SvVentaCambio:             require('./VentaCambio')(sequelize, Sequelize.DataTypes)
 };
 
 // Asociaciones

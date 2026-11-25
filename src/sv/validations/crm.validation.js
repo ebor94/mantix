@@ -3,6 +3,7 @@
  * Joi schemas para personas, prospectos, gestiones y listas.
  */
 const Joi = require('joi');
+const ventas = require('./ventas.validation');
 
 const personas = {
   buscar: Joi.object({
@@ -128,7 +129,8 @@ const gestiones = {
     gest_prox_hora:       Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
     gest_ubicacion_lat:   Joi.number().min(-90).max(90).allow(null),
     gest_ubicacion_lng:   Joi.number().min(-180).max(180).allow(null),
-    gest_fecha_hora:      Joi.date().iso()
+    gest_fecha_hora:      Joi.date().iso(),
+    venta:                ventas.venta   // solo al cerrar el contrato; ver ventas.service
   }),
   list: Joi.object({
     page:  Joi.number().integer().min(1).default(1),
