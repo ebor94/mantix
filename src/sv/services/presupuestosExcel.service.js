@@ -171,7 +171,7 @@ function leerAparte(buffer, maxColumna) {
       // Sin pid no llegó a arrancar: no es culpa del archivo.
       if (!hijo.pid) {
         salio = true;
-        if (!respondido) logger.warn('[SV] No arrancó el lector del presupuesto', { code: err?.code });
+        logger.warn('[SV] No arrancó el lector del presupuesto', { code: err?.code });
         if (respondido) liberar(); else terminar(reject, noSePudo());
       } else terminar(reject, demasiado());
     });

@@ -362,6 +362,19 @@ describe('leer', () => {
       expect(logger.warn.mock.calls[0][1]).toEqual({ code: 'EMFILE' });
     });
 
+    test('b3: sin descriptores, send lanza antes que el evento error y el log lleva el code igual', async () => {
+      fork.mockImplementationOnce(() => {
+        const h = new EventEmitter();
+        h.kill = jest.fn(); // sin pid ni send, como en EMFILE
+        hijos.push(h);
+        return h;
+      });
+      await error(leer(BUF));
+      hijos[0].emit('error', Object.assign(new Error('x'), { code: 'EMFILE' }));
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn.mock.calls[0][1]).toEqual({ code: 'EMFILE' });
+    });
+
     test('si fork lanza o send falla: CONFLICT y queda libre', async () => {
       fork.mockImplementationOnce(() => { throw new Error('ENOMEM'); });
       expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
@@ -610,6 +623,26 @@ describe('leer', () => {
       expect(await error(leer(buf))).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
       expect((await leer(await base())).filas).toHaveLength(2);
     }, 30000);
+
+    // Dos directorios seguidos: la cuenta leería el primero y exceljs el segundo, que puede decir otra cosa.
+    test('b1: un segundo directorio escondido antes del final se rechaza', async () => {
+      const buf = await base();
+      const fin = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+      const ini = buf.readUInt32LE(fin + 16);
+      const largo = buf.readUInt32LE(fin + 12);
+      const directorio = (corrido) => {
+        const d = Buffer.from(buf.subarray(ini, ini + largo));
+        for (let p = 0; p < largo; p += 46 + d.readUInt16LE(p + 28) + d.readUInt16LE(p + 30) + d.readUInt16LE(p + 32)) {
+          d.writeUInt32LE(d.readUInt32LE(p + 42) + corrido, p + 42);
+        }
+        return d;
+      };
+      const final = Buffer.from(buf.subarray(fin));
+      final.writeUInt32LE(ini + largo, 16);
+      const doble = Buffer.concat([Buffer.alloc(largo), buf.subarray(0, ini), directorio(largo), directorio(0), final]);
+      expect(await error(leer(doble))).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
+      expect((await leer(buf)).filas).toHaveLength(2);
+    });
 
     test('el hijo termina solo al cortarse el canal', async () => {
       const hijo = childProcess.fork(path.join(__dirname, '../src/sv/services/presupuestosExcel.lector.js'), [], {

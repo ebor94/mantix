@@ -55,6 +55,8 @@ function cabeEnMemoria(buf) {
   try {
     const fin = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
     if (fin < 0) return false;
+    // El directorio termina donde empieza el final: si hay otro en medio, exceljs leería también ese.
+    if (buf.readUInt32LE(fin + 16) + buf.readUInt32LE(fin + 12) !== fin) return false;
     const total = buf.readUInt16LE(fin + 10);
     let p = buf.readUInt32LE(fin + 16);
     let usado = 0;
