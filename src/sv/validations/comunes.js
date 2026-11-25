@@ -1,6 +1,5 @@
 /** sv/validations/comunes.js — piezas Joi que comparten los schemas. */
 const Joi = require('joi');
-const { aISO } = require('../utils/fechas');
 
 const diaBogota = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' });
 
@@ -10,6 +9,6 @@ const diaBogota = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' 
  * Si llega con hora, es el día de Colombia.
  */
 const diaISO = Joi.date().iso().custom((valor, { original }) =>
-  (/T|\s/.test(String(original)) ? diaBogota.format(valor) : aISO(valor)));
+  (/T|\s/.test(String(original)) ? diaBogota.format(valor) : valor.toISOString().slice(0, 10)));
 
 module.exports = { diaISO };

@@ -6,13 +6,14 @@ const router = require('express').Router();
 const ctrl   = require('../controllers/renovaciones.controller');
 const Joi    = require('joi');
 const { validate } = require('../middleware/validate');
+const { diaISO } = require('../validations/comunes');
 
 router.use(ctrl.requireAreaEmp);
 
 const schemas = {
   marcarConvenio: Joi.object({
     fecha_inicio:      Joi.date().iso().required(),
-    fecha_vencimiento: Joi.date().iso().allow(null)
+    fecha_vencimiento: diaISO.allow(null)
   }),
   query: Joi.object({
     dias: Joi.number().integer().min(0).max(365)
@@ -25,3 +26,4 @@ router.get  ('/vencidos',                                                       
 router.post ('/jobs/manual',                                                       ctrl.ejecutarJobManual);
 
 module.exports = router;
+module.exports.schemas = schemas; // para probar los schemas sin levantar la ruta
