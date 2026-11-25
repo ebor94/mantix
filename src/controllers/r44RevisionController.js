@@ -14,6 +14,7 @@ const { R44Proveedor, R44Revision, R44Documento, R44Usuario } = require('../mode
 const { generarR44Pdf, cargarProveedorCompleto } = require('../services/r44Pdf');
 const { archivarDocumentosEnDrive, notificarBienvenidaProveedor } = require('../services/n8nService');
 const { carpetaProveedor } = require('../services/r44Carpeta');
+const { quitarProteccionPdf } = require('../services/pdfDecrypt');
 
 // Contraseña temporal legible (sin caracteres ambiguos) para cuentas creadas
 // por el revisor. El proveedor la cambia al primer ingreso.
@@ -381,6 +382,8 @@ const r44RevisionController = {
       const paraDrive = [];
       for (const [fieldname, [file]] of entradas) {
         const tipoDB = MAPA[fieldname] || fieldname;
+        // Quitar la protección del PDF (si la tiene) para que sea legible por la IA.
+        if (file.mimetype === 'application/pdf') await quitarProteccionPdf(file.path);
         // Reemplazar: no hay índice único en (proveedor_id, tipo_documento),
         // así que se borra el existente de ese tipo antes de crear el nuevo.
         await R44Documento.destroy({ where: { proveedor_id: pid, tipo_documento: tipoDB } });
