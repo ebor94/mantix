@@ -7,6 +7,8 @@ module.exports = (sequelize, DataTypes) => {
     prod_nombre:           { type: DataTypes.STRING(120), allowNull: false },
     prod_descripcion:      { type: DataTypes.TEXT },
     prod_categoria:        { type: DataTypes.STRING(50) },
+    prod_tipo:             { type: DataTypes.STRING(50) },                    // categoría → tipo → producto (migración 025)
+    prod_es_generico:      { type: DataTypes.TINYINT, defaultValue: 0 },      // 1 = fila "por definir" del tipo, sin precio
     prod_precio_base:      { type: DataTypes.DECIMAL(12, 2) },
     prod_requiere_empresa: { type: DataTypes.TINYINT, defaultValue: 0 },
     prod_activo:           { type: DataTypes.TINYINT, defaultValue: 1 },
