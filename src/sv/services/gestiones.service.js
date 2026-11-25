@@ -36,8 +36,13 @@ async function crear(payload, asesorId) {
     // Actualizar prospecto si hay nuevo estado o nueva fecha
     const prospUpdate = {};
     if (payload.gest_estado_nuevo_id) prospUpdate.prosp_estado_id = payload.gest_estado_nuevo_id;
-    if (payload.gest_prox_fecha)      prospUpdate.prosp_prox_gestion_fecha = payload.gest_prox_fecha;
-    if (payload.gest_prox_hora)       prospUpdate.prosp_prox_gestion_hora  = payload.gest_prox_hora;
+    if (payload.gest_prox_fecha) {
+      // La cita se reemplaza completa: sin hora nueva, no se conserva la vieja
+      prospUpdate.prosp_prox_gestion_fecha = payload.gest_prox_fecha;
+      prospUpdate.prosp_prox_gestion_hora  = payload.gest_prox_hora || null;
+    } else if (payload.gest_prox_hora) {
+      prospUpdate.prosp_prox_gestion_hora  = payload.gest_prox_hora;
+    }
 
     // Si el cambio es a un estado FINAL (firmado/cerrado/perdido), ajustar la próxima gestión
     // para que no aparezca colgada en el calendario / urgentes futuros.
@@ -55,6 +60,12 @@ async function crear(payload, asesorId) {
           prospUpdate.prosp_prox_gestion_hora  = null;
         }
       }
+    }
+
+    // PAP: la visita cumple la cita pendiente. Gana sobre el estado final.
+    if (payload.quitar_prox && !payload.gest_prox_fecha) {
+      prospUpdate.prosp_prox_gestion_fecha = null;
+      prospUpdate.prosp_prox_gestion_hora  = null;
     }
 
     if (Object.keys(prospUpdate).length) {

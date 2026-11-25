@@ -128,6 +128,7 @@ const gestiones = {
     gest_duracion_seg:    Joi.number().integer().min(0).allow(null),
     gest_prox_fecha:      diaISO.allow(null),
     gest_prox_hora:       Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
+    quitar_prox:          Joi.boolean(),   // PAP: la visita cumple la cita pendiente
     gest_ubicacion_lat:   Joi.number().min(-90).max(90).allow(null),
     gest_ubicacion_lng:   Joi.number().min(-180).max(180).allow(null),
     gest_fecha_hora:      Joi.date().iso(),

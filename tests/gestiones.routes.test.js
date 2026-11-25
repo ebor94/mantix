@@ -300,3 +300,17 @@ describe('GET /api/sv/gestiones/resumen-dia', () => {
     expect(next).toHaveBeenCalledWith(err);
   });
 });
+
+describe('POST /api/sv/gestiones — quitar_prox', () => {
+  test('quitar_prox: true llega al servicio', async () => {
+    const r = await request(await app(ASESOR)).post('/api/sv/gestiones').send({ ...GESTION, quitar_prox: true });
+    expect(r.status).toBe(201);
+    expect(gestiones.crear).toHaveBeenCalledWith(expect.objectContaining({ quitar_prox: true }), 10);
+  });
+
+  test("quitar_prox: 'quizás' → 422 y no registra", async () => {
+    const r = await request(await app(ASESOR)).post('/api/sv/gestiones').send({ ...GESTION, quitar_prox: 'quizás' });
+    expect(r.status).toBe(422);
+    expect(gestiones.crear).not.toHaveBeenCalled();
+  });
+});
