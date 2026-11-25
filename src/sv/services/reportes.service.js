@@ -1,9 +1,8 @@
 /**
  * sv/services/reportes.service.js
- * Dashboard por área + reporte personal del asesor.
- * Lee de snapshot_diario y agrega los counts del día actual (no en snapshot todavía).
+ * Dashboard por área (snapshot diario) + reportes del asesor y del equipo, calculados al momento.
  */
-const { Op, fn, col, literal } = require('sequelize');
+const { Op, QueryTypes, fn, col, literal } = require('sequelize');
 const {
   sequelize, SvSnapshotDiario, SvUsuario, SvArea, SvGrupo, SvGestion, SvProspecto, SvResultado, SvMeta, SvEstado
 } = require('../models');
@@ -33,6 +32,20 @@ async function dashboardArea({ scope, fecha }) {
   return { fecha: dia, kpis: totales[0] || {} };
 }
 
+// Misma definición que snapshot.service. En SQL directo: en un `where`, Sequelize corre las horas
+// del rango según la zona horaria del servidor.
+async function contarGestiones(usrId, desde, hasta) {
+  const [fila] = await sequelize.query(`
+    SELECT COUNT(*) AS gestiones, COUNT(CASE WHEN r.resultado_es_positivo = 1 THEN 1 END) AS interesados
+      FROM sv_crm_gestiones g
+      LEFT JOIN sv_cfg_resultados_gestion r ON r.resultado_id = g.gest_resultado_id
+     WHERE g.gest_asesor_id = :usrId AND g.gest_fecha_hora BETWEEN :inicio AND :fin`, {
+    replacements: { usrId, inicio: `${desde} 00:00:00`, fin: `${hasta} 23:59:59` },
+    type: QueryTypes.SELECT
+  });
+  return { gestiones: Number(fila.gestiones), interesados: Number(fila.interesados) };
+}
+
 async function reporteAsesor(usrId, { mes, anio, desde, hasta }) {
   // Si pasaron desde/hasta usar esos (normalizados); sino calcular del mes
   let dStart, dEnd;
@@ -51,16 +64,13 @@ async function reporteAsesor(usrId, { mes, anio, desde, hasta }) {
     order: [['snap_fecha', 'ASC']]
   });
 
-  const totales = snaps.reduce((acc, s) => {
-    acc.gestiones   += s.snap_gestiones_realizadas;
-    acc.interesados += s.snap_interesados_nuevos;
-    return acc;
-  }, { gestiones: 0, interesados: 0 });
-
-  // Contratos y valor se calculan al momento: las correcciones y anulaciones del supervisor
-  // cambian días que el snapshot ya guardó.
+  // Todo al momento: el snapshot de hoy no existe hasta las 11:55 p. m., y las correcciones y
+  // anulaciones del supervisor cambian días que ya guardó.
   const metricas = await ventas.metricasPorAsesor([usrId], dStart, dEnd);
-  Object.assign(totales, metricas.get(usrId) || { contratos: 0, valor: 0 });
+  const totales = {
+    ...(await contarGestiones(usrId, dStart, dEnd)),
+    ...(metricas.get(usrId) || { contratos: 0, valor: 0 })
+  };
 
   // Meta del periodo
   let meta = null;

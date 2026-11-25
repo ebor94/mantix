@@ -1,6 +1,6 @@
 jest.mock('../src/sv/models', () => ({
   sequelize: { transaction: jest.fn(), query: jest.fn() },
-  SvVenta: { create: jest.fn(), findByPk: jest.fn(), findAll: jest.fn() },
+  SvVenta: { create: jest.fn(), findByPk: jest.fn(), findAll: jest.fn(), findOne: jest.fn() },
   SvVentaItem: { bulkCreate: jest.fn(), findAll: jest.fn(), destroy: jest.fn() },
   SvVentaCambio: { create: jest.fn(), count: jest.fn() },
   SvProducto: { findOne: jest.fn(), findAll: jest.fn() },
@@ -129,6 +129,24 @@ describe('registrarAlCerrar', () => {
     M.SvVentaItem.bulkCreate.mockRejectedValue(choque);
     expect(await error(cerrar())).toBe(choque);
     expect(choque.code).toBeUndefined();
+  });
+});
+
+describe('yaRegistrada', () => {
+  test.each([['existe una venta con esa clave', true, { venta_id: 40 }], ['no existe', false, null]])('%s → %s', async (_n, esperado, fila) => {
+    M.SvVenta.findOne.mockResolvedValue(fila);
+    expect(await ventas.yaRegistrada(CLAVE)).toBe(esperado);
+    expect(M.SvVenta.findOne.mock.calls[0][0].where).toEqual({ venta_clave: 'abcdefgh-1' });
+  });
+
+  test('el error es el mismo de registrarAlCerrar', async () => {
+    M.SvVenta.create.mockRejectedValue(Object.assign(new Error('Validation error'), { name: 'SequelizeUniqueConstraintError' }));
+    const alCerrar = await error(ventas.registrarAlCerrar({
+      prospecto: PROSPECTO, gestId: 77, estadoNuevo: GANADO, venta: { clave: CLAVE, items: ITEMS }, usuarioId: 7, transaction: t
+    }));
+    const e = ventas.errorYaRegistrada();
+    expect([e.code, e.message]).toEqual([alCerrar.code, alCerrar.message]);
+    expect(e.code).toBe('CONFLICT');
   });
 });
 
@@ -265,11 +283,19 @@ describe('corregir y anular', () => {
     expect(venta.update).not.toHaveBeenCalled();
   });
 
-  test('anular la marca y deja el motivo y el total que tenía', async () => {
+  test('anular la marca y deja el motivo, el total y los productos que tenía', async () => {
     await ventas.anular(40, { motivo: 'el cliente desistió', cambios_vistos: 0 }, 3);
     expect(M.SvVentaCambio.create).toHaveBeenCalledWith({
-      vc_venta_id: 40, vc_usr_id: 3, vc_accion: 'anular', vc_motivo: 'el cliente desistió', vc_total_antes: '21785000.00', vc_total_despues: 0
+      vc_venta_id: 40, vc_usr_id: 3, vc_accion: 'anular', vc_motivo: 'el cliente desistió', vc_total_antes: '21785000.00', vc_total_despues: 0,
+      vc_detalle: {
+        antes: [
+          { prod_id: 10, cantidad: 2, precio_unitario: 8500000, precio_ofrecido: 8000000 },
+          { prod_id: 11, cantidad: 1, precio_unitario: 4785000, precio_ofrecido: null }
+        ],
+        despues: []
+      }
     }, { transaction: t });
+    expect(M.SvVentaItem.findAll).toHaveBeenCalledWith({ where: { vi_venta_id: 40 }, transaction: t });
     expect(venta.update).toHaveBeenCalledWith({ venta_anulada: 1 }, { transaction: t });
     expect(M.SvVentaItem.destroy).not.toHaveBeenCalled();
   });

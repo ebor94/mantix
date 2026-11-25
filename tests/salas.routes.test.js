@@ -1,6 +1,7 @@
 const express = require('express');
 const request = require('supertest');
 
+jest.mock('../src/utils/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../src/sv/services/salas.service', () => ({
   listar: jest.fn(), obtener: jest.fn(), atender: jest.fn(), registrarVisita: jest.fn()
 }));
@@ -76,6 +77,21 @@ describe('rutas /sv/salas', () => {
     expect(body).not.toHaveProperty('gest_prosp_id');
     expect(body).not.toHaveProperty('gest_asesor_id');
     expect(body).not.toHaveProperty('gest_canal');
+  });
+
+  test('el reintento de una venta ya registrada responde 409 CONFLICT', async () => {
+    const r = express.Router();
+    r.use('/salas', require('../src/sv/routes/salas.routes'));
+    r.use(require('../src/sv/middleware/svErrorHandler').svErrorHandler);
+    const a = express();
+    a.use(express.json());
+    a.use((req, res, next) => { req.user = ASESOR; next(); });
+    a.use('/api/sv', r);
+    salas.registrarVisita.mockRejectedValue(Object.assign(new Error('Esta venta ya quedó registrada. Recarga la ficha para verla'), { code: 'CONFLICT' }));
+
+    const res = await request(a).post('/api/sv/salas/homenajes/57/visitas').send({ gest_resultado_id: 3 });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ success: false, error: 'CONFLICT', message: 'Esta venta ya quedó registrada. Recarga la ficha para verla' });
   });
 
   test('un error inesperado llega al manejador de errores (next) sin tumbar el proceso', async () => {

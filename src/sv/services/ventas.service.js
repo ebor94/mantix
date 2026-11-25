@@ -18,6 +18,7 @@ const TOTAL_MAXIMO = 999999999999; // venta_total es DECIMAL(14,2)
 
 function error(code, mensaje) { return Object.assign(new Error(mensaje), { code }); }
 const invalida = (mensaje) => error('VALIDATION_ERROR', mensaje);
+const errorYaRegistrada = () => error('CONFLICT', 'Esta venta ya quedó registrada. Recarga la ficha para verla');
 
 async function areaRegistraVentas(areaId, transaction) {
   // prod_tipo <> '' deja por fuera también los NULL.
@@ -82,8 +83,13 @@ async function crearUnaVez(datos, transaction) {
     return await SvVenta.create(datos, { transaction });
   } catch (e) {
     if (e.name !== 'SequelizeUniqueConstraintError') throw e;
-    throw error('CONFLICT', 'Esta venta ya quedó registrada. Recarga la ficha para verla');
+    throw errorYaRegistrada();
   }
+}
+
+// ¿Ya se guardó la venta de este formulario?
+async function yaRegistrada(clave) {
+  return !!(await SvVenta.findOne({ where: { venta_clave: clave }, attributes: ['venta_id'] }));
 }
 
 async function registrarAlCerrar({ prospecto, gestId, estadoNuevo, venta, usuarioId, transaction }) {
@@ -199,9 +205,11 @@ async function corregir(ventaId, { items, motivo, cambios_vistos: vistos }, usua
 async function anular(ventaId, { motivo, cambios_vistos: vistos }, usuarioId) {
   await enTransaccion(async (t) => {
     const venta = await bloquear(ventaId, vistos, t);
+    const items = await SvVentaItem.findAll({ where: { vi_venta_id: ventaId }, transaction: t });
     await SvVentaCambio.create({
       vc_venta_id: ventaId, vc_usr_id: usuarioId, vc_accion: 'anular', vc_motivo: motivo,
-      vc_total_antes: venta.venta_total, vc_total_despues: 0
+      vc_total_antes: venta.venta_total, vc_total_despues: 0,
+      vc_detalle: { antes: resumen(items), despues: [] }
     }, { transaction: t });
     await venta.update({ venta_anulada: 1 }, { transaction: t });
   });
@@ -236,5 +244,6 @@ async function metricasPorAsesor(asesorIds, desde, hasta) {
 }
 
 module.exports = {
-  areaRegistraVentas, registrarAlCerrar, listarDeProspecto, obtener, corregir, anular, metricasPorAsesor
+  areaRegistraVentas, errorYaRegistrada, yaRegistrada, registrarAlCerrar,
+  listarDeProspecto, obtener, corregir, anular, metricasPorAsesor
 };

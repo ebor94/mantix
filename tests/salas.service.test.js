@@ -10,7 +10,8 @@ jest.mock('../src/sv/models', () => ({
   SvPersona: { findByPk: jest.fn() },
   SvUsuario: {},
   SvGestion: { findAll: jest.fn(), findOne: jest.fn() },
-  SvSalaContratante: { findAll: jest.fn(), findOne: jest.fn(), create: jest.fn() }
+  SvSalaContratante: { findAll: jest.fn(), findOne: jest.fn(), create: jest.fn() },
+  SvVenta: { findOne: jest.fn() }
 }));
 jest.mock('../src/sv/services/homenajesSala.repo', () => ({
   listarEnCurso: jest.fn(),
@@ -495,6 +496,39 @@ describe('registrarVisita', () => {
       M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 901, prosp_activo: 1, prosp_asesor_id: duenio });
       await esperarError(salas.registrarVisita(57, ASESOR, { ...BODY, gest_estado_nuevo_id: 5, venta: VENTA }), 'CLIENTE_DE_OTRO_ASESOR', 403);
       expect(gestiones.crear).not.toHaveBeenCalled();
+    });
+
+    // El primer intento se guardó, se perdió la respuesta y se reintenta.
+    describe('reintento de una venta ya registrada', () => {
+      const reintentar = (user = ASESOR, extra = {}) =>
+        salas.registrarVisita(57, user, { ...BODY, gest_estado_nuevo_id: 5, venta: VENTA, ...extra }).then(() => null, (e) => e);
+      beforeEach(() => M.SvVenta.findOne.mockResolvedValue({ venta_id: 40 }));
+
+      test.each([['en curso', 'ABIERTO'], ['que ya terminó', 'FINALIZADO']])('en un homenaje %s → CONFLICT y no guarda nada', async (_n, estado) => {
+        repo.obtener.mockResolvedValue(H(57, { estado }));
+        const e = await reintentar();
+        expect(e.code).toBe('CONFLICT');
+        expect(e.message).toBe('Esta venta ya quedó registrada. Recarga la ficha para verla');
+        expect(M.SvVenta.findOne.mock.calls[0][0].where).toEqual({ venta_clave: 'abcdefgh-1' });
+        expect(gestiones.crear).not.toHaveBeenCalled();
+      });
+
+      test('otra venta en un homenaje que ya terminó → HOMENAJE_CERRADO', async () => {
+        M.SvVenta.findOne.mockResolvedValue(null);
+        repo.obtener.mockResolvedValue(H(57, { estado: 'FINALIZADO' }));
+        expect((await reintentar()).code).toBe('HOMENAJE_CERRADO');
+      });
+
+      test.each([['un supervisor', SUPERVISOR], ['un asesor de otra área', AJENO]])('a %s se le niega antes de mirar la venta', async (_n, user) => {
+        expect((await reintentar(user)).code).toBe('FORBIDDEN');
+        expect(M.SvVenta.findOne).not.toHaveBeenCalled();
+      });
+
+      test('sin venta no se consulta nada', async () => {
+        repo.obtener.mockResolvedValue(H(57, { estado: 'FINALIZADO' }));
+        expect((await reintentar(ASESOR, { venta: undefined })).code).toBe('HOMENAJE_CERRADO');
+        expect(M.SvVenta.findOne).not.toHaveBeenCalled();
+      });
     });
   });
 

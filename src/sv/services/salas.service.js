@@ -15,6 +15,7 @@ const { primerTelefonoValido, formatearNombre } = require('../utils/contratante'
 const repo = require('./homenajesSala.repo');
 const personas = require('./personas.service');
 const gestiones = require('./gestiones.service');
+const ventas = require('./ventas.service');
 const SalaError = require('./salaError');
 const logger = require('../../utils/logger');
 
@@ -258,6 +259,8 @@ async function atender(homenajeId, user, body = {}) {
 async function registrarVisita(homenajeId, user, body = {}) {
   const cat = await catalogos();
   exigirAsesor(user, cat);
+  // Un reintento de lo que ya se guardó se responde como tal, aunque el homenaje haya terminado.
+  if (body.venta && await ventas.yaRegistrada(body.venta.clave)) throw ventas.errorYaRegistrada();
   await homenajeEnCurso(homenajeId);
 
   const vinculo = await SvSalaContratante.findOne({ where: { sc_homenaje_sala_id: homenajeId } });

@@ -10,14 +10,14 @@ const logger = require('../../utils/logger');
 
 /**
  * Genera/actualiza snapshots para un día específico.
- * @param {string} fecha - 'YYYY-MM-DD' (default: hoy)
+ * @param {string} fecha - 'YYYY-MM-DD' (default: hoy en Colombia)
  * @param {number} [usuarioId] - si se pasa, solo recalcula ese usuario
  * @returns {Promise<{insertados:number, actualizados:number, fecha:string}>}
  */
-const { aISO, hoyISO } = require('../utils/fechas');
+const { aISO, hoyBogotaISO } = require('../utils/fechas');
 
 async function generarSnapshot(fecha = null, usuarioId = null) {
-  const dia = aISO(fecha) || hoyISO();
+  const dia = aISO(fecha) || hoyBogotaISO(); // a las 11:55 p. m. en UTC ya es el día siguiente
 
   // Filtro opcional por usuario
   const userFilter = usuarioId ? 'AND u.usr_id = ?' : '';
