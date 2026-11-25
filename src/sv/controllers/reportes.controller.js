@@ -28,11 +28,12 @@ function areaAlAlcance(user, areaId) {
 }
 
 // Los grupos que tiene asignados (los mismos que pide su panel) y, si se limita por área, los de
-// sus áreas. Devuelve false si ya respondió 404 / 403.
+// sus áreas. Director y gerente se rigen solo por sus áreas: un grupo asignado no abre otra área. Devuelve false si ya respondió 404 / 403.
 async function grupoAlAlcance(req, res, grupoId) {
   const grupo = await SvGrupo.findByPk(grupoId, { attributes: ['grupo_area_id'] });
   if (!grupo) { fail(res, 404, ERROR_CODES.NOT_FOUND, 'Grupo no encontrado'); return false; }
-  const alcanza = incluye(grupoIdsAccesibles(req.user), grupoId) || areaAlAlcance(req.user, grupo.grupo_area_id);
+  const porGrupo = !req.scope.crossArea && incluye(grupoIdsAccesibles(req.user), grupoId);
+  const alcanza = porGrupo || areaAlAlcance(req.user, grupo.grupo_area_id);
   if (!alcanza) prohibido(res, 'Grupo fuera de tu alcance');
   return alcanza;
 }

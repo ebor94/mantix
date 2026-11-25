@@ -145,6 +145,12 @@ describe('POST /api/sv/gestiones — con venta', () => {
 });
 
 describe('GET /api/sv/gestiones — historial', () => {
+  test('el historial no usa el alcance de ventas: director fuera de su área → 200', async () => {
+    const r = await request(await app(DIRECTOR)).get('/api/sv/gestiones?prosp_id=300');
+    expect(r.status).toBe(200);
+    expect(gestiones.historial).toHaveBeenCalledWith(300, { page: 1, limit: 20 });
+  });
+
   test('historial de un prospecto propio → 200', async () => {
     const r = await request(await app(ASESOR)).get('/api/sv/gestiones?prosp_id=100');
     expect(r.status).toBe(200);
