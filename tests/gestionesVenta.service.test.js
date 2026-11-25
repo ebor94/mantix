@@ -11,6 +11,8 @@ jest.mock('../src/sv/models', () => ({
 }));
 
 const M = require('../src/sv/models');
+const logger = require('../src/utils/logger');
+const recuperacion = require('../src/sv/services/recuperacionAuto.service');
 const ventas = require('../src/sv/services/ventas.service');
 const { crear } = require('../src/sv/services/gestiones.service');
 
@@ -57,18 +59,53 @@ test('si la venta no es válida se revierte todo', async () => {
   expect(t.commit).not.toHaveBeenCalled();
 });
 
-test('si falla la lectura posterior al commit se propaga ese error, sin intentar revertir', async () => {
-  const lectura = new Error('se cayó la conexión');
-  M.SvGestion.findByPk.mockRejectedValue(lectura);
-  // Así responde Sequelize: ya no hay nada que revertir.
+test.each([
+  ['falla una consulta', (e) => M.SvGestion.create.mockRejectedValue(e), new Error('db caída')],
+  ['la venta ya estaba registrada', (e) => ventas.registrarAlCerrar.mockRejectedValue(e), Object.assign(new Error('ya quedó'), { code: 'CONFLICT' })],
+  ['falla el commit', (e) => t.commit.mockRejectedValue(e), new Error('se perdió la conexión')]
+])('si %s y además falla el rollback, se propaga el error original', async (_n, preparar, original) => {
+  preparar(original);
   t.rollback.mockRejectedValue(new Error('Transaction cannot be rolled back because it has been finished with state: commit'));
-  await expect(crear({ gest_prosp_id: 9, gest_estado_nuevo_id: 5, venta: VENTA }, 7)).rejects.toBe(lectura);
-  expect(t.commit).toHaveBeenCalledTimes(1);
-  expect(t.rollback).not.toHaveBeenCalled();
+  await expect(crear({ gest_prosp_id: 9, gest_estado_nuevo_id: 5, venta: VENTA }, 7)).rejects.toBe(original);
+  expect(t.rollback).toHaveBeenCalledTimes(1);
+  expect(M.SvGestion.findByPk).not.toHaveBeenCalled();
+});
+
+describe('si falla la lectura posterior al commit', () => {
+  const cerrar = () => crear({ gest_prosp_id: 9, gest_estado_nuevo_id: 5, gest_comentario: 'Ana Pérez, 3001234567', venta: VENTA }, 7);
+  let guardada;
+  beforeEach(() => {
+    guardada = { gest_id: 77, dataValues: { gest_id: 77, gest_comentario: 'Ana Pérez, 3001234567' } };
+    M.SvGestion.create.mockResolvedValue(guardada);
+    M.SvGestion.findByPk.mockRejectedValue(new Error('se cayó la conexión'));
+  });
+
+  test('responde con la gestión guardada, sin revertir', async () => {
+    expect(await cerrar()).toBe(guardada);
+    expect(t.commit).toHaveBeenCalledTimes(1);
+    expect(t.rollback).not.toHaveBeenCalled();
+    expect(guardada.dataValues).not.toHaveProperty('recuperacion_svc');
+  });
+
+  test('deja en el log el error y la gestión, sin datos personales', async () => {
+    await cerrar();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const texto = JSON.stringify(logger.error.mock.calls[0]);
+    expect(texto).toContain('gest_id=77');
+    expect(texto).toContain('se cayó la conexión');
+    expect(texto).not.toMatch(/Ana|300/);
+  });
+
+  test('conserva el aviso de la recuperación generada', async () => {
+    recuperacion.intentarRecuperacion.mockResolvedValue({ prosp_id: 950 });
+    expect((await cerrar()).dataValues.recuperacion_svc).toEqual({ prosp_id: 950, mensaje: expect.stringContaining('recuperación') });
+    guardada = { gest_id: 78 }; // sin dataValues
+    M.SvGestion.create.mockResolvedValue(guardada);
+    expect((await cerrar()).recuperacion_svc.prosp_id).toBe(950);
+  });
 });
 
 test('devuelve la gestión guardada y avisa si se generó una recuperación', async () => {
-  const recuperacion = require('../src/sv/services/recuperacionAuto.service');
   recuperacion.intentarRecuperacion.mockResolvedValue({ prosp_id: 950 });
   const g = await crear({ gest_prosp_id: 9, gest_estado_nuevo_id: 5, venta: VENTA }, 7);
   expect(M.SvGestion.findByPk.mock.calls[0][0]).toBe(77);

@@ -93,21 +93,27 @@ async function crear(payload, asesorId) {
 
     await t.commit();
   } catch (e) {
-    await t.rollback();
+    try { await t.rollback(); } catch { /* el error que importa es el original */ }
     throw e;
   }
 
-  // Ya quedó guardada: si esta lectura falla no hay nada que revertir.
-  // Devolver con relaciones cargadas + info de recuperación generada (si aplica)
-  const result = await SvGestion.findByPk(gest.gest_id, {
-    include: [
-      { model: SvResultado, as: 'resultado' },
-      { model: SvEstado,    as: 'estadoNuevo' },
-      { model: SvUsuario,   as: 'asesor', attributes: ['usr_id', 'usr_nombre', 'usr_apellido'] }
-    ]
-  });
+  // Devolver con relaciones cargadas + info de recuperación generada (si aplica).
+  // Ya quedó guardada: si la lectura falla se devuelve sin relaciones. Un error haría que la
+  // persona la registre otra vez.
+  let result = gest;
+  try {
+    result = await SvGestion.findByPk(gest.gest_id, {
+      include: [
+        { model: SvResultado, as: 'resultado' },
+        { model: SvEstado,    as: 'estadoNuevo' },
+        { model: SvUsuario,   as: 'asesor', attributes: ['usr_id', 'usr_nombre', 'usr_apellido'] }
+      ]
+    });
+  } catch (e) {
+    logger.error(`[Gestiones] Quedó guardada, pero falló su lectura: gest_id=${gest.gest_id} ${e.message}`);
+  }
   if (recuperacionGenerada) {
-    result.dataValues.recuperacion_svc = {
+    (result.dataValues || result).recuperacion_svc = {
       prosp_id: recuperacionGenerada.prosp_id,
       mensaje: 'Se generó un prospecto SVC para recuperación de este cliente.'
     };
