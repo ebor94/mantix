@@ -8,6 +8,7 @@ const {
   sequelize, SvSnapshotDiario, SvUsuario, SvArea, SvGrupo, SvGestion, SvProspecto, SvResultado, SvMeta, SvEstado
 } = require('../models');
 const { aISO, hoyISO, rango } = require('../utils/fechas');
+const ventas = require('./ventas.service');
 
 async function dashboardArea({ scope, fecha }) {
   const dia = aISO(fecha) || hoyISO();
@@ -53,10 +54,13 @@ async function reporteAsesor(usrId, { mes, anio, desde, hasta }) {
   const totales = snaps.reduce((acc, s) => {
     acc.gestiones   += s.snap_gestiones_realizadas;
     acc.interesados += s.snap_interesados_nuevos;
-    acc.contratos   += s.snap_contratos_cerrados;
-    acc.valor       += parseFloat(s.snap_valor_vendido_cop || 0);
     return acc;
-  }, { gestiones: 0, interesados: 0, contratos: 0, valor: 0 });
+  }, { gestiones: 0, interesados: 0 });
+
+  // Contratos y valor se calculan al momento: las correcciones y anulaciones del supervisor
+  // cambian días que el snapshot ya guardó.
+  const metricas = await ventas.metricasPorAsesor([usrId], dStart, dEnd);
+  Object.assign(totales, metricas.get(usrId) || { contratos: 0, valor: 0 });
 
   // Meta del periodo
   let meta = null;
@@ -113,7 +117,9 @@ async function reporteEquipo({ grupoId, desde = null, hasta = null, fecha = null
     where: { usr_grupo_id: grupoId, usr_activo: 1 },
     attributes: ['usr_id', 'usr_nombre', 'usr_apellido', 'usr_email', 'usr_rol_id']
   });
-  if (!asesores.length) return { desde: dDesde, hasta: dHasta, asesores: [] };
+  const grupo = await SvGrupo.findByPk(grupoId, { attributes: ['grupo_area_id'] });
+  const registraVentas = !!grupo && await ventas.areaRegistraVentas(grupo.grupo_area_id);
+  if (!asesores.length) return { desde: dDesde, hasta: dHasta, registra_ventas: registraVentas, asesores: [] };
   const asesorIds = asesores.map(u => u.usr_id);
 
   // 2) Conteo de gestiones por asesor en el rango
@@ -153,27 +159,8 @@ async function reporteEquipo({ grupoId, desde = null, hasta = null, fecha = null
   });
   const mapInter = new Map(interesRows.map(r => [r.gest_asesor_id, parseInt(r.total)]));
 
-  // 4) Cambios a estados ganados (contratos firmados / afiliados) en el rango
-  const ganadosRows = await SvGestion.findAll({
-    where: {
-      gest_asesor_id: { [Op.in]: asesorIds },
-      gest_fecha_hora: { [Op.between]: [start, end] }
-    },
-    include: [{
-      model: SvEstado,
-      as: 'estadoNuevo',
-      where: { estado_es_ganado: 1 },
-      required: true,
-      attributes: []
-    }],
-    attributes: [
-      'gest_asesor_id',
-      [fn('COUNT', col('gest_id')), 'total']
-    ],
-    group: ['gest_asesor_id'],
-    raw: true
-  });
-  const mapGanados = new Map(ganadosRows.map(r => [r.gest_asesor_id, parseInt(r.total)]));
+  // 4) Contratos (firmados / afiliados) y valor vendido en el rango
+  const metricas = await ventas.metricasPorAsesor(asesorIds, dDesde, dHasta);
 
   // 5) Vencidas acumuladas (prospectos con prox_gestion_fecha < hoy y estado no final)
   const vencRows = await SvProspecto.findAll({
@@ -204,13 +191,14 @@ async function reporteEquipo({ grupoId, desde = null, hasta = null, fecha = null
 
   // 7) Componer resultado — usa las mismas claves del snapshot para compatibilidad con TablaAsesores
   const filas = asesores.map(u => {
-    const contratos = mapGanados.get(u.usr_id) || 0;
+    const { contratos, valor } = metricas.get(u.usr_id) || { contratos: 0, valor: 0 };
     return {
       snap_usuario_id:           u.usr_id,
       usuario:                   { usr_id: u.usr_id, usr_nombre: u.usr_nombre, usr_apellido: u.usr_apellido, usr_email: u.usr_email },
       snap_gestiones_realizadas: mapGest.get(u.usr_id) || 0,
       snap_interesados_nuevos:   mapInter.get(u.usr_id) || 0,
       snap_contratos_cerrados:   contratos,
+      snap_valor_vendido_cop:    valor,
       snap_vencidas_acumuladas:  mapVenc.get(u.usr_id) || 0,
       snap_meta_contratos:       metaContratos,
       snap_meta_porcentaje:      metaContratos > 0 ? Math.round((contratos / metaContratos) * 100) : null
@@ -222,7 +210,7 @@ async function reporteEquipo({ grupoId, desde = null, hasta = null, fecha = null
     || (b.snap_gestiones_realizadas - a.snap_gestiones_realizadas)
   );
 
-  return { desde: dDesde, hasta: dHasta, asesores: filas };
+  return { desde: dDesde, hasta: dHasta, registra_ventas: registraVentas, asesores: filas };
 }
 
 module.exports = { dashboardArea, reporteAsesor, reporteEquipo };

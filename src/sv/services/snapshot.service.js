@@ -21,12 +21,15 @@ async function generarSnapshot(fecha = null, usuarioId = null) {
 
   // Filtro opcional por usuario
   const userFilter = usuarioId ? 'AND u.usr_id = ?' : '';
-  const params = usuarioId ? [dia, dia, dia, dia, usuarioId] : [dia, dia, dia, dia];
+  const params = Array(6).fill(dia);
+  if (usuarioId) params.push(usuarioId);
 
   // Query agregada:
   //   - gestiones del día por asesor
   //   - interesados nuevos = gestiones cuyo resultado_es_positivo=1 del día
-  //   - contratos cerrados = prospectos que pasaron a estado_es_ganado=1 hoy (vía gestiones)
+  //   - contratos cerrados = ventas activas de hoy del asesor dueño + cierres sin venta (prospectos
+  //     que pasaron a estado_es_ganado=1 hoy). Misma regla que ventas.metricasPorAsesor.
+  //   - valor vendido = suma de esas ventas
   //   - vencidas acumuladas = prospectos activos con prox_fecha < hoy del asesor
   const sql = `
     INSERT INTO sv_rpt_snapshot_diario
@@ -48,19 +51,26 @@ async function generarSnapshot(fecha = null, usuarioId = null) {
          WHERE g.gest_asesor_id = u.usr_id AND DATE(g.gest_fecha_hora) = ?
            AND r.resultado_es_positivo = 1
       ), 0) AS interesados,
-      COALESCE((
+      (
+        SELECT COUNT(*) FROM sv_crm_ventas v
+         WHERE v.venta_asesor_id = u.usr_id AND v.venta_fecha = ? AND v.venta_anulada = 0
+      ) + (
         SELECT COUNT(DISTINCT g.gest_prosp_id) FROM sv_crm_gestiones g
          JOIN sv_cfg_estados_gestion e ON e.estado_id = g.gest_estado_nuevo_id
          WHERE g.gest_asesor_id = u.usr_id AND DATE(g.gest_fecha_hora) = ?
            AND e.estado_es_ganado = 1
-      ), 0) AS contratos,
+           AND NOT EXISTS (SELECT 1 FROM sv_crm_ventas v WHERE v.venta_gest_id = g.gest_id)
+      ) AS contratos,
       COALESCE((
         SELECT COUNT(*) FROM sv_crm_prospectos p
          WHERE p.prosp_asesor_id = u.usr_id
            AND p.prosp_activo = 1
            AND p.prosp_prox_gestion_fecha < CURDATE()
       ), 0) AS vencidas,
-      0 AS valor   -- Se completa en Fase 4 al haber contratos con valor
+      COALESCE((
+        SELECT SUM(v.venta_total) FROM sv_crm_ventas v
+         WHERE v.venta_asesor_id = u.usr_id AND v.venta_fecha = ? AND v.venta_anulada = 0
+      ), 0) AS valor
     FROM sv_org_usuarios u
     WHERE u.usr_activo = 1
       AND u.usr_grupo_id IS NOT NULL
