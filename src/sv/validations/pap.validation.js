@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { diaISO } = require('./comunes');
 
 module.exports = {
   registroRapido: Joi.object({
@@ -13,7 +14,7 @@ module.exports = {
     lng:        Joi.number().min(-180).max(180).allow(null),
     comentario: Joi.string().allow('', null),
     nota:       Joi.string().allow('', null),
-    prox_fecha: Joi.date().iso().allow(null),
+    prox_fecha: diaISO.allow(null),
     prox_hora:  Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, '')
   }),
   zonas: Joi.object({

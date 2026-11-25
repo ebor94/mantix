@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { diaISO } = require('./comunes');
 
 const TIPOS_FECHA = ['nacimiento', 'aniversario_laboral', 'aniversario_boda', 'otro'];
 // Nota: dia_madre/dia_padre NO se aceptan en create — se derivan del género.
@@ -14,7 +15,7 @@ const personaSchema = Joi.object({
   persona_direccion:          Joi.string().max(250).allow('', null),
   persona_barrio:             Joi.string().max(100).allow('', null),
   persona_ciudad:             Joi.string().max(80).allow('', null),
-  persona_fecha_nacimiento:   Joi.date().iso().allow(null),
+  persona_fecha_nacimiento:   diaISO.allow(null),
   persona_genero:             Joi.string().valid('M', 'F', 'N').allow(null, '')
 });
 
@@ -32,7 +33,7 @@ module.exports = {
     persona:           personaSchema.required(),
     cargo:             Joi.string().max(120).allow('', null),
     departamento:      Joi.string().max(120).allow('', null),
-    fecha_ingreso:     Joi.date().iso().allow(null),
+    fecha_ingreso:     diaISO.allow(null),
     es_titular:        Joi.boolean().default(false),
     observaciones:     Joi.string().max(1000).allow('', null),
     fechas_especiales: Joi.array().items(fechaEspecialSchema).default([])
@@ -41,7 +42,7 @@ module.exports = {
   actualizarContacto: Joi.object({
     cf_cargo:          Joi.string().max(120).allow('', null),
     cf_departamento:   Joi.string().max(120).allow('', null),
-    cf_fecha_ingreso:  Joi.date().iso().allow(null),
+    cf_fecha_ingreso:  diaISO.allow(null),
     cf_es_titular:     Joi.number().valid(0, 1),
     cf_observaciones:  Joi.string().max(1000).allow('', null)
   }).min(1),

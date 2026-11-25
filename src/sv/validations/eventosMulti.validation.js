@@ -3,13 +3,14 @@
  * Schemas para el CRUD de eventos multi-asesor + pool público (SP-1a).
  */
 const Joi = require('joi');
+const { diaISO } = require('./comunes');
 
 const TIPOS_EVENTO   = ['REUNION', 'VISITA', 'CAPACITACION', 'LLAMADA', 'FERIA', 'PERSONAL', 'OTRO', 'SEGUIMIENTO'];
 const MODOS_FECHA    = ['UNICO', 'DIA_COMPLETO_MULTI', 'SLOTS'];
 const ESTADOS_ASIS   = ['CONFIRMADO', 'ASISTIO', 'NO_ASISTIO', 'JUSTIFICADO'];
 
 const slot = Joi.object({
-  fecha:       Joi.date().iso().required(),
+  fecha:       diaISO.required(),
   hora_inicio: Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).required(),
   hora_fin:    Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).required()
 });

@@ -1,5 +1,6 @@
 // sv/validations/salas.validation.js — schemas Joi planos (validate llama schema.validate).
 const Joi = require('joi');
+const { diaISO } = require('./comunes');
 const ventas = require('./ventas.validation');
 
 const atender = Joi.object({
@@ -11,7 +12,7 @@ const visita = Joi.object({
   gest_resultado_id:    Joi.number().integer().positive().required(),
   gest_estado_nuevo_id: Joi.number().integer().positive().allow(null),
   gest_comentario:      Joi.string().allow('', null),
-  gest_prox_fecha:      Joi.date().iso().allow(null),
+  gest_prox_fecha:      diaISO.allow(null),
   gest_prox_hora:       Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
   venta:                ventas.venta   // solo al cerrar el contrato; ver ventas.service
 });

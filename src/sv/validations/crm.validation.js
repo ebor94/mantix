@@ -3,6 +3,7 @@
  * Joi schemas para personas, prospectos, gestiones y listas.
  */
 const Joi = require('joi');
+const { diaISO } = require('./comunes');
 const ventas = require('./ventas.validation');
 
 const personas = {
@@ -53,7 +54,7 @@ const prospectos = {
     subproceso: Joi.string().valid('nuevo', 'recuperacion'),  // SVC comercial
     q:          Joi.string().min(2),
     filtro_rapido: Joi.string().valid('urgentes', 'hoy', 'proximas', 'sin_gestion', 'cerrados'),
-    prox_gestion_fecha: Joi.date().iso(),
+    prox_gestion_fecha: diaISO,
     prox_gestion_mes:   Joi.string().pattern(/^\d{4}-\d{2}$/)
   }),
   panelDia: Joi.object({
@@ -80,7 +81,7 @@ const prospectos = {
     prosp_fuente_id:  Joi.number().integer(),
     prosp_punto_id:   Joi.number().integer(),
     prosp_lista_id:   Joi.number().integer(),
-    prosp_prox_gestion_fecha: Joi.date().iso().allow(null),
+    prosp_prox_gestion_fecha: diaISO.allow(null),
     prosp_prox_gestion_hora:  Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
     prosp_prioridad:  Joi.number().integer().min(1).max(5).default(3),
     prosp_zona_pap:   Joi.string().max(100).allow('', null),
@@ -93,7 +94,7 @@ const prospectos = {
     })).default([])
   }).or('prosp_persona_id', 'prosp_empresa_id'),
   update: Joi.object({
-    prosp_prox_gestion_fecha: Joi.date().iso().allow(null),
+    prosp_prox_gestion_fecha: diaISO.allow(null),
     prosp_prox_gestion_hora:  Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
     prosp_prioridad:          Joi.number().integer().min(1).max(5),
     prosp_zona_pap:           Joi.string().max(100).allow('', null),
@@ -125,7 +126,7 @@ const gestiones = {
     gest_canal:           Joi.string().valid('llamada', 'presencial', 'correo').default('llamada'),
     gest_comentario:      Joi.string().allow('', null),
     gest_duracion_seg:    Joi.number().integer().min(0).allow(null),
-    gest_prox_fecha:      Joi.date().iso().allow(null),
+    gest_prox_fecha:      diaISO.allow(null),
     gest_prox_hora:       Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).allow(null, ''),
     gest_ubicacion_lat:   Joi.number().min(-90).max(90).allow(null),
     gest_ubicacion_lng:   Joi.number().min(-180).max(180).allow(null),
