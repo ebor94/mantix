@@ -13,7 +13,7 @@ router.post ('/reasignacion-masiva', ctrl.reasignacionMasiva);                  
 router.get  ('/:id',                 ctrl.getOne);
 router.post ('/',                  validate(v.prospectos.create),              ctrl.create);
 router.put  ('/:id',                 validate(v.prospectos.update),              ctrl.update);
-router.put  ('/:id/productos',                                                   ctrl.actualizarProductos);
+router.put  ('/:id/productos',       validate(v.prospectos.productos),           ctrl.actualizarProductos);
 router.patch('/:id/reasignar',       validate(v.prospectos.reasignar),           ctrl.reasignar);
 router.patch('/:id/asignar',       ctrl.asignar);                               // sin-asignar → asesor
 

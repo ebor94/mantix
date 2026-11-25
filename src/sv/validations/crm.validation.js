@@ -100,6 +100,14 @@ const prospectos = {
     prosp_punto_id:           Joi.number().integer().allow(null),
     prosp_fuente_id:          Joi.number().integer().allow(null)
   }).min(1),
+  // prod_id es opcional: los que llegan sin él se ignoran, no se rechazan.
+  productos: Joi.object({
+    productos: Joi.array().items(Joi.object({
+      prod_id: Joi.number().integer().allow(null),
+      es_principal: Joi.boolean().default(false),
+      nota: Joi.string().max(200).allow('', null)
+    })).required()
+  }),
   reasignar: Joi.object({
     nuevo_asesor_id: Joi.number().integer().required(),
     motivo:          Joi.string().max(250).allow('').optional()

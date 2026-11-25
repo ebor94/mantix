@@ -12,7 +12,8 @@ const M = require('../src/sv/models');
 const prospectos = require('../src/sv/services/prospectos.service');
 
 const t = { commit: jest.fn(), rollback: jest.fn() };
-const PRECIOS = { 10: '8770000.00', 11: '5315000.00', 12: null };
+const PRECIOS = { 10: '8770000.00', 11: '5315000.00', 12: null, 13: '4000000.00', 14: '0.00' };
+const GENERICOS = new Set([13]); // "por definir" con precio escrito
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -21,7 +22,7 @@ beforeEach(() => {
   M.SvProspecto.findByPk.mockResolvedValue({ prosp_id: 900 });
   M.SvProspectoProducto.findAll.mockResolvedValue([]);
   M.SvProducto.findAll.mockImplementation(async ({ where }) =>
-    where.prod_id[Op.in].filter((id) => id in PRECIOS).map((id) => ({ prod_id: id, prod_precio_base: PRECIOS[id] })));
+    where.prod_id[Op.in].filter((id) => id in PRECIOS).map((id) => ({ prod_id: id, prod_precio_base: PRECIOS[id], prod_es_generico: GENERICOS.has(id) ? 1 : 0 })));
 });
 
 const creados = () => M.SvProspectoProducto.create.mock.calls.map(([d]) => d);
@@ -41,6 +42,16 @@ describe('crear', () => {
 
   test('sin precio (por definir o sin lista) guarda null', async () => {
     await prospectos.crear({ ...BASE, productos: [{ prod_id: 12 }] }, 7);
+    expect(creados()[0].pp_precio_ofrecido).toBeNull();
+  });
+
+  test('un "por definir" con precio escrito guarda null', async () => {
+    await prospectos.crear({ ...BASE, productos: [{ prod_id: 13 }] }, 7);
+    expect(creados()[0].pp_precio_ofrecido).toBeNull();
+  });
+
+  test('un producto con precio 0.00 guarda null', async () => {
+    await prospectos.crear({ ...BASE, productos: [{ prod_id: 14 }] }, 7);
     expect(creados()[0].pp_precio_ofrecido).toBeNull();
   });
 
@@ -83,6 +94,24 @@ describe('actualizarProductos', () => {
     expect(M.SvProspectoProducto.destroy).toHaveBeenCalledWith({ where: { pp_id: { [Op.in]: [2] } }, transaction: t });
     expect(creados()).toEqual([{ pp_prosp_id: 900, pp_prod_id: 11, pp_es_principal: 1, pp_nota: null, pp_precio_ofrecido: '5315000.00' }]);
     expect(a.update).toHaveBeenCalledWith({ pp_es_principal: 0, pp_nota: null }, { transaction: t });
+    // El precio se consulta solo para el nuevo y dentro de la transacción.
+    const consulta = M.SvProducto.findAll.mock.calls[0][0];
+    expect(consulta.where.prod_id[Op.in]).toEqual([11]);
+    expect(consulta.transaction).toBe(t);
+  });
+
+  test('una fila existente pedida como prod_id "10" (texto) se conserva', async () => {
+    const a = fila(1, 10, '5000000.00');
+    M.SvProspectoProducto.findAll.mockResolvedValue([a]);
+    await prospectos.actualizarProductos(900, [{ prod_id: '10' }]);
+    expect(M.SvProspectoProducto.destroy).not.toHaveBeenCalled();
+    expect(M.SvProspectoProducto.create).not.toHaveBeenCalled();
+    expect(a.update).toHaveBeenCalledTimes(1);
+  });
+
+  test('un pp_precio_ofrecido del cliente en un producto nuevo se ignora', async () => {
+    await prospectos.actualizarProductos(900, [{ prod_id: 10, pp_precio_ofrecido: 1 }]);
+    expect(creados()[0].pp_precio_ofrecido).toBe('8770000.00');
   });
 
   test('una lista vacía quita todos los intereses', async () => {

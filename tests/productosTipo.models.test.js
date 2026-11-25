@@ -48,4 +48,14 @@ describe('validación del catálogo de productos', () => {
   test.each([[{ prod_tipo: '' }], [{ prod_tipo: null }], [{ prod_tipo: 'Lotes' }], [{ prod_es_generico: 0 }]])('editar acepta %j', (cambio) => {
     expect(v.producto.update.validate(cambio).error).toBeUndefined();
   });
+
+  test.each([['prod_tipo'], ['prod_categoria']])('%s recorta espacios y un espacio solo queda vacío', (campo) => {
+    for (const schema of [v.producto.create, v.producto.update]) {
+      const base = schema === v.producto.create ? BASE : {};
+      expect(schema.validate({ ...base, [campo]: ' Osarios ' }).value[campo]).toBe('Osarios');
+      const r = schema.validate({ ...base, [campo]: ' ' });
+      expect(r.error).toBeUndefined();
+      expect(r.value[campo]).toBe('');
+    }
+  });
 });

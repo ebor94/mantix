@@ -226,15 +226,18 @@ function interesesUnicos(productos) {
   return [...unicos.values()];
 }
 
-// Precio de lista vigente de cada producto. Sin precio (o "por definir") queda null.
+// Precio de lista vigente de cada producto. Un "por definir", o un producto sin precio o en 0, queda null.
 async function preciosVigentes(prodIds, transaction) {
   if (!prodIds.length) return new Map();
   const filas = await SvProducto.findAll({
     where: { prod_id: { [Op.in]: prodIds } },
-    attributes: ['prod_id', 'prod_precio_base'],
+    attributes: ['prod_id', 'prod_precio_base', 'prod_es_generico'],
     transaction
   });
-  return new Map(filas.map((f) => [f.prod_id, f.prod_precio_base]));
+  return new Map(filas.map((f) => [
+    f.prod_id,
+    !f.prod_es_generico && Number(f.prod_precio_base) > 0 ? f.prod_precio_base : null
+  ]));
 }
 
 async function crear(payload, asesorId) {
