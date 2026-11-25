@@ -1,10 +1,14 @@
 jest.mock('../src/masajes/utils/zipSeguro', () => ({ inspeccionarZip: jest.fn() }));
+jest.mock('../src/utils/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 
 const childProcess = require('child_process');
 const { EventEmitter } = require('events');
 const ExcelJS = require('exceljs');
 const JSZip = require('jszip');
 const { inspeccionarZip } = require('../src/masajes/utils/zipSeguro');
+const logger = require('../src/utils/logger');
+const zlib = require('zlib');
+const path = require('path');
 const x = require('../src/sv/services/presupuestosExcel.service');
 
 const CATS = ['Osarios', 'Bóvedas'];
@@ -35,7 +39,7 @@ async function conXml(cambiar) {
 }
 
 
-beforeEach(() => inspeccionarZip.mockReset());
+beforeEach(() => { inspeccionarZip.mockReset(); logger.warn.mockReset(); });
 
 describe('escribir', () => {
   test('hoja, encabezados, formato y hoja oculta', async () => {
@@ -208,11 +212,11 @@ describe('leer', () => {
     const BUF = Buffer.from('x');
     const esperar = () => Promise.resolve().then(() => Promise.resolve());
 
-    test('al vencer los 15 s lo mata con SIGKILL, responde el error y no acepta otra lectura hasta el exit', async () => {
+    test('al vencer los 10 s lo mata con SIGKILL, responde el error y no acepta otra lectura hasta el exit', async () => {
       const p = error(leer(BUF));
       await esperar();
       expect(hijos[0].send).toHaveBeenCalledWith({ buffer: BUF, maxColumna: 6, maxFilas: 300 }, expect.any(Function));
-      jest.advanceTimersByTime(14999);
+      jest.advanceTimersByTime(9999);
       expect(hijos[0].kill).not.toHaveBeenCalled();
       jest.advanceTimersByTime(1);
       expect(hijos[0].kill).toHaveBeenCalledWith('SIGKILL');
@@ -261,6 +265,103 @@ describe('leer', () => {
       await error(otra);
     });
 
+    test('N1: un hijo sin pid ni send (sin descriptores): CONFLICT, nunca llama a kill y acepta la siguiente', async () => {
+      fork.mockImplementationOnce(() => {
+        const h = new EventEmitter();
+        h.kill = jest.fn(); // simulado: un kill real sin pid mataría el grupo de procesos
+        hijos.push(h);
+        return h;
+      });
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
+      expect(hijos[0].kill).not.toHaveBeenCalled();
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+    });
+
+    test('N1: si el hijo no sale tras el kill, a los 2 s responde y libera', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      jest.advanceTimersByTime(10000);
+      expect(hijos[0].kill).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(1999);
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT' });
+      jest.advanceTimersByTime(1);
+      expect(await p).toMatchObject({ code: 'VALIDATION_ERROR' });
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+      const tercera = leer(BUF);
+      await esperar();
+      hijos[0].emit('exit', null, 'SIGKILL'); // un exit tardío no libera la lectura en curso
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT' });
+      hijos[2].emit('exit', 1);
+      await error(tercera);
+    });
+
+    test('N1: un segundo error del hijo no lanza', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      expect(() => { hijos[0].emit('error', new Error('a')); hijos[0].emit('error', new Error('b')); }).not.toThrow();
+      hijos[0].emit('exit', null, 'SIGKILL');
+      await p;
+    });
+
+    test('N1: error sin pid después de que send falló: responde y libera', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      hijos[0].send.mock.calls[0][1](new Error('canal cerrado'));
+      expect(hijos[0].kill).toHaveBeenCalledWith('SIGKILL');
+      hijos[0].pid = undefined;
+      hijos[0].emit('error', new Error('x'));
+      expect(await p).toMatchObject({ code: 'CONFLICT' });
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+    });
+
+    test('N1: send lanza con pid: mata, CONFLICT y libera al salir', async () => {
+      fork.mockImplementationOnce(() => {
+        const h = new EventEmitter();
+        h.pid = 99;
+        h.send = () => { throw new Error('ERR_IPC_CHANNEL_CLOSED'); };
+        h.kill = jest.fn();
+        hijos.push(h);
+        return h;
+      });
+      const p = error(leer(BUF));
+      await esperar();
+      expect(hijos[0].kill).toHaveBeenCalledWith('SIGKILL');
+      hijos[0].emit('exit', null, 'SIGKILL');
+      expect(await p).toMatchObject({ code: 'CONFLICT' });
+    });
+
+    test('b3: si el hijo muere sin responder, una línea de log con código y señal, sin el archivo', async () => {
+      const p = error(leer(Buffer.from('contenido secreto')));
+      await esperar();
+      hijos[0].emit('exit', 134, null);
+      await p;
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      const [mensaje, datos] = logger.warn.mock.calls[0];
+      expect(datos).toEqual({ codigo: 134, senal: null });
+      expect(JSON.stringify([mensaje, datos])).not.toMatch(/secreto/);
+    });
+
+    test('b3: si no arranca, el log lleva el code del error', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      hijos[0].pid = undefined;
+      hijos[0].emit('error', Object.assign(new Error('x'), { code: 'EMFILE' }));
+      await p;
+      expect(logger.warn.mock.calls[0][1]).toEqual({ code: 'EMFILE' });
+    });
+
     test('si fork lanza o send falla: CONFLICT y queda libre', async () => {
       fork.mockImplementationOnce(() => { throw new Error('ENOMEM'); });
       expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
@@ -273,7 +374,7 @@ describe('leer', () => {
     });
   });
 
-    test('un archivo que el hilo no puede abrir', async () => {
+    test('un archivo que el proceso no puede abrir', async () => {
       const e = await error(leer(Buffer.from('basura que inspeccionarZip (simulado) deja pasar')));
       expect(e).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
     });
@@ -468,3 +569,54 @@ describe('leer', () => {
     });
   });
 });
+
+  describe('segunda tanda', () => {
+    test('N2: una fórmula que da 0 se lee como 0 (normal y compartida)', async () => {
+      const buf = await conXml((xml) => xml
+        .replace(/(<c r="D4"[^>]*>)<v>14000000<\/v>/, '$1<f>1-1</f><v>0</v>')
+        .replace(/(<c r="D5"[^>]*>)<v>0<\/v>/, '$1<f t="shared" ref="D5:D6" si="0">1-1</f><v>0</v>'));
+      const r = await leer(buf);
+      expect(r.errores).toEqual([]);
+      expect(r.filas.map((f) => f.valores.Osarios)).toEqual([0, 0]);
+    });
+
+    test('N2: una fórmula sin resultado guardado sigue dando error', async () => {
+      const buf = await conXml((xml) => xml.replace(/(<c r="D4"[^>]*>)<v>14000000<\/v>/, '$1<f>1-1</f>'));
+      expect((await leer(buf)).errores).toEqual([{ fila: 4, columna: 'D (Osarios)', mensaje: 'Abre el archivo en Excel y guárdalo de nuevo' }]);
+    });
+
+    test('un ID en una celda combinada da error', async () => {
+      const buf = await modificado((ws) => { ws.mergeCells('A4:A5'); });
+      const r = await leer(buf);
+      expect(r.errores).toEqual([{ fila: 5, columna: 'A (ID)', mensaje: 'No combines celdas' }]);
+      expect(r.filas.map((f) => f.usr_id)).toEqual([7]);
+    });
+
+    test('una fila que solo trae banderas no cuenta como vacía', async () => {
+      const buf = await modificado((ws) => { ws.mergeCells('D9:D10'); });
+      const r = await leer(buf);
+      expect(r.errores).toContainEqual({ fila: 10, columna: 'D (Osarios)', mensaje: 'No combines celdas' });
+    });
+
+    // inspeccionarZip está simulado: aquí actúa la cuenta propia del proceso hijo.
+    test.each([
+      ['una entrada de más de 10 MB', [11]],
+      ['varias entradas que juntas pasan de 10 MB', [4, 4, 4]]
+    ])('b1: %s se rechaza', async (_n, tamanos) => {
+      const zip = await JSZip.loadAsync(await base());
+      tamanos.forEach((mb, i) => zip.file(`xl/relleno${i}.bin`, Buffer.alloc(mb * 1024 * 1024), { compression: 'DEFLATE' }));
+      const buf = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+      expect(buf.length).toBeLessThan(200000);
+      expect(await error(leer(buf))).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
+      expect((await leer(await base())).filas).toHaveLength(2);
+    }, 30000);
+
+    test('el hijo termina solo al cortarse el canal', async () => {
+      const hijo = childProcess.fork(path.join(__dirname, '../src/sv/services/presupuestosExcel.lector.js'), [], {
+        execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc']
+      });
+      const salida = new Promise((resolve) => hijo.once('exit', (codigo) => resolve(codigo)));
+      hijo.disconnect();
+      expect(await salida).toBe(0);
+    });
+  });

@@ -318,19 +318,27 @@ async function guardar({ user, areaId, anio, mes, filas }) {
       pre_usr_id: usrId, pre_area_id: areaId, pre_anio: anio, pre_mes: mes, pre_categoria: categoria,
       pre_valor: valor, pre_created_by: user.usr_id, pre_updated_by: user.usr_id, pre_updated_at: ahora
     });
-    const registros = pedidos
-      .filter(([u, c, v]) => (guardado.get(llave(u, c)) || 0) !== v)
-      .map(([u, c, v]) => registro(u, c, v));
+    // Primero los ceros de lo que salió del catálogo: la llave única no distingue tildes ni mayúsculas
+    // y, si el 0 viejo llegara después, borraría el valor de la categoría nueva.
+    const registros = [];
     for (const usrId of vistos) {
       for (const [categoria] of fueraDelCatalogo(guardado, usrId, categorias)) registros.push(registro(usrId, categoria, 0));
     }
+    // Un 0 sin fila previa también se guarda (para que la plantilla no lo rellene con el mes anterior).
+    const pendientes = pedidos.filter(([u, c, v]) => guardado.get(llave(u, c)) !== v);
+    pendientes.forEach(([u, c, v]) => registros.push(registro(u, c, v)));
+    // Solo cuentan como cambio los valores que de verdad cambian, como en revisar.
+    const cambiaron = [
+      ...registros.filter((r) => r.pre_valor === 0 && !categorias.includes(r.pre_categoria)),
+      ...pendientes.filter(([u, c, v]) => (guardado.get(llave(u, c)) || 0) !== v).map(([u, c, v]) => registro(u, c, v))
+    ];
     if (registros.length) {
       await SvPresupuesto.bulkCreate(registros, {
         updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at', 'pre_categoria'], transaction: t
       });
     }
     await t.commit();
-    return { guardados: new Set(registros.map((r) => r.pre_usr_id)).size, cambios: registros.length };
+    return { guardados: new Set(cambiaron.map((r) => r.pre_usr_id)).size, cambios: cambiaron.length };
   } catch (e) {
     try { await t.rollback(); } catch { /* el error que importa es el original */ }
     throw e;

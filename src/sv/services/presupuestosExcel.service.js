@@ -8,6 +8,7 @@
 const path = require('path');
 const childProcess = require('child_process');
 const ExcelJS = require('exceljs');
+const logger = require('../../utils/logger');
 const { inspeccionarZip } = require('../../masajes/utils/zipSeguro');
 const { VALOR_MAXIMO, MAX_FILAS } = require('../validations/presupuestos.validation');
 
@@ -90,7 +91,8 @@ async function escribir({ titulo, areaId, anio, mes, categorias, filas }) {
 
 const MAX_BYTES_DESCOMPRIMIDOS = 10 * 1024 * 1024;
 const MAX_ENTRADAS = 100;
-const TIEMPO_MAXIMO_MS = 15000;
+const TIEMPO_MAXIMO_MS = 10000; // el cliente de GenFlow corta a los 15 s
+const ESPERA_SALIDA_MS = 2000;
 const MEMORIA_MAXIMA_MB = 256;
 const FORMULA_SIN_RESULTADO = 2;
 const COMBINADA = 4;
@@ -112,9 +114,9 @@ function entornoDelHijo() {
 /**
  * Lee el libro en un proceso hijo (ver presupuestosExcel.lector.js), de uno en uno, con memoria y
  * tiempo limitados. Devuelve { datos, hoja, celdas } o lanza VALIDATION_ERROR / CONFLICT.
- * `leyendo` se libera cuando el hijo ya terminó, no antes.
+ * `leyendo` se libera cuando el hijo ya terminó o, si no llega su exit, 2 s después del kill.
  */
-function leerEnHilo(buffer, maxColumna) {
+function leerAparte(buffer, maxColumna) {
   if (leyendo) throw Object.assign(new Error('Se está revisando otro archivo. Intenta en unos segundos'), { code: 'CONFLICT' });
   leyendo = true;
   return new Promise((resolve, reject) => {
@@ -126,16 +128,23 @@ function leerEnHilo(buffer, maxColumna) {
         stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
         env: entornoDelHijo()
       });
-    } catch {
+    } catch (e) {
       leyendo = false;
+      logger.warn('[SV] No arrancó el lector del presupuesto', { code: e.code });
       return reject(noSePudo());
     }
 
     let respondido = false;
     let salio = false;
-    let pendiente = null; // lo que se responde cuando el hijo termine
+    let liberado = false;
+    let pendiente = null; // lo que se responde cuando se libera
+    let timer = null;
+    let espera = null;
     const liberar = () => {
+      if (liberado) return;
+      liberado = true;
       clearTimeout(timer);
+      clearTimeout(espera);
       leyendo = false;
       if (pendiente) pendiente();
     };
@@ -143,16 +152,28 @@ function leerEnHilo(buffer, maxColumna) {
       if (respondido) return;
       respondido = true;
       pendiente = () => accion(valor);
-      if (salio) return liberar();
+      clearTimeout(timer);
+      // Sin pid (fork sin descriptores) no hay a quién matar: kill sin pid alcanzaría a todo el grupo de procesos.
+      if (salio || !hijo.pid) return liberar();
       try { hijo.kill('SIGKILL'); } catch { /* ya terminó */ }
+      espera = setTimeout(liberar, ESPERA_SALIDA_MS);
+      espera.unref();
     };
-    const timer = setTimeout(() => terminar(reject, demasiado()), TIEMPO_MAXIMO_MS);
+    timer = setTimeout(() => terminar(reject, demasiado()), TIEMPO_MAXIMO_MS);
 
     hijo.once('message', (m) => (m && m.ok ? terminar(resolve, m) : terminar(reject, demasiado())));
-    hijo.once('exit', () => { salio = true; if (respondido) liberar(); else terminar(reject, demasiado()); });
-    hijo.once('error', () => {
+    hijo.once('exit', (codigo, senal) => {
+      salio = true;
+      if (!respondido) logger.warn('[SV] El lector del presupuesto terminó sin responder', { codigo, senal });
+      if (respondido) liberar(); else terminar(reject, demasiado());
+    });
+    hijo.on('error', (err) => {
       // Sin pid no llegó a arrancar: no es culpa del archivo.
-      if (!hijo.pid) { salio = true; terminar(reject, noSePudo()); } else terminar(reject, demasiado());
+      if (!hijo.pid) {
+        salio = true;
+        if (!respondido) logger.warn('[SV] No arrancó el lector del presupuesto', { code: err?.code });
+        if (respondido) liberar(); else terminar(reject, noSePudo());
+      } else terminar(reject, demasiado());
     });
     try {
       hijo.send({ buffer, maxColumna, maxFilas: MAX_FILAS }, (err) => { if (err) terminar(reject, noSePudo()); });
@@ -215,7 +236,7 @@ const clave = (s) => sinTildes(String(s ?? '')).toLowerCase().replace(/\s+/g, ''
 async function leer(buffer, { areaId, anio, mes, categorias, asesores }) {
   try { inspeccionarZip(buffer, { maxDescomprimido: MAX_BYTES_DESCOMPRIMIDOS, maxEntradas: MAX_ENTRADAS }); } catch { throw noEsExcel(); }
   const maxColumna = COLUMNAS_FIJAS + categorias.length + 1;
-  const { datos, hoja, celdas } = await leerEnHilo(buffer, maxColumna);
+  const { datos, hoja, celdas } = await leerAparte(buffer, maxColumna);
 
   validarMarca(datos, { areaId, anio, mes });
   if (!hoja) throw error('El archivo no tiene la hoja "Presupuesto". Descarga la plantilla del mes');

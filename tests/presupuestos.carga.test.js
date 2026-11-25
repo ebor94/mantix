@@ -86,7 +86,7 @@ describe('plantilla', () => {
   });
 
   test('el valor por defecto se decide por asesor: los del mes si tiene alguno, si no los del mes anterior', async () => {
-    presupuestoPorLlamada([[7, 'Osarios', 1000]], [[7, 'Osarios', 5], [8, 'Osarios', 800], [8, 'Bóvedas', 80]]);
+    presupuestoPorLlamada([[7, 'Osarios', 1000]], [[7, 'Osarios', 5], [7, 'Bóvedas', 30], [8, 'Osarios', 800], [8, 'Bóvedas', 80]]);
     const ws = (await leerLibro((await svc.plantilla({ user: SUPERVISOR, ...P })).buffer)).getWorksheet('Presupuesto');
     // 7 (Ana): solo lo del mes, el 5 del mes anterior no entra; 8 (Beto): lo del mes anterior; 9 (Zoe): nada
     expect([ws.getCell('D4').value, ws.getCell('E4').value]).toEqual([1000, 0]);
@@ -205,9 +205,10 @@ describe('guardar', () => {
     expect(r).toEqual({ guardados: 2, cambios: 2 });
     const [registros, opts] = M.SvPresupuesto.bulkCreate.mock.calls[0];
     expect(opts).toEqual({ updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at', 'pre_categoria'], transaction: t });
-    // 7/Bóvedas = 0 sin nada guardado no es un cambio
+    // el 0 explícito de 7/Bóvedas se guarda, pero no cuenta como cambio
     expect(registros).toEqual([
       expect.objectContaining({ pre_usr_id: 7, pre_area_id: 1, pre_anio: 2026, pre_mes: 11, pre_categoria: 'Osarios', pre_valor: 100, pre_created_by: 3, pre_updated_by: 3 }),
+      expect.objectContaining({ pre_usr_id: 7, pre_categoria: 'Bóvedas', pre_valor: 0 }),
       expect.objectContaining({ pre_usr_id: 8, pre_categoria: 'Osarios', pre_valor: 5 })
     ]);
     expect(registros[0].pre_updated_at).toBeInstanceOf(Date);
@@ -219,7 +220,7 @@ describe('guardar', () => {
     presupuestoPorLlamada([[7, 'Vieja', 300], [7, 'Osarios', 100], [8, 'Vieja', 0], [99, 'Vieja', 5]]);
     const r = await guardar([{ usr_id: 7, valores: { Osarios: 100 } }, { usr_id: 8, valores: { Osarios: 5 } }]);
     const [registros, opts] = M.SvPresupuesto.bulkCreate.mock.calls[0];
-    expect(registros.map((x) => [x.pre_usr_id, x.pre_categoria, x.pre_valor])).toEqual([[8, 'Osarios', 5], [7, 'Vieja', 0]]);
+    expect(registros.map((x) => [x.pre_usr_id, x.pre_categoria, x.pre_valor])).toEqual([[7, 'Vieja', 0], [8, 'Osarios', 5]]);
     expect(opts.transaction).toBe(t);
     expect(r).toEqual({ guardados: 2, cambios: 2 });
   });
@@ -245,6 +246,34 @@ describe('guardar', () => {
     presupuestoPorLlamada([[7, 'Osarios', 100]]);
     await guardar([{ usr_id: 7, valores: { Osarios: 0 } }]);
     expect(M.SvPresupuesto.bulkCreate.mock.calls[0][0][0]).toMatchObject({ pre_categoria: 'Osarios', pre_valor: 0 });
+  });
+
+  test('N3: el cero de la categoría vieja se escribe antes que el valor de la nueva', async () => {
+    M.SvProducto.findAll.mockResolvedValue([{ prod_categoria: 'Prórrogas' }]);
+    presupuestoPorLlamada([[7, 'Prorrogas', 300]]);
+    await guardar([{ usr_id: 7, valores: { Prórrogas: 12 } }]);
+    expect(M.SvPresupuesto.bulkCreate.mock.calls[0][0].map((r) => [r.pre_categoria, r.pre_valor])).toEqual([['Prorrogas', 0], ['Prórrogas', 12]]);
+  });
+
+  test('N4: un asesor cargado en 0 no vuelve a salir con lo del mes anterior', async () => {
+    const filasDB = new Map(); // 'anio-mes|usr|cat' → valor
+    const previo = [[7, 'Osarios', 500], [8, 'Osarios', 700]];
+    previo.forEach(([u, c, v]) => filasDB.set(`2026-10|${u}|${c}`, v));
+    M.SvPresupuesto.findAll.mockImplementation(async ({ where }) => [...filasDB]
+      .map(([k, v]) => ({ k: k.split('|'), v }))
+      .filter(({ k }) => k[0] === `${where.pre_anio}-${where.pre_mes}` && (!where.pre_usr_id || where.pre_usr_id[Op.in].includes(Number(k[1]))))
+      .map(({ k, v }) => ({ pre_usr_id: Number(k[1]), pre_categoria: k[2], pre_valor: String(v) })));
+    M.SvPresupuesto.bulkCreate.mockImplementation(async (registros) => {
+      registros.forEach((r) => filasDB.set(`${r.pre_anio}-${r.pre_mes}|${r.pre_usr_id}|${r.pre_categoria}`, r.pre_valor));
+    });
+    const r = await guardar([
+      { usr_id: 7, valores: { Osarios: 0, 'Bóvedas': 0 } },
+      { usr_id: 8, valores: { Osarios: 10, 'Bóvedas': 0 } }
+    ]);
+    expect(r).toEqual({ guardados: 1, cambios: 1 }); // el cero explícito no cuenta como cambio
+    const ws = (await leerLibro((await svc.plantilla({ user: SUPERVISOR, ...P })).buffer)).getWorksheet('Presupuesto');
+    expect([ws.getCell('D4').value, ws.getCell('E4').value]).toEqual([0, 0]); // Ana (7)
+    expect([ws.getCell('D5').value, ws.getCell('E5').value]).toEqual([10, 0]); // Beto (8)
   });
 
   test('un error al guardar deshace todo y se propaga', async () => {
