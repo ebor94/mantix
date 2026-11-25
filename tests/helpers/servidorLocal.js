@@ -11,7 +11,11 @@ async function escuchar(app) {
 }
 
 async function cerrarTodos() {
-  await Promise.all(servidores.splice(0).map((s) => new Promise((resolve) => s.close(resolve))));
+  await Promise.all(servidores.splice(0).map((s) => new Promise((resolve) => {
+    s.close(resolve);
+    // Sin esto, una petición que quedó sin respuesta deja a Jest colgado en vez de fallar.
+    s.closeAllConnections();
+  })));
 }
 
 module.exports = { escuchar, cerrarTodos };

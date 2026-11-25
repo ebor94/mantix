@@ -9,7 +9,20 @@
  */
 const logger = require('../../utils/logger');
 
-const CAPTURADO = Symbol('sv.capturado');
+const CAPTURADO = Symbol.for('sv.capturado');
+const TERMINADA = Symbol('sv.respuestaTerminada');
+
+// compression() termina la respuesta real después de que el handler llamó a res.end, así
+// que res.writableEnded no alcanza para saber si el handler ya respondió.
+function vigilarRespuesta(res) {
+  if (res[TERMINADA] !== undefined) return;
+  res[TERMINADA] = false;
+  const end = res.end;
+  res.end = function (...args) {
+    res[TERMINADA] = true;
+    return end.apply(this, args);
+  };
+}
 
 function envolver(layer) {
   const original = layer.handle;
@@ -17,15 +30,16 @@ function envolver(layer) {
   if (original.length > 3 || original[CAPTURADO]) return;
 
   const capturado = function (req, res, next) {
+    vigilarRespuesta(res);
     const resultado = original.call(this, req, res, next);
     if (resultado && typeof resultado.catch === 'function') {
       resultado.catch((motivo) => {
         // next(undefined) seguiría como si no hubiera error.
         const err = motivo || new Error('Promesa rechazada sin motivo');
         // Con la respuesta ya terminada, next(err) cortaría la conexión: solo se anota.
-        if (res.writableEnded) {
+        if (res[TERMINADA]) {
           logger.error('[SV] Error después de responder', {
-            message: err.message, stack: err.stack, method: req.method, path: req.baseUrl + req.path
+            detalle: err.message || String(err), stack: err.stack, method: req.method, path: req.baseUrl + req.path
           });
           return;
         }

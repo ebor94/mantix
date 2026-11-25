@@ -17,6 +17,20 @@ const PREFIJOS = new Map(
 );
 
 let server;
+let index;
+
+// Handlers normales (hasta 3 argumentos) que no llevan la marca de capturarAsync.
+function sinCapturar(router, ruta = '') {
+  return router.stack.flatMap((layer) => {
+    if (layer.route) {
+      return layer.route.stack
+        .filter((l) => l.handle.length <= 3 && !l.handle[Symbol.for('sv.capturado')])
+        .map((l) => `${(l.method || 'all').toUpperCase()} ${ruta}${layer.route.path}`);
+    }
+    if (Array.isArray(layer.handle.stack)) return sinCapturar(layer.handle, `${ruta}/…`);
+    return layer.handle.length <= 3 && !layer.handle[Symbol.for('sv.capturado')] ? [`use ${ruta}`] : [];
+  });
+}
 
 beforeAll(async () => {
   jest.resetModules();
@@ -30,8 +44,9 @@ beforeAll(async () => {
       return r;
     });
   }
+  index = require('../src/sv/routes/index');
   const a = express();
-  a.use('/api/sv', require('../src/sv/routes/index'));
+  a.use('/api/sv', index);
   server = await escuchar(a);
 });
 afterAll(cerrarTodos);
@@ -39,6 +54,10 @@ afterAll(cerrarTodos);
 test('todos los archivos de rutas están montados en index.js', () => {
   expect(ARCHIVOS.length).toBeGreaterThan(0);
   expect([...PREFIJOS.keys()].sort()).toEqual([...ARCHIVOS].sort());
+});
+
+test('no queda ningún handler sin capturar, venga de un archivo o esté escrito en index.js', () => {
+  expect(sinCapturar(index)).toEqual([]);
 });
 
 test.each(ARCHIVOS)('%s: un handler async que falla responde 500 en vez de tumbar el proceso', async (archivo) => {

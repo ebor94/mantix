@@ -33,9 +33,26 @@ describe('svErrorHandler', () => {
   });
 
   test.each([
-    ['SequelizeValidationError'], ['SequelizeUniqueConstraintError'], ['SequelizeDatabaseError'], ['MulterError']
+    ['SequelizeValidationError'], ['SequelizeUniqueConstraintError'], ['MulterError']
   ])('%s lo responde el manejador global', (name) => {
     const err = error({ name, code: 'LIMIT_FILE_SIZE' });
+    const { res, next } = ejecutar(err);
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['ER_DATA_TOO_LONG'], ['ER_BAD_NULL_ERROR'], ['ER_WARN_DATA_OUT_OF_RANGE'],
+    ['WARN_DATA_TRUNCATED'], ['ER_TRUNCATED_WRONG_VALUE_FOR_FIELD']
+  ])('SequelizeDatabaseError por un dato (%s) lo responde el manejador global', (codigoSql) => {
+    const err = error({ name: 'SequelizeDatabaseError', parent: { code: codigoSql } });
+    const { res, next } = ejecutar(err);
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('un error con statusCode 4xx (URL mal formada) conserva su estado', () => {
+    const err = error({ statusCode: 400 });
     const { res, next } = ejecutar(err);
     expect(next).toHaveBeenCalledWith(err);
     expect(res.status).not.toHaveBeenCalled();
@@ -45,7 +62,10 @@ describe('svErrorHandler', () => {
     ['un error común', error({})],
     ['un error del sistema', error({ code: 'ECONNREFUSED' }, 'connect ECONNREFUSED 10.0.0.5:3306')],
     ['una caída de la base', error({ name: 'SequelizeConnectionError' }, 'connect ETIMEDOUT 10.0.0.5:3306')],
-    ['un code que coincide con una propiedad heredada', error({ code: 'constructor' })]
+    ['un code que coincide con una propiedad heredada', error({ code: 'constructor' })],
+    ['una columna que no existe', error({ name: 'SequelizeDatabaseError', parent: { code: 'ER_BAD_FIELD_ERROR' } }, "Unknown column 'x'")],
+    ['un interbloqueo', error({ name: 'SequelizeDatabaseError', parent: { code: 'ER_LOCK_DEADLOCK' } }, 'Deadlock found')],
+    ['un statusCode 5xx', error({ statusCode: 503 }, 'detalle interno')]
   ])('%s → 500 genérico, sin el texto interno', (_nombre, err) => {
     const { res, next } = ejecutar(err);
     expect(res.status).toHaveBeenCalledWith(500);
@@ -59,10 +79,16 @@ describe('svErrorHandler', () => {
     ejecutar(error({}, 'detalle interno'));
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error.mock.calls[0][1]).toEqual(expect.objectContaining({
-      message: 'detalle interno', method: 'GET', path: '/api/sv/personas/buscar'
+      detalle: 'detalle interno', method: 'GET', path: '/api/sv/personas/buscar'
     }));
     expect(logger.error.mock.calls[0][1].stack).toContain('detalle interno');
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('3001234567');
+  });
+
+  test('un motivo que no es Error también queda anotado', () => {
+    const { res } = ejecutar('texto suelto');
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(logger.error.mock.calls[0][1]).toEqual(expect.objectContaining({ detalle: 'texto suelto' }));
   });
 
   test('con la respuesta ya empezada lo pasa a next', () => {

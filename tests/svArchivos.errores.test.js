@@ -45,12 +45,15 @@ function cargar(csv) {
 
 describe('carga masiva', () => {
   test.each([
-    ['una fila con más columnas', 'nombre,telefono\nAna,3001234567\nLuis,3007654321,Cúcuta', 3],
-    ['una comilla sin cerrar', 'nombre,telefono\n"Ana,3001234567', 2]
-  ])('%s: VALIDATION_ERROR con la línea y la lista fallida', async (_caso, csv, linea) => {
+    ['una fila con más columnas', 'nombre,telefono\nAna,3001234567\nLuis,3007654321,Cúcuta\nEva,3009999999', ' (línea 3)'],
+    ['una fila con más columnas, guardada en Windows', 'nombre,telefono\r\nAna,3001234567\r\nLuis,3007654321,Cúcuta\r\nEva,3009999999\r\n', ' (línea 3)'],
+    // csv-parse informa dónde terminó de leer, no dónde se abrió la comilla: mejor no dar la línea.
+    ['una comilla sin cerrar', 'nombre,telefono\n"Ana,3001234567\nLuis,3007654321\nEva,3009999999', ''],
+    ['una comilla sin cerrar, guardada en Windows', 'nombre,telefono\r\n"Ana,3001234567\r\nLuis,3007654321\r\nEva,3009999999', '']
+  ])('%s: VALIDATION_ERROR claro y la lista fallida', async (_caso, csv, linea) => {
     const e = await cargar(csv).then(() => null, (err) => err);
     expect(e.code).toBe('VALIDATION_ERROR');
-    expect(e.message).toBe(`El archivo CSV no es válido (línea ${linea}). Revisa que todas las filas tengan las mismas columnas y que no falten comillas.`);
+    expect(e.message).toBe(`El archivo CSV no es válido${linea}. Revisa que todas las filas tengan las mismas columnas y que no falten comillas.`);
     expect(lista.update).toHaveBeenCalledWith(expect.objectContaining({
       lista_estado: 'fallida', lista_log: { error: expect.stringContaining('CSV inválido: ') }
     }));

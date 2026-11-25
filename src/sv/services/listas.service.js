@@ -62,7 +62,8 @@ async function cargarDesdeArchivo({ filePath, originalName, areaId, grupoId, fue
     records = parse(raw, { columns: (header) => header.map(h => h.trim().toLowerCase()), skip_empty_lines: true, trim: true });
   } catch (e) {
     await lista.update({ lista_estado: 'fallida', lista_log: { error: 'CSV inválido: ' + e.message } });
-    const linea = e.lines ? ` (línea ${e.lines})` : '';
+    // Con una comilla sin cerrar, e.lines es donde terminó de leer, no donde se abrió.
+    const linea = e.lines && e.code !== 'CSV_QUOTE_NOT_CLOSED' ? ` (línea ${e.lines})` : '';
     const invalido = new Error(`El archivo CSV no es válido${linea}. Revisa que todas las filas tengan las mismas columnas y que no falten comillas.`);
     invalido.code = 'VALIDATION_ERROR';
     throw invalido;

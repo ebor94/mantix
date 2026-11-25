@@ -1,5 +1,6 @@
 jest.mock('../src/utils/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 
+const compression = require('compression');
 const express = require('express');
 const request = require('supertest');
 const logger = require('../src/utils/logger');
@@ -8,8 +9,9 @@ const { escuchar, cerrarTodos } = require('./helpers/servidorLocal');
 
 let manejador;
 
-function montar(router) {
+function montar(router, ...antes) {
   const a = express();
+  antes.forEach((m) => a.use(m));
   a.use(router);
   // Manejador de cuatro argumentos; jest.fn no sirve directo porque su length es 0.
   // eslint-disable-next-line no-unused-vars
@@ -99,13 +101,18 @@ describe('capturarAsync', () => {
     expect(res.body).toEqual({ propio: 'bum' });
   });
 
-  test('aplicarlo dos veces no repite el error', async () => {
+  test('aplicarlo dos veces no envuelve otra vez: next se llama una sola vez', async () => {
     const r = express.Router();
     r.get('/x', async () => { throw new Error('una vez'); });
     capturarAsync(r);
+    const envuelto = r.stack[0].route.stack[0].handle;
     capturarAsync(r);
-    await request(await montar(r)).get('/x');
-    expect(manejador).toHaveBeenCalledTimes(1);
+    expect(r.stack[0].route.stack[0].handle).toBe(envuelto);
+
+    const next = jest.fn();
+    await r.stack[0].route.stack[0].handle({}, { end() {} }, next).catch(() => {});
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(next).toHaveBeenCalledTimes(1);
   });
 
   test('si falla después de responder, la respuesta llega y solo se anota', async () => {
@@ -116,8 +123,27 @@ describe('capturarAsync', () => {
     expect(res.body).toEqual({ ok: 1 });
     expect(manejador).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledTimes(1);
-    expect(logger.error.mock.calls[0][1]).toEqual(expect.objectContaining({ message: 'tarde', method: 'GET', path: '/x' }));
+    expect(logger.error.mock.calls[0][1]).toEqual(expect.objectContaining({ detalle: 'tarde', method: 'GET', path: '/x' }));
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('3001234567');
+  });
+
+  test('lo mismo detrás de compression(), que termina la respuesta real más tarde', async () => {
+    const r = express.Router();
+    const grande = { filas: Array.from({ length: 400 }, (_, i) => ({ i, nombre: `fila número ${i}` })) };
+    r.get('/x', async (req, res) => { res.json(grande); throw new Error('tarde'); });
+    const res = await request(await montar(capturarAsync(r), compression())).get('/x').set('Accept-Encoding', 'gzip');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(grande);
+    expect(manejador).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  test('un motivo que no es Error también queda anotado', async () => {
+    const r = express.Router();
+    // eslint-disable-next-line no-throw-literal
+    r.get('/x', async (req, res) => { res.json({ ok: 1 }); throw 'texto suelto'; });
+    await request(await montar(capturarAsync(r))).get('/x');
+    expect(logger.error.mock.calls[0][1]).toEqual(expect.objectContaining({ detalle: 'texto suelto' }));
   });
 
   test('si falla con la respuesta a medias, se corta esa petición y el servidor sigue', async () => {

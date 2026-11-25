@@ -33,7 +33,8 @@ Express 4 no recoge las promesas rechazadas de un handler async. `server.js` ter
 - No toca los manejadores de error (cuatro argumentos).
 - Es idempotente: un handler ya envuelto no se envuelve otra vez.
 - Un rechazo sin motivo (`Promise.reject()`) pasa a `next` como `Error('Promesa rechazada sin motivo')`; `next(undefined)` seguiría como si no hubiera error.
-- Si la respuesta ya terminó (`res.writableEnded`), solo se anota en el log. Llamar a `next` ahí cortaría la conexión y podría truncar una respuesta correcta.
+- Si el handler ya respondió (llamó a `res.end`, directamente o con `res.json`, `res.send` o un stream), solo se anota en el log. Llamar a `next` ahí cortaría la conexión y podría truncar una respuesta correcta. No se usa `res.writableEnded`: `compression()` termina la respuesta real más tarde.
+- En el log, el texto del error va en `detalle`: winston reemplazaría la etiqueta con una clave `message`.
 
 Depende de la estructura interna de Express 4 (4.21.2 instalado). Express 5 reenvía los rechazos por sí mismo: al migrar, este archivo se elimina.
 
@@ -48,14 +49,16 @@ Depende de la estructura interna de Express 4 (4.21.2 instalado). Express 5 reen
 | `err.code` es `NOT_FOUND` | 404 |
 | `err.code` es `FORBIDDEN` | 403 |
 | `err.code` es `CONFLICT`, `DUPLICATE`, `DUPLICATE_PHONE`, `DUPLICATE_NIT` o `DUPLICATE_EMAIL` | 409 |
-| `err.name` es `SequelizeValidationError`, `SequelizeUniqueConstraintError`, `SequelizeDatabaseError` o `MulterError` | `next(err)`: lo responde el manejador global, que ya traduce esos casos |
+| `err.name` es `SequelizeValidationError`, `SequelizeUniqueConstraintError` o `MulterError` | `next(err)`: lo responde el manejador global, que ya traduce esos casos |
+| `SequelizeDatabaseError` por un dato enviado (`ER_DATA_TOO_LONG`, `ER_BAD_NULL_ERROR`, `ER_WARN_DATA_OUT_OF_RANGE`, `WARN_DATA_TRUNCATED`, `ER_TRUNCATED_WRONG_VALUE_FOR_FIELD`) | `next(err)` |
+| `err.statusCode` entre 400 y 499 (por ejemplo, una URL mal formada) | `next(err)` |
 | Cualquier otro | 500 `INTERNAL_ERROR`, "Error interno. Intenta de nuevo en unos minutos." |
 
 El 500 anota en el log el mensaje, la pila, el método y la ruta sin la query, que puede traer nombres o teléfonos. Al cliente no le llega el texto interno.
 
 ### 3.3 `src/sv/routes/index.js`
 
-Después de montar todas las rutas: `capturarAsync(router)` y `router.use(svErrorHandler)`. Una prueba verifica que todas las `*.routes.js` de la carpeta están montadas antes de esa línea y quedan cubiertas.
+Después de montar todas las rutas: `capturarAsync(router)` y `router.use(svErrorHandler)`. Una prueba verifica que todas las `*.routes.js` de la carpeta están montadas y que ningún handler del router queda sin capturar, venga de un archivo o esté escrito en `index.js`.
 
 ### 3.4 Catálogos
 
@@ -70,7 +73,7 @@ Estos errores no llevan `code`, así que quedarían como "Error interno". Pasan 
 | `listas.controller.js`, filtro de archivo | "Solo se aceptan archivos CSV" (igual que hoy) |
 | `fidelizacion.controller.js`, filtro de archivo | "Solo se aceptan imágenes (jpg/png/webp)" (igual que hoy) |
 | `listas.service.js`, grupo sin estados | "No hay estados activos configurados para el grupo" (igual que hoy) |
-| `listas.service.js`, CSV mal formado | "El archivo CSV no es válido (línea N). Revisa que todas las filas tengan las mismas columnas y que no falten comillas." |
+| `listas.service.js`, CSV mal formado | "El archivo CSV no es válido (línea N). Revisa que todas las filas tengan las mismas columnas y que no falten comillas." Sin la línea si es una comilla sin cerrar: csv-parse informa dónde terminó de leer, no dónde se abrió |
 
 La lista sigue quedando como `fallida`, con el detalle técnico en `lista_log`.
 
@@ -101,3 +104,5 @@ Solo backend: `deploy-mantix`. Sin migración ni cambios en GenFlow. Reversión:
 - `propuestas.controller.previewPdf` envía un stream sin escuchar su evento `error`. Por cómo funciona Node, una falla a mitad del envío terminaría el proceso; no se reprodujo.
 - CSV separado por punto y coma, como lo guarda Excel en español: no falla, pero se lee como una sola columna, así que por el código todas las filas quedarían como error.
 - El CSV subido no se borra cuando la carga falla (queda en `uploads/sv`).
+- `propuestas.controller` (generar y ver el PDF) responde 500 con el texto interno y no lo anota en el log. Es anterior a esta rama.
+- `renovaciones.service`: dos errores de configuración sin `code` quedan como "Error interno" (solo SUPER_ADMIN; antes apagaban el proceso).

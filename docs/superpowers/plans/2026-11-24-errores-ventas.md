@@ -835,6 +835,17 @@ index 66f7cd1..ecf0256 100644
 
 ---
 
+### Ajustes tras la revisión independiente
+
+El código de las Tasks 1 a 4 de arriba es el de la primera versión. La revisión pidió estos cambios, que están en el commit siguiente, cada uno con su prueba:
+
+- `capturarAsync`: detectar la respuesta terminada también detrás de `compression()`; anotar el texto en `detalle`; marca `Symbol.for('sv.capturado')`.
+- `svErrorHandler`: de `SequelizeDatabaseError` solo los errores por un dato enviado van al manejador global; los `statusCode` 4xx conservan su estado.
+- `listas.service`: sin número de línea cuando la comilla no se cierra.
+- Pruebas: la de doble envoltura ahora falla si se quita la guarda; la de cobertura detecta rutas escritas en `index.js`; el servidor de prueba cierra las conexiones abiertas.
+
+---
+
 ### Task 5: Integración y despliegue (con el usuario)
 
 - [ ] **Step 1:** suite completa, `npx jest`: solo fallan las cinco conocidas.
