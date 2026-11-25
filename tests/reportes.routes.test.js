@@ -36,6 +36,9 @@ const ADMIN_COM   = usuario('ADMIN_AREA', 7, areas(2, 3));
 const GERENTE     = usuario('GERENTE_GENERAL', 7, { usr_grupo_id: null, ...areas(1, 2, 3, 4) });
 const GERENTE_1   = usuario('GERENTE_GENERAL', 7, { usr_grupo_id: null });
 const DIRECTOR    = usuario('DIRECTOR_COMERCIAL', 20, areas(3, 4)); // todo menos Prenecesidad
+// Jefes por área con un grupo asignado que no es de sus áreas.
+const ADMIN_GRUPO    = usuario('ADMIN_AREA', 20, grupos(1));
+const DIRECTOR_GRUPO = usuario('DIRECTOR_COMERCIAL', 20, { usr_area_id: null, usr_grupo_id: null, ...grupos(1) });
 const SUPER       = usuario('SUPER_ADMIN', 7, { usr_area_id: null, usr_grupo_id: null });
 const OTRO_ROL    = usuario('ROL_NUEVO', 7);
 
@@ -88,14 +91,19 @@ const EQUIPOS = ['el propio', 'otro de su área', 'uno de otra área', 'uno que 
 const GRUPOS_POR_ROL = expandir([
   ['SUPERVISOR',                    SUPERVISOR,  [1, 11, 2, 99],  [200, 403, 403, 404]],
   ['SUPERVISOR de varios grupos',   MULTIGRUPO,  [2, 5, 1, 99],   [200, 200, 403, 404]],
+  ['SUPERVISOR con áreas extra',    MULTIGRUPO,  [3, 13, 11, 99], [200, 403, 403, 404]],
   ['COORDINADOR_PREVISION',         COORDINADOR, [2, 5, 3, 99],   [200, 403, 403, 404]],
   ['ADMIN_AREA',                    ADMIN,       [1, 11, 2, 99],  [200, 200, 403, 404]],
   ['ADMIN_AREA con otras áreas',    ADMIN_COM,   [1, 11, 2, 99],  [200, 200, 200, 404]],
   ['GERENTE_GENERAL',               GERENTE,     [1, 11, 2, 99],  [200, 200, 200, 404]],
   ['GERENTE_GENERAL de un área',    GERENTE_1,   [1, 11, 2, 99],  [200, 200, 403, 404]],
   ['DIRECTOR_COMERCIAL',            DIRECTOR,    [2, 5, 1, 99],   [200, 200, 403, 404]],
-  ['SUPER_ADMIN',                   SUPER,       [1, 11, 2, 99],  [200, 200, 200, 404]]
-], EQUIPOS);
+  ['SUPER_ADMIN',                   SUPER,       [1, 11, 2, 99],  [200, 200, 200, 404]],
+  ['ADMIN_AREA con su área',        ADMIN_GRUPO, [2, 5, 3, 99],   [200, 200, 403, 404]]
+], EQUIPOS).concat(expandir([
+  ['ADMIN_AREA de otra área',       ADMIN_GRUPO,    [1, 11, 13], [200, 403, 403]],
+  ['DIRECTOR_COMERCIAL sin área',   DIRECTOR_GRUPO, [1, 11, 2],  [200, 403, 403]]
+], ['el que tiene asignado', 'otro del área de ese grupo', 'uno de otra área']));
 
 describe('GET /asesor/:id', () => {
   test.each(ASESORES)('%s, %s → %i', async (_rol, _cual, estado, user, id) => {
@@ -154,7 +162,8 @@ describe('GET /equipo', () => {
   test.each([
     ['SUPERVISOR de varios grupos', MULTIGRUPO, [2, 3, 4, 5]], ['SUPERVISOR', SUPERVISOR, [1]],
     ['COORDINADOR_PREVISION', usuario('COORDINADOR_PREVISION', 20, grupos(5)), [2, 5]], ['JEFE_PAP', JEFE_PAP, [3]],
-    ['ADMIN_AREA', ADMIN, [1]], ['DIRECTOR_COMERCIAL', usuario('DIRECTOR_COMERCIAL', 20, { ...grupos(2, 3, 4), ...areas(3, 4) }), [2, 3, 4]]
+    ['ADMIN_AREA', ADMIN, [1]], ['ADMIN_AREA con un grupo de otra área', ADMIN_GRUPO, [2, 1]],
+    ['DIRECTOR_COMERCIAL sin área', DIRECTOR_GRUPO, [1]], ['DIRECTOR_COMERCIAL', usuario('DIRECTOR_COMERCIAL', 20, { ...grupos(2, 3, 4), ...areas(3, 4) }), [2, 3, 4]]
   ])('el panel de %s abre todos sus grupos', async (_n, user, ids) => {
     for (const id of ids) expect((await pedir(user, `equipo?grupo_id=${id}`)).status).toBe(200);
     expect(reportes.reporteEquipo.mock.calls.map(([o]) => o.grupoId)).toEqual(ids);
@@ -212,6 +221,8 @@ describe('GET /dashboard', () => {
       ['GERENTE_GENERAL', 4, 200, GERENTE], ['GERENTE_GENERAL de un área', 2, 403, GERENTE_1],
       ['DIRECTOR_COMERCIAL', 4, 200, DIRECTOR], ['DIRECTOR_COMERCIAL', 1, 403, DIRECTOR],
       ['SUPER_ADMIN', 2, 200, SUPER],
+      // Un grupo asignado no da su área completa.
+      ['ADMIN_AREA con un grupo de otra área', 1, 403, ADMIN_GRUPO], ['DIRECTOR_COMERCIAL sin área', 1, 403, DIRECTOR_GRUPO],
       // Un área completa es más que sus grupos.
       ['SUPERVISOR', 1, 403, SUPERVISOR], ['SUPERVISOR de varios grupos', 3, 403, MULTIGRUPO],
       ['COORDINADOR_PREVISION', 2, 403, COORDINADOR], ['COORDINADOR_PREVISION', 3, 403, COORDINADOR]

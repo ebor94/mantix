@@ -27,13 +27,12 @@ function areaAlAlcance(user, areaId) {
   return !ROLES_POR_GRUPO.includes(rolDe(user)) && incluye(areaIdsAccesibles(user), areaId);
 }
 
-// Devuelve false si ya respondió 404 / 403.
+// Los grupos que tiene asignados (los mismos que pide su panel) y, si se limita por área, los de
+// sus áreas. Devuelve false si ya respondió 404 / 403.
 async function grupoAlAlcance(req, res, grupoId) {
   const grupo = await SvGrupo.findByPk(grupoId, { attributes: ['grupo_area_id'] });
   if (!grupo) { fail(res, 404, ERROR_CODES.NOT_FOUND, 'Grupo no encontrado'); return false; }
-  const alcanza = ROLES_POR_GRUPO.includes(rolDe(req.user))
-    ? incluye(grupoIdsAccesibles(req.user), grupoId)
-    : areaAlAlcance(req.user, grupo.grupo_area_id);
+  const alcanza = incluye(grupoIdsAccesibles(req.user), grupoId) || areaAlAlcance(req.user, grupo.grupo_area_id);
   if (!alcanza) prohibido(res, 'Grupo fuera de tu alcance');
   return alcanza;
 }
