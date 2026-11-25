@@ -3,9 +3,9 @@
  * Helpers seguros para manejar fechas que pueden venir como Date object
  * (Joi.date() convierte strings ISO a Date) o como string 'YYYY-MM-DD'.
  *
- * - aISO(d): siempre devuelve 'YYYY-MM-DD' (en zona local) o null
+ * - aISO(d): 'YYYY-MM-DD' o null. Para fechas sin hora: de un Date toma el día en UTC
  * - rangoDia(d): { start: 'YYYY-MM-DD 00:00:00', end: 'YYYY-MM-DD 23:59:59' }
- * - diaBogotaISO(instante): día de Colombia de un instante, 'YYYY-MM-DD'
+ * - diaBogotaISO(instante): día de Colombia de un instante válido, 'YYYY-MM-DD'
  * - hoyISO() / hoyBogotaISO(): 'YYYY-MM-DD' de hoy en Colombia
  */
 

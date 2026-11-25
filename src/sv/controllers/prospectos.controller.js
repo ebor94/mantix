@@ -46,7 +46,7 @@ async function agendaMes(req, res) {
   // El filtro reemplaza al del alcance: quien se limita solo por área (ADMIN_AREA) pide solo las suyas.
   const s = req.scope;
   if (areaId && s.areaId && !s.grupoId && !s.asesorId
-      && !areaIdsAccesibles(req.user)?.includes(parseInt(areaId))) {
+      && !areaIdsAccesibles(req.user).map(Number).includes(Number(areaId))) {
     return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Área fuera de tu alcance');
   }
   const r = await prospectos.agendaMes({

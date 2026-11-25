@@ -36,7 +36,7 @@ test('sin gest_fecha_hora: la próxima del 26 queda en el 25', async () => {
     expect.anything());
 });
 
-test('con gest_fecha_hora a las 8:30 p. m. del 25 (UTC del 26) también queda en el 25', async () => {
-  await crear({ ...base, gest_fecha_hora: '2026-11-26T01:30:00Z' }, 7);
-  expect(SvProspecto.update.mock.calls[0][0].prosp_prox_gestion_fecha).toBe('2026-11-25');
+test('con gest_fecha_hora manda su día, no el de hoy: 8:30 p. m. del 23 (UTC del 24)', async () => {
+  await crear({ ...base, gest_fecha_hora: new Date('2026-11-24T01:30:00Z') }, 7);
+  expect(SvProspecto.update.mock.calls[0][0].prosp_prox_gestion_fecha).toBe('2026-11-23');
 });

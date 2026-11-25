@@ -70,6 +70,10 @@ describe('ADMIN_AREA solo puede pedir sus áreas', () => {
     expect(res.status).toBe(200);
     expect(where().prosp_area_id).toBe(3);
   });
+  test.each([2, 3, 4])('compara como número aunque sus ids lleguen como texto (pide el %i)', async (id) => {
+    const res = await pedir(usuario('ADMIN_AREA', { usr_area_id: '2', areasExtra: [{ area_id: '3' }] }), `&area_id=${id}`);
+    expect(res.status).toBe(id === 4 ? 403 : 200);
+  });
   test('un área ajena → 403 sin consultar', async () => {
     const res = await pedir(admin, '&area_id=4');
     expect(res.status).toBe(403);
@@ -81,6 +85,7 @@ describe('ADMIN_AREA solo puede pedir sus áreas', () => {
 describe.each([
   ['SUPERVISOR', usuario('SUPERVISOR')],
   ['ASESOR', usuario('ASESOR')],
+  ['ASESOR sin grupo', usuario('ASESOR', { usr_grupo_id: null })],
   ['DIRECTOR_COMERCIAL', usuario('DIRECTOR_COMERCIAL')],
   ['SUPER_ADMIN', usuario('SUPER_ADMIN', { usr_area_id: null, usr_grupo_id: null })]
 ])('%s con area_id', (_rol, user) => {
