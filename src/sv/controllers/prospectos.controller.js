@@ -4,7 +4,7 @@
 const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES, ROLES_SUPERVISORES } = require('../config/constants');
-const { grupoIdsAccesibles } = require('../utils/acceso');
+const { grupoIdsAccesibles, areaIdsAccesibles } = require('../utils/acceso');
 const { fueraDeAlcance } = require('../utils/alcanceProspecto');
 
 // Supervisor+ puede filtrar por un asesor específico vía ?asesor_id=.
@@ -42,10 +42,18 @@ async function panelDia(req, res) {
 }
 
 async function agendaMes(req, res) {
+  const areaId = req.query.area_id;
+  // El filtro reemplaza al del alcance: quien se limita solo por área (ADMIN_AREA) pide solo las suyas.
+  const s = req.scope;
+  if (areaId && s.areaId && !s.grupoId && !s.asesorId
+      && !areaIdsAccesibles(req.user)?.includes(parseInt(areaId))) {
+    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Área fuera de tu alcance');
+  }
   const r = await prospectos.agendaMes({
     scope: req.scope,
     anio: parseInt(req.query.anio),
-    mes:  parseInt(req.query.mes)
+    mes:  parseInt(req.query.mes),
+    areaId
   });
   return ok(res, r);
 }

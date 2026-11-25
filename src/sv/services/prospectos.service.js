@@ -169,8 +169,10 @@ async function panelDia({ scope, fecha, areaId, grupoId, subproceso }) {
 
 // Conteo de eventos por día del mes (para colorear dots del MiniCalendar)
 // Excluye prospectos en estados FINAL (firmado/cerrado/perdido) — ya no requieren gestión.
-async function agendaMes({ scope, anio, mes }) {
+async function agendaMes({ scope, anio, mes, areaId }) {
   const baseWhere = buildScopeWhere(scope);
+  // Área activa del usuario (multi-área): solo marca los días con citas de esa área.
+  if (areaId) baseWhere.prosp_area_id = parseInt(areaId);
   const inicio = new Date(anio, mes - 1, 1);
   const fin    = new Date(anio, mes,     1);
   const estadosNoFinales = literal(`(SELECT estado_id FROM sv_cfg_estados_gestion WHERE estado_es_final = 0)`);
