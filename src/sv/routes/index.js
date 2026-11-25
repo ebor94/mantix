@@ -55,6 +55,9 @@ router.use('/renovaciones', svAuth, svAreaGuard, require('./renovaciones.routes'
 // ─── Salas de velación: visitas de Prenecesidad (migración 023) ───
 router.use('/salas',        svAuth, svAreaGuard, require('./salas.routes'));
 
+// ─── Ventas: correcciones y anulaciones del supervisor (migración 027) ───
+router.use('/ventas',       svAuth, svAreaGuard, require('./ventas.routes'));
+
 // ─── Errores: siempre al final, después de montar TODAS las rutas ───
 // Un handler async que falla llega a svErrorHandler en vez de terminar el proceso.
 capturarAsync(router);

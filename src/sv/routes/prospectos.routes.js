@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/prospectos.controller');
+const ventas = require('../controllers/ventas.controller');
 const v    = require('../validations/crm.validation');
 const { validate } = require('../middleware/validate');
 
@@ -11,6 +12,7 @@ router.get  ('/sin-asignar/count',   ctrl.sinAsignarCount);                     
 router.get  ('/por-asesor',          ctrl.porAsesor);                              // conteo por asesor (reasignación)
 router.post ('/reasignacion-masiva', ctrl.reasignacionMasiva);                     // mover todos de un asesor a otros
 router.get  ('/:id',                 ctrl.getOne);
+router.get  ('/:id/ventas',          ventas.listarDeProspecto);                    // ventas del cliente
 router.post ('/',                  validate(v.prospectos.create),              ctrl.create);
 router.put  ('/:id',                 validate(v.prospectos.update),              ctrl.update);
 router.put  ('/:id/productos',       validate(v.prospectos.productos),           ctrl.actualizarProductos);
