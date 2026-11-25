@@ -82,6 +82,12 @@ async function registroRapido(payload, asesorId) {
       transaction: t
     });
 
+    // "Volver" guarda la próxima visita; con cualquier otro resultado no queda nada pendiente.
+    const proxima = {
+      prosp_prox_gestion_fecha: resultadoCodigo === 'VOLVER' ? payload.prox_fecha || null : null,
+      prosp_prox_gestion_hora:  resultadoCodigo === 'VOLVER' ? payload.prox_hora  || null : null
+    };
+
     if (!prospecto) {
       prospecto = await SvProspecto.create({
         prosp_area_id:   AREA_PAP_ID,
@@ -90,15 +96,15 @@ async function registroRapido(payload, asesorId) {
         prosp_asesor_id: asesorId,
         prosp_estado_id: estado.estado_id,
         prosp_zona_pap:  zonaPap || null,
-        prosp_nota_inicial: payload.nota || null
+        prosp_nota_inicial: payload.nota || null,
+        ...proxima
       }, { transaction: t });
     } else {
       // Actualizar estado y zona del prospecto existente
       await prospecto.update({
         prosp_estado_id: estado.estado_id,
         prosp_zona_pap:  zonaPap || prospecto.prosp_zona_pap,
-        prosp_prox_gestion_fecha: resultadoCodigo === 'VOLVER' ? payload.prox_fecha || null : null,
-        prosp_prox_gestion_hora:  resultadoCodigo === 'VOLVER' ? payload.prox_hora  || null : null
+        ...proxima
       }, { transaction: t });
     }
 
