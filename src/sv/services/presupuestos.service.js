@@ -51,11 +51,16 @@ function puedeCargar(user, areaId) {
   return ROLES_QUE_CARGAN.includes(user?.rol?.rol_codigo) && alcance(user, areaId) !== null;
 }
 
+// Cargar también exige que haya a quién cargarle: al menos un asesor activo a su alcance.
+async function puedeCargarAhora(user, areaId) {
+  return puedeCargar(user, areaId) && (await asesoresCargables(user, areaId)).length > 0;
+}
+
 // Categorías del catálogo activo del área, en su orden.
 async function categoriasDe(areaId) {
   const filas = await SvProducto.findAll({
     attributes: ['prod_categoria'],
-    where: { prod_area_id: areaId, prod_activo: 1, prod_tipo: { [Op.ne]: '' }, prod_categoria: { [Op.ne]: null } },
+    where: { prod_area_id: areaId, prod_activo: 1, prod_tipo: { [Op.ne]: '' }, prod_categoria: { [Op.ne]: '' } },
     group: ['prod_categoria'],
     order: [[fn('MIN', col('prod_orden_display')), 'ASC'], ['prod_categoria', 'ASC']],
     raw: true
@@ -66,11 +71,11 @@ async function categoriasDe(areaId) {
 const llave = (usrId, categoria) => `${usrId}|${categoria}`;
 
 // Presupuesto cargado del mes: 'asesor|categoría' → valor.
-async function valoresDelMes(areaId, anio, mes, ids) {
+async function valoresDelMes(areaId, anio, mes, ids, transaction) {
   const where = { pre_area_id: areaId, pre_anio: anio, pre_mes: mes };
   if (ids) where.pre_usr_id = { [Op.in]: ids };
   const filas = await SvPresupuesto.findAll({
-    attributes: ['pre_usr_id', 'pre_categoria', 'pre_valor'], where, raw: true
+    attributes: ['pre_usr_id', 'pre_categoria', 'pre_valor'], where, raw: true, ...(transaction ? { transaction } : {})
   });
   return new Map(filas.map((f) => [llave(f.pre_usr_id, f.pre_categoria), Number(f.pre_valor)]));
 }
@@ -152,7 +157,8 @@ async function consultar({ user, areaId, anio, mes }) {
 
   // Categorías con datos que ya no están en el catálogo, al final.
   const fuera = new Set();
-  for (const [k] of [...deVisibles(presupuesto), ...deVisibles(realizado)]) {
+  for (const [k, valor] of [...deVisibles(presupuesto), ...deVisibles(realizado)]) {
+    if (valor === 0) continue;
     const cat = k.slice(k.indexOf('|') + 1);
     if (!catalogo.includes(cat)) fuera.add(cat);
   }
@@ -178,7 +184,7 @@ async function consultar({ user, areaId, anio, mes }) {
 
   return {
     area_id: areaId, anio, mes,
-    puede_cargar: puedeCargar(user, areaId),
+    puede_cargar: await puedeCargarAhora(user, areaId),
     categorias,
     grupos: [...grupos].sort(([a], [b]) => a - b).map(([grupo_id, nombre]) => ({ grupo_id, nombre })),
     asesores,
@@ -210,11 +216,15 @@ const porGrupoYNombre = (a, b) => {
 async function plantilla({ user, areaId, anio, mes }) {
   const { categorias, asesores } = await contextoDeCarga(user, areaId);
   const ids = asesores.map((a) => a.usr_id);
-  let valores = await valoresDelMes(areaId, anio, mes, ids);
-  if (!valores.size) {
+  // Por asesor: los de este mes si tiene alguno; si no, los del mes anterior.
+  const delMes = await valoresDelMes(areaId, anio, mes, ids);
+  const conMes = new Set([...delMes.keys()].map((k) => Number(k.split('|')[0])));
+  let previos = new Map();
+  if (ids.some((id) => !conMes.has(Number(id)))) {
     const [anioPrevio, mesPrevio] = mes === 1 ? [anio - 1, 12] : [anio, mes - 1];
-    valores = await valoresDelMes(areaId, anioPrevio, mesPrevio, ids);
+    previos = await valoresDelMes(areaId, anioPrevio, mesPrevio, ids);
   }
+  const valorDe = (id, c) => (conMes.has(Number(id)) ? delMes : previos).get(llave(id, c)) || 0;
   const area = await SvArea.findByPk(areaId, { attributes: ['area_nombre'] });
   const areaNombre = area?.area_nombre || 'area';
   const redes = await adUsuariosPorIdentidad(asesores.map((a) => a.usr_id_identidad));
@@ -223,12 +233,23 @@ async function plantilla({ user, areaId, anio, mes }) {
     usr_id: a.usr_id,
     usuario_red: redes.get(a.usr_id_identidad) || '',
     nombre: nombreDe(a),
-    valores: Object.fromEntries(categorias.map((c) => [c, valores.get(llave(a.usr_id, c)) || 0]))
+    valores: Object.fromEntries(categorias.map((c) => [c, valorDe(a.usr_id, c)]))
   }));
   const buffer = await excel.escribir({
     titulo: `Presupuesto ${areaNombre} — ${excel.nombreMes(mes)} ${anio}`, areaId, anio, mes, categorias, filas
   });
   return { buffer, nombre: excel.nombreArchivo({ areaNombre, anio, mes }) };
+}
+
+// Lo guardado de un asesor en categorías que ya no están en el catálogo: al guardar se pone en 0.
+function fueraDelCatalogo(guardado, usrId, categorias) {
+  const salida = [];
+  for (const [k, valor] of guardado) {
+    const [id, ...resto] = k.split('|');
+    const categoria = resto.join('|');
+    if (Number(id) === Number(usrId) && valor !== 0 && !categorias.includes(categoria)) salida.push([categoria, valor]);
+  }
+  return salida;
 }
 
 /** Lee el archivo y dice qué cambiaría. No guarda nada. */
@@ -256,6 +277,9 @@ async function revisar({ user, areaId, anio, mes, buffer }) {
       const despues = f.valores[categoria];
       if (antes !== despues) cambios.push({ usr_id: f.usr_id, nombre: f.nombre, categoria, antes, despues });
     }
+    for (const [categoria, antes] of fueraDelCatalogo(guardado, f.usr_id, categorias)) {
+      cambios.push({ usr_id: f.usr_id, nombre: f.nombre, categoria, antes, despues: 0 });
+    }
   }
   return { filas, cambios, errores };
 }
@@ -270,8 +294,7 @@ async function guardar({ user, areaId, anio, mes, filas }) {
   const permitidos = new Set(asesores.map((a) => Number(a.usr_id)));
 
   const vistos = new Set();
-  const registros = [];
-  const ahora = new Date();
+  const pedidos = []; // [usr_id, categoría, valor]
   for (const f of filas) {
     const usrId = Number(f?.usr_id);
     if (!permitidos.has(usrId)) throw error('FORBIDDEN', 'Hay asesores fuera de tu alcance o que ya no están activos');
@@ -282,24 +305,36 @@ async function guardar({ user, areaId, anio, mes, filas }) {
     for (const [categoria, valor] of entradas) {
       if (!categorias.includes(categoria)) throw error('VALIDATION_ERROR', 'Hay una categoría que no es del catálogo');
       if (!enteroValido(valor)) throw error('VALIDATION_ERROR', `Los valores son enteros de 0 a ${VALOR_MAXIMO.toLocaleString('es-CO')}`);
-      registros.push({
-        pre_usr_id: usrId, pre_area_id: areaId, pre_anio: anio, pre_mes: mes, pre_categoria: categoria,
-        pre_valor: valor, pre_created_by: user.usr_id, pre_updated_by: user.usr_id, pre_updated_at: ahora
-      });
+      pedidos.push([usrId, categoria, valor]);
     }
   }
 
   const t = await sequelize.transaction();
   try {
-    await SvPresupuesto.bulkCreate(registros, {
-      updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at'], transaction: t
+    // Solo se marca autor y fecha en lo que de verdad cambia.
+    const guardado = await valoresDelMes(areaId, anio, mes, [...vistos], t);
+    const ahora = new Date();
+    const registro = (usrId, categoria, valor) => ({
+      pre_usr_id: usrId, pre_area_id: areaId, pre_anio: anio, pre_mes: mes, pre_categoria: categoria,
+      pre_valor: valor, pre_created_by: user.usr_id, pre_updated_by: user.usr_id, pre_updated_at: ahora
     });
+    const registros = pedidos
+      .filter(([u, c, v]) => (guardado.get(llave(u, c)) || 0) !== v)
+      .map(([u, c, v]) => registro(u, c, v));
+    for (const usrId of vistos) {
+      for (const [categoria] of fueraDelCatalogo(guardado, usrId, categorias)) registros.push(registro(usrId, categoria, 0));
+    }
+    if (registros.length) {
+      await SvPresupuesto.bulkCreate(registros, {
+        updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at', 'pre_categoria'], transaction: t
+      });
+    }
     await t.commit();
+    return { guardados: new Set(registros.map((r) => r.pre_usr_id)).size, cambios: registros.length };
   } catch (e) {
     try { await t.rollback(); } catch { /* el error que importa es el original */ }
     throw e;
   }
-  return { guardados: vistos.size, cambios: registros.length };
 }
 
 module.exports = {

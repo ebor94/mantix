@@ -62,7 +62,7 @@ afterEach(cerrarTodos);
 
 describe('plantilla', () => {
   test('con lo cargado del mes, ordenada por grupo y nombre, con el usuario de red', async () => {
-    presupuestoPorLlamada([[7, 'Osarios', 1000], [8, 'Bóvedas', 50]]);
+    presupuestoPorLlamada([[7, 'Osarios', 1000], [8, 'Bóvedas', 50], [9, 'Osarios', 9]]);
     const { buffer, nombre } = await svc.plantilla({ user: SUPERVISOR, ...P });
     expect(nombre).toBe('presupuesto-prenecesidad-2026-11.xlsx');
     const ws = (await leerLibro(buffer)).getWorksheet('Presupuesto');
@@ -71,7 +71,8 @@ describe('plantilla', () => {
     expect([4, 5, 6].map((r) => ws.getCell(`B${r}`).value)).toEqual(['aperez', 'bruiz', '']);
     expect(ws.getCell('D4').value).toBe(1000);
     expect(ws.getCell('E5').value).toBe(50);
-    expect(ws.getCell('D6').value).toBe(0);
+    expect(ws.getCell('D6').value).toBe(9);
+    expect(ws.getCell('E4').value).toBe(0);
     expect(M.SvPresupuesto.findAll).toHaveBeenCalledTimes(1);
     expect(adUsuariosPorIdentidad).toHaveBeenCalledWith([90, 80, 70]);
   });
@@ -82,6 +83,15 @@ describe('plantilla', () => {
     expect(ws.getCell('D4').value).toBe(777);
     const [, previo] = M.SvPresupuesto.findAll.mock.calls;
     expect(previo[0].where).toMatchObject({ pre_anio: 2026, pre_mes: 10 });
+  });
+
+  test('el valor por defecto se decide por asesor: los del mes si tiene alguno, si no los del mes anterior', async () => {
+    presupuestoPorLlamada([[7, 'Osarios', 1000]], [[7, 'Osarios', 5], [8, 'Osarios', 800], [8, 'Bóvedas', 80]]);
+    const ws = (await leerLibro((await svc.plantilla({ user: SUPERVISOR, ...P })).buffer)).getWorksheet('Presupuesto');
+    // 7 (Ana): solo lo del mes, el 5 del mes anterior no entra; 8 (Beto): lo del mes anterior; 9 (Zoe): nada
+    expect([ws.getCell('D4').value, ws.getCell('E4').value]).toEqual([1000, 0]);
+    expect([ws.getCell('D5').value, ws.getCell('E5').value]).toEqual([800, 80]);
+    expect([ws.getCell('D6').value, ws.getCell('E6').value]).toEqual([0, 0]);
   });
 
   test('en enero, el mes anterior es diciembre del año anterior', async () => {
@@ -127,8 +137,8 @@ describe('revisar', () => {
   test('no escribe, y solo cuenta como cambio lo que difiere de lo guardado', async () => {
     presupuestoPorLlamada([[7, 'Osarios', 1000], [7, 'Bóvedas', 50]]);
     const r = await revisar(await libro([
-      fila(7, 'Ana', { Osarios: 1000, 'Bóvedas': 60 }),
-      fila(8, 'Beto', { Osarios: 0, 'Bóvedas': 5 })
+      fila(7, 'Ana X', { Osarios: 1000, 'Bóvedas': 60 }),
+      fila(8, 'Beto X', { Osarios: 0, 'Bóvedas': 5 })
     ]));
     expect(r.filas).toEqual([
       { usr_id: 7, nombre: 'Ana X', valores: { Osarios: 1000, 'Bóvedas': 60 } },
@@ -144,27 +154,38 @@ describe('revisar', () => {
     expect(M.SvPresupuesto.findAll.mock.calls[0][0].where.pre_usr_id).toEqual({ [Op.in]: [7, 8] });
   });
 
+  test('lista lo guardado en categorías que salieron del catálogo, con despues 0', async () => {
+    presupuestoPorLlamada([[7, 'Vieja', 300], [7, 'Osarios', 10], [8, 'Vieja', 0], [99, 'Vieja', 5]]);
+    const r = await revisar(await libro([fila(7, 'Ana X', { Osarios: 10, 'Bóvedas': 0 }), fila(8, 'Beto X', { Osarios: 0, 'Bóvedas': 0 })]));
+    expect(r.cambios).toEqual([{ usr_id: 7, nombre: 'Ana X', categoria: 'Vieja', antes: 300, despues: 0 }]);
+  });
+
+  test('un asesor cuyo nombre no es el del ID da error', async () => {
+    const r = await revisar(await libro([fila(7, 'Beto X', { Osarios: 1, 'Bóvedas': 0 })]));
+    expect(r.errores).toEqual([{ fila: 4, columna: 'A (ID)', mensaje: expect.stringMatching(/no corresponde/) }]);
+  });
+
   test('sin diferencias, sin cambios', async () => {
     presupuestoPorLlamada([[7, 'Osarios', 1]]);
-    expect((await revisar(await libro([fila(7, 'Ana', { Osarios: 1, 'Bóvedas': 0 })]))).cambios).toEqual([]);
+    expect((await revisar(await libro([fila(7, 'Ana X', { Osarios: 1, 'Bóvedas': 0 })]))).cambios).toEqual([]);
   });
 
   test('devuelve los errores del libro con fila y columna', async () => {
-    const r = await revisar(await libro([fila(7, 'Ana', { Osarios: -1, 'Bóvedas': 0 }), fila(99, 'Otro', { Osarios: 1, 'Bóvedas': 1 })]));
+    const r = await revisar(await libro([fila(7, 'Ana X', { Osarios: -1, 'Bóvedas': 0 }), fila(99, 'Otro', { Osarios: 1, 'Bóvedas': 1 })]));
     expect(r.errores.map((e) => [e.fila, e.columna])).toEqual([[4, 'D (Osarios)'], [5, 'A (ID)']]);
     expect(r.filas).toEqual([]);
     expect(r.cambios).toEqual([]);
   });
 
   test('un error del libro entero se informa sin fila ni columna, con filas y cambios vacíos', async () => {
-    const buf = await excel.escribir({ titulo: 't', ...P, mes: 10, categorias: CATS, filas: [fila(7, 'Ana', { Osarios: 5 })] });
+    const buf = await excel.escribir({ titulo: 't', ...P, mes: 10, categorias: CATS, filas: [fila(7, 'Ana X', { Osarios: 5 })] });
     const r = await revisar(buf);
     expect(r).toEqual({ filas: [], cambios: [], errores: [{ fila: null, columna: null, mensaje: expect.stringMatching(/no es de noviembre de 2026/) }] });
     expect(M.SvPresupuesto.findAll).not.toHaveBeenCalled();
   });
 
   test('con errores de celda, filas y cambios van vacíos aunque otras filas estén bien', async () => {
-    const r = await revisar(await libro([fila(7, 'Ana', { Osarios: 5, 'Bóvedas': 0 }), fila(8, 'Beto', { Osarios: -5, 'Bóvedas': 0 })]));
+    const r = await revisar(await libro([fila(7, 'Ana X', { Osarios: 5, 'Bóvedas': 0 }), fila(8, 'Beto X', { Osarios: -5, 'Bóvedas': 0 })]));
     expect(r.errores).toHaveLength(1);
     expect(r.filas).toEqual([]);
     expect(r.cambios).toEqual([]);
@@ -181,17 +202,49 @@ describe('guardar', () => {
 
   test('upsert en una transacción, a nombre de quien guarda', async () => {
     const r = await guardar(FILAS);
-    expect(r).toEqual({ guardados: 2, cambios: 3 });
+    expect(r).toEqual({ guardados: 2, cambios: 2 });
     const [registros, opts] = M.SvPresupuesto.bulkCreate.mock.calls[0];
-    expect(opts).toEqual({ updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at'], transaction: t });
+    expect(opts).toEqual({ updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at', 'pre_categoria'], transaction: t });
+    // 7/Bóvedas = 0 sin nada guardado no es un cambio
     expect(registros).toEqual([
       expect.objectContaining({ pre_usr_id: 7, pre_area_id: 1, pre_anio: 2026, pre_mes: 11, pre_categoria: 'Osarios', pre_valor: 100, pre_created_by: 3, pre_updated_by: 3 }),
-      expect.objectContaining({ pre_usr_id: 7, pre_categoria: 'Bóvedas', pre_valor: 0 }),
       expect.objectContaining({ pre_usr_id: 8, pre_categoria: 'Osarios', pre_valor: 5 })
     ]);
     expect(registros[0].pre_updated_at).toBeInstanceOf(Date);
     expect(t.commit).toHaveBeenCalledTimes(1);
     expect(t.rollback).not.toHaveBeenCalled();
+  });
+
+  test('lo guardado en una categoría que salió del catálogo se pone en 0, en la misma transacción', async () => {
+    presupuestoPorLlamada([[7, 'Vieja', 300], [7, 'Osarios', 100], [8, 'Vieja', 0], [99, 'Vieja', 5]]);
+    const r = await guardar([{ usr_id: 7, valores: { Osarios: 100 } }, { usr_id: 8, valores: { Osarios: 5 } }]);
+    const [registros, opts] = M.SvPresupuesto.bulkCreate.mock.calls[0];
+    expect(registros.map((x) => [x.pre_usr_id, x.pre_categoria, x.pre_valor])).toEqual([[8, 'Osarios', 5], [7, 'Vieja', 0]]);
+    expect(opts.transaction).toBe(t);
+    expect(r).toEqual({ guardados: 2, cambios: 2 });
+  });
+
+  test('lo que no cambia no se escribe: ni autor ni fecha', async () => {
+    presupuestoPorLlamada([[7, 'Osarios', 100], [7, 'Bóvedas', 20]]);
+    const r = await guardar([{ usr_id: 7, valores: { Osarios: 100, 'Bóvedas': 20 } }]);
+    expect(M.SvPresupuesto.bulkCreate).not.toHaveBeenCalled();
+    expect(t.commit).toHaveBeenCalledTimes(1);
+    expect(r).toEqual({ guardados: 0, cambios: 0 });
+  });
+
+  test('solo se escribe lo que cambió, comparando con lo guardado dentro de la transacción', async () => {
+    presupuestoPorLlamada([[7, 'Osarios', 100], [7, 'Bóvedas', 20]]);
+    await guardar([{ usr_id: 7, valores: { Osarios: 100, 'Bóvedas': 25 } }]);
+    expect(M.SvPresupuesto.bulkCreate.mock.calls[0][0].map((x) => [x.pre_categoria, x.pre_valor])).toEqual([['Bóvedas', 25]]);
+    const lectura = M.SvPresupuesto.findAll.mock.calls[0][0];
+    expect(lectura.transaction).toBe(t);
+    expect(lectura.where.pre_usr_id).toEqual({ [Op.in]: [7] });
+  });
+
+  test('un cero sobre algo guardado sí es un cambio', async () => {
+    presupuestoPorLlamada([[7, 'Osarios', 100]]);
+    await guardar([{ usr_id: 7, valores: { Osarios: 0 } }]);
+    expect(M.SvPresupuesto.bulkCreate.mock.calls[0][0][0]).toMatchObject({ pre_categoria: 'Osarios', pre_valor: 0 });
   });
 
   test('un error al guardar deshace todo y se propaga', async () => {
@@ -256,7 +309,7 @@ describe('rutas', () => {
   }
   const QUERY = { area_id: 1, anio: 2026, mes: 11 };
   const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  const libro = () => excel.escribir({ titulo: 't', ...P, categorias: CATS, filas: [fila(7, 'Ana', { Osarios: 10, 'Bóvedas': 0 })] });
+  const libro = () => excel.escribir({ titulo: 't', ...P, categorias: CATS, filas: [fila(7, 'Ana X', { Osarios: 10, 'Bóvedas': 0 })] });
   const subir = async (user, adjuntar, campos = QUERY) => {
     let rq = request(await app(user)).post('/api/sv/presupuestos/revisar');
     for (const [k, v] of Object.entries(campos)) rq = rq.field(k, String(v));

@@ -64,7 +64,7 @@ describe('categoriasDe', () => {
     expect(await svc.categoriasDe(1)).toEqual(['Osarios', 'Bóvedas']);
     const q = M.SvProducto.findAll.mock.calls[0][0];
     expect(q.where).toEqual({
-      prod_area_id: 1, prod_activo: 1, prod_tipo: { [Op.ne]: '' }, prod_categoria: { [Op.ne]: null }
+      prod_area_id: 1, prod_activo: 1, prod_tipo: { [Op.ne]: '' }, prod_categoria: { [Op.ne]: '' }
     });
     expect(q.group).toEqual(['prod_categoria']);
     expect(q.raw).toBe(true);
@@ -210,10 +210,59 @@ describe('consultar', () => {
       const r = await svc.consultar({ user: u, areaId: 1, anio: 2026, mes: 11 });
       expect(r.asesores.map((a) => a.usr_id)).toContain(12);
       expect(r.total.realizado).toBe(900);
-      const where = M.SvUsuario.findAll.mock.calls.at(-1)[0].where;
+      const where = M.SvUsuario.findAll.mock.calls[0][0].where;
       expect(where.usr_area_id).toBeUndefined();
       expect(where[Op.or][1]).toEqual({ usr_id: { [Op.in]: [12] } });
     }
+  });
+
+  describe('el SQL de lo realizado', () => {
+    const sqlEnviado = async (extra = {}) => {
+      await consultar(extra);
+      const [sql, opts] = M.sequelize.query.mock.calls[0];
+      return { sql: sql.replace(/\s+/g, ' ').trim(), opts };
+    };
+
+    test('suma cantidad por precio de la venta, por asesor dueño y categoría del producto', async () => {
+      const { sql } = await sqlEnviado();
+      expect(sql).toMatch(/^SELECT v\.venta_asesor_id AS usr_id, p\.prod_categoria AS categoria, SUM\(i\.vi_cantidad \* i\.vi_precio_unitario\) AS valor /);
+      expect(sql).toContain('FROM sv_crm_ventas v');
+      expect(sql).toContain('JOIN sv_crm_ventas_items i ON i.vi_venta_id = v.venta_id');
+      expect(sql).toContain('JOIN sv_cfg_productos p ON p.prod_id = i.vi_prod_id');
+      expect(sql).toContain('WHERE v.venta_anulada = 0 AND v.venta_area_id = :areaId AND v.venta_fecha BETWEEN :desde AND :hasta');
+      expect(sql).toMatch(/GROUP BY v\.venta_asesor_id, p\.prod_categoria$/);
+      expect(sql).not.toMatch(/vi_precio_ofrecido|venta_created_by|venta_total/);
+    });
+
+    test('los reemplazos llevan el área pedida', async () => {
+      M.SvUsuario.findAll.mockResolvedValue([]);
+      const { opts } = await sqlEnviado({ user: user('SUPER_ADMIN'), areaId: 5 });
+      expect(opts.replacements.areaId).toBe(5);
+      expect(opts.type).toBe('SELECT');
+    });
+  });
+
+  test('una categoría fuera del catálogo solo sale si algún valor visible es distinto de 0', async () => {
+    datos({ pres: [[7, 'Vieja', 0]], real: [[8, 'Otra', 0]] });
+    expect((await consultar()).categorias).toEqual(['Osarios', 'Bóvedas']);
+  });
+
+  test('puede_cargar exige al menos un asesor al que cargar', async () => {
+    datos();
+    expect((await consultar()).puede_cargar).toBe(true);
+    M.SvUsuario.findAll.mockResolvedValueOnce(ASESORES).mockResolvedValueOnce([]);
+    expect((await consultar()).puede_cargar).toBe(false);
+  });
+
+  test('el último cambio se pide con su editor', async () => {
+    datos({ editado: { pre_updated_at: new Date('2026-11-20T15:30:00Z'), editor: { usr_nombre: 'Sara', usr_apellido: 'Mora' } } });
+    await consultar();
+    expect(M.SvPresupuesto.findOne.mock.calls[0][0].include).toEqual([{ association: 'editor', attributes: ['usr_nombre', 'usr_apellido'] }]);
+  });
+
+  test('un último cambio sin editor deja el nombre en null', async () => {
+    datos({ editado: { pre_updated_at: new Date('2026-11-20T15:30:00Z'), editor: null } });
+    expect((await consultar()).actualizado).toEqual({ por: null, en: '2026-11-20T15:30:00.000Z' });
   });
 
   test('el alcance entra en la consulta de usuarios', async () => {

@@ -1,6 +1,7 @@
 jest.mock('../src/masajes/utils/zipSeguro', () => ({ inspeccionarZip: jest.fn() }));
 
 const ExcelJS = require('exceljs');
+const JSZip = require('jszip');
 const { inspeccionarZip } = require('../src/masajes/utils/zipSeguro');
 const x = require('../src/sv/services/presupuestosExcel.service');
 
@@ -22,6 +23,15 @@ async function modificado(cambiar, buf) {
   cambiar(wb.getWorksheet('Presupuesto'), wb);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+// Cambia el XML de la hoja Presupuesto de un libro bueno.
+async function conXml(cambiar) {
+  const zip = await JSZip.loadAsync(await base());
+  const nombre = Object.keys(zip.files).find((n) => /^xl\/worksheets\/sheet1\.xml$/.test(n));
+  zip.file(nombre, cambiar(await zip.file(nombre).async('string')));
+  return Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+}
+
 
 beforeEach(() => inspeccionarZip.mockReset());
 
@@ -109,6 +119,118 @@ describe('leer', () => {
     });
     const f = (await leer(buf)).filas[0];
     expect(f.valores).toEqual({ Osarios: 500, 'Bóvedas': 14000000 });
+  });
+
+
+  describe('lectura segura', () => {
+    test('la bomba de celdas combinadas da error a tiempo y el proceso sigue vivo', async () => {
+      const bomba = await conXml((xml) => xml.replace('</sheetData>', '</sheetData><mergeCells count="1"><mergeCell ref="A7:XFD1048576"/></mergeCells>'));
+      expect(bomba.length).toBeLessThan(20000);
+      const t0 = Date.now();
+      const e = await error(leer(bomba));
+      expect(e).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
+      expect(Date.now() - t0).toBeLessThan(15000);
+      expect((await leer(await base())).filas).toHaveLength(2); // y la siguiente lectura funciona
+    }, 30000);
+
+    test('un archivo que el hilo no puede abrir', async () => {
+      const e = await error(leer(Buffer.from('basura que inspeccionarZip (simulado) deja pasar')));
+      expect(e).toMatchObject({ code: 'VALIDATION_ERROR', message: 'El archivo no es un Excel válido o es demasiado grande' });
+    });
+
+    test('una lectura a la vez', async () => {
+      const buf = await base();
+      const primera = leer(buf);
+      const segunda = await error(leer(buf));
+      expect(segunda).toMatchObject({ code: 'CONFLICT', message: 'Se está revisando otro archivo. Intenta en unos segundos' });
+      expect((await primera).filas).toHaveLength(2);
+      expect((await leer(buf)).filas).toHaveLength(2); // libre otra vez
+    });
+
+    test('la inspección del zip usa los topes de la carga', async () => {
+      await leer(await base());
+      expect(inspeccionarZip).toHaveBeenCalledWith(expect.any(Buffer), { maxDescomprimido: 10 * 1024 * 1024, maxEntradas: 100 });
+    });
+  });
+
+  describe('valores que nadie escribió', () => {
+    test('una celda combinada que no es la principal', async () => {
+      const buf = await modificado((ws) => { ws.mergeCells('D4:E4'); });
+      const r = await leer(buf);
+      expect(r.errores).toEqual([{ fila: 4, columna: 'E (Bóvedas)', mensaje: 'No combines celdas' }]);
+      expect(r.filas.map((f) => f.usr_id)).toEqual([8]);
+    });
+
+    test('una fórmula sin resultado guardado', async () => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = { formula: '1+1' }; });
+      expect((await leer(buf)).errores).toEqual([{ fila: 4, columna: 'D (Osarios)', mensaje: 'Abre el archivo en Excel y guárdalo de nuevo' }]);
+    });
+  });
+
+  describe('números', () => {
+    test.each([
+      ['ruido decimal de un cálculo', 14000000.0000001, 14000000],
+      ['fórmula con ruido decimal', { formula: '1/3*42000000', result: 13999999.9999999 }, 14000000],
+      ['texto con puntos', '1.000.000', 1000000],
+      ['cero', '0', 0]
+    ])('acepta %s', async (_n, valor, esperado) => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = valor; });
+      const r = await leer(buf);
+      expect(r.errores).toEqual([]);
+      expect(r.filas[0].valores.Osarios).toBe(esperado);
+    });
+
+    test.each([
+      ['decimal de verdad', 14000000.01], ['medio', 0.5], ['separadores mezclados', '1.234,567'],
+      ['separadores mezclados 2', '1,234.567'], ['empieza en 0', '007'], ['miles mal agrupados', '1.00.000'],
+      ['miles con cero al inicio', '0.100'], ['dos puntos seguidos', '1..000']
+    ])('rechaza %s', async (_n, valor) => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = valor; });
+      expect((await leer(buf)).errores).toHaveLength(1);
+    });
+  });
+
+  describe('qué es una celda', () => {
+    test('fórmula compartida: su resultado guardado', async () => {
+      const buf = await modificado((ws) => {
+        ws.getCell('D4').value = { formula: '1+1', result: 5 };
+        ws.getCell('D5').value = { sharedFormula: 'D4', result: 6 };
+      });
+      const r = await leer(buf);
+      expect(r.errores).toEqual([]);
+      expect(r.filas.map((f) => f.valores.Osarios)).toEqual([5, 6]);
+    });
+
+    test('texto enriquecido', async () => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = { richText: [{ text: '14.' }, { text: '000.000', font: { bold: true } }] }; });
+      expect((await leer(buf)).filas[0].valores.Osarios).toBe(14000000);
+    });
+
+    test('hipervínculo: el texto visible, nunca el destino', async () => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = { text: '2500', hyperlink: 'https://ejemplo.com/9999' }; });
+      expect((await leer(buf)).filas[0].valores.Osarios).toBe(2500);
+    });
+
+    test('una fecha no es un valor', async () => {
+      const buf = await modificado((ws) => { ws.getCell('D4').value = new Date('2026-01-01T00:00:00Z'); ws.getCell('D4').style = { numFmt: 'yyyy-mm-dd' }; });
+      expect((await leer(buf)).errores).toEqual([{ fila: 4, columna: 'D (Osarios)', mensaje: expect.any(String) }]);
+    });
+
+    test('una fila con valores pero sin ID', async () => {
+      const buf = await modificado((ws) => { ws.getCell('A9').value = null; ws.getCell('D9').value = 5; });
+      expect((await leer(buf)).errores).toEqual([{ fila: 9, columna: 'A (ID)', mensaje: 'Falta el ID del asesor' }]);
+    });
+
+    test('el nombre debe ser el del ID, sin importar mayúsculas, tildes ni espacios', async () => {
+      const ok = await modificado((ws) => { ws.getCell('C4').value = '  ANA   PEREZ '; });
+      expect((await leer(ok)).errores).toEqual([]);
+      const mal = await modificado((ws) => { ws.getCell('C4').value = 'Beto Ruiz'; });
+      const r = await leer(mal);
+      expect(r.errores).toEqual([{ fila: 4, columna: 'A (ID)', mensaje: 'El ID no corresponde a ese asesor: descarga la plantilla de nuevo' }]);
+      expect(r.filas.map((f) => f.usr_id)).toEqual([8]);
+      const vacio = await modificado((ws) => { ws.getCell('C4').value = null; });
+      expect((await leer(vacio)).errores).toHaveLength(1);
+    });
   });
 
   describe('errores de fila', () => {
