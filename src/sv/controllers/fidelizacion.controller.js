@@ -28,7 +28,7 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 },  // 8MB
   fileFilter: (_req, file, cb) => {
     if (/^image\//.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Solo se aceptan imágenes (jpg/png/webp)'));
+    else cb(Object.assign(new Error('Solo se aceptan imágenes (jpg/png/webp)'), { code: ERROR_CODES.VALIDATION_ERROR }));
   }
 });
 

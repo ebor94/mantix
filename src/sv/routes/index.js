@@ -5,6 +5,8 @@
 const router = require('express').Router();
 const { svAuth }      = require('../middleware/svAuth');
 const { svAreaGuard } = require('../middleware/svAreaGuard');
+const { svErrorHandler } = require('../middleware/svErrorHandler');
+const { capturarAsync }  = require('../utils/capturarAsync');
 
 router.get('/health', (_req, res) => res.json({
   ok: true,
@@ -52,5 +54,10 @@ router.use('/renovaciones', svAuth, svAreaGuard, require('./renovaciones.routes'
 
 // ─── Salas de velación: visitas de Prenecesidad (migración 023) ───
 router.use('/salas',        svAuth, svAreaGuard, require('./salas.routes'));
+
+// ─── Errores: siempre al final, después de montar TODAS las rutas ───
+// Un handler async que falla llega a svErrorHandler en vez de terminar el proceso.
+capturarAsync(router);
+router.use(svErrorHandler);
 
 module.exports = router;

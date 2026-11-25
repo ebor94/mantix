@@ -23,7 +23,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (_req, file, cb) => {
     if (/csv|text\/plain/.test(file.mimetype) || /\.csv$/i.test(file.originalname)) cb(null, true);
-    else cb(new Error('Solo se aceptan archivos CSV'));
+    else cb(Object.assign(new Error('Solo se aceptan archivos CSV'), { code: ERROR_CODES.VALIDATION_ERROR }));
   }
 });
 
