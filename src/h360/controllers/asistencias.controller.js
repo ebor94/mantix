@@ -32,7 +32,7 @@ const karingsoft = require('../services/karingsoft.service')
 const ESTADOS_POR_ROL = {
   asistente:            ['ASISTENCIA'],
   tanatologo:           ['PRESERVACION'],
-  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO'],
+  asistente_tanatologo: ['ASISTENCIA', 'PRESERVACION', 'ENCOFRADO', 'ENCUENTRO'],
   supervisora:          ['ENCOFRADO', 'ENCUENTRO', 'SALA'],
 }
 
@@ -40,7 +40,7 @@ const ESTADOS_POR_ROL = {
 const ETAPAS_POR_ROL = {
   asistente:            ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE'],
   tanatologo:           ['F04_TANATOPRAXIA', 'F07_SALIDA_NO_CONFORME'],
-  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
+  asistente_tanatologo: ['F02_INVENTARIO_CUERPO', 'F03_INVENTARIO_RETOQUE', 'F04_TANATOPRAXIA', 'F06_ENCOFRADO', 'F05_ENTREGA', 'F07_SALIDA_NO_CONFORME', 'F08_DESINFECCION'],
   // La supervisora no encofra: eso lo hace el asistente de tanatólogo. Pero
   // sí saca el caso de ENCOFRADO hacia ENCUENTRO, y para eso no necesita poder
   // guardar el F-06 — la transición exige que esté cerrado, no quién lo cerró.
@@ -60,7 +60,8 @@ const ETAPAS_PARA_CERRAR = {
   tanatologo:           { PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'] },
   asistente_tanatologo: { ASISTENCIA:   ['F02_INVENTARIO_CUERPO', 'F08_DESINFECCION'],
                           PRESERVACION: ['F04_TANATOPRAXIA', 'F03_INVENTARIO_RETOQUE'],
-                          ENCOFRADO:    ['F06_ENCOFRADO'] },
+                          ENCOFRADO:    ['F06_ENCOFRADO'],
+                          ENCUENTRO:    ['F05_ENTREGA'] },
   // ENCOFRADO con F06 se queda a propósito aunque ella no pueda diligenciarlo:
   // es lo que le exige el encofrado cerrado para poder avanzar a ENCUENTRO.
   supervisora:          { ENCOFRADO:    ['F06_ENCOFRADO'],
@@ -209,7 +210,7 @@ const TRANSICIONES = {
   ASISTENCIA:   { siguiente: 'PRESERVACION', roles: ['asistente', 'asistente_tanatologo', 'admin'] },
   PRESERVACION: { siguiente: 'ENCOFRADO',    roles: ['tanatologo', 'asistente_tanatologo', 'admin'] },
   ENCOFRADO:    { siguiente: 'ENCUENTRO',    roles: ['supervisora', 'coordinador', 'asistente_tanatologo', 'admin'] },
-  ENCUENTRO:    { siguiente: 'SALA',         roles: ['asesor', 'supervisora', 'coordinador', 'admin'] },
+  ENCUENTRO:    { siguiente: 'SALA',         roles: ['asesor', 'supervisora', 'coordinador', 'asistente_tanatologo', 'admin'] },
   SALA:         { siguiente: 'APROBACION',   roles: ['supervisora', 'coordinador', 'admin'] },
   APROBACION:   { siguiente: 'CERRADO',      roles: ['coordinador', 'contabilidad', 'admin'] },
 }
@@ -1157,4 +1158,9 @@ async function avanzarPorEvento(asistenciaId, destino, { usuario, nombre, coment
 module.exports = { ordenServicioErp, r34DeLaAsistencia, listar, resumen, obtener, rolDelConductor, tieneVelacion, obtenerHistorial, obtenerEtapa, crear, asignarActores, cambiarEstado, guardarEtapa, aprobar, agregarNota, desistir, avanzarPorEvento,
   // Se exportan para probarlos: de ellos depende que un caso pueda avanzar, y
   // equivocarse deja a alguien pidiendo un formato que no puede llenar.
-  hayVehiculoQueDesinfectar, requisitosEfectivos }
+  hayVehiculoQueDesinfectar, requisitosEfectivos,
+  // Las cuatro tablas que deciden quién puede qué. Se exportan para que las
+  // pruebas fijen la matriz: un rol al que se le abre una etapa pero no la
+  // transición cierra el formato y deja el caso trabado en el estado, sin que
+  // nada lo advierta.
+  ESTADOS_POR_ROL, ETAPAS_POR_ROL, ETAPAS_PARA_CERRAR, TRANSICIONES }
