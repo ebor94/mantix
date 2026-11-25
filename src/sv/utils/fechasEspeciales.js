@@ -49,8 +49,8 @@ function proximaOcurrencia(fechaISO) {
   const mes = parseInt(m[2], 10);
   const dia = parseInt(m[3], 10);
 
-  const hoy = new Date();
-  const hoyUTC = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
+  // "Hoy" es el día de Colombia, no el de UTC.
+  const hoyUTC = new Date(`${hoyISO()}T00:00:00Z`);
   const anioActual = hoyUTC.getUTCFullYear();
 
   let candidato = new Date(Date.UTC(anioActual, mes - 1, dia));

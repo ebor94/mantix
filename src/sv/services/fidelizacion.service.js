@@ -300,7 +300,7 @@ async function proximosCumpleanos({ dias = 3 } = {}) {
     ]
   });
 
-  const anioActual = new Date().getUTCFullYear();
+  const anioActual = Number(hoyISO().slice(0, 4));
   const eventos = [];
   for (const c of contactos) {
     const p = c.persona;
