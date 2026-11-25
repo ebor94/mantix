@@ -39,15 +39,25 @@
  *    hacer y la actividad desaparece del tablero sin que nadie lo note—, pero un
  *    500 de MySQL es un peor mensaje que un 400 que diga qué campo falta.
  *
+ * 5. LA EVIDENCIA FOTOGRÁFICA LA GUARDA EL SERVICIO DE VEHÍCULOS, REUSADO. No
+ *    se duplica: está acoplado al `id` de un registro y a una ruta en disco, no
+ *    a la tabla de vehículos. Lo único que hay que decirle es A QUÉ TABLA
+ *    escribe —`h360_lab_evidencia`, espejo exacto de `h360_desinf_evidencia`—,
+ *    porque sin eso la foto del laboratorio queda colgada del registro del
+ *    VEHÍCULO que tenga el mismo id.
+ *
  * ── De dónde sale el reloj ─────────────────────────────────────────────────
  * De `../utils/fecha_hora`, que es el hogar designado del «hoy» del negocio.
  * NO de `desinfecciones.controller.js`, que también lo exporta: ese archivo
  * requiere `../config/db` y el servicio de evidencia al cargarse, así que
- * importarlo acá arrastraría sharp y multer de rebote.
+ * importarlo acá arrastraría todo el módulo de vehículos de rebote. El servicio
+ * de evidencia sí se importa, y con él vienen sharp y multer: es el precio de
+ * no duplicarlo, y las rutas lo necesitan igual para el multer de la subida.
  */
 const db = require('../config/db')
-const { hoyBogota, fechaSolo } = require('../utils/fecha_hora')
+const { hoyBogota, fechaSolo, diasEntre } = require('../utils/fecha_hora')
 const { generarDia, cerrarDiariasVencidas } = require('../services/laboratorio.service')
+const evid = require('../services/desinfeccionEvidencia.service')
 
 const texto = (v, max) => String(v ?? '').trim().slice(0, max)
 const esVerdadero = v => v === true || v === 1 || v === '1' || v === 'true'
@@ -645,11 +655,485 @@ async function tablero(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Registrar y omitir
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * La tabla de evidencia de ESTE módulo.
+ *
+ * El servicio de evidencia es el de vehículos, reusado tal cual, y solo admite
+ * esta tabla o la de allá: si acá se escribiera mal el nombre, el servicio lanza
+ * al cargar este archivo (la fábrica de `servirEvidencia` se llama al final) y
+ * el proceso no arranca, que es mejor que descubrirlo con la primera foto.
+ *
+ * Sin este dato las filas irían a `h360_desinf_evidencia`, cuya FK apunta a
+ * `h360_desinf_registro`: la foto del laboratorio quedaría colgada del registro
+ * del VEHÍCULO que tenga el mismo id —los dos autoincrementos arrancan en 1, así
+ * que el choque es lo normal— y una auditoría leería una foto del laboratorio
+ * como evidencia de una carroza.
+ */
+const TABLA_EVIDENCIA = 'h360_lab_evidencia'
+
+/** Lo que multer deja en `req.files`, siempre como lista. */
+function archivosDe(req) {
+  const f = req?.files
+  if (!f) return []
+  if (Array.isArray(f)) return f
+  return Object.values(f).flat().filter(Boolean)
+}
+
+// Para el mensaje del 409. Que diga en qué estado quedó importa: «ya está
+// omitida» y «el sistema la cerró como no hecha» son dos problemas distintos
+// para el que está parado frente a la pantalla.
+const ESTADO_EN_TEXTO = {
+  HECHA:    'ya tiene un registro de hoy',
+  OMITIDA:  'ya se omitió',
+  NO_HECHA: 'ya quedó cerrada como no hecha',
+}
+
+function conflicto(mensaje) {
+  return Object.assign(new Error(mensaje), { status: 409 })
+}
+
+/**
+ * La tarea del día con la REGLA VIGENTE y la actividad, que es de donde se
+ * copia al registro.
+ *
+ * Se lee de la base y no del cuerpo del pedido: el `tipo_registro` que decide si
+ * se exige foto tiene que ser el de la tabla. Si lo dijera el cliente, la
+ * actividad que exige evidencia se cerraría sin evidencia mandando
+ * `tipo_registro: 'CONFIRMACION'`, y la prueba sanitaria dejaría de existir sin
+ * que nada se viera raro en la pantalla.
+ *
+ * `fecha_esperada` sale con DATE_FORMAT —la columna se llama `fecha`— porque se
+ * guarda en el registro y se compara contra la fecha de ejecución como texto.
+ */
+const SQL_TAREA_A_CERRAR = `
+  SELECT t.id                             AS tarea_id,
+         t.laboratorio_id                 AS laboratorio_id,
+         t.regla_id                       AS regla_id,
+         t.estado                         AS estado,
+         DATE_FORMAT(t.fecha, '%Y-%m-%d') AS fecha_esperada,
+         r.frecuencia                     AS frecuencia,
+         r.cada_dias                      AS cada_dias,
+         r.tipo_registro                  AS tipo_registro,
+         a.nombre                         AS actividad,
+         a.bloque                         AS bloque
+    FROM h360_lab_tarea t
+    JOIN h360_lab_regla r     ON r.id = t.regla_id
+    JOIN h360_lab_actividad a ON a.id = r.actividad_id
+   WHERE t.id = ?`
+
+/** La regla sola, para el camino POR_EVENTO, que no tiene tarea. */
+const SQL_REGLA_A_REGISTRAR = `
+  SELECT r.id             AS regla_id,
+         r.laboratorio_id AS laboratorio_id,
+         r.frecuencia     AS frecuencia,
+         r.cada_dias      AS cada_dias,
+         r.tipo_registro  AS tipo_registro,
+         r.activo         AS activo,
+         a.nombre         AS actividad,
+         a.bloque         AS bloque
+    FROM h360_lab_regla r
+    JOIN h360_lab_actividad a ON a.id = r.actividad_id
+   WHERE r.id = ?`
+
+/**
+ * El registro como lo ve la pantalla. Las dos fechas con DATE_FORMAT y ningún
+ * TIMESTAMP: `created_at` tiene el mismo problema de zona y no hace falta.
+ *
+ * `DATE_FORMAT` de NULL es NULL, así que un registro POR_EVENTO devuelve
+ * `fecha_esperada: null` y no una fecha inventada.
+ */
+const SELECT_REGISTRO = `
+  SELECT g.id, g.laboratorio_id, g.regla_id, g.tarea_id,
+         g.actividad_nombre, g.bloque, g.frecuencia, g.cada_dias, g.tipo_registro,
+         g.dias_atraso, g.observaciones, g.registrado_por, g.registrado_nombre,
+         DATE_FORMAT(g.fecha_ejecucion, '%Y-%m-%d') AS fecha_ejecucion,
+         DATE_FORMAT(g.fecha_esperada,  '%Y-%m-%d') AS fecha_esperada,
+         (SELECT COUNT(*) FROM h360_lab_evidencia e WHERE e.registro_id = g.id) AS evidencias
+    FROM h360_lab_registro g`
+
+/**
+ * Los cinco campos que el registro COPIA de la regla vigente, más el nombre de
+ * la actividad: no se apunta a la regla. Cambiar una frecuencia en abril no
+ * puede reescribir lo que se cumplió en marzo, y renombrar una actividad no
+ * puede renombrar el histórico. Es la misma razón que en `h360_desinf_registro`.
+ */
+const SQL_ALTA_REGISTRO = `
+  INSERT INTO h360_lab_registro
+    (laboratorio_id, regla_id, tarea_id, actividad_nombre, bloque,
+     frecuencia, cada_dias, tipo_registro,
+     fecha_ejecucion, fecha_esperada, dias_atraso, observaciones,
+     registrado_por, registrado_nombre)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+
+/**
+ * El cierre de la tarea.
+ *
+ * `AND estado = 'PENDIENTE'` en el WHERE no es redundante con la lectura previa:
+ * entre esa lectura y esta escritura alguien pudo registrarla u omitirla, y
+ * pisarla dejaría dos registros de una sola ejecución —el informe contaría dos
+ * cumplimientos donde hubo uno— o borraría el motivo de una omisión. Si no
+ * afecta ninguna fila, el registro se deshace completo.
+ */
+const SQL_CERRAR_TAREA = `
+  UPDATE h360_lab_tarea
+     SET estado      = 'HECHA',
+         registro_id = ?,
+         cerrada_por = ?,
+         cerrada_at  = NOW()
+   WHERE id = ? AND estado = 'PENDIENTE'`
+
+const SQL_OMITIR_TAREA = `
+  UPDATE h360_lab_tarea
+     SET estado         = 'OMITIDA',
+         motivo_omision = ?,
+         cerrada_por    = ?,
+         cerrada_at     = NOW()
+   WHERE id = ? AND estado = 'PENDIENTE'`
+
+/**
+ * POST /laboratorio/registro
+ * Body: { laboratorio_id, tarea_id? | regla_id?, fecha_ejecucion?, observaciones? }
+ *
+ * Las fotos llegan en `req.files`: la ruta tiene que montar
+ * `desinfeccionEvidencia.service.subidaEvidencia` como middleware (es el multer
+ * EN MEMORIA del módulo de vehículos, reusado). Sin ese middleware `req.files`
+ * viene vacío y una actividad de EVIDENCIA se rechaza con 400 aunque el
+ * operario haya mandado la foto.
+ *
+ * ── Dos caminos ───────────────────────────────────────────────────────────
+ * · Con `tarea_id`: cierra la tarea del día a HECHA y guarda la fecha que
+ *   tocaba con el atraso medido contra ella.
+ * · Sin `tarea_id` (POR_EVENTO): `tarea_id` y `fecha_esperada` quedan en NULL.
+ *   Esa frecuencia no tiene día, así que no hay nada contra lo que medir atraso
+ *   e inventarle una fecha esperada sería inventar un incumplimiento.
+ *
+ * ── Lo que se rechaza ANTES de abrir la transacción ────────────────────────
+ * Todo lo que se pueda: rechazar es barato, rechazar después de haber escrito
+ * no, y una foto en disco de un registro que no existe es basura que nadie
+ * limpia, en un disco donde `uploads/` ya pesa 8,4 GB.
+ *
+ * ── Lo que se deshace ─────────────────────────────────────────────────────
+ * El disco NO tiene rollback. Las filas de evidencia se escriben con la
+ * conexión de la transacción, pero los archivos ya están en disco: si la
+ * transacción se deshace hay que borrarlos a mano con `descartarEvidencias`, o
+ * quedan huérfanos para siempre.
+ */
+async function registrar(req, res, next) {
+  let conn = null
+  let rutasEscritas = []
+  let confirmado = false
+
+  try {
+    const b = req.body || {}
+
+    const laboratorioId = enteroPositivo(b.laboratorio_id)
+    if (!laboratorioId)
+      return res.status(400).json({ mensaje: 'Falta el laboratorio', campo: 'laboratorio_id' })
+
+    // Por defecto se registra hoy, que es el caso normal: alguien acaba de
+    // hacer el aseo. Una fecha pasada se admite (se olvidó registrarlo ayer);
+    // una futura no es una preferencia sino un dato imposible, y además movería
+    // el ancla de las quincenales hacia adelante: el tablero diría que está al
+    // día algo que nadie hizo.
+    const hoy = hoyBogota()
+    const fechaEjecucion = b.fecha_ejecucion === undefined || b.fecha_ejecucion === ''
+      ? hoy : fechaSolo(b.fecha_ejecucion)
+    if (!fechaEjecucion)
+      return res.status(400).json({
+        mensaje: 'La fecha de ejecución debe venir como AAAA-MM-DD', campo: 'fecha_ejecucion',
+      })
+    if (fechaEjecucion > hoy)
+      return res.status(400).json({
+        mensaje: 'La fecha de ejecución no puede ser futura', campo: 'fecha_ejecucion',
+      })
+
+    const pideTarea = b.tarea_id !== undefined && b.tarea_id !== null && b.tarea_id !== ''
+    let tarea = null
+    let regla = null
+
+    if (pideTarea) {
+      const tareaId = enteroPositivo(b.tarea_id)
+      if (!tareaId)
+        return res.status(400).json({ mensaje: 'Identificador de tarea inválido', campo: 'tarea_id' })
+
+      const [[fila]] = await db.query(SQL_TAREA_A_CERRAR, [tareaId])
+      if (!fila) return res.status(404).json({ mensaje: 'Esa tarea no existe' })
+
+      // Se compara contra el laboratorio del pedido y no se adopta el de la
+      // tarea: si no coinciden, el frontend está mirando otro laboratorio del
+      // que cree y el registro quedaría en el que no es.
+      if (Number(fila.laboratorio_id) !== laboratorioId)
+        return res.status(400).json({
+          mensaje: 'Esa tarea es de otro laboratorio', campo: 'tarea_id',
+        })
+
+      if (fila.estado !== 'PENDIENTE')
+        return res.status(409).json({
+          mensaje: `«${fila.actividad}» ${ESTADO_EN_TEXTO[fila.estado] || 'ya está cerrada'}.`,
+          estado: fila.estado,
+        })
+
+      tarea = fila
+    } else {
+      const reglaId = enteroPositivo(b.regla_id)
+      if (!reglaId)
+        return res.status(400).json({
+          mensaje: 'Falta la tarea del día, o la actividad por evento que se ejecutó',
+          campo: 'regla_id',
+        })
+
+      const [[fila]] = await db.query(SQL_REGLA_A_REGISTRAR, [reglaId])
+      if (!fila) return res.status(404).json({ mensaje: 'Esa actividad no existe' })
+      if (Number(fila.laboratorio_id) !== laboratorioId)
+        return res.status(400).json({
+          mensaje: 'Esa actividad es de otro laboratorio', campo: 'regla_id',
+        })
+
+      // Solo las POR_EVENTO se registran sin tarea. Dejar pasar una DIARIA por
+      // acá escribiría el registro y dejaría SU TAREA en PENDIENTE: el cierre de
+      // medianoche la pasaría a NO_HECHA y el informe diría que no se hizo algo
+      // que sí se hizo, con el registro al lado contradiciéndolo.
+      if (fila.frecuencia !== 'POR_EVENTO')
+        return res.status(400).json({
+          mensaje: `«${fila.actividad}» es ${fila.frecuencia} y se registra sobre la tarea del día: ` +
+                   'manda su tarea_id.',
+          campo: 'tarea_id',
+        })
+
+      regla = fila
+    }
+
+    // De acá se COPIA, y es lo que se leyó de la base. Nada de esto se toma del
+    // cuerpo del pedido.
+    const vigente = tarea || regla
+
+    const archivos = archivosDe(req)
+    // La columna es TEXT: 65535 BYTES, no caracteres. Un tope alto de caracteres
+    // se pasaría de largo con acentos y la base rechazaría el registro entero.
+    const observaciones = texto(b.observaciones, 2000) || null
+
+    // La exigencia es la de la REGLA, no la del cuerpo. Es la prueba sanitaria:
+    // sin foto no queda nada que mostrar en una auditoría.
+    if (vigente.tipo_registro === 'EVIDENCIA' && !archivos.length)
+      return res.status(400).json({
+        mensaje: `«${vigente.actividad}» exige al menos una foto como evidencia.`,
+        campo: 'evidencia',
+      })
+
+    // Cuándo tocaba y qué tan tarde se hizo. Se GUARDA y no se recalcula nunca:
+    // es el dato del informe, y el del tablero mide otra cosa (el día que se
+    // está mirando). Negativo = se hizo antes de la fecha esperada.
+    const fechaEsperada = tarea ? tarea.fecha_esperada : null
+    const diasAtraso = fechaEsperada ? diasEntre(fechaEsperada, fechaEjecucion) : null
+
+    conn = await db.getConnection()
+    await conn.beginTransaction()
+
+    const [ins] = await conn.query(SQL_ALTA_REGISTRO, [
+      laboratorioId, vigente.regla_id, tarea ? tarea.tarea_id : null,
+      vigente.actividad, vigente.bloque,
+      vigente.frecuencia, vigente.cada_dias ?? null, vigente.tipo_registro,
+      fechaEjecucion, fechaEsperada, diasAtraso, observaciones,
+      texto(req.user?.usuario, 50), texto(req.user?.nombre, 150) || null,
+    ])
+    const registroId = ins.insertId
+
+    let filasEvidencia = []
+    if (archivos.length) {
+      const guardado = await evid.guardarEvidencias({
+        conn,
+        registroId,
+        archivos,
+        // A la tabla de ESTE módulo. Sin esto, a la de vehículos.
+        tabla: TABLA_EVIDENCIA,
+        // `placa` es el prefijo del nombre del archivo en disco: el archivo
+        // viaja solo y alguien lo va a mirar desde la consola del servidor,
+        // donde «foto-3.jpg» no dice de qué es. Acá no hay placa, así que va el
+        // laboratorio.
+        placa: `lab${laboratorioId}`,
+        actividadNombre: vigente.actividad,
+        fechaEjecucion,
+      })
+      filasEvidencia = guardado?.filas || []
+      rutasEscritas  = guardado?.rutasEscritas || []
+    }
+
+    if (tarea) {
+      const [upd] = await conn.query(SQL_CERRAR_TAREA,
+        [registroId, texto(req.user?.usuario, 50), tarea.tarea_id])
+      // El guardia no encontró la fila: alguien la cerró mientras se escribía.
+      // Se deshace todo —incluidas las fotos— en vez de dejar un registro
+      // colgando de una tarea que cerró otra cosa.
+      if (!Number(upd?.affectedRows))
+        throw conflicto(`«${tarea.actividad}» la acaba de cerrar alguien más. Vuelve a cargar el tablero.`)
+    }
+
+    await conn.commit()
+    confirmado = true
+
+    // ⚠️ LA COPIA A DRIVE NO SE LLAMA ACÁ, a diferencia del módulo de vehículos.
+    // `enviarEvidenciasADrive` lee `h360_desinf_registro JOIN vehiculos` por id
+    // y el flujo de n8n arma las carpetas de Drive con la PLACA: con el id de un
+    // registro de laboratorio encontraría el registro del VEHÍCULO que tenga ese
+    // id y mandaría a Drive las fotos de ese vehículo, y el callback marcaría
+    // como archivadas evidencias ajenas. La copia a Drive del laboratorio
+    // necesita su propio flujo, su carpeta y su callback: queda pendiente y está
+    // reportado. Mientras tanto la evidencia válida es la del servidor y la fila
+    // de la base, que es lo que ya quedó guardado.
+
+    const [[registro]] = await db.query(`${SELECT_REGISTRO} WHERE g.id = ?`, [registroId])
+
+    res.status(201).json({
+      registro: registro || { id: registroId },
+      // Las filas que se acabaron de escribir, para que la pantalla pinte las
+      // miniaturas sin volver a pedir el registro.
+      evidencia: filasEvidencia,
+      tarea: tarea
+        ? { id: tarea.tarea_id, estado: 'HECHA', fecha_esperada: fechaEsperada, dias_atraso: diasAtraso }
+        : null,
+    })
+  } catch (err) {
+    // Solo se deshace si no se había confirmado: si el commit pasó y lo que
+    // falló fue la lectura de la respuesta, los archivos ya tienen su fila en la
+    // base y borrarlos dejaría el registro sin evidencia.
+    if (conn && !confirmado) {
+      await conn.rollback().catch(() => {})
+      if (rutasEscritas.length)
+        await evid.descartarEvidencias(rutasEscritas).catch(() => {})
+    }
+    // La carrera del cierre es un 409 nuestro, no un fallo del servidor: se
+    // responde y no se escala a next, que lo volvería un 500.
+    if (err?.status === 409) return res.status(409).json({ mensaje: err.message })
+    next(err)
+  } finally {
+    if (conn) conn.release()
+  }
+}
+
+/**
+ * POST /laboratorio/tareas/:id/omitir
+ * Body: { motivo_omision }
+ *
+ * EL MOTIVO ES OBLIGATORIO y es el punto entero de este endpoint. Sin él la
+ * gente omite para que el indicador no se ponga rojo, «OMITIDA» deja de decir
+ * nada y el dato no sirve en una auditoría sanitaria, que es para lo único que
+ * se lleva. Con motivo, omitir es información: no llegó el insumo, no hubo
+ * servicios, se dañó el equipo.
+ *
+ * No abre transacción: es un solo UPDATE, y un UPDATE ya es atómico. El guardia
+ * `AND estado = 'PENDIENTE'` hace el resto.
+ */
+async function omitirTarea(req, res, next) {
+  try {
+    const id = enteroPositivo(req.params?.id)
+    if (!id) return res.status(400).json({ mensaje: 'Identificador de tarea inválido' })
+
+    // Lo primero y antes de leer: es lo más barato de rechazar.
+    const motivo = texto(req.body?.motivo_omision, 200)
+    if (!motivo)
+      return res.status(400).json({
+        mensaje: 'Para omitir una tarea hay que escribir por qué: el motivo es lo que hace ' +
+                 'que el dato sirva en una auditoría.',
+        campo: 'motivo_omision',
+      })
+
+    const [[tarea]] = await db.query(SQL_TAREA_A_CERRAR, [id])
+    if (!tarea) return res.status(404).json({ mensaje: 'Esa tarea no existe' })
+    if (tarea.estado !== 'PENDIENTE')
+      return res.status(409).json({
+        mensaje: `«${tarea.actividad}» ${ESTADO_EN_TEXTO[tarea.estado] || 'ya está cerrada'}.`,
+        estado: tarea.estado,
+      })
+
+    const [upd] = await db.query(SQL_OMITIR_TAREA, [motivo, texto(req.user?.usuario, 50), id])
+    if (!Number(upd?.affectedRows))
+      return res.status(409).json({
+        mensaje: `«${tarea.actividad}» la acaba de cerrar alguien más. Vuelve a cargar el tablero.`,
+      })
+
+    res.json({
+      tarea_id: id,
+      estado: 'OMITIDA',
+      motivo_omision: motivo,
+      fecha_esperada: tarea.fecha_esperada,
+      actividad: tarea.actividad,
+    })
+  } catch (err) { next(err) }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Historial y evidencia
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /laboratorio/registros ?laboratorio_id=&desde=&hasta=&actividad=
+ *
+ * El histórico plano, que es lo que el frontend exporta a Excel (el backend no
+ * genera archivos). El informe agrupado es otro endpoint.
+ *
+ * La búsqueda por actividad va contra `actividad_nombre`, que es la COPIA que
+ * guarda el registro: una actividad renombrada se sigue encontrando por como se
+ * llamaba cuando se ejecutó, que es lo que dice el papel que se está buscando.
+ */
+async function listarRegistros(req, res, next) {
+  try {
+    const q = req.query || {}
+    const filtros = []
+    const params  = []
+
+    if (q.laboratorio_id !== undefined && q.laboratorio_id !== '') {
+      const labId = enteroPositivo(q.laboratorio_id)
+      if (!labId)
+        return res.status(400).json({ mensaje: 'laboratorio_id inválido', campo: 'laboratorio_id' })
+      filtros.push('g.laboratorio_id = ?'); params.push(labId)
+    }
+    for (const [campo, comparador] of [['desde', '>='], ['hasta', '<=']]) {
+      if (q[campo] === undefined || q[campo] === '') continue
+      const fecha = fechaSolo(q[campo])
+      if (!fecha)
+        return res.status(400).json({ mensaje: `La fecha «${campo}» no es válida`, campo })
+      filtros.push(`g.fecha_ejecucion ${comparador} ?`); params.push(fecha)
+    }
+    if (q.actividad) {
+      filtros.push('g.actividad_nombre LIKE ?')
+      params.push(`%${texto(q.actividad, 80)}%`)
+    }
+
+    const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''
+    const [rows] = await db.query(
+      `${SELECT_REGISTRO}
+       ${where}
+       ORDER BY g.fecha_ejecucion DESC, g.id DESC
+       LIMIT 200`, params)
+    res.json(rows)
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /laboratorio/evidencia/:id — el binario, con el token en la cabecera.
+ *
+ * Es el handler del servicio de vehículos montado sobre la tabla de acá. No se
+ * reimplementa: la normalización de la ruta (servir por id un valor de la base
+ * sin normalizar es literalmente cómo se leen archivos del sistema), la lista
+ * blanca de mimes (un mime inventado convierte una foto en una página servida
+ * desde nuestro dominio) y la caché privada son justo lo que no hay que
+ * equivocarse dos veces.
+ *
+ * Se arma al cargar el módulo y no por petición: así un nombre de tabla mal
+ * escrito revienta al arrancar el proceso y no con la primera foto.
+ */
+const servirEvidencia = evid.servirEvidenciaDesde(TABLA_EVIDENCIA)
+
 module.exports = {
   listarLaboratorios,
   listarActividades, crearActividad, actualizarActividad,
   listarReglas, crearRegla, actualizarRegla,
   tablero,
+  registrar, omitirTarea, listarRegistros, servirEvidencia,
   // Expuestos para las pruebas y para quien tenga que decidir lo mismo: la
   // lista de roles que registran es la que el tablero manda en el dato, y
   // `camposDeFrecuencia` es el espejo de los dos CHECK de la tabla.

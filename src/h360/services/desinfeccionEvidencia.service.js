@@ -54,6 +54,37 @@ const MIMES_PERMITIDOS = [
 // Textos que pasan la forma de un id de Drive pero no son uno.
 const BASURA_DRIVE = ['undefined', 'null', 'nodata', 'notfound', 'nofileid']
 
+// ── A qué tabla se escribe ─────────────────────────────────────────────────
+//
+// Este servicio está acoplado al `id` de un registro y a una ruta en disco, no
+// a la tabla de vehículos, así que el módulo de laboratorio lo REUSA en vez de
+// duplicarlo. Lo único que cambia es a qué tabla van las filas:
+// `h360_lab_evidencia` es espejo exacto de `h360_desinf_evidencia` (ver
+// `src/scripts/h360_laboratorio_migration.sql`).
+//
+// El nombre NO puede viajar como `?` —un marcador no sirve para un
+// identificador—, así que se interpola, y por eso la LISTA BLANCA no es
+// decoración: es lo único que separa un parámetro de una inyección. Cualquier
+// otro valor lanza.
+//
+// El default es la tabla de vehículos para que ninguna llamada de allá cambie.
+// Sin este parámetro la evidencia del laboratorio aterrizaba en la tabla de
+// vehículos, cuya FK apunta a `h360_desinf_registro`: la foto quedaría colgada
+// del registro de un VEHÍCULO con el mismo id —los dos autoincrementos arrancan
+// en 1, así que el choque es lo normal y no la excepción— y una auditoría
+// leería la foto del laboratorio como evidencia de una carroza.
+const TABLA_VEHICULOS   = 'h360_desinf_evidencia'
+const TABLA_LABORATORIO = 'h360_lab_evidencia'
+const TABLAS_EVIDENCIA  = [TABLA_VEHICULOS, TABLA_LABORATORIO]
+
+function tablaEvidencia(nombre) {
+  const t = String(nombre ?? '').trim() || TABLA_VEHICULOS
+  if (!TABLAS_EVIDENCIA.includes(t))
+    throw new Error(
+      `tabla de evidencia desconocida: «${nombre}». Solo ${TABLAS_EVIDENCIA.join(' o ')}.`)
+  return t
+}
+
 const MIME_POR_EXT = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
   '.webp': 'image/webp', '.heic': 'image/heic',
@@ -206,7 +237,7 @@ async function contenido(archivo) {
 }
 
 /**
- * Guarda los archivos ya validados, inserta las filas de h360_desinf_evidencia
+ * Guarda los archivos ya validados, inserta las filas de la tabla de evidencia
  * con la conexión de la transacción que recibe, y devuelve las rutas escritas
  * para que el controlador pueda borrarlas si hace rollback.
  *
@@ -221,9 +252,14 @@ async function contenido(archivo) {
  * @param {string}   opts.placa            va al nombre del archivo
  * @param {string}   opts.actividadNombre  va al nombre del archivo
  * @param {string|Date} opts.fechaEjecucion  decide la subcarpeta AAAA/MM
+ * @param {string}   [opts.tabla]          la tabla de evidencia; por defecto la
+ *   de vehículos. El laboratorio pasa `h360_lab_evidencia`, que es espejo de
+ *   ella. Solo se admiten esas dos: ver `tablaEvidencia`.
  * @returns {Promise<{filas: Array, rutasEscritas: string[]}>}
  */
-async function guardarEvidencias({ conn, registroId, archivos, placa, actividadNombre, fechaEjecucion }) {
+async function guardarEvidencias({
+  conn, registroId, archivos, placa, actividadNombre, fechaEjecucion, tabla,
+}) {
   const filas = []
   const rutasEscritas = []
 
@@ -232,6 +268,12 @@ async function guardarEvidencias({ conn, registroId, archivos, placa, actividadN
 
   const id = entero(registroId)
   if (!id) throw malaPeticion('No se puede guardar evidencia sin el registro al que pertenece')
+
+  // Antes de tocar el disco: una tabla mala tiene que fallar cuando todavía no
+  // hay nada escrito. Al revés dejaría archivos huérfanos de un INSERT que
+  // nunca iba a correr, que es justo lo que `descartarEvidencias` existe para
+  // no tener que adivinar.
+  const destino = tablaEvidencia(tabla)
 
   // AAAA/MM y no todo en un directorio: con dos fotos diarias, un solo
   // directorio llega a decenas de miles de entradas y hasta un `ls` en el
@@ -283,7 +325,7 @@ async function guardarEvidencias({ conn, registroId, archivos, placa, actividadN
     // se va a leer en la base y a mirar a ojo, no una ruta del sistema.
     const rutaRelativa = `${anio}/${mes}/${nombreArchivo}`
     const [r] = await conn.query(
-      `INSERT INTO h360_desinf_evidencia (registro_id, ruta, nombre_original, mime, bytes)
+      `INSERT INTO ${destino} (registro_id, ruta, nombre_original, mime, bytes)
        VALUES (?,?,?,?,?)`,
       [id, rutaRelativa, nombreOriginal, mime, datos.length])
 
@@ -409,48 +451,63 @@ function enviarEvidenciasADrive(registroId) {
 }
 
 /**
- * GET /desinfecciones/evidencia/:id — sirve el binario con el token en la
- * cabecera, como el PDF del R-34: el frontend lo pide como blob con el token
- * y nunca como enlace directo.
+ * El handler que sirve el binario de UNA tabla de evidencia, con el token en la
+ * cabecera y como el PDF del R-34: el frontend lo pide como blob con el token y
+ * nunca como enlace directo.
+ *
+ * Es una fábrica y no un handler suelto porque el laboratorio sirve las fotos
+ * de `h360_lab_evidencia` con exactamente estas reglas —la normalización de la
+ * ruta, el mime de la lista blanca, el nombre de disco en la cabecera y la
+ * caché privada— y duplicarlas allá sería duplicar justo lo que hay que no
+ * equivocarse. La tabla se decide al montar la ruta, una sola vez, no por
+ * petición.
  */
-async function servirEvidencia(req, res, next) {
-  try {
-    const id = entero(req.params?.id)
-    if (!id) return res.status(400).json({ mensaje: 'Id de evidencia inválido' })
+function servirEvidenciaDesde(tabla) {
+  const destino = tablaEvidencia(tabla)
 
-    const [[fila]] = await db.query(
-      'SELECT id, ruta, mime FROM h360_desinf_evidencia WHERE id = ?', [id])
-    if (!fila) return res.status(404).json({ mensaje: 'Evidencia no encontrada' })
-
-    const absoluta = rutaSegura(fila.ruta)
-    if (!absoluta) {
-      // Mismo 404 que si no existiera: el que pregunta no tiene por qué saber
-      // si falló por la ruta o por la fila.
-      console.error(`[desinf-evidencia] ruta fuera del directorio base en la evidencia ${id}: ${fila.ruta}`)
-      return res.status(404).json({ mensaje: 'Evidencia no encontrada' })
-    }
-
-    let binario
+  return async function servirEvidencia(req, res, next) {
     try {
-      binario = await fs.promises.readFile(absoluta)
-    } catch (err) {
-      // La fila existe y el archivo no: es un dato distinto de «no existe la
-      // evidencia» y hay que poder verlo en el log, porque significa que algo
-      // se borró del disco sin pasar por acá.
-      console.error(`[desinf-evidencia] la evidencia ${id} no está en disco (${absoluta}): ${err.message}`)
-      return res.status(404).json({ mensaje: 'El archivo de la evidencia no está en el servidor' })
-    }
+      const id = entero(req.params?.id)
+      if (!id) return res.status(400).json({ mensaje: 'Id de evidencia inválido' })
 
-    const ext = path.extname(absoluta).toLowerCase()
-    res.setHeader('Content-Type', mimeSeguro(fila.mime, ext))
-    // El nombre del archivo en disco y no nombre_original: lo segundo lo
-    // escribe el cliente y acabaría dentro de una cabecera.
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(absoluta)}"`)
-    // Privada: es evidencia sanitaria, no debe quedar en caché de proxys.
-    res.setHeader('Cache-Control', 'private, max-age=86400')
-    return res.send(binario)
-  } catch (err) { next(err) }
+      const [[fila]] = await db.query(
+        `SELECT id, ruta, mime FROM ${destino} WHERE id = ?`, [id])
+      if (!fila) return res.status(404).json({ mensaje: 'Evidencia no encontrada' })
+
+      const absoluta = rutaSegura(fila.ruta)
+      if (!absoluta) {
+        // Mismo 404 que si no existiera: el que pregunta no tiene por qué saber
+        // si falló por la ruta o por la fila.
+        console.error(`[desinf-evidencia] ruta fuera del directorio base en ${destino} ${id}: ${fila.ruta}`)
+        return res.status(404).json({ mensaje: 'Evidencia no encontrada' })
+      }
+
+      let binario
+      try {
+        binario = await fs.promises.readFile(absoluta)
+      } catch (err) {
+        // La fila existe y el archivo no: es un dato distinto de «no existe la
+        // evidencia» y hay que poder verlo en el log, porque significa que algo
+        // se borró del disco sin pasar por acá.
+        console.error(`[desinf-evidencia] ${destino} ${id} no está en disco (${absoluta}): ${err.message}`)
+        return res.status(404).json({ mensaje: 'El archivo de la evidencia no está en el servidor' })
+      }
+
+      const ext = path.extname(absoluta).toLowerCase()
+      res.setHeader('Content-Type', mimeSeguro(fila.mime, ext))
+      // El nombre del archivo en disco y no nombre_original: lo segundo lo
+      // escribe el cliente y acabaría dentro de una cabecera.
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(absoluta)}"`)
+      // Privada: es evidencia sanitaria, no debe quedar en caché de proxys.
+      res.setHeader('Cache-Control', 'private, max-age=86400')
+      return res.send(binario)
+    } catch (err) { next(err) }
+  }
 }
+
+// GET /desinfecciones/evidencia/:id — el de vehículos, que es el que montan las
+// rutas de este módulo. El laboratorio arma el suyo con la fábrica.
+const servirEvidencia = servirEvidenciaDesde(TABLA_VEHICULOS)
 
 /**
  * Acepta las dos formas del callback: una evidencia por llamada, o el lote
@@ -572,6 +629,7 @@ module.exports = {
   descartarEvidencias,
   enviarEvidenciasADrive,
   servirEvidencia,
+  servirEvidenciaDesde,
   callbackDrive,
   // Para las pruebas y para un script de mantenimiento que necesite ubicar los
   // archivos; el resto del código no debería armar rutas por su cuenta.

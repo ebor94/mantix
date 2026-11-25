@@ -257,6 +257,76 @@ describe('guardarEvidencias', () => {
   })
 })
 
+// ── A qué tabla se escribe ─────────────────────────────────────────────────
+//
+// El módulo de laboratorio tiene su propia tabla de evidencia
+// (`h360_lab_evidencia`), espejo exacto de esta, y reusa ESTE servicio sin
+// duplicarlo. Sin el parámetro, la evidencia del laboratorio aterrizaba en
+// `h360_desinf_evidencia`, cuya FK apunta a `h360_desinf_registro`: las fotos
+// del laboratorio quedarían colgadas del registro de un VEHÍCULO que
+// casualmente tuviera el mismo id, y una auditoría leería la foto del
+// laboratorio como evidencia de una carroza.
+describe('la tabla de evidencia', () => {
+  const datos = {
+    registroId: 77,
+    placa: 'lab1',
+    actividadNombre: 'Barrer y trapear el piso',
+    fechaEjecucion: '2026-11-25',
+  }
+
+  test('por defecto es la de vehículos, para que allá no cambie nada', async () => {
+    const conn = connDoble()
+    await svc.guardarEvidencias({
+      ...datos, conn, archivos: [archivoEnMemoria('a.jpg', 'image/jpeg')],
+    })
+
+    expect(conn.consultas[0].sql).toMatch(/INSERT INTO h360_desinf_evidencia/i)
+  })
+
+  test('con `tabla` escribe en la del laboratorio', async () => {
+    const conn = connDoble()
+    await svc.guardarEvidencias({
+      ...datos, conn, tabla: 'h360_lab_evidencia',
+      archivos: [archivoEnMemoria('a.jpg', 'image/jpeg')],
+    })
+
+    expect(conn.consultas[0].sql).toMatch(/INSERT INTO h360_lab_evidencia/i)
+    expect(conn.consultas[0].sql).not.toMatch(/h360_desinf_evidencia/i)
+  })
+
+  // El nombre de la tabla se interpola en el SQL —no puede ir como `?`—, así
+  // que la lista blanca no es decoración: es lo único que separa un parámetro
+  // de una inyección. Y se valida ANTES de escribir en disco, para no dejar
+  // archivos huérfanos de un INSERT que nunca iba a correr.
+  test('una tabla que no está en la lista blanca lanza y no toca el disco', async () => {
+    const conn = connDoble()
+    await expect(svc.guardarEvidencias({
+      ...datos, conn, tabla: 'usuarios; DROP TABLE h360_lab',
+      archivos: [archivoEnMemoria('a.jpg', 'image/jpeg')],
+    })).rejects.toThrow(/tabla de evidencia/i)
+
+    expect(fs.promises.writeFile).not.toHaveBeenCalled()
+    expect(conn.query).not.toHaveBeenCalled()
+  })
+
+  test('servirEvidenciaDesde sirve desde la tabla que se le da', async () => {
+    db.query = jest.fn(async () => [[{ id: 11, ruta: '2026/11/foto.jpg', mime: 'image/jpeg' }]])
+    const res = resDoble()
+
+    await svc.servirEvidenciaDesde('h360_lab_evidencia')({ params: { id: '11' } }, res, jest.fn())
+
+    expect(String(db.query.mock.calls[0][0])).toMatch(/FROM h360_lab_evidencia/i)
+    expect(res.enviado).toEqual(Buffer.from('binario'))
+  })
+
+  test('servirEvidenciaDesde sin tabla sirve desde la de vehículos', async () => {
+    db.query = jest.fn(async () => [[{ id: 11, ruta: '2026/11/foto.jpg', mime: 'image/jpeg' }]])
+    await svc.servirEvidenciaDesde()({ params: { id: '11' } }, resDoble(), jest.fn())
+
+    expect(String(db.query.mock.calls[0][0])).toMatch(/FROM h360_desinf_evidencia/i)
+  })
+})
+
 // ── Rollback ───────────────────────────────────────────────────────────────
 describe('descartarEvidencias', () => {
   test('borra todo lo que se escribió', async () => {

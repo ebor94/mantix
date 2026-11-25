@@ -33,8 +33,24 @@ jest.mock('../../services/laboratorio.service', () => ({
   ejecutarGeneracionDiaria: jest.fn(),
 }))
 
+// El servicio de evidencia es el MISMO del módulo de vehículos, reusado y no
+// duplicado. Se dobla para poder afirmar a qué tabla se le pide escribir y que
+// el rollback borra del disco lo que ya se había escrito.
+//
+// `servirEvidenciaDesde` es una fábrica y el controlador la llama al cargarse,
+// así que el doble devuelve un handler con la tabla colgada como propiedad: el
+// registro de llamadas lo borra `clearAllMocks` en el primer beforeEach, pero
+// la propiedad del handler sobrevive.
+jest.mock('../../services/desinfeccionEvidencia.service', () => ({
+  guardarEvidencias: jest.fn(),
+  descartarEvidencias: jest.fn(),
+  enviarEvidenciasADrive: jest.fn(),
+  servirEvidenciaDesde: jest.fn(tabla => Object.assign(jest.fn(), { tabla })),
+}))
+
 const db   = require('../../config/db')
 const svc  = require('../../services/laboratorio.service')
+const evid = require('../../services/desinfeccionEvidencia.service')
 const ctrl = require('../laboratorio.controller')
 
 // ── Dobles de Express ──────────────────────────────────────────────────────
@@ -52,8 +68,8 @@ const COORD        = { usuario: 'COORD1', nombre: 'Coordinadora',  rol: 'coordin
 const TANATOLOGO   = { usuario: 'TANA1',  nombre: 'Tanatólogo',    rol: 'tanatologo' }
 const CONTABILIDAD = { usuario: 'CONTA1', nombre: 'Contabilidad',  rol: 'contabilidad' }
 
-function reqFalso({ body = {}, params = {}, query = {}, user = COORD } = {}) {
-  return { body, params, query, user }
+function reqFalso({ body = {}, params = {}, query = {}, files, user = COORD } = {}) {
+  return { body, params, query, files, user }
 }
 
 async function llamar(fn, req) {
@@ -127,6 +143,11 @@ beforeEach(() => {
   fijarInstante(INSTANTE)
   svc.cerrarDiariasVencidas.mockImplementation(async () => { pasos.push({ paso: 'cerrar' }); return { cerradas: 0 } })
   svc.generarDia.mockImplementation(async () => { pasos.push({ paso: 'generar' }); return { creadas: 0, ya_existian: 0, arrastradas: 0 } })
+  // Las dos son `async` de verdad, así que devuelven promesa: el controlador
+  // les hace `.catch()` y un doble que devuelva `undefined` lo rompería por el
+  // doble y no por el código.
+  evid.guardarEvidencias.mockResolvedValue({ filas: [], rutasEscritas: [] })
+  evid.descartarEvidencias.mockResolvedValue(undefined)
   prepararPool()
 })
 
@@ -702,5 +723,643 @@ describe('listarReglas', () => {
     db.query.mockResolvedValue([[]])
     await llamar(ctrl.listarReglas, reqFalso())
     expect(String(db.query.mock.calls[0][0])).not.toMatch(/created_at|updated_at/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Registrar y omitir
+//
+// Lo que se cuida acá, en orden de qué duele más si se rompe:
+//
+//  1. Que lo que se puede rechazar se rechace ANTES de abrir la transacción. Una
+//     foto ya escrita en disco por un registro que no existe es basura que nadie
+//     limpia, y en este disco `uploads/` ya pesa 8,4 GB.
+//  2. Que lo que se escribió a medias se deshaga en la base Y en el disco. Si la
+//     transacción se cae después de guardar las fotos y nadie llama a
+//     `descartarEvidencias`, los archivos quedan huérfanos para siempre.
+//  3. Que el registro COPIE la regla vigente y no apunte a ella: cambiar una
+//     frecuencia en abril no puede reescribir lo que se cumplió en marzo.
+//  4. Que la validación sea contra la REGLA LEÍDA DE LA BASE y nunca contra lo
+//     que mande el cliente. Si el cuerpo pudiera decir «esto es CONFIRMACION»,
+//     la actividad que exige foto se cerraría sin foto y la evidencia sanitaria
+//     dejaría de existir sin que nada se vea raro.
+//  5. Que omitir exija motivo. Sin motivo obligatorio la gente omite para que el
+//     indicador no se ponga rojo y el dato deja de servir para la auditoría.
+//  6. Que la evidencia del laboratorio vaya a LA TABLA DEL LABORATORIO. El
+//     servicio es el mismo de vehículos; sin decirle la tabla, la foto queda
+//     colgada del registro de un vehículo con el mismo id.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Las filas tal como las devuelve MySQL, con las fechas YA formateadas.
+const TAREA_ABIERTA = {
+  tarea_id: 10, laboratorio_id: 1, regla_id: 3, estado: 'PENDIENTE',
+  fecha_esperada: '2026-11-23',
+  frecuencia: 'CADA_N_DIAS', cada_dias: 15, tipo_registro: 'CONFIRMACION',
+  actividad: 'Limpieza de la trampa de grasa', bloque: 'TRAMPA_GRASA',
+}
+
+// La que exige foto: una de las tres marcadas EVID en la especificación.
+const TAREA_CON_FOTO = {
+  ...TAREA_ABIERTA, tarea_id: 12, regla_id: 8,
+  estado: 'PENDIENTE', fecha_esperada: HOY,
+  frecuencia: 'DIARIA', cada_dias: null, tipo_registro: 'EVIDENCIA',
+  actividad: 'Recipiente de residuos anatomopatológicos', bloque: 'OPERATIVA',
+}
+
+// Las POR_EVENTO no tienen día y no están en h360_lab_tarea: se registran
+// contra la regla.
+const REGLA_EVENTO = {
+  regla_id: 20, laboratorio_id: 1, activo: 1,
+  frecuencia: 'POR_EVENTO', cada_dias: null, tipo_registro: 'EVIDENCIA',
+  actividad: 'Recolección de bolsas de residuos peligrosos', bloque: 'OPERATIVA',
+}
+
+const REGISTRO_GUARDADO = {
+  id: 900, laboratorio_id: 1, regla_id: 3, tarea_id: 10,
+  actividad_nombre: 'Limpieza de la trampa de grasa', bloque: 'TRAMPA_GRASA',
+  frecuencia: 'CADA_N_DIAS', cada_dias: 15, tipo_registro: 'CONFIRMACION',
+  fecha_ejecucion: HOY, fecha_esperada: '2026-11-23', dias_atraso: 2,
+  observaciones: null, registrado_por: 'COORD1', registrado_nombre: 'Coordinadora',
+  evidencias: 0,
+}
+
+const foto = (nombre = 'IMG_1.jpg') =>
+  ({ originalname: nombre, mimetype: 'image/jpeg', buffer: Buffer.from('foto') })
+
+/**
+ * Conexión de transacción simulada. Guarda lo que se escribió para poder
+ * afirmar sobre los INSERT y los UPDATE, y permite hacer fallar una consulta a
+ * propósito.
+ */
+function connDoble({ fallaEn = null, cierre = 1 } = {}) {
+  const c = {
+    consultas: [],
+    commits: 0, rollbacks: 0, liberada: false,
+    beginTransaction: jest.fn(async () => { c.consultas.push({ sql: 'BEGIN' }) }),
+    commit:   jest.fn(async () => { c.commits++ }),
+    rollback: jest.fn(async () => { c.rollbacks++ }),
+    release:  jest.fn(() => { c.liberada = true }),
+  }
+  c.query = jest.fn(async (sql, params) => {
+    const s = String(sql)
+    c.consultas.push({ sql: s, params })
+    if (fallaEn && new RegExp(fallaEn, 'i').test(s)) throw new Error('fallo simulado de base')
+    if (/^INSERT/i.test(s.trim())) return [{ insertId: 900, affectedRows: 1 }]
+    if (/^UPDATE/i.test(s.trim())) return [{ affectedRows: cierre }]
+    return [[]]
+  })
+  c.consultaCon = patron => c.consultas.find(q => new RegExp(patron, 'i').test(q.sql))
+  return c
+}
+
+/**
+ * Pool falso para los caminos de escritura, enrutado por la tabla de cada
+ * consulta. `tarea` y `regla` son lo que devuelve la lectura previa a la
+ * transacción; `null` significa «no existe».
+ */
+function prepararEscritura({ tarea = TAREA_ABIERTA, regla = null, registro = REGISTRO_GUARDADO } = {}) {
+  db.query.mockImplementation(async (sql, params) => {
+    const s = String(sql)
+    if (/FROM h360_lab_tarea t/i.test(s))    { pasos.push({ paso: 'tarea',    params }); return [tarea ? [tarea] : []] }
+    if (/FROM h360_lab_registro g/i.test(s)) { pasos.push({ paso: 'registro', params }); return [registro ? [registro] : []] }
+    if (/FROM h360_lab_regla r/i.test(s))    { pasos.push({ paso: 'regla',    params }); return [regla ? [regla] : []] }
+    pasos.push({ paso: 'otra', sql: s, params })
+    return [[]]
+  })
+}
+
+const insertRegistro = conn => conn.consultaCon('INSERT INTO h360_lab_registro')
+/** Los parámetros del INSERT, por nombre de columna, para no contar posiciones. */
+function columnasDelRegistro(conn) {
+  const q = insertRegistro(conn)
+  const nombres = /\(([^)]*)\)\s*VALUES/i.exec(q.sql)[1].split(',').map(x => x.trim())
+  return Object.fromEntries(nombres.map((n, i) => [n, q.params[i]]))
+}
+
+describe('registrar — lo que se rechaza antes de abrir la transacción', () => {
+  // Es la regla de la BASE la que exige la foto. Si no hay foto no hay
+  // evidencia sanitaria, y rechazarlo después de abrir la transacción es
+  // escribir para después borrar.
+  test('una actividad de EVIDENCIA sin fotos da 400 y la transacción nunca se abre', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    const { res, next } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 12 } }))
+
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'evidencia' })
+    expect(next).not.toHaveBeenCalled()
+    expect(db.getConnection).not.toHaveBeenCalled()
+    expect(evid.guardarEvidencias).not.toHaveBeenCalled()
+  })
+
+  // El `tipo_registro` que importa es el de la tabla. Si el cuerpo pudiera
+  // bajarlo a CONFIRMACION, la actividad que exige foto se cerraría sin foto.
+  test('el tipo_registro del cuerpo no baja la exigencia de la regla', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 12, tipo_registro: 'CONFIRMACION' } }))
+
+    expect(res.codigo).toBe(400)
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  // Y tampoco la sube: una CONFIRMACION se cierra sin foto aunque el cuerpo
+  // diga otra cosa.
+  test('el tipo_registro del cuerpo tampoco inventa una exigencia que la regla no tiene', async () => {
+    prepararEscritura()
+    db.getConnection.mockResolvedValue(connDoble())
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10, tipo_registro: 'EVIDENCIA' } }))
+
+    expect(res.codigo).toBe(201)
+  })
+
+  // Cerrar dos veces la misma tarea dejaría dos registros de una ejecución y el
+  // informe contaría doble.
+  test('una tarea ya cerrada da 409 y no abre la transacción', async () => {
+    for (const estado of ['HECHA', 'OMITIDA', 'NO_HECHA']) {
+      jest.clearAllMocks()
+      prepararEscritura({ tarea: { ...TAREA_ABIERTA, estado } })
+      const { res } = await llamar(ctrl.registrar,
+        reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+      expect([estado, res.codigo]).toEqual([estado, 409])
+      expect(db.getConnection).not.toHaveBeenCalled()
+    }
+  })
+
+  test('una tarea de otro laboratorio da 400 y no abre la transacción', async () => {
+    prepararEscritura({ tarea: { ...TAREA_ABIERTA, laboratorio_id: 2 } })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'tarea_id' })
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  test('una tarea que no existe da 404', async () => {
+    prepararEscritura({ tarea: null })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 99 } }))
+
+    expect(res.codigo).toBe(404)
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  test('sin laboratorio_id da 400 y no toca la base', async () => {
+    const { res } = await llamar(ctrl.registrar, reqFalso({ body: { tarea_id: 10 } }))
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'laboratorio_id' })
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  // Sin tarea y sin regla no hay nada contra lo que registrar.
+  test('sin tarea_id y sin regla_id da 400', async () => {
+    const { res } = await llamar(ctrl.registrar, reqFalso({ body: { laboratorio_id: 1 } }))
+    expect(res.codigo).toBe(400)
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  // Una ejecución futura adelantaría el ancla de las quincenales y el tablero
+  // diría que está al día algo que nadie hizo.
+  test('una fecha de ejecución futura da 400', async () => {
+    prepararEscritura()
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10, fecha_ejecucion: '2026-11-26' } }))
+
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'fecha_ejecucion' })
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  test('una fecha de ejecución que no existe da 400', async () => {
+    prepararEscritura()
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10, fecha_ejecucion: '2026-02-31' } }))
+
+    expect(res.codigo).toBe(400)
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+})
+
+describe('registrar — el registro copia la regla vigente', () => {
+  // Copia y no apunta: cambiar la frecuencia en abril no puede reescribir lo
+  // que se cumplió en marzo. Es la misma razón que en h360_desinf_registro.
+  test('copia actividad, bloque, frecuencia, cada_dias y tipo_registro de la base', async () => {
+    prepararEscritura()
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10, observaciones: 'Se raspó la trampa' } }))
+
+    expect(res.codigo).toBe(201)
+    expect(columnasDelRegistro(conn)).toMatchObject({
+      laboratorio_id:   1,
+      regla_id:         3,
+      tarea_id:         10,
+      actividad_nombre: 'Limpieza de la trampa de grasa',
+      bloque:           'TRAMPA_GRASA',
+      frecuencia:       'CADA_N_DIAS',
+      cada_dias:        15,
+      tipo_registro:    'CONFIRMACION',
+      observaciones:    'Se raspó la trampa',
+      registrado_por:   'COORD1',
+    })
+  })
+
+  // Lo que manda el cliente en estos campos se ignora: si se copiara del
+  // cuerpo, el histórico sería lo que diga el frontend y no lo que regía.
+  test('la frecuencia y el tipo del cuerpo se ignoran', async () => {
+    prepararEscritura()
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    await llamar(ctrl.registrar, reqFalso({ body: {
+      laboratorio_id: 1, tarea_id: 10,
+      frecuencia: 'DIARIA', cada_dias: 1, tipo_registro: 'EVIDENCIA',
+      actividad_nombre: 'Otra cosa', bloque: 'LABORATORIO',
+    } }))
+
+    expect(columnasDelRegistro(conn)).toMatchObject({
+      frecuencia: 'CADA_N_DIAS', cada_dias: 15, tipo_registro: 'CONFIRMACION',
+      actividad_nombre: 'Limpieza de la trampa de grasa', bloque: 'TRAMPA_GRASA',
+    })
+  })
+
+  // El atraso se calcula contra la fecha ESPERADA de la tarea y se guarda: es
+  // el dato del informe y no se vuelve a calcular nunca.
+  test('dias_atraso se mide contra la fecha esperada de la tarea', async () => {
+    prepararEscritura()
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    await llamar(ctrl.registrar, reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    // Esperada el 23, ejecutada hoy 25: dos días tarde.
+    expect(columnasDelRegistro(conn)).toMatchObject({
+      fecha_esperada: '2026-11-23', fecha_ejecucion: HOY, dias_atraso: 2,
+    })
+  })
+
+  test('hacerla antes de la fecha esperada deja dias_atraso negativo', async () => {
+    prepararEscritura({ tarea: { ...TAREA_ABIERTA, fecha_esperada: '2026-11-28' } })
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    await llamar(ctrl.registrar, reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+    expect(columnasDelRegistro(conn).dias_atraso).toBe(-3)
+  })
+
+  // La tarea se cierra con el estado y el registro que la cerró, y el UPDATE
+  // repite `estado = 'PENDIENTE'` en el WHERE: si alguien la cerró entre la
+  // lectura y la escritura, el cierre no la pisa.
+  test('cierra la tarea a HECHA apuntando al registro, y solo si seguía PENDIENTE', async () => {
+    prepararEscritura()
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    expect(res.codigo).toBe(201)
+    const upd = conn.consultaCon('UPDATE h360_lab_tarea')
+    expect(upd.sql).toMatch(/estado\s*=\s*'HECHA'/i)
+    expect(upd.sql).toMatch(/estado\s*=\s*'PENDIENTE'/i)   // el guardia del WHERE
+    expect(upd.params).toEqual([900, 'COORD1', 10])
+    expect(conn.commits).toBe(1)
+    expect(conn.liberada).toBe(true)
+  })
+
+  // Si el guardia no encontró la fila, alguien la cerró mientras se escribía:
+  // se deshace todo en vez de dejar un registro de una tarea cerrada por otro.
+  test('si la tarea se cerró en el medio, deshace y devuelve 409', async () => {
+    prepararEscritura()
+    const conn = connDoble({ cierre: 0 })
+    db.getConnection.mockResolvedValue(conn)
+
+    const { res, next } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    expect(res.codigo).toBe(409)
+    expect(next).not.toHaveBeenCalled()
+    expect(conn.commits).toBe(0)
+    expect(conn.rollbacks).toBe(1)
+    expect(conn.liberada).toBe(true)
+  })
+})
+
+describe('registrar — el camino POR_EVENTO', () => {
+  // No tiene día: no hay tarea que cerrar ni fecha contra la que medir atraso.
+  // Inventar una fecha esperada sería inventar un incumplimiento.
+  test('sin tarea_id deja tarea_id y fecha_esperada en NULL', async () => {
+    prepararEscritura({ tarea: null, regla: REGLA_EVENTO })
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    const { res } = await llamar(ctrl.registrar, reqFalso({ body: {
+      laboratorio_id: 1, regla_id: 20, observaciones: 'Entrega a la empresa de residuos',
+    }, files: [foto()] }))
+
+    expect(res.codigo).toBe(201)
+    const cols = columnasDelRegistro(conn)
+    expect(cols.tarea_id).toBeNull()
+    expect(cols.fecha_esperada).toBeNull()
+    expect(cols.dias_atraso).toBeNull()
+    expect(cols).toMatchObject({ frecuencia: 'POR_EVENTO', tipo_registro: 'EVIDENCIA' })
+
+    // Y no se toca ninguna tarea: no hay ninguna suya.
+    expect(conn.consultaCon('UPDATE h360_lab_tarea')).toBeUndefined()
+    expect(res.cuerpo.tarea).toBeNull()
+  })
+
+  test('una regla POR_EVENTO de tipo EVIDENCIA sin fotos da 400', async () => {
+    prepararEscritura({ tarea: null, regla: REGLA_EVENTO })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, regla_id: 20 } }))
+
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'evidencia' })
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  // Una DIARIA registrada sin su tarea dejaría la tarea PENDIENTE: el cierre la
+  // pasaría a NO_HECHA y el informe diría que no se hizo algo que sí se hizo, con
+  // el registro al lado para contradecirlo.
+  test('una regla que no es POR_EVENTO exige su tarea_id', async () => {
+    prepararEscritura({ tarea: null, regla: { ...REGLA_EVENTO, frecuencia: 'DIARIA' } })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, regla_id: 20 }, files: [foto()] }))
+
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'tarea_id' })
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  test('una regla de otro laboratorio da 400', async () => {
+    prepararEscritura({ tarea: null, regla: { ...REGLA_EVENTO, laboratorio_id: 2 } })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, regla_id: 20 }, files: [foto()] }))
+
+    expect(res.codigo).toBe(400)
+    expect(db.getConnection).not.toHaveBeenCalled()
+  })
+
+  test('una regla que no existe da 404', async () => {
+    prepararEscritura({ tarea: null, regla: null })
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, regla_id: 20 }, files: [foto()] }))
+
+    expect(res.codigo).toBe(404)
+  })
+})
+
+describe('registrar — la transacción y las fotos', () => {
+  test('la evidencia va a la tabla del laboratorio, no a la de vehículos', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+    evid.guardarEvidencias.mockResolvedValue({
+      filas: [{ id: 5, ruta: '2026/11/foto.jpg' }], rutasEscritas: ['/datos/2026/11/foto.jpg'],
+    })
+
+    const { res } = await llamar(ctrl.registrar, reqFalso({
+      body: { laboratorio_id: 1, tarea_id: 12 }, files: [foto(), foto('IMG_2.jpg')],
+    }))
+
+    expect(res.codigo).toBe(201)
+    expect(evid.guardarEvidencias).toHaveBeenCalledTimes(1)
+    const args = evid.guardarEvidencias.mock.calls[0][0]
+    expect(args.tabla).toBe('h360_lab_evidencia')
+    // Con la conexión de la transacción, no con el pool: las filas tienen que
+    // deshacerse con el resto si algo falla después.
+    expect(args.conn).toBe(conn)
+    expect(args.registroId).toBe(900)
+    expect(args.archivos).toHaveLength(2)
+    expect(args.fechaEjecucion).toBe(HOY)
+    expect(args.actividadNombre).toBe(TAREA_CON_FOTO.actividad)
+    // Las filas recién escritas viajan en la respuesta para que la pantalla
+    // pinte las miniaturas sin volver a pedir el registro.
+    expect(res.cuerpo.evidencia).toEqual([{ id: 5, ruta: '2026/11/foto.jpg' }])
+  })
+
+  // El disco NO tiene rollback: si la transacción se deshace y nadie borra, los
+  // archivos quedan huérfanos para siempre en un disco que ya está al 54 %.
+  test('un fallo a mitad deshace la transacción y borra del disco lo escrito', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    const conn = connDoble({ fallaEn: 'UPDATE h360_lab_tarea' })
+    db.getConnection.mockResolvedValue(conn)
+    evid.guardarEvidencias.mockResolvedValue({
+      filas: [{ id: 5 }], rutasEscritas: ['/datos/2026/11/foto.jpg'],
+    })
+
+    const { next } = await llamar(ctrl.registrar, reqFalso({
+      body: { laboratorio_id: 1, tarea_id: 12 }, files: [foto()],
+    }))
+
+    expect(next).toHaveBeenCalled()
+    expect(conn.commits).toBe(0)
+    expect(conn.rollbacks).toBe(1)
+    expect(evid.descartarEvidencias).toHaveBeenCalledWith(['/datos/2026/11/foto.jpg'])
+    expect(conn.liberada).toBe(true)
+  })
+
+  // Lo mismo si lo que falla es el propio guardado de las fotos a mitad del
+  // lote: el servicio devuelve las rutas en la excepción no, así que lo que se
+  // cubre acá es que la transacción se deshaga igual y la conexión se libere.
+  test('si el guardado de las fotos lanza, deshace y libera la conexión', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+    evid.guardarEvidencias.mockRejectedValue(new Error('sin espacio en disco'))
+
+    const { next } = await llamar(ctrl.registrar, reqFalso({
+      body: { laboratorio_id: 1, tarea_id: 12 }, files: [foto()],
+    }))
+
+    expect(next).toHaveBeenCalled()
+    expect(conn.rollbacks).toBe(1)
+    expect(conn.liberada).toBe(true)
+  })
+
+  // Sin fotos no hay nada que borrar, y llamar al descarte con la lista vacía
+  // solo ensucia el log del fallo real.
+  test('si no se escribió ninguna foto no se llama al descarte', async () => {
+    prepararEscritura()
+    const conn = connDoble({ fallaEn: 'INSERT INTO h360_lab_registro' })
+    db.getConnection.mockResolvedValue(conn)
+
+    const { next } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    expect(next).toHaveBeenCalled()
+    expect(conn.rollbacks).toBe(1)
+    expect(evid.descartarEvidencias).not.toHaveBeenCalled()
+    expect(conn.liberada).toBe(true)
+  })
+
+  // El flujo de n8n que copia a Drive arma las carpetas con la PLACA y lee
+  // h360_desinf_registro: llamarlo con el id de un registro de laboratorio
+  // mandaría a Drive las fotos del vehículo que tenga ese id. El laboratorio no
+  // copia a Drive todavía; está reportado como pendiente.
+  test('no intenta la copia a Drive: ese flujo es el de vehículos', async () => {
+    prepararEscritura({ tarea: TAREA_CON_FOTO })
+    db.getConnection.mockResolvedValue(connDoble())
+    evid.guardarEvidencias.mockResolvedValue({ filas: [{ id: 5 }], rutasEscritas: ['/a/1.jpg'] })
+
+    await llamar(ctrl.registrar, reqFalso({
+      body: { laboratorio_id: 1, tarea_id: 12 }, files: [foto()],
+    }))
+
+    expect(evid.enviarEvidenciasADrive).not.toHaveBeenCalled()
+  })
+
+  test('las fechas del registro que vuelve son texto AAAA-MM-DD', async () => {
+    prepararEscritura()
+    db.getConnection.mockResolvedValue(connDoble())
+
+    const { res } = await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    expect(res.cuerpo.registro.fecha_ejecucion).toBe(HOY)
+    expect(JSON.stringify(res.cuerpo)).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
+
+    const sql = db.query.mock.calls.map(c => String(c[0])).find(s => /FROM h360_lab_registro g/i.test(s))
+    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_ejecucion/i)
+    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_esperada/i)
+    expect(sql).not.toMatch(/created_at|updated_at/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Omitir
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('omitirTarea', () => {
+  const prepararTarea = (tarea = TAREA_ABIERTA, afectadas = 1) =>
+    db.query.mockImplementation(async (sql, params) => {
+      const s = String(sql)
+      if (/FROM h360_lab_tarea t/i.test(s)) { pasos.push({ paso: 'tarea', params }); return [tarea ? [tarea] : []] }
+      if (/^UPDATE/i.test(s.trim()))        { pasos.push({ paso: 'update', sql: s, params }); return [{ affectedRows: afectadas }] }
+      return [[]]
+    })
+
+  // El motivo obligatorio es lo que impide que la gente omita para que el
+  // indicador no se ponga rojo. Sin él, «OMITIDA» no dice nada y el dato deja
+  // de servir en una auditoría.
+  test('sin motivo da 400 y no escribe', async () => {
+    for (const motivo of [undefined, '', '   ', null]) {
+      jest.clearAllMocks()
+      prepararTarea()
+      const { res } = await llamar(ctrl.omitirTarea,
+        reqFalso({ params: { id: '10' }, body: { motivo_omision: motivo } }))
+
+      expect([motivo, res.codigo]).toEqual([motivo, 400])
+      expect(res.cuerpo).toMatchObject({ campo: 'motivo_omision' })
+      expect(db.query.mock.calls.some(c => /^UPDATE/i.test(String(c[0]).trim()))).toBe(false)
+    }
+  })
+
+  test('con motivo la pasa a OMITIDA y guarda quién y por qué', async () => {
+    prepararTarea()
+    const { res } = await llamar(ctrl.omitirTarea, reqFalso({
+      params: { id: '10' }, body: { motivo_omision: '  No llegó el insumo  ' },
+    }))
+
+    expect(res.codigo).toBe(200)
+    const upd = pasos.find(p => p.paso === 'update')
+    expect(upd.sql).toMatch(/estado\s*=\s*'OMITIDA'/i)
+    // El guardia: si alguien la cerró en el medio, no se pisa.
+    expect(upd.sql).toMatch(/estado\s*=\s*'PENDIENTE'/i)
+    expect(upd.params).toEqual(['No llegó el insumo', 'COORD1', 10])
+  })
+
+  test('una tarea ya cerrada da 409 y no escribe', async () => {
+    for (const estado of ['HECHA', 'OMITIDA', 'NO_HECHA']) {
+      jest.clearAllMocks()
+      prepararTarea({ ...TAREA_ABIERTA, estado })
+      const { res } = await llamar(ctrl.omitirTarea,
+        reqFalso({ params: { id: '10' }, body: { motivo_omision: 'Vacaciones' } }))
+
+      expect([estado, res.codigo]).toEqual([estado, 409])
+      expect(db.query.mock.calls.some(c => /^UPDATE/i.test(String(c[0]).trim()))).toBe(false)
+    }
+  })
+
+  test('una tarea que no existe da 404', async () => {
+    prepararTarea(null)
+    const { res } = await llamar(ctrl.omitirTarea,
+      reqFalso({ params: { id: '99' }, body: { motivo_omision: 'Vacaciones' } }))
+    expect(res.codigo).toBe(404)
+  })
+
+  // La carrera: la leímos PENDIENTE y alguien la cerró antes del UPDATE.
+  test('si se cerró entre la lectura y el UPDATE da 409', async () => {
+    prepararTarea(TAREA_ABIERTA, 0)
+    const { res } = await llamar(ctrl.omitirTarea,
+      reqFalso({ params: { id: '10' }, body: { motivo_omision: 'Vacaciones' } }))
+    expect(res.codigo).toBe(409)
+  })
+
+  test('un id inválido da 400 sin tocar la base', async () => {
+    const { res } = await llamar(ctrl.omitirTarea,
+      reqFalso({ params: { id: '0' }, body: { motivo_omision: 'Vacaciones' } }))
+    expect(res.codigo).toBe(400)
+    expect(db.query).not.toHaveBeenCalled()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Historial y evidencia
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('listarRegistros', () => {
+  test('filtra por laboratorio, fechas y actividad, y acota el resultado', async () => {
+    db.query.mockResolvedValue([[REGISTRO_GUARDADO]])
+    await llamar(ctrl.listarRegistros, reqFalso({ query: {
+      laboratorio_id: '1', desde: '2026-11-01', hasta: '2026-11-25', actividad: 'trampa',
+    } }))
+
+    const [sql, params] = db.query.mock.calls[0]
+    expect(String(sql)).toMatch(/g\.laboratorio_id = \?/)
+    expect(String(sql)).toMatch(/g\.fecha_ejecucion >= \?/)
+    expect(String(sql)).toMatch(/g\.fecha_ejecucion <= \?/)
+    expect(String(sql)).toMatch(/g\.actividad_nombre LIKE \?/)
+    expect(String(sql)).toMatch(/LIMIT/i)
+    expect(params).toEqual([1, '2026-11-01', '2026-11-25', '%trampa%'])
+  })
+
+  test('una fecha que no existe da 400 y no consulta', async () => {
+    const { res } = await llamar(ctrl.listarRegistros, reqFalso({ query: { desde: '2026-02-31' } }))
+    expect(res.codigo).toBe(400)
+    expect(res.cuerpo).toMatchObject({ campo: 'desde' })
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  test('las fechas salen formateadas en SQL y no trae TIMESTAMP', async () => {
+    db.query.mockResolvedValue([[]])
+    await llamar(ctrl.listarRegistros, reqFalso())
+
+    const sql = String(db.query.mock.calls[0][0])
+    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_ejecucion\s*,\s*'%Y-%m-%d'\s*\)/i)
+    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_esperada\s*,\s*'%Y-%m-%d'\s*\)/i)
+    expect(sql).not.toMatch(/created_at|updated_at/)
+  })
+
+  test('cuenta las evidencias desde la tabla del laboratorio', async () => {
+    db.query.mockResolvedValue([[]])
+    await llamar(ctrl.listarRegistros, reqFalso())
+    expect(String(db.query.mock.calls[0][0])).toMatch(/FROM h360_lab_evidencia/i)
+  })
+})
+
+describe('servirEvidencia', () => {
+  // El mismo handler del módulo de vehículos, armado sobre la tabla del
+  // laboratorio: la normalización de la ruta y la lista blanca de mimes no se
+  // duplican acá, que es justo donde se cometen los errores que se pagan caro.
+  test('es el handler del servicio, montado sobre h360_lab_evidencia', () => {
+    expect(typeof ctrl.servirEvidencia).toBe('function')
+    expect(ctrl.servirEvidencia.tabla).toBe('h360_lab_evidencia')
   })
 })
