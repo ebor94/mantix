@@ -14,16 +14,29 @@
 //     y acá un día es inhabilitar un vehículo antes de lo debido.
 //  4. Que un webhook caído o una base caída no tumben el proceso: el cron no
 //     tiene a nadie detrás para atrapar la excepción.
+//  5. Que la generación del día del laboratorio, que viaja colgada del mismo
+//     cron, no pueda tumbar nada de lo anterior — y que sus fallas no se
+//     pierdan: el laboratorio se traga sus propias excepciones por diseño, así
+//     que si nadie vuelca sus `errores` acá, un laboratorio que no generó el
+//     día queda invisible y el barrido reporta éxito.
 
 jest.mock('../../config/db')
 jest.mock('../googleChat.service', () => ({
   enviar: jest.fn(),
   enviarOperaciones: jest.fn(),
 }))
+// El laboratorio va doblado a propósito: esta suite prueba el barrido de
+// vehículos, que está en producción, y no las consultas del otro módulo. Sin el
+// doble, la base falsa de acá —que solo entiende las tablas de vehículos— haría
+// fallar la generación y ensuciaría `errores` en todas las pruebas de abajo.
+jest.mock('../laboratorio.service', () => ({
+  ejecutarGeneracionDiaria: jest.fn(),
+}))
 jest.mock('node-cron', () => ({ schedule: jest.fn(() => ({ stop: jest.fn() })) }))
 
 const db      = require('../../config/db')
 const gchat   = require('../googleChat.service')
+const lab     = require('../laboratorio.service')
 const cron    = require('node-cron')
 const desinf  = require('../desinfecciones.service')
 
@@ -130,10 +143,20 @@ function montar(opciones) {
   return bd
 }
 
+// Lo que devuelve `ejecutarGeneracionDiaria` una noche sin novedades. Se arma
+// con función para que ninguna prueba mute la de la siguiente.
+const GENERACION_OK = () => ({
+  fecha: HOY,
+  cerradas: 3,
+  laboratorios: [{ laboratorio_id: 1, creadas: 14, ya_existian: 0, arrastradas: 0 }],
+  errores: [],
+})
+
 beforeEach(() => {
   jest.clearAllMocks()
   delete process.env.DESINF_AVISO_DIAS
   gchat.enviarOperaciones.mockResolvedValue({ ok: true })
+  lab.ejecutarGeneracionDiaria.mockResolvedValue(GENERACION_OK())
 })
 
 // ── barrerVencidas: qué vence ───────────────────────────────────────────────
@@ -481,6 +504,91 @@ describe('ejecutarBarridoDiario nunca lanza', () => {
   })
 })
 
+// ── El laboratorio colgado del mismo cron ───────────────────────────────────
+//
+// No hay un cron nuevo: el de las 00:05 ya está armado con su zona explícita y
+// sus tres razones. Lo que se cuida acá es que el pasajero no maneje:
+//
+//  · que la generación del día se llame de verdad (si no, el tablero del
+//    laboratorio amanece vacío y el incumplimiento de ayer no se escribe);
+//  · que sus errores NO se pierdan. `ejecutarGeneracionDiaria` no lanza nunca:
+//    tiene un try por laboratorio y devuelve lo que falló en `errores`. Si el
+//    barrido no los vuelca, el cron loguea «terminado, 0 errores» una noche en
+//    que el laboratorio no generó nada. Esa falla silenciosa es justo la que
+//    este módulo existe para evitar;
+//  · que si algún día SÍ lanza —un fallo al requerir el módulo, por ejemplo—,
+//    el barrido de vehículos, que es la regla dura y está en producción, ya
+//    quedó hecho y el aviso ya salió.
+describe('el barrido nocturno también genera el día del laboratorio', () => {
+  test('llama a ejecutarGeneracionDiaria y devuelve su salida', async () => {
+    montar({ vehiculos: VEHICULOS(), programaciones: PROGRAMACIONES() })
+    db.query = jest.fn().mockResolvedValue([[]])
+
+    const r = await desinf.ejecutarBarridoDiario()
+
+    expect(lab.ejecutarGeneracionDiaria).toHaveBeenCalledTimes(1)
+    expect(r.laboratorio).toEqual(expect.objectContaining({ cerradas: 3 }))
+    expect(r.errores).toEqual([])
+  })
+
+  test('los errores que DEVUELVE el laboratorio terminan en los del barrido', async () => {
+    const bd = montar({ vehiculos: VEHICULOS(), programaciones: PROGRAMACIONES() })
+    db.query = jest.fn().mockResolvedValue([[]])
+    lab.ejecutarGeneracionDiaria.mockResolvedValue({
+      fecha: HOY,
+      cerradas: 0,
+      laboratorios: [],
+      errores: [
+        { paso: 'cerrarDiariasVencidas', mensaje: 'base caída' },
+        { paso: 'generarDia', laboratorio_id: 2, mensaje: 'ER_LOCK_WAIT_TIMEOUT' },
+      ],
+    })
+
+    const r = await desinf.ejecutarBarridoDiario()
+
+    // El paso viene prefijado para que en el log se distinga de una falla del
+    // barrido de vehículos, y el laboratorio_id sobrevive al volcado: sin él no
+    // se sabe qué sede quedó sin tablero.
+    expect(r.errores).toEqual([
+      { paso: 'laboratorio.cerrarDiariasVencidas', mensaje: 'base caída' },
+      { paso: 'laboratorio.generarDia', laboratorio_id: 2, mensaje: 'ER_LOCK_WAIT_TIMEOUT' },
+    ])
+    // Y el barrido de vehículos no se enteró: hizo su trabajo igual.
+    expect(r.barrido.vencidas).toBe(2)
+    expect(bd.vehiculos.find(v => v.id === 1).activo).toBe(0)
+    expect(bd.commits).toBe(1)
+  })
+
+  test('si la generación LANZA, el barrido de vehículos igual termina y el error queda', async () => {
+    const bd = montar({ vehiculos: VEHICULOS(), programaciones: PROGRAMACIONES() })
+    db.query = jest.fn().mockResolvedValue([[{ placa: 'ABC123', tipo: 'CARROZA', actividad: 'Desinfección choque', fecha: '2026-11-08' }]])
+    lab.ejecutarGeneracionDiaria.mockRejectedValue(new Error('Cannot find module \'./laboratorio.service\''))
+
+    const r = await desinf.ejecutarBarridoDiario()
+
+    expect(r.errores).toEqual([
+      expect.objectContaining({ paso: 'ejecutarGeneracionDiaria', mensaje: expect.stringContaining('Cannot find module') }),
+    ])
+    expect(r.laboratorio).toBeNull()
+    // Lo que importa: la regla dura corrió completa y el aviso salió.
+    expect(r.barrido.vencidas).toBe(2)
+    expect(bd.vehiculos.find(v => v.id === 1).activo).toBe(0)
+    expect(bd.commits).toBe(1)
+    expect(r.aviso.enviado).toBe(true)
+  })
+
+  test('una generación sin errores no agrega nada a los del barrido', async () => {
+    montar({ vehiculos: VEHICULOS(), programaciones: PROGRAMACIONES() })
+    db.query = jest.fn().mockResolvedValue([[]])
+    // Sin `errores`: el barrido no puede asumir que el arreglo viene.
+    lab.ejecutarGeneracionDiaria.mockResolvedValue({ fecha: HOY, cerradas: 0, laboratorios: [] })
+
+    const r = await desinf.ejecutarBarridoDiario()
+
+    expect(r.errores).toEqual([])
+  })
+})
+
 // ── El job ──────────────────────────────────────────────────────────────────
 describe('el job de desinfecciones', () => {
   // El job guarda su `task` en una variable de módulo, así que cada prueba
@@ -519,5 +627,85 @@ describe('el job de desinfecciones', () => {
     await expect(callback()).resolves.toBeUndefined()
     expect(spy).toHaveBeenCalledTimes(1)
     spy.mockRestore()
+  })
+
+  /** Corre el callback del cron con una salida dada y devuelve el JSON logueado. */
+  async function logDelCron(salida) {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    const spy = jest.spyOn(servicio, 'ejecutarBarridoDiario').mockResolvedValue(salida)
+    try {
+      job.start()
+      const [, callback] = cronFresco.schedule.mock.calls[0]
+      await expect(callback()).resolves.toBeUndefined()
+
+      const linea = log.mock.calls.find(c => String(c[0]).includes('barrido diario terminado'))
+      expect(linea).toBeTruthy()
+      return JSON.parse(linea[1])
+    } finally {
+      spy.mockRestore()
+      log.mockRestore()
+    }
+  }
+
+  test('el log resume también la generación del laboratorio', async () => {
+    const datos = await logDelCron({
+      barrido:     { vencidas: 2, vehiculos_inhabilitados: [{ placa: 'ABC123' }] },
+      resumen:     {},
+      aviso:       { enviado: true },
+      laboratorio: {
+        fecha: HOY,
+        cerradas: 3,
+        laboratorios: [
+          { laboratorio_id: 1, creadas: 14 },
+          { laboratorio_id: 2, creadas: 16 },
+        ],
+        errores: [],
+      },
+      errores: [],
+    })
+
+    expect(datos).toEqual(expect.objectContaining({
+      vencidas: 2, inhabilitados: 1, aviso: true, errores: 0,
+      lab_cerradas: 3, lab_creadas: 30,
+    }))
+  })
+
+  // La parte del laboratorio puede venir vacía por dos caminos reales: que la
+  // generación haya lanzado (y el barrido la dejara en null) o que el día no
+  // tenga laboratorios. El log es lo único que se ve de este cron a la mañana
+  // siguiente: si se rompe armándolo, el catch del job se come la línea entera
+  // y la noche queda sin rastro de nada, ni del barrido de vehículos.
+  test('el log no se rompe cuando la parte del laboratorio viene vacía', async () => {
+    const datos = await logDelCron({
+      barrido: { vencidas: 0, vehiculos_inhabilitados: [] },
+      resumen: {}, aviso: { enviado: false }, laboratorio: null,
+      errores: [{ paso: 'ejecutarGeneracionDiaria', mensaje: 'boom' }],
+    })
+
+    // null y no 0: «no corrió» no es lo mismo que «no hizo nada».
+    expect(datos.lab_cerradas).toBeNull()
+    expect(datos.lab_creadas).toBeNull()
+    expect(datos.errores).toBe(1)
+  })
+
+  test('el log tolera un laboratorio sin lista de laboratorios', async () => {
+    const datos = await logDelCron({
+      barrido: { vencidas: 0, vehiculos_inhabilitados: [] },
+      resumen: {}, aviso: { enviado: false },
+      laboratorio: { fecha: HOY, cerradas: 0 },
+      errores: [],
+    })
+
+    expect(datos.lab_cerradas).toBe(0)
+    expect(datos.lab_creadas).toBe(0)
+  })
+
+  test('el log no se rompe con una salida completamente vacía', async () => {
+    const datos = await logDelCron({})
+
+    expect(datos).toEqual(expect.objectContaining({
+      vencidas: null, inhabilitados: null, aviso: false, errores: 0,
+      lab_cerradas: null, lab_creadas: null,
+    }))
   })
 })

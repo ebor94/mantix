@@ -2,10 +2,12 @@
  * h360/jobs/desinfecciones.job.js
  *
  * Un solo cron: el barrido nocturno de desinfecciones (vencer programaciones,
- * inhabilitar vehículos y avisar al espacio de operaciones).
+ * inhabilitar vehículos y avisar al espacio de operaciones) y, colgada del
+ * mismo disparo, la generación del día del laboratorio.
  *
- * El job no tiene lógica. Todo está en h360/services/desinfecciones.service.js
- * para poder correr el barrido a mano y probarlo sin esperar la medianoche.
+ * El job no tiene lógica —ni la del laboratorio: eso lo orquesta el servicio—.
+ * Todo está en h360/services/desinfecciones.service.js para poder correr el
+ * barrido a mano y probarlo sin esperar la medianoche.
  */
 const cron  = require('node-cron')
 const desinf = require('../services/desinfecciones.service')
@@ -33,11 +35,21 @@ function start() {
   task = cron.schedule('5 0 * * *', async () => {
     try {
       const r = await desinf.ejecutarBarridoDiario()
+      // La parte del laboratorio puede venir en null (la generación lanzó) o
+      // sin lista (no hay laboratorios activos), así que todo se lee con `?.` y
+      // la suma se hace sobre un arreglo garantizado. Esta línea es lo único
+      // que se ve de la noche a la mañana siguiente: si se rompiera armándola,
+      // el catch de abajo se comería el reporte entero, barrido de vehículos
+      // incluido. `null` y no `0` cuando no corrió: «no corrió» y «no hizo
+      // nada» se investigan distinto.
+      const lab = r?.laboratorio || null
       console.log('[desinfecciones] barrido diario terminado:',
         JSON.stringify({
           vencidas:      r?.barrido?.vencidas ?? null,
           inhabilitados: r?.barrido?.vehiculos_inhabilitados?.length ?? null,
           aviso:         r?.aviso?.enviado ?? false,
+          lab_cerradas:  lab?.cerradas ?? null,
+          lab_creadas:   lab ? (lab.laboratorios || []).reduce((n, x) => n + (Number(x?.creadas) || 0), 0) : null,
           errores:       r?.errores?.length ?? 0,
         }))
     } catch (err) {

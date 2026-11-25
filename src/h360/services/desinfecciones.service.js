@@ -347,16 +347,29 @@ async function avisar(resumen) {
 // ── La orquestación que llama el cron ───────────────────────────────────────
 
 /**
- * Barrido + resumen + aviso, en ese orden. Es lo único que llama el job.
+ * Barrido + resumen + aviso + generación del día del laboratorio, en ese orden.
+ * Es lo único que llama el job.
  *
- * NUNCA lanza: loguea y sigue. Cada paso va en su propio try porque los tres
+ * NUNCA lanza: loguea y sigue. Cada paso va en su propio try porque los cuatro
  * sirven por separado — si el barrido falla (y quedó revertido), el resumen
  * todavía puede avisar que hay cosas vencidas, que es justo la noche en la que
  * más falta hace. Y una excepción que suba de acá tumbaría el proceso: node no
  * tiene a nadie escuchando detrás de un callback de cron.
+ *
+ * ── Por qué el laboratorio viaja acá ──────────────────────────────────────
+ * No se armó un cron nuevo: el de las 00:05 ya está en producción con la zona
+ * declarada explícita y con las tres razones de esa hora documentadas en el
+ * job. Un segundo cron a la misma hora duplicaría esas tres decisiones en un
+ * archivo donde nadie las volvería a leer, y la próxima vez que alguien mueva
+ * la hora movería una sola de las dos.
+ *
+ * El laboratorio va ÚLTIMO y en su propio try. Último porque la regla dura del
+ * parque automotor —inhabilitar un vehículo vencido— y el aviso de la mañana no
+ * pueden esperar a un módulo que recién entra; en su propio try porque este
+ * barrido está en producción y el laboratorio es el pasajero, no el que maneja.
  */
 async function ejecutarBarridoDiario() {
-  const salida = { barrido: null, resumen: null, aviso: null, errores: [] }
+  const salida = { barrido: null, resumen: null, aviso: null, laboratorio: null, errores: [] }
 
   try {
     salida.barrido = await barrerVencidas()
@@ -382,6 +395,37 @@ async function ejecutarBarridoDiario() {
       salida.errores.push({ paso: 'avisar', mensaje: err?.message })
       console.error('[desinfecciones] avisar falló:', err?.message)
     }
+  }
+
+  // El día del laboratorio: cerrar las diarias de ayer y materializar la lista
+  // de hoy en cada laboratorio activo.
+  //
+  // El `require` va acá adentro y no arriba a propósito. `ejecutarGeneracionDiaria`
+  // no lanza —tiene un try por laboratorio y devuelve lo que falló—, así que
+  // este try/catch solo se gana la única excepción que podría quedar: la de
+  // cargar el módulo. Un require arriba la convertiría en un fallo al cargar
+  // ESTE archivo, y con él se caerían el barrido de vehículos y el controlador
+  // que lo consulta. Importado acá, un laboratorio roto cuesta la generación de
+  // su día y nada más.
+  try {
+    const laboratorio = require('./laboratorio.service')
+    salida.laboratorio = await laboratorio.ejecutarGeneracionDiaria()
+
+    // Y se vuelcan sus errores a los nuestros. Esto NO es decoración: el
+    // laboratorio se traga sus propias excepciones por diseño (detrás del cron
+    // no hay nadie que las atrape), así que si no se copian acá, un laboratorio
+    // que no generó el día queda invisible — el job loguea «terminado, 0
+    // errores» y nadie se entera de que el tablero amaneció vacío y de que el
+    // incumplimiento de ayer no se escribió. El paso va prefijado para que en
+    // el log se distinga de una falla del barrido de vehículos, y el resto de
+    // los campos (el `laboratorio_id`, que dice qué sede quedó sin tablero) se
+    // conserva tal como vino.
+    for (const e of (salida.laboratorio?.errores || [])) {
+      salida.errores.push({ ...e, paso: `laboratorio.${e?.paso || 'desconocido'}` })
+    }
+  } catch (err) {
+    salida.errores.push({ paso: 'ejecutarGeneracionDiaria', mensaje: err?.message })
+    console.error('[desinfecciones] la generación del día del laboratorio falló:', err?.message)
   }
 
   return salida
