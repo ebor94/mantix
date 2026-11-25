@@ -47,7 +47,9 @@ async function cargarDesdeArchivo({ filePath, originalName, areaId, grupoId, fue
   });
   if (!estadoInicial) {
     await lista.update({ lista_estado: 'fallida', lista_log: { error: 'No hay estados para el grupo' } });
-    throw new Error('No hay estados activos configurados para el grupo');
+    const sinEstados = new Error('No hay estados activos configurados para el grupo');
+    sinEstados.code = 'VALIDATION_ERROR';
+    throw sinEstados;
   }
 
   // Leer y parsear CSV
@@ -60,7 +62,10 @@ async function cargarDesdeArchivo({ filePath, originalName, areaId, grupoId, fue
     records = parse(raw, { columns: (header) => header.map(h => h.trim().toLowerCase()), skip_empty_lines: true, trim: true });
   } catch (e) {
     await lista.update({ lista_estado: 'fallida', lista_log: { error: 'CSV inválido: ' + e.message } });
-    throw e;
+    const linea = e.lines ? ` (línea ${e.lines})` : '';
+    const invalido = new Error(`El archivo CSV no es válido${linea}. Revisa que todas las filas tengan las mismas columnas y que no falten comillas.`);
+    invalido.code = 'VALIDATION_ERROR';
+    throw invalido;
   }
 
   if (records.length > MAX_FILAS) {
