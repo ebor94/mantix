@@ -202,8 +202,10 @@ describe('GET /desinfecciones/registros — filtros y paginación', () => {
   })
 
   test('el límite y el offset viajan interpolados, no como marcadores', async () => {
-    // Van interpolados porque ya están validados como enteros: con marcadores,
-    // mysql2 los manda como texto.
+    // Van interpolados, con los valores ya validados como enteros. Con
+    // marcadores también funcionaría —el pool usa protocolo de texto— así que
+    // esto fija la forma que eligió el controlador, no una restricción
+    // técnica.
     await pedir({ limite: 25, offset: 50 })
 
     const [sql, params] = consultaDeFilas()

@@ -961,8 +961,12 @@ async function listarRegistros(req, res, next) {
          LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
        ${where}`, params)
 
-    // El LIMIT/OFFSET se interpola porque ya está validado como entero: con
-    // marcadores, mysql2 los manda como texto y MySQL rechaza la consulta.
+    // El LIMIT/OFFSET va interpolado, con los dos valores ya validados como
+    // entero más arriba. Con marcadores también funcionaría: el pool es un
+    // `createPool` de mysql2/promise y acá se usa `pool.query`, o sea
+    // protocolo de texto, donde los números se serializan como números —
+    // `laboratorioInformes.controller.js` corre `LIMIT ? OFFSET ?` en
+    // producción. Las dos formas son seguras; esta es la excepción en el repo.
     const [filas] = await db.query(
       `${SELECT_REGISTRO}
        ${where}
