@@ -7,6 +7,7 @@
 const path = require('path');
 const { R44Proveedor, R44Documento, R44ExtraccionLlm } = require('../models');
 const { notificarN8n, archivarDocumentosEnDrive } = require('../services/n8nService');
+const { quitarProteccionPdf } = require('../services/pdfDecrypt');
 const { carpetaProveedor } = require('../services/r44Carpeta');
 
 // tipo_documento (BD) -> clave corta usada en el archivado / nombres en Drive
@@ -69,6 +70,9 @@ const r44DocumentosController = {
       const tiposArchivos = {};
       for (const [fieldname, [file]] of Object.entries(files)) {
         const tipoDB = TIPO_DOCUMENTO_MAP[fieldname] || fieldname;
+        // Quitar la protección del PDF (si la tiene) antes de la extracción:
+        // la API de Anthropic rechaza los PDF encriptados.
+        if (file.mimetype === 'application/pdf') await quitarProteccionPdf(file.path);
         await R44Documento.upsert({
           proveedor_id:            parseInt(proveedor_id),
           tipo_documento:          tipoDB,
