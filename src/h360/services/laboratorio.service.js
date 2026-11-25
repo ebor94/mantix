@@ -14,9 +14,14 @@
  *    unicidad la garantiza MySQL y no un SELECT previo, así que dos procesos
  *    simultáneos (cron y tablero a la misma hora) tampoco duplican.
  *
- * 2. NO SE ABRE UNA TAREA NUEVA MIENTRAS HAYA UNA ABIERTA de la misma regla.
- *    Sin ese guardia, una quincenal atrasada dos semanas deja 14 filas y el
- *    informe diría que el laboratorio falló 14 veces cuando falló una.
+ * 2. NO SE ABRE UNA TAREA NUEVA MIENTRAS HAYA UNA ABIERTA de la misma regla,
+ *    PERO SOLO SI ESA FRECUENCIA ARRASTRA. Sin el guardia, una quincenal
+ *    atrasada dos semanas deja 14 filas y el informe diría que el laboratorio
+ *    falló 14 veces cuando falló una. Con el guardia aplicado también a las
+ *    DIARIA pasaba lo contrario y peor: la diaria de ayer todavía PENDIENTE
+ *    bloqueaba la de hoy, el tablero amanecía con la lista de ayer y el día de
+ *    hoy no quedaba escrito ni como incumplimiento. Cada día es un evento de
+ *    cumplimiento propio; lo semanal y lo quincenal es una deuda que sigue.
  *
  * 3. SOLO LAS DIARIA CADUCAN. `cerrarDiariasVencidas` filtra por
  *    `r.frecuencia = 'DIARIA'`. Lo semanal y lo de cada N días sigue
@@ -46,38 +51,19 @@
  * fecha que sale de una consulta va con `DATE_FORMAT(x, '%Y-%m-%d')` y toda
  * aritmética de días se hace en SQL con `DATEDIFF`. Acá no se recorta ningún
  * ISO ni se construye ningún `Date` a partir de una fecha de la base.
+ *
+ * El «hoy» del negocio sale de `../utils/fecha_hora`, que es el único lugar de
+ * h360 donde se dice `America/Bogota`. Antes este archivo tenía su propia copia
+ * con un `Intl.DateTimeFormat` paralelo.
  */
 const db = require('../config/db')
 const { reglaAplicaEn, diaSemanaISO, arrastra } = require('./laboratorio.calendario')
+const { hoyBogota } = require('../utils/fecha_hora')
 
 // Quién queda como responsable del cierre automático. No es un usuario de
 // LDAP: es la marca que deja distinguir «lo cerró el sistema porque se pasó el
 // día» de «alguien lo cerró», igual que el ACTOR del barrido de vehículos.
 const ACTOR = 'sistema'
-
-const ZONA_NEGOCIO = 'America/Bogota'
-
-/**
- * El día de hoy (AAAA-MM-DD) en la zona del negocio.
- *
- * Es la parte de fecha de `relojBogota()` de `desinfecciones.controller.js`,
- * reescrita acá en vez de importada, por la misma razón que `laboratorio.
- * calendario.js` no importa `fechaSolo`: en este repo el flujo es
- * controlador → servicio, y requerir el controlador desde un servicio además
- * arrastraría multer y sharp (vía `desinfeccionEvidencia.service`) solo para
- * preguntar qué día es. Si aparece una tercera copia de esto, el lugar es
- * `src/h360/utils/fechas.js`, no un controlador.
- *
- * El cálculo es con Intl y la zona explícita: `new Date().toISOString()` daría
- * el día de UTC, y a las 19:00 de Cúcuta eso ya es mañana.
- */
-const PARTES_BOGOTA = new Intl.DateTimeFormat('en-US', {
-  timeZone: ZONA_NEGOCIO, year: 'numeric', month: '2-digit', day: '2-digit',
-})
-function hoyBogota(instante = new Date()) {
-  const p = Object.fromEntries(PARTES_BOGOTA.formatToParts(instante).map(x => [x.type, x.value]))
-  return `${p.year}-${p.month}-${p.day}`
-}
 
 /**
  * La fecha de trabajo, o null.
@@ -234,11 +220,12 @@ function cadaNDiasExigible(regla) {
  * Idempotente: llamarla dos veces con la misma fecha devuelve `creadas: 0` la
  * segunda vez. Se puede llamar desde una consulta de lectura sin miedo.
  *
- * OJO con el orden respecto de `cerrarDiariasVencidas`: el guardia de la
- * invariante 2 no distingue frecuencias, así que una DIARIA de ayer que siguió
- * PENDIENTE bloquea la de hoy. Quien dispare la generación tiene que cerrar
- * primero las diarias vencidas —`ejecutarGeneracionDiaria` lo hace en ese
- * orden— o el tablero muestra la tarea vieja en lugar de la del día.
+ * NO depende de que `cerrarDiariasVencidas` haya corrido antes: el guardia de
+ * la invariante 2 solo mira las frecuencias que arrastran, así que una DIARIA
+ * de ayer que quedó PENDIENTE no bloquea la de hoy. Eso es lo que hace que el
+ * segundo disparador sirva de red: si el cron de las 00:05 no corrió porque el
+ * servidor estaba caído, la primera consulta del tablero genera el día igual y
+ * el cierre de ayer se hace cuando se pueda.
  *
  * @param {number} laboratorioId
  * @param {string} fecha  AAAA-MM-DD exacto, el día del negocio
@@ -266,15 +253,28 @@ async function generarDia(laboratorioId, fecha) {
 
   const [abiertas] = await db.query(SQL_TAREAS_ABIERTAS, [lab])
 
-  // Invariante 2. Una tarea abierta de OTRO día bloquea la nueva; la abierta de
-  // la misma fecha no bloquea nada, porque es justo la que íbamos a crear y la
-  // clave única la va a descartar sola (eso es `ya_existian`).
+  // Invariante 2, y SOLO para lo que arrastra. Una tarea abierta de OTRO día
+  // bloquea la nueva; la abierta de la misma fecha no bloquea nada, porque es
+  // justo la que íbamos a crear y la clave única la va a descartar sola (eso es
+  // `ya_existian`).
+  //
+  // El guardia se condiciona a `arrastra()` porque una DIARIA abierta de ayer
+  // NO es la misma deuda que la de hoy: cada día es un evento de cumplimiento
+  // propio, y el día que no se generó no se puede escribir después. Aplicado
+  // también a las diarias, el guardia anulaba la red de seguridad del segundo
+  // disparador —el tablero genera el día de forma perezosa justamente para
+  // cubrir que el cron de las 00:05 no haya corrido— y dejaba la pantalla
+  // mostrando la lista de ayer sin que el incumplimiento de hoy quedara
+  // escrito nunca. Lo semanal y lo de cada N días conservan el guardia, que es
+  // donde hacía falta: es lo que impide que una quincenal atrasada quince días
+  // produzca quince incumplimientos en vez de uno.
   const bloqueadas = new Set()
   let arrastradas = 0
   for (const a of (abiertas || [])) {
     if (a.fecha_abierta === dia) continue
+    if (!arrastra(a.frecuencia)) continue
     bloqueadas.add(a.regla_id)
-    if (a.fecha_abierta < dia && arrastra(a.frecuencia)) arrastradas++
+    if (a.fecha_abierta < dia) arrastradas++
   }
 
   const porCrear = candidatas.filter(r => !bloqueadas.has(r.regla_id))
@@ -311,9 +311,11 @@ async function cerrarDiariasVencidas(fecha) {
  * Lo que llama el cron de medianoche: cierra las diarias de ayer y genera el
  * día de hoy en cada laboratorio activo.
  *
- * El orden importa y no es estético: si se generara antes de cerrar, la diaria
- * de ayer todavía PENDIENTE bloquearía la de hoy por la invariante 2 y el
- * laboratorio amanecería con la lista de ayer.
+ * Se cierra primero y se genera después porque es el orden en que se lee —
+ * cerrar ayer, abrir hoy— y porque deja el tablero sin la tarea vieja desde la
+ * primera consulta. Ya NO es el orden el que garantiza que el día se genere:
+ * eso lo garantiza el guardia, que solo mira lo que arrastra. Si el cierre
+ * falla, la generación sigue y el día queda escrito igual.
  *
  * NUNCA lanza: acumula en `errores` y sigue. Cada laboratorio va en su propio
  * try porque son independientes —que una sede quede sin generar no puede dejar
@@ -369,7 +371,9 @@ module.exports = {
   generarDia,
   cerrarDiariasVencidas,
   ejecutarGeneracionDiaria,
-  // Expuestos para las pruebas: el reloj del negocio y la decisión de las
-  // quincenales, que es la única rama con aritmética propia.
+  // Expuestos para las pruebas: la decisión de las quincenales, que es la única
+  // rama con aritmética propia, y el reloj con que este servicio decide el día
+  // —reexportado de `utils/fecha_hora`, no una copia— para que la prueba del
+  // cron afirme sobre el mismo que usa `ejecutarGeneracionDiaria`.
   _internos: { hoyBogota, cadaNDiasExigible, fechaDeTrabajo, ACTOR },
 }

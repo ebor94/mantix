@@ -213,8 +213,58 @@ describe('generarDia es idempotente', () => {
   })
 })
 
-// ── Invariante 2: una tarea abierta bloquea la siguiente ────────────────────
+// ── Invariante 2: una tarea abierta bloquea la siguiente, pero SOLO si arrastra
 describe('generarDia no abre otra tarea mientras haya una abierta', () => {
+  // El guardia existe para lo que arrastra. Aplicado a las DIARIA anula la red
+  // de seguridad del segundo disparador: `generarDia` se llama desde el tablero
+  // justamente para cubrir que el cron de las 00:05 no haya corrido (servidor
+  // caído), y si la diaria de ayer todavía PENDIENTE bloquea la de hoy, el
+  // tablero muestra la lista de ayer y el incumplimiento del día no se escribe
+  // NUNCA. Cada día es un evento de cumplimiento propio: la diaria del 26 no
+  // depende de cómo quedó la del 25.
+  test('las DIARIA de hoy nacen aunque las de ayer sigan PENDIENTE (sin cierre en el medio)', async () => {
+    const DIARIAS = Array.from({ length: 14 }, (_, i) => ({ id: 100 + i, frecuencia: 'DIARIA' }))
+    const bd = baseFalsa({ reglas: DIARIAS })
+
+    const ayer = await svc.generarDia(LAB, MAR)
+    expect(ayer.creadas).toBe(14)
+
+    // Nadie cerró las de ayer: el cron no corrió y el tablero es el primero en
+    // llegar. Las 14 del martes siguen PENDIENTE.
+    const hoy = await svc.generarDia(LAB, MIE)
+
+    expect(hoy.creadas).toBe(14)
+    expect(hoy.ya_existian).toBe(0)
+    // Una DIARIA vieja que sigue abierta es un cierre que no alcanzó a correr,
+    // no un arrastre: no se cuenta.
+    expect(hoy.arrastradas).toBe(0)
+    expect(bd.tareas.filter(t => t.fecha === MIE)).toHaveLength(14)
+    expect(bd.tareas.filter(t => t.fecha === MAR && t.estado === 'PENDIENTE')).toHaveLength(14)
+  })
+
+  test('la quincenal con tarea abierta sigue sin duplicarse', async () => {
+    // El guardia hace falta justo acá: sin él una quincenal atrasada produce un
+    // incumplimiento por día en vez de uno.
+    const bd = baseFalsa({
+      reglas: [
+        { id: 30, frecuencia: 'CADA_N_DIAS', cada_dias: 15 },
+        { id: 20, frecuencia: 'SEMANAL', dia_semana: 6 },
+      ],
+      tareas: [
+        { regla_id: 30, fecha: '2026-11-10', estado: 'PENDIENTE' },
+        { regla_id: 20, fecha: '2026-11-21', estado: 'PENDIENTE' },
+      ],
+    })
+
+    const r = await svc.generarDia(LAB, SAB)   // sábado: a la semanal le tocaría
+
+    expect(r.creadas).toBe(0)
+    expect(r.arrastradas).toBe(2)
+    expect(tareasDe(bd, 30)).toHaveLength(1)
+    expect(tareasDe(bd, 20)).toHaveLength(1)
+    expect(inserts()).toHaveLength(0)
+  })
+
   test('una regla con tarea PENDIENTE de otro día no genera otra', async () => {
     const bd = baseFalsa({
       reglas: [{ id: 30, frecuencia: 'CADA_N_DIAS', cada_dias: 15 }],

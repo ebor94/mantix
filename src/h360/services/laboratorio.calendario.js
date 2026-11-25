@@ -6,45 +6,28 @@
  * datos, sin reloj, sin estado. Así se puede probar sin montar MySQL, y el
  * generador del día (laboratorio.service.js) se queda solo con las consultas.
  *
- * ── Por qué este archivo no importa nada ──────────────────────────────────
- * El plan sugería consumir `fechaSolo` de `../controllers/desinfecciones.
- * controller`, que ya la exporta. No se hace, por dos razones:
+ * ── De dónde sale `fechaSolo` ──────────────────────────────────────────────
+ * De `../utils/fecha_hora`, que es el único lugar de h360 donde viven el reloj
+ * del negocio y la aritmética de fechas.
+ *
+ * NO de `../controllers/desinfecciones.controller`, que también la exporta, por
+ * dos razones que siguen valiendo:
  *
  *  1. Dirección de las dependencias. En este repo ningún servicio requiere un
  *     controlador: el flujo es siempre controlador → servicio. Invertirlo acá
  *     crea un ciclo en potencia en cuanto el controlador del laboratorio pida
- *     este módulo, que es justo lo que va a pasar en la Tarea 4.
+ *     este módulo.
  *  2. Y lo concreto: `desinfecciones.controller.js` requiere `../config/db` y
  *     `../services/desinfeccionEvidencia.service` al cargarse, y `db.js` llama
  *     a `mysql.createPool(...)` en el require. Importar el controlador acá
  *     abriría un pool de MySQL (y cargaría sharp y multer) con solo pedir una
- *     función que calcula días de la semana. La promesa de «sin base de datos»
- *     dejaría de ser cierta y las pruebas de este archivo, que no mockean nada,
- *     levantarían conexiones de verdad.
+ *     función que calcula días de la semana.
  *
- * Así que la validación de la fecha se duplica. Son cuatro líneas y no tienen
- * dueño natural todavía; si aparece una tercera copia, el lugar es
- * `src/h360/utils/`, no un controlador.
+ * `utils/fecha_hora.js` no requiere nada, así que importarlo deja intacta la
+ * promesa de «funciones puras, sin base de datos» y las pruebas de este archivo
+ * siguen sin mockear nada.
  */
-
-/**
- * «2026-11-09» o cualquier ISO que empiece por una fecha → «2026-11-09».
- * Null si no es una fecha de verdad: el 31 de febrero se descarta comparando
- * contra un Date armado con los mismos números.
- *
- * Copia deliberada de `fechaSolo` de desinfecciones.controller.js — ver la
- * nota de arriba. Se trabaja con el TEXTO y no con `new Date(...)`: un
- * «2026-11-09» pasado por Date es medianoche UTC, que en Bogotá es el 8.
- */
-function fechaSolo(valor) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor ?? '').trim())
-  if (!m) return null
-  const [, anio, mes, dia] = m
-  const prueba = new Date(Date.UTC(+anio, +mes - 1, +dia))
-  if (prueba.getUTCFullYear() !== +anio || prueba.getUTCMonth() !== +mes - 1 ||
-      prueba.getUTCDate() !== +dia) return null
-  return `${anio}-${mes}-${dia}`
-}
+const { fechaSolo } = require('../utils/fecha_hora')
 
 /**
  * Día de la semana ISO de una fecha en texto: 1 = lunes … 7 = domingo.
