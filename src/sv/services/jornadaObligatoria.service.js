@@ -10,6 +10,7 @@
  */
 const { SvJornada, SvJornadaAusencia } = require('../models');
 const { hoyBogotaISO } = require('../utils/fechas');
+const { finalizarJornada } = require('./tracking.service');
 
 const ROLES_NO_OPERATIVOS = new Set([
   'SUPER_ADMIN',
@@ -25,7 +26,7 @@ function esOperativo(usuario) {
 async function estadoHoy(usuario) {
   const fecha = hoyBogotaISO();
   const [jornada, ausencia] = await Promise.all([
-    SvJornada.findOne({ where: { jor_usr_id: usuario.usr_id, jor_fecha: fecha } }),
+    SvJornada.findOne({ where: { jor_usr_id: usuario.usr_id, jor_fecha: fecha }, order: [['jor_inicio_at', 'DESC']] }),
     SvJornadaAusencia.findOne({ where: { aus_usr_id: usuario.usr_id, aus_fecha: fecha } })
   ]);
 
@@ -39,10 +40,12 @@ async function estadoHoy(usuario) {
 }
 
 async function registrarAusencia(usuarioId, { tipo, motivo }) {
+  const fecha = hoyBogotaISO();
+  let ausencia;
   try {
-    return await SvJornadaAusencia.create({
+    ausencia = await SvJornadaAusencia.create({
       aus_usr_id: usuarioId,
-      aus_fecha:  hoyBogotaISO(),
+      aus_fecha:  fecha,
       aus_tipo:   tipo,
       aus_motivo: motivo
     });
@@ -54,6 +57,13 @@ async function registrarAusencia(usuarioId, { tipo, motivo }) {
     }
     throw e;
   }
+
+  // Quien no labora hoy no sigue con la jornada abierta.
+  const activas = await SvJornada.findAll({
+    where: { jor_usr_id: usuarioId, jor_fecha: fecha, jor_estado: 'activa' }
+  });
+  for (const j of activas) await finalizarJornada(j.jor_id);
+  return ausencia;
 }
 
 async function eliminarAusenciaHoy(usuarioId) {

@@ -49,6 +49,7 @@ async function iniciarJornada(req, res) {
     return created(res, j);
   } catch (e) {
     if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'AUSENTE')          return fail(res, 409, 'AUSENTE', e.message);
     if (e.code === 'SIN_CONSENTIMIENTO') return fail(res, 409, 'SIN_CONSENTIMIENTO', e.message);
     if (e.code === 'YA_ACTIVA')        return fail(res, 409, 'YA_ACTIVA', e.message);
     throw e;
@@ -57,14 +58,16 @@ async function iniciarJornada(req, res) {
 
 async function finalizarJornada(req, res) {
   try {
+    // El dueño se comprueba antes de cerrar, no después.
+    const previa = await tracking.obtenerJornada(req.params.id);
+    if (!previa) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Jornada no encontrada');
+    if (Number(previa.jor_usr_id) !== Number(req.user.usr_id) && req.user.rol?.rol_nivel > 2) {
+      return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo puedes finalizar tus propias jornadas');
+    }
     const j = await tracking.finalizarJornada(req.params.id, {
       lat: req.body.lat,
       lng: req.body.lng
     });
-    // Verificar dueño
-    if (j.jor_usr_id !== req.user.usr_id && req.user.rol?.rol_nivel > 2) {
-      return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo puedes finalizar tus propias jornadas');
-    }
     return ok(res, j);
   } catch (e) {
     if (e.code === 'NOT_FOUND')      return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
@@ -75,10 +78,11 @@ async function finalizarJornada(req, res) {
 
 async function batchPuntos(req, res) {
   try {
-    const r = await tracking.batchPuntos(req.params.id, req.body.puntos);
+    const r = await tracking.batchPuntos(req.params.id, req.body.puntos, req.user.usr_id);
     return ok(res, r);
   } catch (e) {
     if (e.code === 'NOT_FOUND')        return fail(res, 404, ERROR_CODES.NOT_FOUND, e.message);
+    if (e.code === 'FORBIDDEN')        return fail(res, 403, ERROR_CODES.FORBIDDEN, e.message);
     if (e.code === 'JORNADA_CERRADA')  return fail(res, 409, 'JORNADA_CERRADA', e.message);
     throw e;
   }

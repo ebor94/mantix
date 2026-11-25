@@ -11,7 +11,7 @@
 const { Op, fn, col } = require('sequelize');
 const crypto = require('crypto');
 const {
-  sequelize, SvJornada, SvTrackingPunto, SvUsuario, SvGestion, SvProspecto, SvPersona
+  sequelize, SvJornada, SvJornadaAusencia, SvTrackingPunto, SvUsuario, SvGestion, SvProspecto, SvPersona
 } = require('../models');
 const { aISO, hoyISO, hoyBogotaISO, rangoDia } = require('../utils/fechas');
 const { sumaDistancias } = require('../utils/haversine');
@@ -51,19 +51,34 @@ function dentroDeHorario(fechaISO /*, horarioJson */) {
   return (hora >= 8 && hora < 12) || (hora >= 14 && hora < 18);
 }
 
+// Cierre automático: las 6 p. m. del día de la jornada, o su inicio si empezó después. Nunca en el futuro.
+function finAutomatico(j) {
+  const inicio = new Date(j.jor_inicio_at).getTime();
+  const seis = new Date(`${aISO(j.jor_fecha)}T18:00:00-05:00`).getTime();
+  return new Date(Math.min(Date.now(), Math.max(inicio, seis)));
+}
+
 /**
- * Inicia una jornada. Falla si ya hay una activa para el usuario en este día.
+ * Inicia la jornada de hoy. Idempotente: si ya hay una activa de hoy la devuelve;
+ * las abiertas de días anteriores se cierran. Con ausencia hoy no deja iniciar.
  */
 async function iniciarJornada(usrId, { lat = null, lng = null, dispositivo = null, ip = null }) {
   const usuario = await SvUsuario.findByPk(usrId);
   if (!usuario) throw new TrackingError('NOT_FOUND', 'Usuario no encontrado');
 
-  // Si ya hay una activa, devolverla en lugar de crear duplicado
-  // (frontend llama auto-iniciar en cada login; idempotencia es deseable)
-  const activa = await SvJornada.findOne({
-    where: { jor_usr_id: usrId, jor_estado: 'activa' }
-  });
-  if (activa) return activa;
+  const hoy = hoyBogotaISO();
+  if (await SvJornadaAusencia.findOne({ where: { aus_usr_id: usrId, aus_fecha: hoy } })) {
+    throw new TrackingError('AUSENTE', 'Hoy marcaste que no laboras');
+  }
+
+  // Una por día: la de hoy se devuelve (idempotente) y las que quedaron abiertas de otros días se cierran.
+  const abiertas = await SvJornada.findAll({ where: { jor_usr_id: usrId, jor_estado: 'activa' } });
+  let deHoy = null;
+  for (const j of abiertas) {
+    if (aISO(j.jor_fecha) === hoy) deHoy = j;
+    else await finalizarJornada(j.jor_id, { marcarAuto: true });
+  }
+  if (deHoy) return deHoy;
 
   const now = new Date();
   const j = await SvJornada.create({
@@ -71,7 +86,7 @@ async function iniciarJornada(usrId, { lat = null, lng = null, dispositivo = nul
     jor_usr_id:            usrId,
     // Bogotá timezone-aware para match con jornadaObligatoria.estadoHoy
     // (jor_fecha con aISO UTC daba mañana post-19:00 Bogotá → popup reaparecía)
-    jor_fecha:             hoyBogotaISO(),
+    jor_fecha:             hoy,
     jor_inicio_at:         now,
     jor_inicio_lat:        lat,
     jor_inicio_lng:        lng,
@@ -103,11 +118,11 @@ async function finalizarJornada(jornadaId, { lat = null, lng = null, marcarAuto 
   const coords = puntos.map(p => ({ lat: parseFloat(p.tp_lat), lng: parseFloat(p.tp_lng) }));
   const km = Math.round(sumaDistancias(coords) * 100) / 100;
 
-  const now = new Date();
-  const duracionMin = Math.round((now - new Date(j.jor_inicio_at)) / 60000);
+  const fin = marcarAuto ? finAutomatico(j) : new Date();
+  const duracionMin = Math.round((fin - new Date(j.jor_inicio_at)) / 60000);
 
   await j.update({
-    jor_fin_at:        now,
+    jor_fin_at:        fin,
     jor_fin_lat:       lat,
     jor_fin_lng:       lng,
     jor_puntos_total:  puntos.length,
@@ -118,15 +133,23 @@ async function finalizarJornada(jornadaId, { lat = null, lng = null, marcarAuto 
   return j;
 }
 
+/** Lee una jornada por id (el controlador comprueba el dueño antes de cerrarla). */
+async function obtenerJornada(jornadaId) {
+  return SvJornada.findByPk(jornadaId);
+}
+
 /**
  * Recibe batch de puntos del frontend. Aplica filtros (accuracy, horario laboral, delta mínimo)
  * y persiste en bulk. Retorna { recibidos, aceptados, descartados, motivos }.
  *
  * payload.puntos = [{ ts, lat, lng, accuracy?, altitude?, speed?, battery?, source? }]
  */
-async function batchPuntos(jornadaId, puntos = []) {
+async function batchPuntos(jornadaId, puntos = [], usrId = null) {
   const j = await SvJornada.findByPk(jornadaId);
   if (!j) throw new TrackingError('NOT_FOUND', 'Jornada no encontrada');
+  if (usrId != null && Number(j.jor_usr_id) !== Number(usrId)) {
+    throw new TrackingError('FORBIDDEN', 'Esta jornada es de otra persona');
+  }
   if (j.jor_estado !== 'activa') {
     throw new TrackingError('JORNADA_CERRADA', 'No se pueden agregar puntos a una jornada finalizada');
   }
@@ -397,7 +420,7 @@ async function purgarAntiguos({ diasRetencion = RETENCION_DIAS } = {}) {
 
 module.exports = {
   TrackingError,
-  iniciarJornada, finalizarJornada, batchPuntos,
+  iniciarJornada, finalizarJornada, batchPuntos, obtenerJornada,
   recorridoUsuario, liveEquipo, listarJornadas,
   aceptarConsentimiento, exportarMisDatos,
   cerrarJornadasAbiertas, purgarAntiguos,
