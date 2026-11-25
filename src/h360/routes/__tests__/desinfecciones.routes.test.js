@@ -42,6 +42,11 @@ jest.mock('../../services/desinfeccionEvidencia.service', () => ({
   subidaEvidencia: jest.fn((req, res, next) => next()),
   servirEvidencia: mockEspia('evid.servirEvidencia'),
   callbackDrive:   mockEspia('evid.callbackDrive'),
+  // `servirEvidenciaDesde` no es de este módulo: la usa el controlador del
+  // LABORATORIO, que este archivo carga de rebote porque routes/index.js monta
+  // los dos módulos y el doble reemplaza el servicio para todo el proceso. Sin
+  // ella la suite entera no arranca, con el error en una línea que no es de acá.
+  servirEvidenciaDesde: jest.fn(() => mockEspia('evid.servirEvidenciaDesde')),
 }))
 
 const express = require('express')

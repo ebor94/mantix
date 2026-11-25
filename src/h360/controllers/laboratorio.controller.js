@@ -708,24 +708,43 @@ function conflicto(mensaje) {
  *
  * `fecha_esperada` sale con DATE_FORMAT —la columna se llama `fecha`— porque se
  * guarda en el registro y se compara contra la fecha de ejecución como texto.
+ *
+ * EL NOMBRE SALE DE LA TAREA (`t.actividad_nombre`) Y NO DEL CATÁLOGO. La tarea
+ * lo congela el día en que se genera, así que es el nombre que regía cuando la
+ * obligación nació. Con `a.nombre`, renombrar la actividad entre la generación y
+ * el cierre partía el MISMO cumplimiento en dos: el informe de `cumplimiento`
+ * —que agrupa por `t.actividad_nombre`— mostraría el nombre viejo y el
+ * `historial` —que lee el registro— el nuevo, sin nada que indique que son el
+ * mismo hecho.
+ *
+ * El JOIN con el catálogo se queda, pero solo por `a.bloque`: ese es el
+ * agrupador VIGENTE con el que se lee la pantalla y la tarea no lo copia.
+ * El JOIN con la regla trae la frecuencia y el `tipo_registro` que rigen hoy,
+ * que es lo correcto: son la obligación, no el nombre del hecho.
  */
 const SQL_TAREA_A_CERRAR = `
   SELECT t.id                             AS tarea_id,
          t.laboratorio_id                 AS laboratorio_id,
          t.regla_id                       AS regla_id,
          t.estado                         AS estado,
+         t.actividad_nombre               AS actividad,
          DATE_FORMAT(t.fecha, '%Y-%m-%d') AS fecha_esperada,
          r.frecuencia                     AS frecuencia,
          r.cada_dias                      AS cada_dias,
          r.tipo_registro                  AS tipo_registro,
-         a.nombre                         AS actividad,
          a.bloque                         AS bloque
     FROM h360_lab_tarea t
     JOIN h360_lab_regla r     ON r.id = t.regla_id
     JOIN h360_lab_actividad a ON a.id = r.actividad_id
    WHERE t.id = ?`
 
-/** La regla sola, para el camino POR_EVENTO, que no tiene tarea. */
+/**
+ * La regla sola, para el camino POR_EVENTO, que no tiene tarea.
+ *
+ * Acá el nombre SÍ sale del catálogo vigente, y es lo correcto: sin tarea no
+ * hubo ningún nombre congelado antes, así que el del catálogo es el único que
+ * rigió cuando el evento pasó.
+ */
 const SQL_REGLA_A_REGISTRAR = `
   SELECT r.id             AS regla_id,
          r.laboratorio_id AS laboratorio_id,
@@ -1015,8 +1034,11 @@ async function registrar(req, res, next) {
 }
 
 /**
- * POST /laboratorio/tareas/:id/omitir
+ * PATCH /laboratorio/tarea/:id/omitir
  * Body: { motivo_omision }
+ *
+ * PATCH y en singular: omitir MODIFICA la tarea del día que ya existe, no crea
+ * nada, igual que `/programacion/:id` en el módulo de vehículos.
  *
  * EL MOTIVO ES OBLIGATORIO y es el punto entero de este endpoint. Sin él la
  * gente omite para que el indicador no se ponga rojo, «OMITIDA» deja de decir
@@ -1070,48 +1092,17 @@ async function omitirTarea(req, res, next) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /laboratorio/registros ?laboratorio_id=&desde=&hasta=&actividad=
+ * ⚠️ EL HISTÓRICO PLANO NO VIVE ACÁ. `GET /laboratorio/registros` se monta sobre
+ * `laboratorioInformes.historial`, que es un sobre-conjunto de esta lectura
+ * —los mismos filtros más `registrado_por`, `frecuencia`, `page` y `limit`— y
+ * devuelve `total`, que es lo que la exportación a Excel necesita para saber
+ * cuántas páginas pedir. Acá había un `listarRegistros` con un `LIMIT 200` fijo;
+ * se borró al montar las rutas: sin ruta era código muerto, y dejar dos formas
+ * de pedir lo mismo obligaba al frontend a aprender dos y a elegir mal una.
  *
- * El histórico plano, que es lo que el frontend exporta a Excel (el backend no
- * genera archivos). El informe agrupado es otro endpoint.
- *
- * La búsqueda por actividad va contra `actividad_nombre`, que es la COPIA que
- * guarda el registro: una actividad renombrada se sigue encontrando por como se
- * llamaba cuando se ejecutó, que es lo que dice el papel que se está buscando.
+ * `SELECT_REGISTRO` se queda porque `registrar` devuelve con él el registro que
+ * acabó de escribir.
  */
-async function listarRegistros(req, res, next) {
-  try {
-    const q = req.query || {}
-    const filtros = []
-    const params  = []
-
-    if (q.laboratorio_id !== undefined && q.laboratorio_id !== '') {
-      const labId = enteroPositivo(q.laboratorio_id)
-      if (!labId)
-        return res.status(400).json({ mensaje: 'laboratorio_id inválido', campo: 'laboratorio_id' })
-      filtros.push('g.laboratorio_id = ?'); params.push(labId)
-    }
-    for (const [campo, comparador] of [['desde', '>='], ['hasta', '<=']]) {
-      if (q[campo] === undefined || q[campo] === '') continue
-      const fecha = fechaSolo(q[campo])
-      if (!fecha)
-        return res.status(400).json({ mensaje: `La fecha «${campo}» no es válida`, campo })
-      filtros.push(`g.fecha_ejecucion ${comparador} ?`); params.push(fecha)
-    }
-    if (q.actividad) {
-      filtros.push('g.actividad_nombre LIKE ?')
-      params.push(`%${texto(q.actividad, 80)}%`)
-    }
-
-    const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''
-    const [rows] = await db.query(
-      `${SELECT_REGISTRO}
-       ${where}
-       ORDER BY g.fecha_ejecucion DESC, g.id DESC
-       LIMIT 200`, params)
-    res.json(rows)
-  } catch (err) { next(err) }
-}
 
 /**
  * GET /laboratorio/evidencia/:id — el binario, con el token en la cabecera.
@@ -1133,7 +1124,7 @@ module.exports = {
   listarActividades, crearActividad, actualizarActividad,
   listarReglas, crearRegla, actualizarRegla,
   tablero,
-  registrar, omitirTarea, listarRegistros, servirEvidencia,
+  registrar, omitirTarea, servirEvidencia,
   // Expuestos para las pruebas y para quien tenga que decidir lo mismo: la
   // lista de roles que registran es la que el tablero manda en el dato, y
   // `camposDeFrecuencia` es el espejo de los dos CHECK de la tabla.

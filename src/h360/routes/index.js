@@ -22,6 +22,7 @@ const licenciasRoutes           = require('./licencias.routes')
 const reportesRoutes            = require('./reportes.routes')
 const dueloRoutes               = require('./duelo.routes')
 const desinfeccionesRoutes      = require('./desinfecciones.routes')
+const laboratorioRoutes         = require('./laboratorio.routes')
 const desinfeccionesCtrl        = require('../controllers/desinfecciones.controller')
 const { requireWebhookToken }   = require('../middleware/webhookToken')
 const evidenciaDesinf           = require('../services/desinfeccionEvidencia.service')
@@ -62,6 +63,12 @@ router.use('/duelo',                 verifyToken, dueloRoutes)
 router.post('/desinfecciones/evidencia/drive',
   requireWebhookToken('DESINF_DRIVE_CALLBACK_TOKEN'), evidenciaDesinf.callbackDrive)
 router.use('/desinfecciones',        verifyToken, desinfeccionesRoutes)
+
+// Aseo y desinfeccion del laboratorio. Modulo hermano del de vehiculos, con
+// tablas propias (h360_lab_*) y el rol `tanatologo`, que no esta en el otro.
+// No tiene callback de webhook ni pantalla publica, asi que va entero detras
+// del token y no necesita ninguna excepcion antes de este montaje.
+router.use('/laboratorio',           verifyToken, laboratorioRoutes)
 
 // Health H360
 router.get('/health', (_, res) => res.json({ ok: true, modulo: 'Homenajes360', version: '1.0.0' }))

@@ -1003,6 +1003,41 @@ describe('registrar — el registro copia la regla vigente', () => {
     })
   })
 
+  // El nombre lo CONGELÓ LA TAREA el día en que se generó, así que el registro
+  // tiene que copiar el de la tarea y no el del catálogo vigente. Si leyera
+  // `a.nombre` y alguien renombra la actividad entre la generación y el cierre,
+  // el MISMO cumplimiento sale con el nombre viejo en `cumplimiento` —que
+  // agrupa por `t.actividad_nombre`— y con el nuevo en `historial`, que lee el
+  // registro: dos filas del informe para un solo hecho, sin nada que indique
+  // que son el mismo.
+  test('el nombre del registro sale de la tarea, no del catálogo vigente', async () => {
+    prepararEscritura()
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    await llamar(ctrl.registrar, reqFalso({ body: { laboratorio_id: 1, tarea_id: 10 } }))
+
+    const sql = String(db.query.mock.calls.find(
+      ([s]) => /FROM h360_lab_tarea t/i.test(String(s)))[0])
+    expect(sql).toMatch(/t\.actividad_nombre\s+AS\s+actividad\b/i)
+    expect(sql).not.toMatch(/a\.nombre\s+AS\s+actividad\b/i)
+  })
+
+  // Al revés en POR_EVENTO: no hay tarea, así que no hubo nombre congelado y el
+  // catálogo vigente es la única fuente que existe. Ahí `a.nombre` es correcto.
+  test('POR_EVENTO sí toma el nombre del catálogo: no hay tarea que lo congele', async () => {
+    prepararEscritura({ tarea: null, regla: REGLA_EVENTO })
+    const conn = connDoble()
+    db.getConnection.mockResolvedValue(conn)
+
+    await llamar(ctrl.registrar,
+      reqFalso({ body: { laboratorio_id: 1, regla_id: 20 }, files: [foto()] }))
+
+    const sql = String(db.query.mock.calls.find(
+      ([s]) => /FROM h360_lab_regla r/i.test(String(s)))[0])
+    expect(sql).toMatch(/a\.nombre\s+AS\s+actividad\b/i)
+  })
+
   test('hacerla antes de la fecha esperada deja dias_atraso negativo', async () => {
     prepararEscritura({ tarea: { ...TAREA_ABIERTA, fecha_esperada: '2026-11-28' } })
     const conn = connDoble()
@@ -1314,43 +1349,16 @@ describe('omitirTarea', () => {
 // Historial y evidencia
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('listarRegistros', () => {
-  test('filtra por laboratorio, fechas y actividad, y acota el resultado', async () => {
-    db.query.mockResolvedValue([[REGISTRO_GUARDADO]])
-    await llamar(ctrl.listarRegistros, reqFalso({ query: {
-      laboratorio_id: '1', desde: '2026-11-01', hasta: '2026-11-25', actividad: 'trampa',
-    } }))
-
-    const [sql, params] = db.query.mock.calls[0]
-    expect(String(sql)).toMatch(/g\.laboratorio_id = \?/)
-    expect(String(sql)).toMatch(/g\.fecha_ejecucion >= \?/)
-    expect(String(sql)).toMatch(/g\.fecha_ejecucion <= \?/)
-    expect(String(sql)).toMatch(/g\.actividad_nombre LIKE \?/)
-    expect(String(sql)).toMatch(/LIMIT/i)
-    expect(params).toEqual([1, '2026-11-01', '2026-11-25', '%trampa%'])
-  })
-
-  test('una fecha que no existe da 400 y no consulta', async () => {
-    const { res } = await llamar(ctrl.listarRegistros, reqFalso({ query: { desde: '2026-02-31' } }))
-    expect(res.codigo).toBe(400)
-    expect(res.cuerpo).toMatchObject({ campo: 'desde' })
-    expect(db.query).not.toHaveBeenCalled()
-  })
-
-  test('las fechas salen formateadas en SQL y no trae TIMESTAMP', async () => {
-    db.query.mockResolvedValue([[]])
-    await llamar(ctrl.listarRegistros, reqFalso())
-
-    const sql = String(db.query.mock.calls[0][0])
-    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_ejecucion\s*,\s*'%Y-%m-%d'\s*\)/i)
-    expect(sql).toMatch(/DATE_FORMAT\(\s*g\.fecha_esperada\s*,\s*'%Y-%m-%d'\s*\)/i)
-    expect(sql).not.toMatch(/created_at|updated_at/)
-  })
-
-  test('cuenta las evidencias desde la tabla del laboratorio', async () => {
-    db.query.mockResolvedValue([[]])
-    await llamar(ctrl.listarRegistros, reqFalso())
-    expect(String(db.query.mock.calls[0][0])).toMatch(/FROM h360_lab_evidencia/i)
+// El histórico plano NO es de este controlador: `GET /laboratorio/registros` se
+// monta sobre `laboratorioInformes.historial`, que trae los mismos filtros, dos
+// más y el `total` que la exportación a Excel necesita. Acá había un
+// `listarRegistros` con `LIMIT 200` fijo; se borró junto con estas pruebas al
+// montar las rutas, porque sin ruta era código muerto y dos funciones para el
+// mismo trabajo obligaban al frontend a aprender dos formas. Sus pruebas viven
+// ahora en `laboratorioInformes.test.js`.
+describe('listarRegistros ya no existe', () => {
+  test('el controlador no lo exporta: hay una sola forma de pedir el histórico', () => {
+    expect(ctrl.listarRegistros).toBeUndefined()
   })
 })
 
