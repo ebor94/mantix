@@ -48,7 +48,7 @@ async function crear(payload, asesorId) {
       estadoNuevoAdvance = await SvEstado.findByPk(payload.gest_estado_nuevo_id, { transaction: t });
       if (estadoNuevoAdvance?.estado_es_final) {
         const prospActual = await SvProspecto.findByPk(payload.gest_prosp_id, { transaction: t });
-        const fechaFirma = require('../utils/fechas').aISO(payload.gest_fecha_hora || new Date());
+        const fechaFirma = require('../utils/fechas').diaBogotaISO(payload.gest_fecha_hora || new Date());
         const proxActual = require('../utils/fechas').aISO(prospActual?.prosp_prox_gestion_fecha);
         if (proxActual && proxActual > fechaFirma) {
           prospUpdate.prosp_prox_gestion_fecha = fechaFirma;

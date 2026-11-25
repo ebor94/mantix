@@ -16,7 +16,7 @@ const { Op, fn, col } = require('sequelize');
 const {
   sequelize, SvProspecto, SvEmpresa, SvEstado, SvFuente, SvUsuario, SvPersona, SvGestion
 } = require('../models');
-const { aISO, hoyISO } = require('../utils/fechas');
+const { aISO, hoyISO, diaBogotaISO } = require('../utils/fechas');
 
 const DIAS_ANTICIPACION = 30;
 const GRUPO_EMPRESARIALES = 2;
@@ -114,8 +114,8 @@ async function renovacionesProximas({ dias = DIAS_ANTICIPACION, scope = null } =
     prosp_grupo_id: GRUPO_EMPRESARIALES,
     prosp_estado_id: { [Op.in]: ganadosIds },
     prosp_fecha_vencimiento_convenio: {
-      [Op.gte]: aISO(hoy),
-      [Op.lte]: aISO(limite)
+      [Op.gte]: diaBogotaISO(hoy),
+      [Op.lte]: diaBogotaISO(limite)
     }
   };
   if (scope?.asesorId) where.prosp_asesor_id = scope.asesorId;
@@ -224,7 +224,7 @@ async function procesarRenovacionesPendientes() {
           prosp_fuente_id:           fuenteRenov.fuente_id,
           prosp_punto_id:            orig.prosp_punto_id,
           prosp_origen_prosp_id:     orig.prosp_id,
-          prosp_prox_gestion_fecha:  aISO(new Date()),
+          prosp_prox_gestion_fecha:  hoyISO(),
           prosp_prioridad:           2,                      // alta
           prosp_nota_inicial:        `Renovación automática del convenio de ${orig.empresa?.empresa_razon_social || ''} (vence ${aISO(orig.prosp_fecha_vencimiento_convenio)}). Prospecto original: #${orig.prosp_id}.`
         }, { transaction: t });

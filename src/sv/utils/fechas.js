@@ -5,8 +5,11 @@
  *
  * - aISO(d): siempre devuelve 'YYYY-MM-DD' (en zona local) o null
  * - rangoDia(d): { start: 'YYYY-MM-DD 00:00:00', end: 'YYYY-MM-DD 23:59:59' }
- * - hoyISO(): 'YYYY-MM-DD' de hoy
+ * - diaBogotaISO(instante): día de Colombia de un instante, 'YYYY-MM-DD'
+ * - hoyISO() / hoyBogotaISO(): 'YYYY-MM-DD' de hoy en Colombia
  */
+
+const FORMATO_BOGOTA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' });
 
 function aISO(d) {
   if (!d) return null;
@@ -25,20 +28,16 @@ function aISO(d) {
   return null;
 }
 
-function hoyISO() {
-  return aISO(new Date());
+/** Día de Colombia de un instante, 'YYYY-MM-DD'. Para fechas sin hora usa aISO(). */
+function diaBogotaISO(instante) {
+  return FORMATO_BOGOTA.format(new Date(instante));
 }
 
-/**
- * Fecha de hoy en zona 'America/Bogota', formato ISO YYYY-MM-DD.
- * Prefiérela sobre hoyISO() cuando el consumidor represente "hoy"
- * desde la perspectiva del usuario en Colombia (jornada, ausencia,
- * horario laboral). hoyISO() sigue existiendo para parseo de inputs
- * Joi.date() con formato YYYY-MM-DD.
- */
-function hoyBogotaISO() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
-}
+/** Hoy en Colombia, 'YYYY-MM-DD'. */
+function hoyBogotaISO() { return diaBogotaISO(new Date()); }
+
+/** Igual que hoyBogotaISO(). Antes daba el día en UTC: después de las 7 p. m. era mañana. */
+function hoyISO() { return hoyBogotaISO(); }
 
 function rangoDia(d) {
   const iso = aISO(d) || hoyISO();
@@ -51,4 +50,4 @@ function rango(desde, hasta) {
   return { start: `${dStart} 00:00:00`, end: `${dEnd} 23:59:59`, desde: dStart, hasta: dEnd };
 }
 
-module.exports = { aISO, hoyISO, hoyBogotaISO, rangoDia, rango };
+module.exports = { aISO, hoyISO, hoyBogotaISO, diaBogotaISO, rangoDia, rango };
