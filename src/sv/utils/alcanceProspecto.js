@@ -48,4 +48,15 @@ function fueraDeAlcance(user, scope, prospecto) {
   return 'Sin alcance definido';
 }
 
-module.exports = { fueraDeAlcance };
+/**
+ * Alcance sobre las ventas de un prospecto: la misma regla, pero los roles cross-área solo
+ * llegan a sus áreas asignadas (SUPER_ADMIN, a todas).
+ */
+function fueraDeAlcanceVentas(user, scope, prospecto) {
+  const motivo = fueraDeAlcance(user, scope, prospecto);
+  if (motivo || !scope?.crossArea) return motivo;
+  const areas = areaIdsAccesibles(user); // null = todas
+  return areas === null || contiene(areas, null, prospecto.prosp_area_id) ? null : 'Fuera de tu área';
+}
+
+module.exports = { fueraDeAlcance, fueraDeAlcanceVentas };

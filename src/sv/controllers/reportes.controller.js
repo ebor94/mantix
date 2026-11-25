@@ -45,6 +45,9 @@ async function dashboard(req, res) {
   if (!ROLES_SUPERVISORES.includes(rol)) {
     scope.asesorId = req.user.usr_id; // ASESOR y AGENTE_SVC ven lo suyo aunque pidan otro
   } else {
+    // Sin pedir nada, un rol cross-área ve solo sus áreas (null = SUPER_ADMIN, sin límite).
+    const areas = scope.crossArea ? areaIdsAccesibles(req.user) : null;
+    if (areas) scope.areaId = areas;
     if (asesorId) {
       if (!(await asesorAlAlcance(req.user, asesorId))) return prohibido(res, 'Fuera de tu alcance');
       scope.asesorId = asesorId;

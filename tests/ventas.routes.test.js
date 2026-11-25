@@ -21,6 +21,13 @@ const SUPERVISOR = { usr_id: 3, usr_area_id: 1, usr_grupo_id: 1, gruposExtra: []
 const AJENO      = { ...SUPERVISOR, usr_id: 4, usr_grupo_id: 2 };
 const ADMIN      = { usr_id: 5, usr_area_id: 1, areasExtra: [], rol: { rol_codigo: 'ADMIN_AREA' } };
 const ADMIN_OTRA = { ...ADMIN, usr_id: 6, usr_area_id: 2 };
+// Cross-área: solo las ventas de sus áreas (SUPER_ADMIN, todas). El cliente 900 es del área 1.
+const jefe = (rol, usr_id, usr_area_id, extras = []) => ({ usr_id, usr_area_id, areasExtra: extras.map((area_id) => ({ area_id })), rol: { rol_codigo: rol } });
+const GERENTE      = jefe('GERENTE_GENERAL', 60, 2, [1, 3]);
+const GERENTE_SIN  = jefe('GERENTE_GENERAL', 61, 2, [3, 4]);
+const DIRECTOR     = jefe('DIRECTOR_COMERCIAL', 62, 3, [1]);
+const DIRECTOR_SIN = jefe('DIRECTOR_COMERCIAL', 63, 3, [4]);
+const SUPER        = jefe('SUPER_ADMIN', 64, null);
 const AGENTE     = { ...ASESOR, rol: { rol_codigo: 'AGENTE_SVC' } }; // el cliente es suyo: solo lo frena el rol
 const BODY = { items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }], motivo: 'precio mal', cambios_vistos: 0 };
 
@@ -51,6 +58,9 @@ afterEach(cerrarTodos);
 describe('ver las ventas del cliente', () => {
   test.each([
     ['su asesor', ASESOR, 900, 200], ['su supervisor', SUPERVISOR, 900, 200],
+    ['un gerente con su área', GERENTE, 900, 200], ['un gerente sin su área', GERENTE_SIN, 900, 403],
+    ['un director con su área', DIRECTOR, 900, 200], ['un director sin su área', DIRECTOR_SIN, 900, 403],
+    ['el super administrador', SUPER, 900, 200],
     ['otro asesor', OTRO, 900, 403], ['un supervisor de otro grupo', AJENO, 900, 403],
     ['un cliente que no existe', ASESOR, 901, 404], ['un id inválido', ASESOR, 'abc', 404],
     ['900 en otra notación (9e2)', ASESOR, '9e2', 404], ['900 en hexadecimal (0x384)', ASESOR, '0x384', 404],
@@ -61,6 +71,14 @@ describe('ver las ventas del cliente', () => {
     expect(r.status).toBe(estado);
     expect(ventas.listarDeProspecto).toHaveBeenCalledTimes(estado === 200 ? 1 : 0);
   });
+});
+
+test('gerente y director fuera de sus áreas: Fuera de tu área', async () => {
+  for (const user of [GERENTE_SIN, DIRECTOR_SIN]) {
+    const r = await request(await app(user)).get('/api/sv/prospectos/900/ventas');
+    expect(r.status).toBe(403);
+    expect(r.body.message).toBe('Fuera de tu área');
+  }
 });
 
 describe.each([['corregir', 'put', '/ventas/40', BODY], ['anular', 'post', '/ventas/40/anular', { motivo: 'se cayó', cambios_vistos: 0 }]])('%s', (accion, metodo, ruta, body) => {
@@ -91,6 +109,21 @@ describe.each([['corregir', 'put', '/ventas/40', BODY], ['anular', 'post', '/ven
     expect(r.status).toBe(403);
     expect(r.body.message).toBe('Fuera de tu área');
     expect(ventas[accion]).toHaveBeenCalledTimes(1);
+  });
+
+  test('gerente y director: solo con el área del cliente entre las suyas; el super administrador siempre', async () => {
+    for (const user of [GERENTE, DIRECTOR, SUPER]) {
+      ventas[accion].mockClear();
+      expect((await pedir(user)).status).toBe(200);
+      expect(ventas[accion]).toHaveBeenCalledTimes(1);
+    }
+    for (const user of [GERENTE_SIN, DIRECTOR_SIN]) {
+      ventas[accion].mockClear();
+      const r = await pedir(user);
+      expect(r.status).toBe(403);
+      expect(r.body.message).toBe('Fuera de tu área');
+      expect(ventas[accion]).not.toHaveBeenCalled();
+    }
   });
 
   test('el agente de SVC no puede, aunque sea su cliente', async () => {

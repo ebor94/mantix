@@ -30,6 +30,13 @@ beforeEach(() => {
   ventas.metricasPorAsesor.mockResolvedValue(new Map([[7, { contratos: 2, valor: 9770000 }]]));
 });
 
+describe('dashboardArea con varias áreas', () => {
+  test.each([['[2, 3]', [2, 3]], ['[] (sin áreas: cero filas)', []]])('scope.areaId %s llega a where.snap_area_id', async (_n, areaId) => {
+    await reportes.dashboardArea({ scope: { areaId }, fecha: '2026-11-24' });
+    expect(M.SvSnapshotDiario.findAll.mock.calls[0][0].where).toEqual({ snap_fecha: '2026-11-24', snap_area_id: areaId });
+  });
+});
+
 test('reporte del asesor: gestiones, interesados, contratos y valor al momento', async () => {
   const r = await reportes.reporteAsesor(7, { desde: '2026-11-01', hasta: '2026-11-30' });
   expect(r.totales).toEqual({ gestiones: 12, interesados: 3, contratos: 2, valor: 9770000 });

@@ -191,6 +191,16 @@ describe('GET /dashboard', () => {
     expect(alcance()).toEqual(esperado);
   });
 
+  test.each([
+    ['GERENTE_GENERAL', GERENTE, [1, 2, 3, 4]], ['GERENTE_GENERAL con una sola', GERENTE_1, [1]],
+    ['DIRECTOR_COMERCIAL', DIRECTOR, [2, 3, 4]], ['DIRECTOR_COMERCIAL sin área (solo un grupo)', DIRECTOR_GRUPO, []]
+  ])('%s sin pedir nada ve solo sus áreas', async (_n, user, esperado) => {
+    expect((await pedir(user, 'dashboard?fecha=2026-11-24')).status).toBe(200);
+    const { areaId, asesorId, grupoId } = alcance();
+    expect([...areaId].sort((a, b) => a - b)).toEqual(esperado);
+    expect([asesorId, grupoId]).toEqual([null, null]);
+  });
+
   describe('asesor_id', () => {
     const SUPERVISORES = ASESORES.filter(([, , , user]) => ![ASESOR, AGENTE, OTRO_ROL].includes(user));
 

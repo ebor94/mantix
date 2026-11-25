@@ -10,18 +10,18 @@ const gestiones  = require('../services/gestiones.service');
 const prospectos = require('../services/prospectos.service');
 const { ok, created, fail } = require('../utils/response');
 const { ERROR_CODES } = require('../config/constants');
-const { fueraDeAlcance } = require('../utils/alcanceProspecto');
+const { fueraDeAlcance, fueraDeAlcanceVentas } = require('../utils/alcanceProspecto');
 const { usuariosAccesibles } = require('../utils/acceso');
 
 // Carga el prospecto y verifica el alcance. Devuelve el prospecto, o null si
 // ya respondió 404 / 403.
-async function prospectoVisible(req, res, prospId) {
+async function prospectoVisible(req, res, prospId, alcance = fueraDeAlcance) {
   const p = await prospectos.obtenerAlcance(prospId);
   if (!p) {
     fail(res, 404, ERROR_CODES.NOT_FOUND, 'Prospecto no encontrado');
     return null;
   }
-  const motivo = fueraDeAlcance(req.user, req.scope, p);
+  const motivo = alcance(req.user, req.scope, p);
   if (motivo) {
     fail(res, 403, ERROR_CODES.FORBIDDEN, motivo);
     return null;
@@ -31,7 +31,9 @@ async function prospectoVisible(req, res, prospId) {
 
 async function create(req, res, next) {
   try {
-    if (!(await prospectoVisible(req, res, req.body.gest_prosp_id))) return;
+    // Registrar una venta exige el alcance de ventas: el director y el gerente, solo en sus áreas.
+    const alcance = req.body.venta ? fueraDeAlcanceVentas : fueraDeAlcance;
+    if (!(await prospectoVisible(req, res, req.body.gest_prosp_id, alcance))) return;
     const g = await gestiones.crear(req.body, req.user.usr_id);
     return created(res, g);
   } catch (e) {

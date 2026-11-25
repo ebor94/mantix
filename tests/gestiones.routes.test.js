@@ -21,12 +21,20 @@ const { svAreaGuard } = require('../src/sv/middleware/svAreaGuard');
 const ASESOR     = { usr_id: 10, usr_area_id: 1, usr_grupo_id: 1, rol: { rol_codigo: 'ASESOR' } };
 const SUPERVISOR = { usr_id: 20, usr_area_id: 1, usr_grupo_id: 1, gruposExtra: [], rol: { rol_codigo: 'SUPERVISOR' } };
 
+const jefe = (rol, usr_id, usr_area_id, extras = []) => ({ usr_id, usr_area_id, usr_grupo_id: null, areasExtra: extras.map((area_id) => ({ area_id })), rol: { rol_codigo: rol } });
+const DIRECTOR = jefe('DIRECTOR_COMERCIAL', 40, 2, [3, 4]); // el prospecto 300 es del área 1
+const DIRECTOR_CON = jefe('DIRECTOR_COMERCIAL', 41, 2, [1]);
+const GERENTE  = jefe('GERENTE_GENERAL', 42, 1, [2, 3, 4]);
+const SUPER    = jefe('SUPER_ADMIN', 43, null);
+
 const PROSPECTOS = {
+  300: { prosp_id: 300, prosp_asesor_id: 30, prosp_grupo_id: 2, prosp_area_id: 1 }, // de otro asesor, en el área 1
   100: { prosp_id: 100, prosp_asesor_id: 10, prosp_grupo_id: 1, prosp_area_id: 1 }, // del asesor 10
   101: { prosp_id: 101, prosp_asesor_id: 11, prosp_grupo_id: 1, prosp_area_id: 1 }, // de otro asesor, mismo grupo
   200: { prosp_id: 200, prosp_asesor_id: 30, prosp_grupo_id: 2, prosp_area_id: 1 }  // de otro grupo
 };
 
+const VENTA = { clave: 'clave-0001', items: [{ prod_id: 10, cantidad: 1, precio_unitario: 5 }] };
 const GESTION = { gest_prosp_id: 100, gest_canal: 'llamada', gest_comentario: 'Llamada de seguimiento' };
 
 // supertest 6 escucha en '::' y conecta a 127.0.0.1. En macOS ese puerto puede
@@ -108,6 +116,31 @@ describe('POST /api/sv/gestiones — alcance del prospecto', () => {
     expect(r.status).toBe(404);
     expect(r.body).toEqual({ success: false, error: 'NOT_FOUND', message: 'Prospecto no encontrado' });
     expect(gestiones.crear).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/sv/gestiones — con venta', () => {
+  const crear = async (user, body) => request(await app(user)).post('/api/sv/gestiones').send(body);
+  const conVenta = { ...GESTION, gest_prosp_id: 300, venta: VENTA };
+
+  test('director fuera de sus áreas → 403 y no registra', async () => {
+    const r = await crear(DIRECTOR, conVenta);
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ success: false, error: 'FORBIDDEN', message: 'Fuera de tu área' });
+    expect(gestiones.crear).not.toHaveBeenCalled();
+  });
+
+  test.each([['director en su área', DIRECTOR_CON], ['gerente con las cuatro', GERENTE], ['super administrador', SUPER]])('%s → 201', async (_n, user) => {
+    expect((await crear(user, conVenta)).status).toBe(201);
+    expect(gestiones.crear).toHaveBeenCalledWith(expect.objectContaining({ venta: VENTA }), user.usr_id);
+  });
+
+  test('el mismo director fuera de sus áreas, sin venta → 201 como siempre', async () => {
+    expect((await crear(DIRECTOR, { ...GESTION, gest_prosp_id: 300 })).status).toBe(201);
+  });
+
+  test('el asesor dueño con venta → 201', async () => {
+    expect((await crear(ASESOR, { ...GESTION, venta: VENTA })).status).toBe(201);
   });
 });
 

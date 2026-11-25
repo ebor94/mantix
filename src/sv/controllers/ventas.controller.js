@@ -1,12 +1,13 @@
 /**
  * sv/controllers/ventas.controller.js — ventas de un cliente y sus correcciones.
- * Ver: quien puede ver al cliente. Corregir y anular: supervisor o superior, en su alcance.
+ * Ver: quien puede ver al cliente; director comercial y gerente general, solo en sus áreas.
+ * Corregir y anular: supervisor o superior, en su alcance.
  */
 const ventas = require('../services/ventas.service');
 const prospectos = require('../services/prospectos.service');
 const { ok, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES_SUPERVISORES } = require('../config/constants');
-const { fueraDeAlcance } = require('../utils/alcanceProspecto');
+const { fueraDeAlcanceVentas } = require('../utils/alcanceProspecto');
 
 // Solo cifras: Number() también acepta '1e3', '0x10' o ' 40'.
 const idDe = (req) => {
@@ -18,7 +19,7 @@ const idDe = (req) => {
 async function clienteEnAlcance(req, res, prospId, noEncontrado) {
   const p = prospId ? await prospectos.obtenerAlcance(prospId) : null;
   if (!p) { fail(res, 404, ERROR_CODES.NOT_FOUND, noEncontrado); return false; }
-  const motivo = fueraDeAlcance(req.user, req.scope, p);
+  const motivo = fueraDeAlcanceVentas(req.user, req.scope, p);
   if (motivo) { fail(res, 403, ERROR_CODES.FORBIDDEN, motivo); return false; }
   return true;
 }
