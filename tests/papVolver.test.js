@@ -56,3 +56,62 @@ test('cliente existente sigue igual: VOLVER guarda y otro resultado limpia', asy
   }));
   expect(M.SvProspecto.create).not.toHaveBeenCalled();
 });
+
+describe('fecha según resultado_requiere_fecha', () => {
+  const res = (extra) => M.SvResultado.findOne.mockResolvedValue({ resultado_id: 1, resultado_nombre: 'R', ...extra });
+  const esperada = { prosp_prox_gestion_fecha: '2026-11-30', prosp_prox_gestion_hora: '10:00' };
+  const nulas = { prosp_prox_gestion_fecha: null, prosp_prox_gestion_hora: null };
+
+  test('cliente nuevo INTERESADO con requiere fecha guarda en prospecto y gestión', async () => {
+    res({ resultado_requiere_fecha: 1 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    await registroRapido({ ...base, resultado_codigo: 'INTERESADO' }, 7);
+    expect(M.SvProspecto.create.mock.calls[0][0]).toEqual(expect.objectContaining(esperada));
+    expect(M.SvGestion.create.mock.calls[0][0]).toEqual(expect.objectContaining({
+      gest_prox_fecha: '2026-11-30', gest_prox_hora: '10:00'
+    }));
+  });
+
+  test('cliente existente INTERESADO con requiere fecha guarda en update', async () => {
+    res({ resultado_requiere_fecha: 1 });
+    const update = jest.fn();
+    M.SvProspecto.findOne.mockResolvedValue({ prosp_id: 5, prosp_zona_pap: null, update });
+    await registroRapido({ ...base, resultado_codigo: 'INTERESADO' }, 7);
+    expect(update.mock.calls[0][0]).toEqual(expect.objectContaining(esperada));
+  });
+
+  test('INTERESADO sin requiere fecha guarda nulas', async () => {
+    res({ resultado_requiere_fecha: 0 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    await registroRapido({ ...base, resultado_codigo: 'INTERESADO' }, 7);
+    expect(M.SvProspecto.create.mock.calls[0][0]).toEqual(expect.objectContaining(nulas));
+    expect(M.SvGestion.create.mock.calls[0][0]).toEqual(expect.objectContaining({
+      gest_prox_fecha: null, gest_prox_hora: null
+    }));
+  });
+
+  test('VOLVER con requiere fecha 0 o ausente guarda la fecha', async () => {
+    for (const extra of [{ resultado_requiere_fecha: 0 }, {}]) {
+      jest.clearAllMocks();
+      res(extra);
+      M.SvProspecto.findOne.mockResolvedValue(null);
+      M.SvProspecto.create.mockResolvedValue({ prosp_id: 5 });
+      M.SvGestion.create.mockResolvedValue({ gest_id: 4 });
+      await registroRapido({ ...base, resultado_codigo: 'VOLVER' }, 7);
+      expect(M.SvProspecto.create.mock.calls[0][0]).toEqual(expect.objectContaining(esperada));
+      expect(M.SvGestion.create.mock.calls[0][0]).toEqual(expect.objectContaining({
+        gest_prox_fecha: '2026-11-30', gest_prox_hora: '10:00'
+      }));
+    }
+  });
+
+  test('NO_INTERESADO con 0 guarda nulas aunque llegue prox_fecha', async () => {
+    res({ resultado_requiere_fecha: 0 });
+    M.SvProspecto.findOne.mockResolvedValue(null);
+    await registroRapido({ ...base, resultado_codigo: 'NO_INTERESADO' }, 7);
+    expect(M.SvProspecto.create.mock.calls[0][0]).toEqual(expect.objectContaining(nulas));
+    expect(M.SvGestion.create.mock.calls[0][0]).toEqual(expect.objectContaining({
+      gest_prox_fecha: null, gest_prox_hora: null
+    }));
+  });
+});

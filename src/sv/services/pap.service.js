@@ -82,10 +82,11 @@ async function registroRapido(payload, asesorId) {
       transaction: t
     });
 
-    // "Volver" guarda la próxima visita; con cualquier otro resultado no queda nada pendiente.
+    // Piden próxima visita "Volver" y los que Administración marca con "requiere fecha".
+    const pideFecha = resultadoCodigo === 'VOLVER' || !!resultado.resultado_requiere_fecha;
     const proxima = {
-      prosp_prox_gestion_fecha: resultadoCodigo === 'VOLVER' ? payload.prox_fecha || null : null,
-      prosp_prox_gestion_hora:  resultadoCodigo === 'VOLVER' ? payload.prox_hora  || null : null
+      prosp_prox_gestion_fecha: pideFecha ? payload.prox_fecha || null : null,
+      prosp_prox_gestion_hora:  pideFecha ? payload.prox_hora  || null : null
     };
 
     if (!prospecto) {
@@ -118,8 +119,8 @@ async function registroRapido(payload, asesorId) {
       gest_comentario:      payload.comentario || null,
       gest_ubicacion_lat:   payload.lat || null,
       gest_ubicacion_lng:   payload.lng || null,
-      gest_prox_fecha:      resultadoCodigo === 'VOLVER' ? payload.prox_fecha || null : null,
-      gest_prox_hora:       resultadoCodigo === 'VOLVER' ? payload.prox_hora  || null : null,
+      gest_prox_fecha:      proxima.prosp_prox_gestion_fecha,
+      gest_prox_hora:       proxima.prosp_prox_gestion_hora,
       gest_fecha_hora:      new Date()
     }, { transaction: t });
 
