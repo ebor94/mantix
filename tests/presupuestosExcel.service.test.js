@@ -1,5 +1,7 @@
 jest.mock('../src/masajes/utils/zipSeguro', () => ({ inspeccionarZip: jest.fn() }));
 
+const childProcess = require('child_process');
+const { EventEmitter } = require('events');
 const ExcelJS = require('exceljs');
 const JSZip = require('jszip');
 const { inspeccionarZip } = require('../src/masajes/utils/zipSeguro');
@@ -132,6 +134,144 @@ describe('leer', () => {
       expect(Date.now() - t0).toBeLessThan(15000);
       expect((await leer(await base())).filas).toHaveLength(2); // y la siguiente lectura funciona
     }, 30000);
+
+  describe('proceso aparte', () => {
+    const MENSAJE = 'El archivo no es un Excel válido o es demasiado grande';
+    const validacion = (sqref) => `</sheetData><dataValidations count="1"><dataValidation type="whole" sqref="${sqref}"><formula1>0</formula1></dataValidation></dataValidations>`;
+    const nombreDefinido = (ref) => async (buf) => {
+      const zip = await JSZip.loadAsync(buf);
+      const xml = await zip.file('xl/workbook.xml').async('string');
+      zip.file('xl/workbook.xml', xml.includes('<definedNames>')
+        ? xml.replace('<definedNames>', `<definedNames><definedName name="N1">${ref}</definedName>`)
+        : xml.replace('</sheets>', `</sheets><definedNames><definedName name="N1">${ref}</definedName></definedNames>`));
+      return Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+    };
+
+    test.each([['D:E completas', 'D1:E1048576'], ['toda la hoja', 'A1:XFD1048576']])('una validación numérica en %s se lee bien', async (_n, rango) => {
+      const buf = await conXml((xml) => xml.replace('</sheetData>', validacion(rango)));
+      const r = await leer(buf);
+      expect(r.errores).toEqual([]);
+      expect(r.filas.map((f) => f.valores.Osarios)).toEqual([14000000, 0]);
+    }, 30000);
+
+    test.each([
+      ['un nombre definido sobre toda la hoja', async () => nombreDefinido('Presupuesto!$A$1:$XFD$1048576')(await base())],
+      ['celdas combinadas hasta XFD', () => conXml((xml) => xml.replace('</sheetData>', '</sheetData><mergeCells count="1"><mergeCell ref="A7:XFD1048576"/></mergeCells>'))]
+    ])('%s agota la memoria del hijo: error, y enseguida un libro bueno se lee', async (_n, armar) => {
+      const e = await error(leer(await armar()));
+      expect(e).toMatchObject({ code: 'VALIDATION_ERROR', message: MENSAJE });
+      expect((await leer(await base())).filas).toHaveLength(2);
+    }, 40000);
+
+    test('el hijo no recibe las claves del padre ni sus opciones de node', async () => {
+      process.env.CLAVE_DE_PRUEBA = 'x';
+      process.env.NODE_OPTIONS = '--no-warnings';
+      const fork = jest.spyOn(childProcess, 'fork');
+      try {
+        await leer(await base());
+        const [ruta, args, opciones] = fork.mock.calls[0];
+        expect(ruta).toMatch(/presupuestosExcel\.lector\.js$/);
+        expect(args).toEqual([]);
+        expect(opciones.execArgv).toEqual(['--max-old-space-size=256']);
+        expect(opciones.serialization).toBe('advanced');
+        expect(opciones.stdio).toEqual(['ignore', 'ignore', 'ignore', 'ipc']);
+        expect(opciones.env.PATH).toBe(process.env.PATH);
+        expect(Object.keys(opciones.env).every((k) => ['PATH', 'SystemRoot', 'TEMP', 'TMP'].includes(k))).toBe(true);
+        expect(opciones.env.CLAVE_DE_PRUEBA).toBeUndefined();
+        expect(opciones.env.NODE_OPTIONS).toBeUndefined();
+      } finally {
+        fork.mockRestore();
+        delete process.env.CLAVE_DE_PRUEBA;
+        delete process.env.NODE_OPTIONS;
+      }
+    });
+  });
+
+  describe('proceso aparte simulado', () => {
+    const MENSAJE = 'El archivo no es un Excel válido o es demasiado grande';
+    let hijos;
+    let fork;
+    beforeEach(() => {
+      jest.useFakeTimers();
+      hijos = [];
+      fork = jest.spyOn(childProcess, 'fork').mockImplementation(() => {
+        const h = new EventEmitter();
+        h.pid = 4321;
+        h.send = jest.fn((_m, cb) => cb && cb(null));
+        h.kill = jest.fn();
+        hijos.push(h);
+        return h;
+      });
+    });
+    afterEach(() => { fork.mockRestore(); jest.useRealTimers(); });
+
+    const BUF = Buffer.from('x');
+    const esperar = () => Promise.resolve().then(() => Promise.resolve());
+
+    test('al vencer los 15 s lo mata con SIGKILL, responde el error y no acepta otra lectura hasta el exit', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      expect(hijos[0].send).toHaveBeenCalledWith({ buffer: BUF, maxColumna: 6, maxFilas: 300 }, expect.any(Function));
+      jest.advanceTimersByTime(14999);
+      expect(hijos[0].kill).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(1);
+      expect(hijos[0].kill).toHaveBeenCalledWith('SIGKILL');
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT' });
+      hijos[0].emit('exit', null, 'SIGKILL');
+      expect(await p).toMatchObject({ code: 'VALIDATION_ERROR', message: MENSAJE });
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+    });
+
+    test('al recibir la respuesta lo mata y libera cuando sale', async () => {
+      const p = leer(BUF);
+      await esperar();
+      hijos[0].emit('message', { ok: true, datos: ['presupuesto-genflow', 1, 2026, 11], hoja: true, celdas: [[3, 4, 'Osarios', 0], [3, 5, 'Bóvedas', 0]] });
+      expect(hijos[0].kill).toHaveBeenCalledWith('SIGKILL');
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT' });
+      hijos[0].emit('exit', null, 'SIGKILL');
+      expect(await p).toEqual(expect.objectContaining({ filas: [], errores: [] }));
+    });
+
+    test('si muere sin responder: error de archivo y queda libre', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      hijos[0].emit('exit', 134, null);
+      expect(await p).toMatchObject({ code: 'VALIDATION_ERROR', message: MENSAJE });
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+    });
+
+    test('si no arranca (error del fork) no es culpa del archivo: CONFLICT, y vuelve a aceptar', async () => {
+      const p = error(leer(BUF));
+      await esperar();
+      hijos[0].pid = undefined;
+      hijos[0].emit('error', new Error('spawn'));
+      expect(await p).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
+      const otra = leer(BUF);
+      await esperar();
+      expect(hijos).toHaveLength(2);
+      hijos[1].emit('exit', 1);
+      await error(otra);
+    });
+
+    test('si fork lanza o send falla: CONFLICT y queda libre', async () => {
+      fork.mockImplementationOnce(() => { throw new Error('ENOMEM'); });
+      expect(await error(leer(BUF))).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
+      hijos.length = 0;
+      const p = error(leer(BUF));
+      await esperar();
+      hijos[0].send.mock.calls[0][1](new Error('canal cerrado'));
+      hijos[0].emit('exit', null, 'SIGKILL');
+      expect(await p).toMatchObject({ code: 'CONFLICT', message: 'No se pudo leer el archivo. Intenta de nuevo' });
+    });
+  });
 
     test('un archivo que el hilo no puede abrir', async () => {
       const e = await error(leer(Buffer.from('basura que inspeccionarZip (simulado) deja pasar')));

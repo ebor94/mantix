@@ -6,7 +6,7 @@
  *  - Los mensajes dicen fila y columna, pero no repiten el valor de la celda.
  */
 const path = require('path');
-const { Worker } = require('worker_threads');
+const childProcess = require('child_process');
 const ExcelJS = require('exceljs');
 const { inspeccionarZip } = require('../../masajes/utils/zipSeguro');
 const { VALOR_MAXIMO, MAX_FILAS } = require('../validations/presupuestos.validation');
@@ -100,29 +100,65 @@ let leyendo = false;
 
 const demasiado = () => error('El archivo no es un Excel válido o es demasiado grande');
 
+const noSePudo = () => Object.assign(new Error('No se pudo leer el archivo. Intenta de nuevo'), { code: 'CONFLICT' });
+
+// El hijo solo recibe lo necesario para arrancar: nada del .env, de NODE_OPTIONS ni de pm2.
+function entornoDelHijo() {
+  const env = {};
+  for (const k of ['PATH', 'SystemRoot', 'TEMP', 'TMP']) if (process.env[k] !== undefined) env[k] = process.env[k];
+  return env;
+}
+
 /**
- * Lee el libro en un hilo propio (ver presupuestosExcel.worker.js), de uno en uno, con memoria y
+ * Lee el libro en un proceso hijo (ver presupuestosExcel.lector.js), de uno en uno, con memoria y
  * tiempo limitados. Devuelve { datos, hoja, celdas } o lanza VALIDATION_ERROR / CONFLICT.
+ * `leyendo` se libera cuando el hijo ya terminó, no antes.
  */
 function leerEnHilo(buffer, maxColumna) {
   if (leyendo) throw Object.assign(new Error('Se está revisando otro archivo. Intenta en unos segundos'), { code: 'CONFLICT' });
   leyendo = true;
   return new Promise((resolve, reject) => {
-    let fin = false;
-    const worker = new Worker(path.join(__dirname, 'presupuestosExcel.worker.js'), {
-      workerData: { buffer, maxColumna, maxFilas: MAX_FILAS },
-      resourceLimits: { maxOldGenerationSizeMb: MEMORIA_MAXIMA_MB }
-    });
-    const terminar = (accion, valor) => {
-      if (fin) return;
-      fin = true;
+    let hijo;
+    try {
+      hijo = childProcess.fork(path.join(__dirname, 'presupuestosExcel.lector.js'), [], {
+        execArgv: [`--max-old-space-size=${MEMORIA_MAXIMA_MB}`],
+        serialization: 'advanced',
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+        env: entornoDelHijo()
+      });
+    } catch {
+      leyendo = false;
+      return reject(noSePudo());
+    }
+
+    let respondido = false;
+    let salio = false;
+    let pendiente = null; // lo que se responde cuando el hijo termine
+    const liberar = () => {
       clearTimeout(timer);
-      worker.terminate().catch(() => {}).then(() => { leyendo = false; accion(valor); });
+      leyendo = false;
+      if (pendiente) pendiente();
+    };
+    const terminar = (accion, valor) => {
+      if (respondido) return;
+      respondido = true;
+      pendiente = () => accion(valor);
+      if (salio) return liberar();
+      try { hijo.kill('SIGKILL'); } catch { /* ya terminó */ }
     };
     const timer = setTimeout(() => terminar(reject, demasiado()), TIEMPO_MAXIMO_MS);
-    worker.once('message', (m) => (m.ok ? terminar(resolve, m) : terminar(reject, demasiado())));
-    worker.once('error', () => terminar(reject, demasiado()));
-    worker.once('exit', () => terminar(reject, demasiado()));
+
+    hijo.once('message', (m) => (m && m.ok ? terminar(resolve, m) : terminar(reject, demasiado())));
+    hijo.once('exit', () => { salio = true; if (respondido) liberar(); else terminar(reject, demasiado()); });
+    hijo.once('error', () => {
+      // Sin pid no llegó a arrancar: no es culpa del archivo.
+      if (!hijo.pid) { salio = true; terminar(reject, noSePudo()); } else terminar(reject, demasiado());
+    });
+    try {
+      hijo.send({ buffer, maxColumna, maxFilas: MAX_FILAS }, (err) => { if (err) terminar(reject, noSePudo()); });
+    } catch {
+      terminar(reject, noSePudo());
+    }
   });
 }
 

@@ -1,9 +1,10 @@
 /**
- * Lee el libro de presupuesto en un hilo aparte, con la memoria limitada por quien lo lanza.
- * exceljs expande rangos enormes (celdas combinadas, columnas, validaciones) y un xlsx pequeño
- * puede agotar la memoria: aquí solo se pierde este hilo. Devuelve datos planos, sin validar nada.
+ * Lee el libro de presupuesto en un proceso hijo, con la memoria limitada por quien lo lanza.
+ * exceljs expande rangos enormes (celdas combinadas, nombres, columnas) y un xlsx pequeño puede
+ * agotar la memoria: aquí solo se pierde este proceso. Un hilo no sirve: V8 aborta todo el proceso.
+ * Recibe { buffer, maxColumna, maxFilas } y responde datos planos, sin validar nada. No sale solo:
+ * lo mata el padre al recibir la respuesta.
  */
-const { parentPort, workerData } = require('worker_threads');
 const ExcelJS = require('exceljs');
 
 const HOJA = 'Presupuesto';
@@ -42,7 +43,8 @@ const vacio = (v) => v === '' || (typeof v === 'string' && v.trim() === '');
 
 async function leer({ buffer, maxColumna, maxFilas }) {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Buffer.from(buffer));
+  // Las validaciones de datos no se usan y exceljs las expande celda por celda.
+  await wb.xlsx.load(Buffer.from(buffer), { ignoreNodes: ['dataValidations'] });
   const datosHoja = wb.getWorksheet(HOJA_DATOS);
   const datos = datosHoja ? [1, 2, 3, 4].map((r) => celda(datosHoja.getCell(`A${r}`)).v) : null;
   const ws = wb.getWorksheet(HOJA);
@@ -69,6 +71,11 @@ async function leer({ buffer, maxColumna, maxFilas }) {
   return { datos, hoja: true, celdas };
 }
 
-leer(workerData)
-  .then((r) => parentPort.postMessage({ ok: true, ...r }))
-  .catch(() => parentPort.postMessage({ ok: false }));
+// Si el padre se va o corta el canal, no se queda vivo.
+process.on('disconnect', () => process.exit(0));
+
+process.on('message', (datos) => {
+  leer(datos)
+    .then((r) => process.send({ ok: true, ...r }))
+    .catch(() => process.send({ ok: false }));
+});
