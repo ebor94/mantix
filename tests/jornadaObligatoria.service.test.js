@@ -1,10 +1,13 @@
-const mockJornada  = { findOne: jest.fn() };
+const mockJornada  = { findOne: jest.fn(), findAll: jest.fn() };
+const mockFinalizar = jest.fn();
 const mockAusencia = { findOne: jest.fn(), create: jest.fn(), destroy: jest.fn() };
 
 jest.mock('../src/sv/models', () => ({
   SvJornada:         mockJornada,
   SvJornadaAusencia: mockAusencia
 }));
+
+jest.mock('../src/sv/services/tracking.service', () => ({ cerrarSinFallar: mockFinalizar }));
 
 jest.mock('../src/sv/utils/fechas', () => ({
   hoyBogotaISO: () => '2026-09-14'
@@ -38,6 +41,8 @@ const superadm  = { usr_id: 14, rol: { rol_codigo: 'SUPER_ADMIN' } };
 
 beforeEach(() => {
   mockJornada.findOne.mockReset().mockResolvedValue(null);
+  mockJornada.findAll.mockReset().mockResolvedValue([]);
+  mockFinalizar.mockReset().mockResolvedValue({});
   mockAusencia.findOne.mockReset().mockResolvedValue(null);
   mockAusencia.create.mockReset();
   mockAusencia.destroy.mockReset();
@@ -58,6 +63,28 @@ describe('estadoHoy', () => {
     expect(r.requiere_popup).toBe(true);
     expect(r.jornada).toBeNull();
     expect(r.ausencia).toBeNull();
+  });
+
+  test('con varias jornadas hoy manda la más reciente', async () => {
+    await svc.estadoHoy(asesor);
+    expect(mockJornada.findOne).toHaveBeenCalledWith({
+      where: { jor_usr_id: 10, jor_fecha: '2026-09-14' },
+      order: [[expect.anything(), 'DESC'], ['jor_inicio_at', 'DESC']]
+    });
+  });
+
+  test('prefiere la jornada activa (el orden empieza por jor_estado = activa)', async () => {
+    await svc.estadoHoy(asesor);
+    const order = mockJornada.findOne.mock.calls[0][0].order;
+    expect(order[0][0].val).toBe("jor_estado = 'activa'");
+  });
+
+  test('la ausencia manda sobre la jornada', async () => {
+    mockJornada.findOne.mockResolvedValue({ jor_id: 'x', jor_estado: 'activa' });
+    mockAusencia.findOne.mockResolvedValue({ aus_id: 1 });
+    const r = await svc.estadoHoy(asesor);
+    expect(r.estado).toBe('ausente');
+    expect(r.requiere_popup).toBe(false);
   });
 
   test('asesor con jornada activa → activa + requiere_popup=false', async () => {
@@ -105,6 +132,42 @@ describe('registrarAusencia', () => {
       aus_motivo: 'Cita médica'
     });
     expect(r.aus_id).toBe(42);
+  });
+
+  test('con jornada activa hoy: la cierra como finalizada', async () => {
+    mockAusencia.create.mockResolvedValue({ aus_id: 42 });
+    mockJornada.findAll.mockResolvedValue([{ jor_id: 'a' }, { jor_id: 'b' }]);
+    await svc.registrarAusencia(10, { tipo: 'PERMISO', motivo: 'Cita médica' });
+    expect(mockJornada.findAll).toHaveBeenCalledWith({
+      where: { jor_usr_id: 10, jor_fecha: '2026-09-14', jor_estado: 'activa' }
+    });
+    expect(mockFinalizar).toHaveBeenCalledTimes(2);
+    expect(mockFinalizar).toHaveBeenCalledWith('a');
+    expect(mockFinalizar.mock.calls[0][1]).toBeUndefined();
+  });
+
+  test('espera los cierres antes de responder', async () => {
+    mockAusencia.create.mockResolvedValue({ aus_id: 42 });
+    mockJornada.findAll.mockResolvedValue([{ jor_id: 'a' }]);
+    let cerrado = false;
+    mockFinalizar.mockImplementation(() => (async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); cerrado = true; })());
+    await svc.registrarAusencia(10, { tipo: 'PERMISO', motivo: 'Cita médica' });
+    expect(cerrado).toBe(true);
+  });
+
+  test('sin jornada: no cierra nada', async () => {
+    mockAusencia.create.mockResolvedValue({ aus_id: 42 });
+    await svc.registrarAusencia(10, { tipo: 'PERMISO', motivo: 'Cita médica' });
+    expect(mockFinalizar).not.toHaveBeenCalled();
+  });
+
+  test('si la ausencia es duplicada no cierra nada', async () => {
+    const dupErr = new Error('dup');
+    dupErr.name = 'SequelizeUniqueConstraintError';
+    mockAusencia.create.mockRejectedValue(dupErr);
+    mockJornada.findAll.mockResolvedValue([{ jor_id: 'a' }]);
+    await expect(svc.registrarAusencia(10, { tipo: 'OTRO', motivo: 'algo' })).rejects.toBeDefined();
+    expect(mockFinalizar).not.toHaveBeenCalled();
   });
 
   test('re-emite AUSENCIA_DUPLICADA si el unique key rechaza', async () => {

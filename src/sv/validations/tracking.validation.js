@@ -8,7 +8,7 @@ const puntoSchema = Joi.object({
   altitude:  Joi.number().allow(null),
   speed:     Joi.number().allow(null),
   battery:   Joi.number().integer().min(0).max(100).allow(null),
-  source:    Joi.string().valid('foreground', 'service_worker', 'manual').default('foreground')
+  source:    Joi.string().valid('foreground', 'service_worker', 'manual', 'post_resume').default('foreground')
 });
 
 module.exports = {
