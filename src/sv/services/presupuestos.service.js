@@ -36,7 +36,9 @@ function alcance(user, areaId) {
   }
   if (ROLES_POR_AREA.includes(rol)) {
     const areas = numeros(areaIdsAccesibles(user));
-    return areas.includes(Number(areaId)) ? { usr_area_id: Number(areaId) } : null;
+    // Sin filtro de usuario: las dos ramas de consultar ya son de esta área, y quien cambió de
+    // área sigue saliendo en los meses en que vendió.
+    return areas.includes(Number(areaId)) ? {} : null;
   }
   // ASESOR, AGENTE_SVC y cualquier rol desconocido: solo él.
   return { usr_id: user.usr_id };

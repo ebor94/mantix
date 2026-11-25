@@ -20,11 +20,11 @@ describe('alcance', () => {
     ['SUPERVISOR con varios grupos', user('SUPERVISOR', { usr_grupo_id: 2, gruposExtra: [{ grupo_id: '5' }, { grupo_id: 2 }] }), 1, { usr_grupo_id: { [Op.in]: [2, 5] } }],
     ['COORDINADOR sus grupos', user('COORDINADOR_PREVISION', { usr_grupo_id: 4, gruposExtra: [{ grupo_id: 6 }] }), 1, { usr_grupo_id: { [Op.in]: [4, 6] } }],
     ['JEFE_PAP el grupo 3', user('JEFE_PAP', { usr_grupo_id: 8, gruposExtra: [{ grupo_id: 9 }] }), 1, { usr_grupo_id: 3 }],
-    ['ADMIN_AREA su área', user('ADMIN_AREA'), 1, { usr_area_id: 1 }],
+    ['ADMIN_AREA su área', user('ADMIN_AREA'), 1, {}],
     ['ADMIN_AREA otra área', user('ADMIN_AREA'), 2, null],
-    ['DIRECTOR un área extra', user('DIRECTOR_COMERCIAL', { usr_area_id: 3, areasExtra: [{ area_id: '1' }] }), 1, { usr_area_id: 1 }],
+    ['DIRECTOR un área extra', user('DIRECTOR_COMERCIAL', { usr_area_id: 3, areasExtra: [{ area_id: '1' }] }), 1, {}],
     ['DIRECTOR sin esa área', user('DIRECTOR_COMERCIAL', { usr_area_id: 3, areasExtra: [{ area_id: 4 }] }), 1, null],
-    ['GERENTE un área extra', user('GERENTE_GENERAL', { usr_area_id: 2, areasExtra: [{ area_id: 1 }] }), 1, { usr_area_id: 1 }],
+    ['GERENTE un área extra', user('GERENTE_GENERAL', { usr_area_id: 2, areasExtra: [{ area_id: 1 }] }), 1, {}],
     ['GERENTE sin esa área', user('GERENTE_GENERAL', { usr_area_id: 2, areasExtra: [] }), 1, null],
     ['SUPER_ADMIN todo', user('SUPER_ADMIN', { usr_area_id: null }), 7, {}],
     ['SUPERVISOR sin grupos', user('SUPERVISOR', { usr_grupo_id: null }), 1, null],
@@ -103,6 +103,12 @@ describe('asesoresCargables', () => {
     expect(M.SvUsuario.findAll.mock.calls[0][0].where).toEqual({
       usr_grupo_id: { [Op.in]: [2] }, usr_area_id: 1, usr_activo: 1, '$rol.rol_codigo$': 'ASESOR'
     });
+  });
+
+  test('el administrador exige el área aunque su alcance no la fije', async () => {
+    M.SvUsuario.findAll.mockResolvedValue([]);
+    await svc.asesoresCargables(user('ADMIN_AREA'), 1);
+    expect(M.SvUsuario.findAll.mock.calls[0][0].where).toEqual({ usr_area_id: 1, usr_activo: 1, '$rol.rol_codigo$': 'ASESOR' });
   });
 
   test('sin alcance no consulta', async () => {
@@ -195,6 +201,19 @@ describe('consultar', () => {
     datos({ pres: [[9, 'Osarios', 0]] });
     await consultar();
     expect(M.SvUsuario.findAll.mock.calls[0][0].where[Op.or][1]).toEqual({ usr_id: { [Op.in]: [] } });
+  });
+
+  test('quien cambió de área sigue saliendo en el mes en que vendió (administrador y supervisor)', async () => {
+    const movido = { usr_id: 12, usr_nombre: 'Fede', usr_apellido: 'Lara', usr_grupo_id: 1, usr_activo: 1, grupo: null };
+    for (const u of [ADMIN, user('SUPERVISOR', { usr_grupo_id: 1 })]) {
+      datos({ usuarios: [...ASESORES, movido], real: [[12, 'Osarios', 900]] });
+      const r = await svc.consultar({ user: u, areaId: 1, anio: 2026, mes: 11 });
+      expect(r.asesores.map((a) => a.usr_id)).toContain(12);
+      expect(r.total.realizado).toBe(900);
+      const where = M.SvUsuario.findAll.mock.calls.at(-1)[0].where;
+      expect(where.usr_area_id).toBeUndefined();
+      expect(where[Op.or][1]).toEqual({ usr_id: { [Op.in]: [12] } });
+    }
   });
 
   test('el alcance entra en la consulta de usuarios', async () => {
