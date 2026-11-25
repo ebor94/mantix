@@ -485,19 +485,26 @@ describe('GET /desinfecciones/registros — resumen del período', () => {
 
 // Como los entrega mysql2: `SUM(...)` llega como texto o `Decimal` según el
 // driver, nunca garantizado como número. Las cifras de producción medidas el
-// 2026-11-25: 21 programadas, 31 sin fecha, 2 NO_APLICA.
-const FLOTA = { programada: '21', vencida: '0', sin_fecha: '31', no_aplica: '2' }
+// 2026-11-25: 54 filas — 21 al día, 0 vencidas, 31 sin fecha, 2 NO_APLICA.
+// Las cuatro suman el total, y eso es parte del contrato: ver la prueba de la
+// partición más abajo.
+const FLOTA = { total: '54', al_dia: '21', vencida: '0', sin_fecha: '31', no_aplica: '2' }
 
-const CLAVES_FLOTA = ['programada', 'vencida', 'sin_fecha', 'no_aplica',
+const CLAVES_FLOTA = ['total', 'al_dia', 'vencida', 'sin_fecha', 'no_aplica',
   'vehiculos_inactivos_por_desinfeccion']
 
-// El enrutado discrimina por los alias `AS inactivos` y `AS programada`, NUNCA
+// Las cuatro que tienen que particionar el total. `total` y los inactivos
+// quedan fuera: uno es el denominador y el otro cuenta vehículos, no filas de
+// programación.
+const CLAVES_PARTICION = ['al_dia', 'vencida', 'sin_fecha', 'no_aplica']
+
+// El enrutado discrimina por los alias `AS inactivos` y `AS al_dia`, NUNCA
 // por `/COUNT\(\*\)/`: las dos consultas llevan conteos y un patrón genérico le
 // devolvería a una la cifra de la otra.
 function prepararFlota({ totales = FLOTA, inactivos = '0' } = {}) {
   db.query.mockImplementation(async sql => {
     if (/AS inactivos/i.test(sql))  return [[{ inactivos }]]
-    if (/AS programada/i.test(sql)) return [[totales]]
+    if (/AS al_dia/i.test(sql))     return [[totales]]
     return [[]]
   })
 }
@@ -530,8 +537,9 @@ describe('GET /desinfecciones/informes/flota', () => {
     expect(res.status).toBe(200)
     expect(res.body.fecha).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(res.body.totales).toEqual(expect.objectContaining({
-      programada: expect.any(Number), vencida: expect.any(Number),
-      sin_fecha: expect.any(Number), no_aplica: expect.any(Number),
+      total: expect.any(Number), al_dia: expect.any(Number),
+      vencida: expect.any(Number), sin_fecha: expect.any(Number),
+      no_aplica: expect.any(Number),
       vehiculos_inactivos_por_desinfeccion: expect.any(Number),
     }))
   })
@@ -550,7 +558,7 @@ describe('GET /desinfecciones/informes/flota', () => {
       expect(db.query).not.toHaveBeenCalled()
     })
 
-  test('trae las cinco claves que pinta el panel, sin ninguna más', async () => {
+  test('trae las seis claves que pinta el panel, sin ninguna más', async () => {
     const res = await pedirFlota({ rol: 'coordinador' })
 
     expect(Object.keys(res.body.totales).sort()).toEqual([...CLAVES_FLOTA].sort())
@@ -561,7 +569,8 @@ describe('GET /desinfecciones/informes/flota', () => {
     const { totales } = (await pedirFlota({ rol: 'coordinador' })).body
 
     for (const clave of CLAVES_FLOTA) expect(typeof totales[clave]).toBe('number')
-    expect(totales.programada).toBe(21)
+    expect(totales.total).toBe(54)
+    expect(totales.al_dia).toBe(21)
     expect(totales.sin_fecha).toBe(31)
     expect(totales.no_aplica).toBe(2)
   })
@@ -574,16 +583,42 @@ describe('GET /desinfecciones/informes/flota', () => {
     expect(sql).toMatch(/p\.fecha_prox < \?/)
   })
 
-  test('no cuenta como programada una fila con fecha pasada', async () => {
+  test('las cuatro cifras suman el total', async () => {
+    // No es aritmética decorativa: nadie mira cuatro números juntos sin
+    // sumarlos. Una versión anterior de la consulta no sumaba — una fila
+    // PENDIENTE con fecha futura no caía en ninguna cifra y una PROGRAMADA sin
+    // fecha caía en dos— y con los datos de hoy daba 54 de pura casualidad.
+    const { totales } = (await pedirFlota({ rol: 'coordinador' })).body
+
+    const suma = CLAVES_PARTICION.reduce((acc, k) => acc + totales[k], 0)
+    expect(suma).toBe(totales.total)
+  })
+
+  test('al día y vencida se parten por la fecha, sin solaparse', async () => {
+    // El corte es `< hoy` contra `>= hoy` sobre la MISMA condición de tener
+    // fecha: así ninguna fila puede caer en las dos ni quedarse afuera.
     await pedirFlota({ rol: 'coordinador' })
-    const sql = db.query.mock.calls.map(c => c[0]).join('\n')
-    expect(sql).toMatch(/NOT \(p\.fecha_prox IS NOT NULL AND p\.fecha_prox < \?\)/)
+    const sql = db.query.mock.calls.find(c => /AS al_dia/i.test(c[0]))[0]
+
+    expect(sql).toMatch(/p\.fecha_prox IS NOT NULL\s+AND \(p\.fecha_prox < \?/)
+    expect(sql).toMatch(/p\.fecha_prox IS NOT NULL\s+AND p\.fecha_prox >= \?/)
+  })
+
+  test('cada cifra de la partición excluye NO_APLICA, salvo la propia', async () => {
+    await pedirFlota({ rol: 'coordinador' })
+    const sql = db.query.mock.calls.find(c => /AS al_dia/i.test(c[0]))[0]
+
+    // Tres guardas `<> 'NO_APLICA'` (sin fecha, vencida, al día) más el
+    // `= 'NO_APLICA'` de su propia cifra.
+    expect((sql.match(/p\.estado <> 'NO_APLICA'/g) || []).length).toBe(3)
+    expect(sql).toMatch(/SUM\(p\.estado = 'NO_APLICA'\)/)
   })
 
   test('sin_fecha cuenta las que no tienen fecha y no son NO_APLICA', async () => {
     await pedirFlota({ rol: 'coordinador' })
     const sql = db.query.mock.calls.map(c => c[0]).join('\n')
-    expect(sql).toMatch(/p\.estado <> 'NO_APLICA' AND p\.fecha_prox IS NULL/)
+    // `\s+` y no un espacio: la condición va partida en dos líneas en el SQL.
+    expect(sql).toMatch(/p\.estado <> 'NO_APLICA'\s+AND p\.fecha_prox IS NULL/)
   })
 
   test('el hoy lo manda el servidor y no CURDATE()', async () => {
@@ -592,7 +627,7 @@ describe('GET /desinfecciones/informes/flota', () => {
     // se corren un día.
     const res = await pedirFlota({ rol: 'coordinador' })
 
-    const [sqlTotales, params] = db.query.mock.calls.find(c => /AS programada/i.test(c[0]))
+    const [sqlTotales, params] = db.query.mock.calls.find(c => /AS al_dia/i.test(c[0]))
     expect(sqlTotales).not.toMatch(/CURDATE\(\)/i)
     expect(params).toEqual([res.body.fecha, res.body.fecha])
   })
@@ -619,7 +654,7 @@ describe('GET /desinfecciones/informes/flota', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.totales).toEqual({
-      programada: 0, vencida: 0, sin_fecha: 0, no_aplica: 0,
+      total: 0, al_dia: 0, vencida: 0, sin_fecha: 0, no_aplica: 0,
       vehiculos_inactivos_por_desinfeccion: 0,
     })
   })

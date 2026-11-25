@@ -1016,19 +1016,32 @@ async function informeFlota(req, res, next) {
   try {
     const { dia: hoy } = relojBogota()
 
-    // `vencida` repite la expresión canónica del tablero en lugar de confiar
-    // en `estado`: el barrido nocturno pone VENCIDA, pero entre que la fecha
-    // pasa y el barrido corre hay una ventana en la que el estado miente. Por
-    // simetría, `programada` tampoco cuenta una fila cuya fecha ya pasó.
+    // LAS CUATRO CIFRAS SON UNA PARTICIÓN: cada fila de la programación cae en
+    // exactamente una, y las cuatro suman `total`. No es un detalle estético —
+    // nadie mira cuatro números juntos sin sumarlos, y una versión anterior de
+    // esta consulta no sumaba: una fila PENDIENTE con fecha futura no caía en
+    // ninguna, y una PROGRAMADA sin fecha caía en dos. Con los datos de hoy
+    // daba 54 de casualidad, porque toda PENDIENTE está sin fecha y toda
+    // PROGRAMADA con fecha. Esa casualidad la mantiene
+    // `actualizarProgramacion`, que deriva el estado de la fecha; un arreglo a
+    // mano en la base la rompe y el panel dejaría de cuadrar sin avisar.
+    //
+    // El orden de los casos es el que los hace excluyentes: NO_APLICA primero,
+    // después sin fecha, después vencida, y al día es el resto. La decisión no
+    // se delega a `estado`, salvo para respetar un VENCIDA explícito: el
+    // barrido nocturno lo pone, pero entre que la fecha pasa y el barrido corre
+    // hay una ventana en la que la columna miente, y la cifra no puede heredar
+    // esa mentira.
     const [[t]] = await db.query(
       `SELECT
-         COALESCE(SUM(p.estado = 'PROGRAMADA'
-                      AND NOT (p.fecha_prox IS NOT NULL AND p.fecha_prox < ?)), 0) AS programada,
-         COALESCE(SUM(p.estado = 'VENCIDA'
-                      OR (p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
-                          AND p.fecha_prox < ?)), 0) AS vencida,
-         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NULL), 0) AS sin_fecha,
-         COALESCE(SUM(p.estado = 'NO_APLICA'), 0) AS no_aplica
+         COUNT(*) AS total,
+         COALESCE(SUM(p.estado = 'NO_APLICA'), 0) AS no_aplica,
+         COALESCE(SUM(p.estado <> 'NO_APLICA'
+                      AND p.fecha_prox IS NULL), 0) AS sin_fecha,
+         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
+                      AND (p.fecha_prox < ? OR p.estado = 'VENCIDA')), 0) AS vencida,
+         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
+                      AND p.fecha_prox >= ? AND p.estado <> 'VENCIDA'), 0) AS al_dia
        FROM h360_desinf_programacion p`, [hoy, hoy])
 
     // Solo los que bajó este módulo: `inactivo_origen` existe para no contar
@@ -1047,10 +1060,14 @@ async function informeFlota(req, res, next) {
     res.json({
       fecha: hoy,
       totales: {
-        programada: Number(t?.programada ?? 0),
-        vencida:    Number(t?.vencida ?? 0),
-        sin_fecha:  Number(t?.sin_fecha ?? 0),
-        no_aplica:  Number(t?.no_aplica ?? 0),
+        // `al_dia` y no `programada`: la cifra es «tiene fecha y todavía no
+        // llegó», que no es lo mismo que `estado = 'PROGRAMADA'`. Con el
+        // nombre viejo, el próximo lector creería que espeja la columna.
+        total:     Number(t?.total ?? 0),
+        al_dia:    Number(t?.al_dia ?? 0),
+        vencida:   Number(t?.vencida ?? 0),
+        sin_fecha: Number(t?.sin_fecha ?? 0),
+        no_aplica: Number(t?.no_aplica ?? 0),
         vehiculos_inactivos_por_desinfeccion: inactivos,
       },
     })
