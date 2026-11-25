@@ -714,16 +714,24 @@ describe('tablero', () => {
 describe('listarRegistros', () => {
   beforeEach(() => { db.query.mockResolvedValue([[]]) })
 
+  // El historial son DOS consultas desde que devuelve `{ filas, total }`: el
+  // conteo del filtro completo y la página. Las afirmaciones miran todo el SQL
+  // de la llamada para no depender de en qué orden se disparan.
+  const sqlDeLaLlamada = () => db.query.mock.calls.map(c => c[0]).join('\n')
+
   test('las fechas se formatean en SQL', async () => {
     await llamar(ctrl.listarRegistros, reqFalso())
-    const [sql] = db.query.mock.calls[0]
+    const sql = sqlDeLaLlamada()
     expect(sql).toMatch(/DATE_FORMAT\(reg\.fecha_ejecucion, *'%Y-%m-%d'\) AS fecha_ejecucion/)
     expect(sql).toMatch(/DATE_FORMAT\(reg\.fecha_programada, *'%Y-%m-%d'\) AS fecha_programada/)
   })
 
-  test('el historial se topa en 200', async () => {
+  // Antes el tope era fijo en 200 y no había total. Ahora la página es de 50
+  // por defecto, con `limite` hasta 200: lo detallan las pruebas de
+  // `desinfecciones.informes.test.js`.
+  test('el historial viene paginado, con página de 50 por defecto', async () => {
     await llamar(ctrl.listarRegistros, reqFalso())
-    expect(db.query.mock.calls[0][0]).toMatch(/LIMIT 200/)
+    expect(sqlDeLaLlamada()).toMatch(/LIMIT 50 OFFSET 0/)
   })
 
   test('filtra por vehículo, rango y actividad', async () => {

@@ -851,7 +851,17 @@ async function registrar(req, res, next) {
 // Historial
 // ═══════════════════════════════════════════════════════════════════════════
 
-// GET /desinfecciones/registros  ?vehiculo_id=&desde=&hasta=&actividad=
+/**
+ * GET /desinfecciones/registros
+ *   ?vehiculo_id=&desde=&hasta=&actividad=&tipo_vehiculo=&limite=&offset=
+ *
+ * Devuelve `{ filas, total }` y NO un arreglo pelado: el informe de vehículos
+ * necesita saber cuántas filas hay en todo el filtro para paginar y para
+ * exportar. `total` sale de un COUNT con EL MISMO `WHERE` y SIN `LIMIT`: si
+ * llevara el límite, el total sería el tamaño de la página, el usuario nunca
+ * llegaría a la página 2 y la exportación se cortaría en la primera página sin
+ * que nada falle.
+ */
 async function listarRegistros(req, res, next) {
   try {
     const q = req.query || {}
@@ -880,14 +890,54 @@ async function listarRegistros(req, res, next) {
       filtros.push('reg.actividad_nombre LIKE ?')
       params.push(`%${texto(q.actividad, 80)}%`)
     }
+    // Filtra por el tipo del vehículo de hoy (`v.tipo`), no por una copia en el
+    // registro: el registro no la guarda.
+    if (q.tipo_vehiculo !== undefined && q.tipo_vehiculo !== '') {
+      const tipo = texto(q.tipo_vehiculo, 20).toUpperCase()
+      if (!TIPOS_VEHICULO.includes(tipo))
+        return res.status(400).json({
+          mensaje: `El tipo de vehículo debe ser uno de: ${TIPOS_VEHICULO.join(', ')}`,
+          campo: 'tipo_vehiculo',
+        })
+      filtros.push('v.tipo = ?'); params.push(tipo)
+    }
+
+    // Tope de 200 por página: es lo que ya aguantaba el endpoint y lo que pide
+    // la exportación, que junta páginas de 200 hasta completar el total.
+    let limite = 50
+    if (q.limite !== undefined && q.limite !== '') {
+      limite = Number(q.limite)
+      if (!Number.isInteger(limite) || limite < 1 || limite > 200)
+        return res.status(400).json({
+          mensaje: 'limite debe ser un entero entre 1 y 200', campo: 'limite',
+        })
+    }
+    let offset = 0
+    if (q.offset !== undefined && q.offset !== '') {
+      offset = Number(q.offset)
+      if (!Number.isInteger(offset) || offset < 0)
+        return res.status(400).json({
+          mensaje: 'offset debe ser un entero mayor o igual a 0', campo: 'offset',
+        })
+    }
 
     const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''
-    const [rows] = await db.query(
+
+    const [[conteo]] = await db.query(
+      `SELECT COUNT(*) AS total
+         FROM h360_desinf_registro reg
+         LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
+       ${where}`, params)
+
+    // El LIMIT/OFFSET se interpola porque ya está validado como entero: con
+    // marcadores, mysql2 los manda como texto y MySQL rechaza la consulta.
+    const [filas] = await db.query(
       `${SELECT_REGISTRO}
        ${where}
        ORDER BY reg.fecha_ejecucion DESC, reg.id DESC
-       LIMIT 200`, params)
-    res.json(rows)
+       LIMIT ${limite} OFFSET ${offset}`, params)
+
+    res.json({ filas, total: Number(conteo?.total ?? 0) })
   } catch (err) { next(err) }
 }
 
