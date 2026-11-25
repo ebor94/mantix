@@ -4,7 +4,7 @@
  */
 const { Op, fn, col, literal } = require('sequelize');
 const {
-  sequelize, SvProspecto, SvProspectoProducto, SvPersona, SvUsuario, SvEstado,
+  sequelize, SvProspecto, SvProspectoProducto, SvProducto, SvPersona, SvUsuario, SvEstado,
   SvFuente, SvPunto, SvLista, SvGestion, SvResultado, SvEmpresa
 } = require('../models');
 const { aISO, hoyISO, rangoDia } = require('../utils/fechas');
@@ -214,10 +214,33 @@ async function obtenerAlcance(id) {
   });
 }
 
+// Intereses sin repetidos ni vacíos; gana la primera aparición. Solo se toman estos
+// campos: un precio enviado por el cliente se ignora.
+function interesesUnicos(productos) {
+  const unicos = new Map();
+  for (const p of productos || []) {
+    const prodId = Number(p?.prod_id);
+    if (!prodId || unicos.has(prodId)) continue;
+    unicos.set(prodId, { prod_id: prodId, es_principal: !!p.es_principal, nota: p.nota || null });
+  }
+  return [...unicos.values()];
+}
+
+// Precio de lista vigente de cada producto. Sin precio (o "por definir") queda null.
+async function preciosVigentes(prodIds, transaction) {
+  if (!prodIds.length) return new Map();
+  const filas = await SvProducto.findAll({
+    where: { prod_id: { [Op.in]: prodIds } },
+    attributes: ['prod_id', 'prod_precio_base'],
+    transaction
+  });
+  return new Map(filas.map((f) => [f.prod_id, f.prod_precio_base]));
+}
+
 async function crear(payload, asesorId) {
   const t = await sequelize.transaction();
   try {
-    const productos = payload.productos || []; // [{prod_id, es_principal, nota}]
+    const intereses = interesesUnicos(payload.productos); // [{prod_id, es_principal, nota}]
     delete payload.productos;
 
     const data = {
@@ -240,12 +263,14 @@ async function crear(payload, asesorId) {
     };
     const p = await SvProspecto.create(data, { transaction: t });
 
-    for (const prod of productos) {
+    const precios = await preciosVigentes(intereses.map((i) => i.prod_id), t);
+    for (const i of intereses) {
       await SvProspectoProducto.create({
         pp_prosp_id: p.prosp_id,
-        pp_prod_id:  prod.prod_id,
-        pp_es_principal: prod.es_principal ? 1 : 0,
-        pp_nota: prod.nota || null
+        pp_prod_id:  i.prod_id,
+        pp_es_principal: i.es_principal ? 1 : 0,
+        pp_nota: i.nota,
+        pp_precio_ofrecido: precios.get(i.prod_id) ?? null
       }, { transaction: t });
     }
     await t.commit();
@@ -272,30 +297,47 @@ async function actualizar(id, payload) {
  * Reemplaza la lista de productos de interés de un prospecto.
  * payload.productos = [{ prod_id, es_principal, nota }]
  *
- * Estrategia: borrar los actuales e insertar los nuevos en transacción.
- * (Más simple que diffear y mantiene el orden + es_principal coherente.)
+ * Los que siguen conservan su fila (y con ella el precio ofrecido y la fecha): solo
+ * cambian principal y nota. Los que se quitan se borran; los nuevos toman el precio de hoy.
  */
 async function actualizarProductos(prospId, productos = []) {
   const p = await SvProspecto.findByPk(prospId);
   if (!p) { const e = new Error('Prospecto no encontrado'); e.code = 'NOT_FOUND'; throw e; }
 
+  const intereses = interesesUnicos(productos);
+
   // Validar: máximo 1 principal
-  const principales = productos.filter(x => x.es_principal).length;
-  if (principales > 1) {
+  if (intereses.filter((i) => i.es_principal).length > 1) {
     const e = new Error('Solo puede haber un producto principal'); e.code = 'VALIDATION_ERROR'; throw e;
   }
 
   const t = await sequelize.transaction();
   try {
-    await SvProspectoProducto.destroy({ where: { pp_prosp_id: prospId }, transaction: t });
-    for (const prod of productos) {
-      if (!prod.prod_id) continue;
-      await SvProspectoProducto.create({
-        pp_prosp_id:     prospId,
-        pp_prod_id:      prod.prod_id,
-        pp_es_principal: prod.es_principal ? 1 : 0,
-        pp_nota:         prod.nota || null
-      }, { transaction: t });
+    const actuales = await SvProspectoProducto.findAll({ where: { pp_prosp_id: prospId }, transaction: t, lock: true });
+    const porProducto = new Map(actuales.map((a) => [a.pp_prod_id, a]));
+    const pedidos = new Set(intereses.map((i) => i.prod_id));
+
+    const quitar = actuales.filter((a) => !pedidos.has(a.pp_prod_id)).map((a) => a.pp_id);
+    if (quitar.length) {
+      await SvProspectoProducto.destroy({ where: { pp_id: { [Op.in]: quitar } }, transaction: t });
+    }
+
+    const nuevos = intereses.filter((i) => !porProducto.has(i.prod_id));
+    const precios = await preciosVigentes(nuevos.map((i) => i.prod_id), t);
+
+    for (const i of intereses) {
+      const datos = { pp_es_principal: i.es_principal ? 1 : 0, pp_nota: i.nota };
+      const actual = porProducto.get(i.prod_id);
+      if (actual) {
+        await actual.update(datos, { transaction: t });
+      } else {
+        await SvProspectoProducto.create({
+          pp_prosp_id: prospId,
+          pp_prod_id: i.prod_id,
+          ...datos,
+          pp_precio_ofrecido: precios.get(i.prod_id) ?? null
+        }, { transaction: t });
+      }
     }
     await t.commit();
   } catch (e) {
