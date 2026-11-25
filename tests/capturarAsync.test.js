@@ -138,6 +138,18 @@ describe('capturarAsync', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    ['sin compresión', []],
+    ['con compresión', [compression()]]
+  ])('si la propia respuesta falla (%s), la petición no queda colgada', async (_caso, antes) => {
+    const r = express.Router();
+    r.get('/x', async (req, res) => res.status(undefined).json({ ok: 1 }));
+    const res = await request(await montar(capturarAsync(r), ...antes)).get('/x').timeout(2000);
+    expect(res.status).toBe(500);
+    expect(manejador).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   test('un motivo que no es Error también queda anotado', async () => {
     const r = express.Router();
     // eslint-disable-next-line no-throw-literal

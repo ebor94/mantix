@@ -33,7 +33,7 @@ Express 4 no recoge las promesas rechazadas de un handler async. `server.js` ter
 - No toca los manejadores de error (cuatro argumentos).
 - Es idempotente: un handler ya envuelto no se envuelve otra vez.
 - Un rechazo sin motivo (`Promise.reject()`) pasa a `next` como `Error('Promesa rechazada sin motivo')`; `next(undefined)` seguiría como si no hubiera error.
-- Si el handler ya respondió (llamó a `res.end`, directamente o con `res.json`, `res.send` o un stream), solo se anota en el log. Llamar a `next` ahí cortaría la conexión y podría truncar una respuesta correcta. No se usa `res.writableEnded`: `compression()` termina la respuesta real más tarde.
+- Si el handler ya respondió (llamó a `res.end`, directamente o con `res.json`, `res.send` o un stream), solo se anota en el log. Llamar a `next` ahí cortaría la conexión y podría truncar una respuesta correcta. `res.writableEnded` no alcanza: `compression()` termina la respuesta real más tarde. La marca se pone después de que `res.end` termina sin error; si `res.end` lanza, el error sigue a `next`.
 - En el log, el texto del error va en `detalle`: winston reemplazaría la etiqueta con una clave `message`.
 
 Depende de la estructura interna de Express 4 (4.21.2 instalado). Express 5 reenvía los rechazos por sí mismo: al migrar, este archivo se elimina.
@@ -50,7 +50,7 @@ Depende de la estructura interna de Express 4 (4.21.2 instalado). Express 5 reen
 | `err.code` es `FORBIDDEN` | 403 |
 | `err.code` es `CONFLICT`, `DUPLICATE`, `DUPLICATE_PHONE`, `DUPLICATE_NIT` o `DUPLICATE_EMAIL` | 409 |
 | `err.name` es `SequelizeValidationError`, `SequelizeUniqueConstraintError` o `MulterError` | `next(err)`: lo responde el manejador global, que ya traduce esos casos |
-| `SequelizeDatabaseError` por un dato enviado (`ER_DATA_TOO_LONG`, `ER_BAD_NULL_ERROR`, `ER_WARN_DATA_OUT_OF_RANGE`, `WARN_DATA_TRUNCATED`, `ER_TRUNCATED_WRONG_VALUE_FOR_FIELD`) | `next(err)` |
+| `SequelizeDatabaseError` por un dato enviado (`ER_DATA_TOO_LONG`, `ER_BAD_NULL_ERROR`, `ER_WARN_DATA_OUT_OF_RANGE`, `WARN_DATA_TRUNCATED`, `ER_TRUNCATED_WRONG_VALUE_FOR_FIELD`, `ER_TRUNCATED_WRONG_VALUE`) | `next(err)` |
 | `err.statusCode` entre 400 y 499 (por ejemplo, una URL mal formada) | `next(err)` |
 | Cualquier otro | 500 `INTERNAL_ERROR`, "Error interno. Intenta de nuevo en unos minutos." |
 
@@ -105,4 +105,4 @@ Solo backend: `deploy-mantix`. Sin migración ni cambios en GenFlow. Reversión:
 - CSV separado por punto y coma, como lo guarda Excel en español: no falla, pero se lee como una sola columna, así que por el código todas las filas quedarían como error.
 - El CSV subido no se borra cuando la carga falla (queda en `uploads/sv`).
 - `propuestas.controller` (generar y ver el PDF) responde 500 con el texto interno y no lo anota en el log. Es anterior a esta rama.
-- `renovaciones.service`: dos errores de configuración sin `code` quedan como "Error interno" (solo SUPER_ADMIN; antes apagaban el proceso).
+- `renovaciones.service`: dos errores de configuración llevan el código `INTERNAL_ERROR`, que no está en la tabla, y quedan como "Error interno" (solo SUPER_ADMIN; antes apagaban el proceso).

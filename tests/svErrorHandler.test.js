@@ -43,7 +43,7 @@ describe('svErrorHandler', () => {
 
   test.each([
     ['ER_DATA_TOO_LONG'], ['ER_BAD_NULL_ERROR'], ['ER_WARN_DATA_OUT_OF_RANGE'],
-    ['WARN_DATA_TRUNCATED'], ['ER_TRUNCATED_WRONG_VALUE_FOR_FIELD']
+    ['WARN_DATA_TRUNCATED'], ['ER_TRUNCATED_WRONG_VALUE_FOR_FIELD'], ['ER_TRUNCATED_WRONG_VALUE']
   ])('SequelizeDatabaseError por un dato (%s) lo responde el manejador global', (codigoSql) => {
     const err = error({ name: 'SequelizeDatabaseError', parent: { code: codigoSql } });
     const { res, next } = ejecutar(err);

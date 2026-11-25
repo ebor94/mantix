@@ -26,7 +26,7 @@ const DEL_MANEJADOR_GLOBAL = new Set(['SequelizeValidationError', 'SequelizeUniq
 // un interbloqueo son fallas del servidor.
 const SQL_POR_DATO = new Set([
   'ER_DATA_TOO_LONG', 'ER_BAD_NULL_ERROR', 'ER_WARN_DATA_OUT_OF_RANGE',
-  'WARN_DATA_TRUNCATED', 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD'
+  'WARN_DATA_TRUNCATED', 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', 'ER_TRUNCATED_WRONG_VALUE'
 ]);
 
 function esDelManejadorGlobal(err) {

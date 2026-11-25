@@ -19,8 +19,10 @@ function vigilarRespuesta(res) {
   res[TERMINADA] = false;
   const end = res.end;
   res.end = function (...args) {
+    // Se marca después: si end lanza, el handler no respondió y el error debe seguir a next.
+    const r = end.apply(this, args);
     res[TERMINADA] = true;
-    return end.apply(this, args);
+    return r;
   };
 }
 
@@ -37,7 +39,7 @@ function envolver(layer) {
         // next(undefined) seguiría como si no hubiera error.
         const err = motivo || new Error('Promesa rechazada sin motivo');
         // Con la respuesta ya terminada, next(err) cortaría la conexión: solo se anota.
-        if (res[TERMINADA]) {
+        if (res[TERMINADA] || res.writableEnded) {
           logger.error('[SV] Error después de responder', {
             detalle: err.message || String(err), stack: err.stack, method: req.method, path: req.baseUrl + req.path
           });
