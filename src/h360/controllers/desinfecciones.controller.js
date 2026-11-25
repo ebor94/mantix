@@ -855,12 +855,17 @@ async function registrar(req, res, next) {
  * GET /desinfecciones/registros
  *   ?vehiculo_id=&desde=&hasta=&actividad=&tipo_vehiculo=&limite=&offset=
  *
- * Devuelve `{ filas, total }` y NO un arreglo pelado: el informe de vehículos
- * necesita saber cuántas filas hay en todo el filtro para paginar y para
- * exportar. `total` sale de un COUNT con EL MISMO `WHERE` y SIN `LIMIT`: si
- * llevara el límite, el total sería el tamaño de la página, el usuario nunca
- * llegaría a la página 2 y la exportación se cortaría en la primera página sin
- * que nada falle.
+ * Devuelve `{ filas, total, resumen }` y NO un arreglo pelado: el informe de
+ * vehículos necesita saber cuántas filas hay en todo el filtro para paginar y
+ * para exportar. `total` sale de un COUNT con EL MISMO `WHERE` y SIN `LIMIT`:
+ * si llevara el límite, el total sería el tamaño de la página, el usuario
+ * nunca llegaría a la página 2 y la exportación se cortaría en la primera
+ * página sin que nada falle.
+ *
+ * `resumen` también se calcula sobre TODO el conjunto filtrado, con los mismos
+ * filtros y sin `LIMIT`, para que las cifras de arriba no puedan contradecir
+ * la tabla de abajo: un resumen de la página diría «1 registro» encima de una
+ * tabla que dice 8.
  */
 async function listarRegistros(req, res, next) {
   try {
@@ -929,6 +934,33 @@ async function listarRegistros(req, res, next) {
          LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
        ${where}`, params)
 
+    // Los agregados del resumen, en una sola consulta con los mismos filtros y
+    // sin LIMIT. Las dos fechas se formatean en SQL con DATE_FORMAT: el pool no
+    // fija `dateStrings`, así que un MIN/MAX pelado vuelve como objeto `Date` y
+    // Express lo serializa en UTC — Colombia vería el día anterior.
+    //
+    // `MIN`/`MAX` sobre un conjunto vacío devuelven NULL y `DATE_FORMAT(NULL,…)`
+    // también, así que el caso «filtro sin resultados» sale solo: ceros y las
+    // dos fechas en null.
+    //
+    // `[[agg]]` y no `[[{ registros }]]`: si la consulta devuelve cero filas,
+    // desestructurar un objeto de `undefined` lanza un TypeError que se va por
+    // `next(err)` sin que se vea la causa.
+    const [[agg]] = await db.query(
+      `SELECT COUNT(*)                                      AS registros,
+              COALESCE(SUM(reg.dias_atraso <= 0 OR reg.dias_atraso IS NULL), 0) AS a_tiempo,
+              COALESCE(SUM(reg.dias_atraso > 0), 0)         AS con_atraso,
+              COALESCE(MAX(reg.dias_atraso), 0)             AS atraso_maximo,
+              COALESCE(SUM(reg.tipo_registro = 'ORDEN_SERVICIO'), 0) AS con_orden_servicio,
+              COALESCE(SUM(reg.tipo_registro = 'EVIDENCIA'), 0)      AS con_evidencia,
+              COUNT(DISTINCT reg.vehiculo_id)               AS vehiculos_distintos,
+              COUNT(DISTINCT reg.registrado_por)            AS personas_distintas,
+              DATE_FORMAT(MIN(reg.fecha_ejecucion), '%Y-%m-%d') AS primera_ejecucion,
+              DATE_FORMAT(MAX(reg.fecha_ejecucion), '%Y-%m-%d') AS ultima_ejecucion
+         FROM h360_desinf_registro reg
+         LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
+       ${where}`, params)
+
     // El LIMIT/OFFSET se interpola porque ya está validado como entero: con
     // marcadores, mysql2 los manda como texto y MySQL rechaza la consulta.
     const [filas] = await db.query(
@@ -937,7 +969,28 @@ async function listarRegistros(req, res, next) {
        ORDER BY reg.fecha_ejecucion DESC, reg.id DESC
        LIMIT ${limite} OFFSET ${offset}`, params)
 
-    res.json({ filas, total: Number(conteo?.total ?? 0) })
+    // Con `Number()` en todos los agregados: mysql2 entrega `SUM`/`COUNT` como
+    // texto o `Decimal` según el driver, y la pantalla los suma.
+    //
+    // `dias_atraso` admite NULL —un registro de una programación que nunca
+    // tuvo fecha no tiene contra qué compararse— y por eso `a_tiempo` cuenta
+    // `<= 0 OR IS NULL`: así `a_tiempo + con_atraso` siempre da `registros`.
+    // Un registro sin fecha programada cuenta como a tiempo porque no hay
+    // atraso que demostrar, y el detalle queda en la columna de la tabla.
+    const resumen = {
+      registros:           Number(agg?.registros ?? 0),
+      a_tiempo:            Number(agg?.a_tiempo ?? 0),
+      con_atraso:          Number(agg?.con_atraso ?? 0),
+      atraso_maximo:       Number(agg?.atraso_maximo ?? 0),
+      con_orden_servicio:  Number(agg?.con_orden_servicio ?? 0),
+      con_evidencia:       Number(agg?.con_evidencia ?? 0),
+      vehiculos_distintos: Number(agg?.vehiculos_distintos ?? 0),
+      personas_distintas:  Number(agg?.personas_distintas ?? 0),
+      primera_ejecucion:   agg?.primera_ejecucion ?? null,
+      ultima_ejecucion:    agg?.ultima_ejecucion ?? null,
+    }
+
+    res.json({ filas, total: Number(conteo?.total ?? 0), resumen })
   } catch (err) { next(err) }
 }
 

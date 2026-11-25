@@ -15,6 +15,10 @@
 //  5. Que las fechas salgan como texto `YYYY-MM-DD`. El pool no tiene
 //     `dateStrings`, así que una fecha devuelta como objeto se serializa en UTC
 //     y en Colombia la pantalla muestra el día anterior.
+//  6. Que `resumen` describa TODO el conjunto filtrado y no la página, con las
+//     diez claves que la pantalla pinta, los agregados como números y las dos
+//     fechas como texto o `null`. Un resumen calculado sobre la página pone
+//     «1 registro» encima de una tabla que dice 8.
 
 jest.mock('../../config/db', () => ({ query: jest.fn(), getConnection: jest.fn() }))
 jest.mock('../../services/desinfeccionEvidencia.service', () => ({
@@ -63,9 +67,48 @@ const FILAS = [
 // saliera del tamaño de la página se nota.
 const TOTAL = 8
 
-function prepararPool({ filas = FILAS, total = TOTAL } = {}) {
+// Los agregados como los entrega mysql2: `SUM`/`COUNT` llegan como texto o
+// `Decimal` según el driver, nunca garantizados como número. Si el controlador
+// no los convierte, el frontend suma cadenas y «6» + «2» da «62».
+const RESUMEN = {
+  registros: '8', a_tiempo: '6', con_atraso: '2', atraso_maximo: '2',
+  con_orden_servicio: '7', con_evidencia: '1',
+  vehiculos_distintos: '7', personas_distintas: '2',
+  primera_ejecucion: '2026-11-13', ultima_ejecucion: '2026-11-24',
+}
+
+// Lo que devuelve de verdad la consulta de agregados sobre un conjunto vacío:
+// `COUNT` da 0, los `COALESCE(SUM(...), 0)` dan 0 y `DATE_FORMAT(MIN(NULL))`
+// da NULL.
+const RESUMEN_VACIO = {
+  registros: '0', a_tiempo: '0', con_atraso: '0', atraso_maximo: '0',
+  con_orden_servicio: '0', con_evidencia: '0',
+  vehiculos_distintos: '0', personas_distintas: '0',
+  primera_ejecucion: null, ultima_ejecucion: null,
+}
+
+const CLAVES_RESUMEN = [
+  'registros', 'a_tiempo', 'con_atraso', 'atraso_maximo',
+  'con_orden_servicio', 'con_evidencia', 'vehiculos_distintos',
+  'personas_distintas', 'primera_ejecucion', 'ultima_ejecucion',
+]
+
+// El enrutado del mock discrimina por `COUNT(*) AS total` y por `AS registros`,
+// NUNCA por `COUNT(*)` a secas: `SELECT_REGISTRO` lleva un subselect
+// `(SELECT COUNT(*) FROM h360_desinf_evidencia …)`, así que un `/COUNT\(\*\)/`
+// le respondería el conteo también a la consulta de filas.
+function prepararPool({ filas = FILAS, total = TOTAL, resumen = RESUMEN } = {}) {
   db.query.mockImplementation(async sql => {
     if (/COUNT\(\*\) +AS total/i.test(sql)) return [[{ total }]]
+    if (/AS registros/i.test(sql)) return [[resumen]]
+    // La página sale recortada por el LIMIT/OFFSET interpolado, como la haría
+    // la base: así una prueba puede pedir una página más chica que el conjunto
+    // y comprobar que el resumen sigue describiendo el conjunto entero.
+    const pagina = /LIMIT (\d+) OFFSET (\d+)/i.exec(sql)
+    if (pagina) {
+      const desde = Number(pagina[2])
+      return [filas.slice(desde, desde + Number(pagina[1]))]
+    }
     return [filas]
   })
 }
@@ -86,6 +129,8 @@ const sqlDeLaLlamada = () => db.query.mock.calls.map(c => c[0]).join('\n')
 const consultaDeFilas = () => db.query.mock.calls.find(c => /LIMIT/i.test(c[0]))
 /** El SQL del conteo y sus parámetros. */
 const consultaDelConteo = () => db.query.mock.calls.find(c => /COUNT\(\*\) +AS total/i.test(c[0]))
+/** El SQL de la consulta de agregados del resumen y sus parámetros. */
+const consultaDelResumen = () => db.query.mock.calls.find(c => /AS registros/i.test(c[0]))
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -276,5 +321,131 @@ describe('GET /desinfecciones/registros — filtros y paginación', () => {
     expect(res.status).toBe(400)
     expect(res.body.campo).toBe('desde')
     expect(db.query).not.toHaveBeenCalled()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('GET /desinfecciones/registros — resumen del período', () => {
+  test('se calcula sobre todo el filtro y no sobre la página', async () => {
+    // Con límite 1 la página trae una fila, pero el resumen tiene que
+    // describir el conjunto entero: si se calculara sobre la página, la
+    // pantalla mostraría «1 registro» encima de una tabla que dice 8.
+    const res = await pedir({ limite: 1 })
+
+    expect(res.body.filas).toHaveLength(1)
+    expect(res.body.resumen.registros).toBe(res.body.total)
+    expect(res.body.resumen.registros).toBe(TOTAL)
+  })
+
+  test('la consulta del resumen no lleva LIMIT ni OFFSET', async () => {
+    await pedir({ limite: 1, offset: 0 })
+
+    const [sql] = consultaDelResumen()
+    expect(sql).not.toMatch(/LIMIT/i)
+    expect(sql).not.toMatch(/OFFSET/i)
+  })
+
+  test('el resumen lleva los mismos filtros y parámetros que la página', async () => {
+    await pedir({
+      vehiculo_id: '4', desde: '2026-11-01', hasta: '2026-11-24',
+      actividad: 'choque', tipo_vehiculo: 'TRASLADO', limite: 1,
+    })
+
+    const [sqlResumen, paramsResumen] = consultaDelResumen()
+    expect(sqlResumen).toContain('reg.vehiculo_id = ?')
+    expect(sqlResumen).toContain('reg.fecha_ejecucion >= ?')
+    expect(sqlResumen).toContain('reg.fecha_ejecucion <= ?')
+    expect(sqlResumen).toContain('reg.actividad_nombre LIKE ?')
+    // El filtro por tipo es del vehículo, así que el resumen necesita el JOIN.
+    expect(sqlResumen).toContain('v.tipo = ?')
+    expect(sqlResumen).toMatch(/LEFT JOIN vehiculos v/)
+    expect(paramsResumen).toEqual(consultaDeFilas()[1])
+  })
+
+  test('trae las diez claves que pinta la pantalla, sin ninguna más', async () => {
+    const { resumen } = (await pedir({})).body
+
+    expect(Object.keys(resumen).sort()).toEqual([...CLAVES_RESUMEN].sort())
+  })
+
+  test('a_tiempo y con_atraso suman los registros', async () => {
+    const { resumen } = (await pedir({})).body
+
+    expect(resumen.a_tiempo + resumen.con_atraso).toBe(resumen.registros)
+  })
+
+  test('a_tiempo cuenta también los dias_atraso en NULL', async () => {
+    // `dias_atraso` admite NULL: un registro de una programación que nunca
+    // tuvo fecha no tiene contra qué compararse. Sin el `IS NULL`, esas filas
+    // no caen en ninguno de los dos lados y la suma deja de dar `registros`.
+    await pedir({})
+
+    const [sql] = consultaDelResumen()
+    expect(sql).toMatch(/reg\.dias_atraso <= 0 OR reg\.dias_atraso IS NULL/)
+    expect(sql).toMatch(/SUM\(reg\.dias_atraso > 0\)/)
+  })
+
+  test('los agregados llegan como números aunque la base los dé como texto', async () => {
+    // mysql2 entrega SUM/COUNT como texto o Decimal: sin Number(), el
+    // frontend concatena cadenas en vez de sumar.
+    const { resumen } = (await pedir({})).body
+
+    for (const clave of CLAVES_RESUMEN.filter(c => !c.endsWith('_ejecucion')))
+      expect(typeof resumen[clave]).toBe('number')
+    expect(resumen.registros).toBe(8)
+    expect(resumen.a_tiempo).toBe(6)
+    expect(resumen.con_atraso).toBe(2)
+    expect(resumen.atraso_maximo).toBe(2)
+    expect(resumen.con_orden_servicio).toBe(7)
+    expect(resumen.con_evidencia).toBe(1)
+    expect(resumen.vehiculos_distintos).toBe(7)
+    expect(resumen.personas_distintas).toBe(2)
+  })
+
+  test('con un filtro sin resultados devuelve ceros y fechas en null', async () => {
+    prepararPool({ filas: [], total: 0, resumen: RESUMEN_VACIO })
+
+    const res = await pedir({ desde: '2000-01-01', hasta: '2000-01-02' })
+
+    expect(res.body.total).toBe(0)
+    expect(res.body.resumen.registros).toBe(0)
+    expect(res.body.resumen.atraso_maximo).toBe(0)
+    expect(res.body.resumen.primera_ejecucion).toBeNull()
+    expect(res.body.resumen.ultima_ejecucion).toBeNull()
+  })
+
+  test('si la base no devuelve ninguna fila de agregados, el resumen sale en ceros', async () => {
+    // Pasa en las pruebas del módulo que dejan el mock en `[[]]`, y pasaría en
+    // producción si la consulta se cayera a cero filas: el resumen tiene que
+    // salir en ceros, nunca reventar por desestructurar `undefined`.
+    db.query.mockImplementation(async sql => {
+      if (/COUNT\(\*\) +AS total/i.test(sql)) return [[{ total: 0 }]]
+      if (/AS registros/i.test(sql)) return [[]]
+      return [[]]
+    })
+
+    const res = await pedir({})
+
+    expect(res.status).toBe(200)
+    expect(res.body.resumen.registros).toBe(0)
+    expect(res.body.resumen.primera_ejecucion).toBeNull()
+  })
+
+  test('las fechas del resumen son texto YYYY-MM-DD', async () => {
+    const { resumen } = (await pedir({})).body
+
+    expect(typeof resumen.primera_ejecucion).toBe('string')
+    expect(resumen.primera_ejecucion).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(resumen.ultima_ejecucion).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  test('las fechas del resumen se formatean en SQL y no en JavaScript', async () => {
+    // Guarda de la trampa UTC: el pool no fija dateStrings, así que un MIN/MAX
+    // sin DATE_FORMAT vuelve como Date y Express lo serializa un día antes.
+    await pedir({})
+
+    const [sql] = consultaDelResumen()
+    expect(sql).toMatch(/DATE_FORMAT\(MIN\(reg\.fecha_ejecucion\), *'%Y-%m-%d'\) AS primera_ejecucion/)
+    expect(sql).toMatch(/DATE_FORMAT\(MAX\(reg\.fecha_ejecucion\), *'%Y-%m-%d'\) AS ultima_ejecucion/)
   })
 })
