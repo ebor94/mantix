@@ -97,15 +97,15 @@ describe('iniciarJornada', () => {
     expect(mockJornada.create).not.toHaveBeenCalled();
   });
 
-  test('consulta las activas del usuario, de la más antigua a la más reciente', async () => {
+  test('consulta las activas del usuario, de la más reciente a la más antigua', async () => {
     await svc.iniciarJornada(10, {});
     expect(mockJornada.findAll).toHaveBeenCalledWith({
       where: { jor_usr_id: 10, jor_estado: 'activa' },
-      order: [['jor_inicio_at', 'ASC']]
+      order: [['jor_inicio_at', 'DESC']]
     });
   });
 
-  test('con dos activas hoy devuelve la primera', async () => {
+  test('con dos activas hoy devuelve la primera de la lista (la más reciente)', async () => {
     const a = jornada({ jor_id: 'a', jor_fecha: new Date('2026-11-25T05:00:00Z') });
     const b = jornada({ jor_id: 'b', jor_fecha: new Date('2026-11-25T05:00:00Z') });
     mockJornada.findAll.mockResolvedValue([a, b]);
@@ -220,6 +220,16 @@ describe('batchPuntos: dueño', () => {
     const mal = await svc.batchPuntos('j1', [{ ts, lat: 4.6, lng: -74.1 }], 10);
     expect(mal).toMatchObject({ aceptados: 0, descartados: 1 });
     expect(mal.motivos.otro_dia).toBe(1);
+  });
+
+  test('con jor_fecha como Date a las 05:00Z (así llega de la base) compara por día', async () => {
+    const ts = new Date(2026, 10, 25, 9, 0, 0);
+    const [y, m, d] = svc.__diaDe(ts).split('-').map(Number);
+    const fecha = new Date(Date.UTC(y, m - 1, d, 5));
+    mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 10, jor_fecha: fecha, jor_estado: 'activa' }));
+    const r = await svc.batchPuntos('j1', [{ ts, lat: 4.6, lng: -74.1 }], 10);
+    expect(r).toMatchObject({ aceptados: 1 });
+    expect(r.motivos.otro_dia).toBe(0);
   });
 
   test('el dueño pasa (también con id como texto)', async () => {

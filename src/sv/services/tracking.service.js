@@ -84,7 +84,7 @@ async function iniciarJornada(usrId, { lat = null, lng = null, dispositivo = nul
   // Una por día: la de hoy se devuelve (idempotente) y las que quedaron abiertas de otros días se cierran.
   const abiertas = await SvJornada.findAll({
     where: { jor_usr_id: usrId, jor_estado: 'activa' },
-    order: [['jor_inicio_at', 'ASC']]
+    order: [['jor_inicio_at', 'DESC']]
   });
   let deHoy = null;
   for (const j of abiertas) {
