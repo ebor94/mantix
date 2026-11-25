@@ -57,7 +57,9 @@ const db = {
   // ─── Ventas al cerrar el contrato (migración 027) ───
   SvVenta:                   require('./Venta')(sequelize, Sequelize.DataTypes),
   SvVentaItem:               require('./VentaItem')(sequelize, Sequelize.DataTypes),
-  SvVentaCambio:             require('./VentaCambio')(sequelize, Sequelize.DataTypes)
+  SvVentaCambio:             require('./VentaCambio')(sequelize, Sequelize.DataTypes),
+  // ─── Presupuesto mensual por asesor y categoría (migración 028) ───
+  SvPresupuesto:             require('./Presupuesto')(sequelize, Sequelize.DataTypes)
 };
 
 // Asociaciones

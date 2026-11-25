@@ -58,6 +58,9 @@ router.use('/salas',        svAuth, svAreaGuard, require('./salas.routes'));
 // ─── Ventas: correcciones y anulaciones del supervisor (migración 027) ───
 router.use('/ventas',       svAuth, svAreaGuard, require('./ventas.routes'));
 
+// ─── Presupuesto contra realizado (migración 028) ───
+router.use('/presupuestos', svAuth, svAreaGuard, require('./presupuestos.routes'));
+
 // ─── Errores: siempre al final, después de montar TODAS las rutas ───
 // Un handler async que falla llega a svErrorHandler en vez de terminar el proceso.
 capturarAsync(router);
