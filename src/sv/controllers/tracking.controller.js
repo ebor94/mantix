@@ -3,6 +3,7 @@
  * Fase 7 — endpoints de tracking GPS de jornadas.
  */
 const tracking = require('../services/tracking.service');
+const jornadaObligatoria = require('../services/jornadaObligatoria.service');
 const { SvUsuario } = require('../models');
 const { ok, created, noContent, fail } = require('../utils/response');
 const { ERROR_CODES, ROLES } = require('../config/constants');
@@ -39,6 +40,9 @@ async function puedeVerUsuario(actor, usrId) {
 }
 
 async function iniciarJornada(req, res) {
+  if (!jornadaObligatoria.esOperativo(req.user)) {
+    return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Tu rol no registra jornada');
+  }
   try {
     const j = await tracking.iniciarJornada(req.user.usr_id, {
       lat:         req.body.lat,
@@ -61,7 +65,7 @@ async function finalizarJornada(req, res) {
     // El dueño se comprueba antes de cerrar, no después.
     const previa = await tracking.obtenerJornada(req.params.id);
     if (!previa) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Jornada no encontrada');
-    if (Number(previa.jor_usr_id) !== Number(req.user.usr_id) && req.user.rol?.rol_nivel > 2) {
+    if (Number(previa.jor_usr_id) !== Number(req.user.usr_id) && !(req.user.rol?.rol_nivel <= 2)) {
       return fail(res, 403, ERROR_CODES.FORBIDDEN, 'Solo puedes finalizar tus propias jornadas');
     }
     const j = await tracking.finalizarJornada(req.params.id, {
@@ -151,7 +155,6 @@ async function exportarMisDatos(req, res) {
 // ─────────────────────────────────────────────────────────
 // SP-4 · Popup obligatorio de inicio de jornada
 // ─────────────────────────────────────────────────────────
-const jornadaObligatoria = require('../services/jornadaObligatoria.service');
 
 async function estadoJornadaHoy(req, res) {
   const r = await jornadaObligatoria.estadoHoy(req.user);

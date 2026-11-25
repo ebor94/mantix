@@ -16,7 +16,10 @@ jest.mock('../src/sv/models', () => ({
   SvGestion: {}, SvProspecto: {}, SvPersona: {}
 }));
 
+jest.mock('../src/utils/logger', () => ({ error: jest.fn(), info: jest.fn(), warn: jest.fn() }));
+const logger = require('../src/utils/logger');
 const svc = require('../src/sv/services/tracking.service');
+svc.__diaDe = require('../src/sv/utils/fechas').diaBogotaISO;
 
 // 8:30 p. m. del 25-nov-2026 en Colombia (ya es 26 en UTC)
 const AHORA_NOCHE = '2026-11-26T01:30:00Z';
@@ -36,6 +39,7 @@ function jornada(extra = {}) {
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date(AHORA_NOCHE));
   Object.values({ ...mockJornada, ...mockAusencia, ...mockPunto, ...mockUsuario }).forEach(f => f.mockReset());
+  logger.error.mockReset();
   mockUsuario.findByPk.mockResolvedValue({ usr_id: 10 });
   mockAusencia.findOne.mockResolvedValue(null);
   mockJornada.findAll.mockResolvedValue([]);
@@ -91,6 +95,51 @@ describe('iniciarJornada', () => {
     expect(ayer.update).toHaveBeenCalledWith(expect.objectContaining({ jor_estado: 'auto_cerrada' }));
     expect(hoy.update).not.toHaveBeenCalled();
     expect(mockJornada.create).not.toHaveBeenCalled();
+  });
+
+  test('consulta las activas del usuario, de la más antigua a la más reciente', async () => {
+    await svc.iniciarJornada(10, {});
+    expect(mockJornada.findAll).toHaveBeenCalledWith({
+      where: { jor_usr_id: 10, jor_estado: 'activa' },
+      order: [['jor_inicio_at', 'ASC']]
+    });
+  });
+
+  test('con dos activas hoy devuelve la primera', async () => {
+    const a = jornada({ jor_id: 'a', jor_fecha: new Date('2026-11-25T05:00:00Z') });
+    const b = jornada({ jor_id: 'b', jor_fecha: new Date('2026-11-25T05:00:00Z') });
+    mockJornada.findAll.mockResolvedValue([a, b]);
+    expect(await svc.iniciarJornada(10, {})).toBe(a);
+  });
+
+  test('espera el cierre de la de ayer antes de crear', async () => {
+    const ayer = jornada();
+    mockJornada.findAll.mockResolvedValue([ayer]);
+    mockJornada.findByPk.mockResolvedValue(ayer);
+    let cerrada = false;
+    ayer.update.mockImplementation(() => (async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); cerrada = true; })());
+    mockJornada.create.mockImplementation(async (v) => { expect(cerrada).toBe(true); return { ...v }; });
+    await svc.iniciarJornada(10, {});
+    expect(mockJornada.create).toHaveBeenCalled();
+  });
+
+  test('si el cierre de la de ayer falla, igual crea la de hoy y lo registra', async () => {
+    const ayer = jornada();
+    mockJornada.findAll.mockResolvedValue([ayer]);
+    mockJornada.findByPk.mockResolvedValue(ayer);
+    ayer.update.mockRejectedValue(new Error('boom'));
+    await svc.iniciarJornada(10, {});
+    expect(mockJornada.create).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalled();
+  });
+
+  test('si otra petición ya cerró la de ayer (YA_FINALIZADA), sigue sin registrar error', async () => {
+    const ayer = jornada();
+    mockJornada.findAll.mockResolvedValue([ayer]);
+    mockJornada.findByPk.mockResolvedValue({ ...ayer, jor_estado: 'auto_cerrada' });
+    await svc.iniciarJornada(10, {});
+    expect(mockJornada.create).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   test('con ausencia hoy: AUSENTE, sin crear ni cerrar', async () => {
@@ -149,6 +198,30 @@ describe('batchPuntos: dueño', () => {
     expect(mockPunto.bulkCreate).not.toHaveBeenCalled();
   });
 
+  test('el dueño se comprueba antes que el estado', async () => {
+    mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 99, jor_estado: 'finalizada' }));
+    await expect(svc.batchPuntos('j1', [], 10)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  test('jornada cerrada del dueño: JORNADA_CERRADA', async () => {
+    mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 10, jor_estado: 'finalizada' }));
+    await expect(svc.batchPuntos('j1', [], 10)).rejects.toMatchObject({ code: 'JORNADA_CERRADA' });
+  });
+
+  test('descarta los puntos de otro día (Colombia) y guarda los del día de la jornada', async () => {
+    const ts = new Date(2026, 10, 25, 9, 0, 0);       // 9 a. m. locales: dentro del horario
+    const dia = svc.__diaDe(ts);
+    mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 10, jor_fecha: dia, jor_estado: 'activa' }));
+    const bien = await svc.batchPuntos('j1', [{ ts, lat: 4.6, lng: -74.1 }], 10);
+    expect(bien).toMatchObject({ aceptados: 1 });
+    expect(bien.motivos.otro_dia).toBe(0);
+
+    mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 10, jor_fecha: '2026-01-01', jor_estado: 'activa' }));
+    const mal = await svc.batchPuntos('j1', [{ ts, lat: 4.6, lng: -74.1 }], 10);
+    expect(mal).toMatchObject({ aceptados: 0, descartados: 1 });
+    expect(mal.motivos.otro_dia).toBe(1);
+  });
+
   test('el dueño pasa (también con id como texto)', async () => {
     mockJornada.findByPk.mockResolvedValue(jornada({ jor_usr_id: 10 }));
     mockPunto.findOne.mockResolvedValue(null);
@@ -169,5 +242,15 @@ describe('obtenerJornada', () => {
     mockJornada.findByPk.mockResolvedValue(j);
     expect(await svc.obtenerJornada('j1')).toBe(j);
     expect(mockJornada.findByPk).toHaveBeenCalledWith('j1');
+  });
+});
+
+describe('cerrarJornadasAbiertas (job)', () => {
+  test('cierra con marcarAuto', async () => {
+    const j = jornada();
+    mockJornada.findAll.mockResolvedValue([j]);
+    mockJornada.findByPk.mockResolvedValue(j);
+    expect(await svc.cerrarJornadasAbiertas()).toBe(1);
+    expect(j.update).toHaveBeenCalledWith(expect.objectContaining({ jor_estado: 'auto_cerrada' }));
   });
 });

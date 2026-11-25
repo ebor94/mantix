@@ -13,8 +13,9 @@ const crypto = require('crypto');
 const {
   sequelize, SvJornada, SvJornadaAusencia, SvTrackingPunto, SvUsuario, SvGestion, SvProspecto, SvPersona
 } = require('../models');
-const { aISO, hoyISO, hoyBogotaISO, rangoDia } = require('../utils/fechas');
+const { aISO, hoyISO, hoyBogotaISO, diaBogotaISO, rangoDia } = require('../utils/fechas');
 const { sumaDistancias } = require('../utils/haversine');
+const logger = require('../../utils/logger');
 
 const RETENCION_DIAS = 90;
 const ACCURACY_MAX_M = 100;  // descarta puntos con accuracy peor que 100m
@@ -58,6 +59,15 @@ function finAutomatico(j) {
   return new Date(Math.min(Date.now(), Math.max(inicio, seis)));
 }
 
+/** Cierra otra jornada sin tumbar la acción en curso: YA_FINALIZADA se ignora y lo demás se registra. */
+async function cerrarSinFallar(jornadaId, opts) {
+  try {
+    await finalizarJornada(jornadaId, opts);
+  } catch (e) {
+    if (e.code !== 'YA_FINALIZADA') logger.error(`No se pudo cerrar la jornada ${jornadaId}: ${e.message}`);
+  }
+}
+
 /**
  * Inicia la jornada de hoy. Idempotente: si ya hay una activa de hoy la devuelve;
  * las abiertas de días anteriores se cierran. Con ausencia hoy no deja iniciar.
@@ -72,11 +82,14 @@ async function iniciarJornada(usrId, { lat = null, lng = null, dispositivo = nul
   }
 
   // Una por día: la de hoy se devuelve (idempotente) y las que quedaron abiertas de otros días se cierran.
-  const abiertas = await SvJornada.findAll({ where: { jor_usr_id: usrId, jor_estado: 'activa' } });
+  const abiertas = await SvJornada.findAll({
+    where: { jor_usr_id: usrId, jor_estado: 'activa' },
+    order: [['jor_inicio_at', 'ASC']]
+  });
   let deHoy = null;
   for (const j of abiertas) {
-    if (aISO(j.jor_fecha) === hoy) deHoy = j;
-    else await finalizarJornada(j.jor_id, { marcarAuto: true });
+    if (aISO(j.jor_fecha) === hoy) deHoy = deHoy || j;
+    else await cerrarSinFallar(j.jor_id, { marcarAuto: true });
   }
   if (deHoy) return deHoy;
 
@@ -165,7 +178,7 @@ async function batchPuntos(jornadaId, puntos = [], usrId = null) {
     raw: true
   });
 
-  const motivos = { off_hours: 0, baja_precision: 0, delta_pequeno: 0, malformados: 0 };
+  const motivos = { off_hours: 0, otro_dia: 0, baja_precision: 0, delta_pequeno: 0, malformados: 0 };
   const aceptados = [];
   let ultLat = ultimo ? parseFloat(ultimo.tp_lat) : null;
   let ultLng = ultimo ? parseFloat(ultimo.tp_lng) : null;
@@ -176,6 +189,8 @@ async function batchPuntos(jornadaId, puntos = [], usrId = null) {
     if (!p?.lat || !p?.lng || !p?.ts) { motivos.malformados++; continue; }
     if (p.accuracy != null && p.accuracy > ACCURACY_MAX_M) { motivos.baja_precision++; continue; }
     if (!dentroDeHorario(p.ts, horario))                   { motivos.off_hours++;     continue; }
+    // Un punto solo cuenta en la jornada de su propio día (Colombia).
+    if (diaBogotaISO(p.ts) !== aISO(j.jor_fecha))          { motivos.otro_dia++;      continue; }
     // delta mínimo (solo a partir del segundo punto)
     if (ultLat != null) {
       const km = haversine({ lat: ultLat, lng: ultLng }, { lat: p.lat, lng: p.lng });
@@ -425,5 +440,5 @@ module.exports = {
   aceptarConsentimiento, exportarMisDatos,
   cerrarJornadasAbiertas, purgarAntiguos,
   // exportados para tests / job
-  dentroDeHorario, RETENCION_DIAS
+  cerrarSinFallar, dentroDeHorario, RETENCION_DIAS
 };

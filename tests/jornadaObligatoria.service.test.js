@@ -7,7 +7,7 @@ jest.mock('../src/sv/models', () => ({
   SvJornadaAusencia: mockAusencia
 }));
 
-jest.mock('../src/sv/services/tracking.service', () => ({ finalizarJornada: mockFinalizar }));
+jest.mock('../src/sv/services/tracking.service', () => ({ cerrarSinFallar: mockFinalizar }));
 
 jest.mock('../src/sv/utils/fechas', () => ({
   hoyBogotaISO: () => '2026-09-14'
@@ -69,8 +69,22 @@ describe('estadoHoy', () => {
     await svc.estadoHoy(asesor);
     expect(mockJornada.findOne).toHaveBeenCalledWith({
       where: { jor_usr_id: 10, jor_fecha: '2026-09-14' },
-      order: [['jor_inicio_at', 'DESC']]
+      order: [[expect.anything(), 'DESC'], ['jor_inicio_at', 'DESC']]
     });
+  });
+
+  test('prefiere la jornada activa (el orden empieza por jor_estado = activa)', async () => {
+    await svc.estadoHoy(asesor);
+    const order = mockJornada.findOne.mock.calls[0][0].order;
+    expect(order[0][0].val).toBe("jor_estado = 'activa'");
+  });
+
+  test('la ausencia manda sobre la jornada', async () => {
+    mockJornada.findOne.mockResolvedValue({ jor_id: 'x', jor_estado: 'activa' });
+    mockAusencia.findOne.mockResolvedValue({ aus_id: 1 });
+    const r = await svc.estadoHoy(asesor);
+    expect(r.estado).toBe('ausente');
+    expect(r.requiere_popup).toBe(false);
   });
 
   test('asesor con jornada activa → activa + requiere_popup=false', async () => {
@@ -130,6 +144,15 @@ describe('registrarAusencia', () => {
     expect(mockFinalizar).toHaveBeenCalledTimes(2);
     expect(mockFinalizar).toHaveBeenCalledWith('a');
     expect(mockFinalizar.mock.calls[0][1]).toBeUndefined();
+  });
+
+  test('espera los cierres antes de responder', async () => {
+    mockAusencia.create.mockResolvedValue({ aus_id: 42 });
+    mockJornada.findAll.mockResolvedValue([{ jor_id: 'a' }]);
+    let cerrado = false;
+    mockFinalizar.mockImplementation(() => (async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); cerrado = true; })());
+    await svc.registrarAusencia(10, { tipo: 'PERMISO', motivo: 'Cita médica' });
+    expect(cerrado).toBe(true);
   });
 
   test('sin jornada: no cierra nada', async () => {

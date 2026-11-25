@@ -8,9 +8,10 @@
  *  - Roles NO operativos: SUPER_ADMIN, GERENTE_GENERAL, DIRECTOR_COMERCIAL.
  *  - Un usuario sólo puede tener 1 ausencia por día (unique key).
  */
+const { literal } = require('sequelize');
 const { SvJornada, SvJornadaAusencia } = require('../models');
 const { hoyBogotaISO } = require('../utils/fechas');
-const { finalizarJornada } = require('./tracking.service');
+const { cerrarSinFallar } = require('./tracking.service');
 
 const ROLES_NO_OPERATIVOS = new Set([
   'SUPER_ADMIN',
@@ -26,7 +27,7 @@ function esOperativo(usuario) {
 async function estadoHoy(usuario) {
   const fecha = hoyBogotaISO();
   const [jornada, ausencia] = await Promise.all([
-    SvJornada.findOne({ where: { jor_usr_id: usuario.usr_id, jor_fecha: fecha }, order: [['jor_inicio_at', 'DESC']] }),
+    SvJornada.findOne({ where: { jor_usr_id: usuario.usr_id, jor_fecha: fecha }, order: [[literal("jor_estado = 'activa'"), 'DESC'], ['jor_inicio_at', 'DESC']] }),
     SvJornadaAusencia.findOne({ where: { aus_usr_id: usuario.usr_id, aus_fecha: fecha } })
   ]);
 
@@ -62,7 +63,7 @@ async function registrarAusencia(usuarioId, { tipo, motivo }) {
   const activas = await SvJornada.findAll({
     where: { jor_usr_id: usuarioId, jor_fecha: fecha, jor_estado: 'activa' }
   });
-  for (const j of activas) await finalizarJornada(j.jor_id);
+  for (const j of activas) await cerrarSinFallar(j.jor_id);
   return ausencia;
 }
 
