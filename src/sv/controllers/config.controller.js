@@ -53,7 +53,14 @@ function updateFactory(Model, pkName) {
     const id = parseInt(req.params.id);
     const item = await Model.findByPk(id);
     if (!item) return fail(res, 404, ERROR_CODES.NOT_FOUND, 'Recurso no encontrado');
-    await item.update(req.body);
+    try {
+      await item.update(req.body);
+    } catch (e) {
+      if (e.name === 'SequelizeUniqueConstraintError') {
+        return fail(res, 409, ERROR_CODES.VALIDATION_ERROR, 'Código duplicado');
+      }
+      throw e;
+    }
     return ok(res, item);
   };
 }
