@@ -25,6 +25,9 @@
 //  6. El «hoy» es el de Bogotá y no el de UTC. A las 9 de la noche en Cúcuta
 //     ya es el día siguiente en UTC: el cron de medianoche generaría el día
 //     equivocado.
+//  7. La tarea COPIA el nombre de la actividad. Si el informe lo leyera del
+//     catálogo, renombrar una actividad renombraría su histórico de
+//     cumplimiento, incluidas las NO_HECHA de meses ya cerrados.
 
 jest.mock('../../config/db', () => ({ query: jest.fn(), getConnection: jest.fn() }))
 
@@ -66,8 +69,12 @@ function baseFalsa({
 } = {}) {
   const estado = {
     labs,
+    // `actividad_nombre` es el nombre VIGENTE en el catálogo, que la consulta
+    // de reglas trae con JOIN y la tarea copia. El default por id es para que
+    // las pruebas que no hablan del nombre no tengan que declararlo.
     reglas: reglas.map(r => ({
-      laboratorio_id: LAB, activo: 1, cada_dias: null, dia_semana: null, ...r,
+      laboratorio_id: LAB, activo: 1, cada_dias: null, dia_semana: null,
+      actividad_nombre: `Actividad ${r.id}`, ...r,
     })),
     tareas: tareas.map(t => ({ laboratorio_id: LAB, estado: 'PENDIENTE', ...t })),
     registros: registros.map(g => ({ laboratorio_id: LAB, ...g })),
@@ -86,11 +93,17 @@ function baseFalsa({
     if (/^INSERT IGNORE INTO h360_lab_tarea/i.test(plano)) {
       const filas = params[0] || []
       let creadas = 0
-      for (const [lab, reglaId, fecha] of filas) {
+      for (const [lab, reglaId, fecha, actividadNombre] of filas) {
         const duplicada = estado.tareas.some(
           t => t.laboratorio_id === lab && t.regla_id === reglaId && t.fecha === fecha)
         if (duplicada) continue          // uk_lab_tarea: IGNORE la descarta
-        estado.tareas.push({ laboratorio_id: lab, regla_id: reglaId, fecha, estado: 'PENDIENTE' })
+        // `actividad_nombre` es NOT NULL en la tabla: si la fila llega sin
+        // nombre, MySQL aborta el INSERT entero y el día no se genera. Acá se
+        // guarda tal como viene para que la afirmación lo pueda ver.
+        estado.tareas.push({
+          laboratorio_id: lab, regla_id: reglaId, fecha,
+          actividad_nombre: actividadNombre, estado: 'PENDIENTE',
+        })
         creadas++
       }
       return [{ affectedRows: creadas }]
@@ -128,6 +141,7 @@ function baseFalsa({
           return {
             regla_id: r.id, frecuencia: r.frecuencia,
             dia_semana: r.dia_semana, cada_dias: r.cada_dias,
+            actividad_nombre: r.actividad_nombre,
             dias_desde_ejecucion: ejec   ? datediff(fecha, ejec)   : null,
             dias_desde_cierre:    cierre ? datediff(fecha, cierre) : null,
           }
@@ -210,6 +224,59 @@ describe('generarDia es idempotente', () => {
 
     expect(r).toEqual({ creadas: 0, ya_existian: 0, arrastradas: 0 })
     expect(inserts()).toHaveLength(0)
+  })
+})
+
+// ── La tarea COPIA el nombre de la actividad ────────────────────────────────
+//
+// `h360_lab_tarea.actividad_nombre` existe por la misma razón que
+// `h360_lab_registro.actividad_nombre`: el informe de cumplimiento agrupa por
+// el nombre, y si lo leyera del catálogo, renombrar una actividad en abril
+// renombraría las NO_HECHA de marzo. El pasado no se reescribe.
+//
+// La columna es NOT NULL: una fila sin nombre no aborta solo esa actividad,
+// aborta el INSERT del día completo —es un solo INSERT con todas las filas— y
+// el laboratorio amanece sin tablero.
+describe('generarDia copia el nombre de la actividad en la tarea', () => {
+  test('el INSERT lleva la columna y el nombre vigente del catálogo', async () => {
+    const bd = baseFalsa({ reglas: [
+      { id: 10, frecuencia: 'DIARIA', actividad_nombre: 'Instrumental' },
+      { id: 11, frecuencia: 'DIARIA', actividad_nombre: 'Camillas' },
+    ] })
+
+    await svc.generarDia(LAB, MIE)
+
+    const [sql, params] = inserts()[0]
+    expect(String(sql)).toMatch(/\(laboratorio_id, ?regla_id, ?fecha, ?actividad_nombre\)/i)
+    expect(params[0]).toEqual([
+      [LAB, 10, MIE, 'Instrumental'],
+      [LAB, 11, MIE, 'Camillas'],
+    ])
+    expect(bd.tareas.map(t => t.actividad_nombre)).toEqual(['Instrumental', 'Camillas'])
+  })
+
+  test('el nombre sale del catálogo en la consulta de reglas, no de JavaScript', async () => {
+    const bd = baseFalsa({ reglas: [{ id: 10, frecuencia: 'DIARIA' }] })
+
+    await svc.generarDia(LAB, MIE)
+
+    const consulta = bd.sql.find(s => /dias_desde_ejecucion/.test(s))
+    expect(consulta).toMatch(/JOIN h360_lab_actividad a ON a\.id = r\.actividad_id/i)
+    expect(consulta).toMatch(/a\.nombre\s+AS actividad_nombre/i)
+  })
+
+  test('ninguna de las 14 filas del día nace sin nombre (la columna es NOT NULL)', async () => {
+    const bd = baseFalsa({
+      reglas: Array.from({ length: 14 }, (_, i) => ({ id: 100 + i, frecuencia: 'DIARIA' })),
+    })
+
+    await svc.generarDia(LAB, MIE)
+
+    expect(bd.tareas).toHaveLength(14)
+    for (const t of bd.tareas) {
+      expect(typeof t.actividad_nombre).toBe('string')
+      expect(t.actividad_nombre.length).toBeGreaterThan(0)
+    }
   })
 })
 
@@ -440,8 +507,14 @@ describe('generarDia valida lo que recibe', () => {
 
     await svc.generarDia(LAB, MIE)
 
+    // La afirmación es sobre la FECHA —tercer elemento de la fila—, no sobre el
+    // ancho de la tupla: que viaje como el mismo texto que entró y no como un
+    // instante, que correría el día. Las columnas las cubre la prueba del
+    // nombre copiado.
     const [, params] = inserts()[0]
-    expect(params[0]).toEqual([[LAB, 10, MIE]])
+    const [fila] = params[0]
+    expect(fila[2]).toBe(MIE)
+    expect(typeof fila[2]).toBe('string')
   })
 })
 

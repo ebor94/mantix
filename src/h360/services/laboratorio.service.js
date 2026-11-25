@@ -45,6 +45,15 @@
  *   Su camino propio es `cadaNDiasExigible()`, que mira lo que trae la
  *   consulta.
  *
+ * ── La copia del nombre ───────────────────────────────────────────────────
+ * Cada tarea guarda `actividad_nombre`, copiado del catálogo el día en que se
+ * generó, igual que `h360_lab_registro` copia la regla vigente. El informe de
+ * cumplimiento agrupa por esa copia: sin ella tendría que leer `a.nombre` del
+ * catálogo y renombrar una actividad en abril renombraría su histórico de
+ * marzo, incluidas las NO_HECHA de meses ya cerrados. El tablero sí usa el
+ * nombre vigente del catálogo, y eso es correcto: muestra lo que hay que hacer
+ * HOY, no lo que decía el papel de marzo.
+ *
  * ── Fechas ────────────────────────────────────────────────────────────────
  * El pool NO tiene `dateStrings`: un DATE vuelve como objeto y Express lo
  * serializa en UTC, que en Colombia corre el día hacia atrás. Por eso toda
@@ -103,12 +112,21 @@ function enteroPositivo(valor) {
  * quincenal OMITIDA no deja registro de ejecución, así que midiendo solo por
  * ejecución volvería a ser exigible al día siguiente de omitirla, y al
  * siguiente, y al siguiente.
+ *
+ * `actividad_nombre` es el nombre VIGENTE del catálogo, y es lo único que este
+ * JOIN trae: la tarea lo COPIA al crearse para que el informe no tenga que
+ * volver al catálogo. El JOIN es INNER y no puede encoger el resultado —
+ * `r.actividad_id` es NOT NULL con FK ON DELETE CASCADE, así que una regla sin
+ * actividad no existe—, y por eso tampoco hace falta un COALESCE: si algún día
+ * faltara, es mejor que el INSERT falle que que entre un nombre vacío al
+ * histórico.
  */
 const SQL_REGLAS_DEL_DIA = `
   SELECT r.id         AS regla_id,
          r.frecuencia AS frecuencia,
          r.dia_semana AS dia_semana,
          r.cada_dias  AS cada_dias,
+         a.nombre     AS actividad_nombre,
          DATEDIFF(?, (SELECT MAX(g.fecha_ejecucion)
                         FROM h360_lab_registro g
                        WHERE g.regla_id       = r.id
@@ -119,6 +137,7 @@ const SQL_REGLAS_DEL_DIA = `
                          AND t.laboratorio_id = r.laboratorio_id
                          AND t.estado <> 'PENDIENTE'))             AS dias_desde_cierre
     FROM h360_lab_regla r
+    JOIN h360_lab_actividad a ON a.id = r.actividad_id
    WHERE r.laboratorio_id = ?
      AND r.activo = 1
      AND r.frecuencia IN ('DIARIA','SEMANAL','CADA_N_DIAS')
@@ -143,13 +162,22 @@ const SQL_TAREAS_ABIERTAS = `
  * `estado` no va en la lista de columnas: su DEFAULT es 'PENDIENTE' y dejarlo
  * al esquema evita que un cambio de default se tenga que replicar acá.
  *
+ * `actividad_nombre` SÍ va: la tarea copia el nombre que regía el día en que se
+ * generó. Si el informe lo leyera del catálogo, renombrar una actividad
+ * renombraría su histórico de cumplimiento, incluidas las NO_HECHA de meses ya
+ * cerrados. Es la misma copia que hace `h360_lab_registro`.
+ *
  * IGNORE y no ON DUPLICATE KEY UPDATE por dos razones: el único conflicto
  * posible es `uk_lab_tarea` (los regla_id salen de la consulta de arriba, así
  * que la FK no puede fallar), y un UPDATE que no cambia nada igual tocaría
  * `updated_at` de las filas que ya estaban, borrando cuándo se abrió cada una.
+ * Con la copia del nombre eso importa más todavía: un UPDATE pisaría el nombre
+ * que la tarea ya había guardado con el del catálogo de hoy, que es justo lo
+ * que esta columna existe para evitar.
  */
 const SQL_ALTA_TAREAS = `
-  INSERT IGNORE INTO h360_lab_tarea (laboratorio_id, regla_id, fecha) VALUES ?`
+  INSERT IGNORE INTO h360_lab_tarea
+    (laboratorio_id, regla_id, fecha, actividad_nombre) VALUES ?`
 
 /**
  * El cierre de las diarias vencidas.
@@ -282,7 +310,12 @@ async function generarDia(laboratorioId, fecha) {
 
   // Un solo INSERT para las 14 o 16 filas del día: a medianoche esto corre por
   // cada laboratorio y no hace falta una ida y vuelta por actividad.
-  const filas = porCrear.map(r => [lab, r.regla_id, dia])
+  //
+  // El nombre va tal como vino del catálogo, sin `?? ''` ni recorte: la columna
+  // es VARCHAR(120) igual que `h360_lab_actividad.nombre`, así que no hay nada
+  // que truncar, y un nombre vacío en el histórico es peor que un INSERT que
+  // falla y se ve en el log del cron.
+  const filas = porCrear.map(r => [lab, r.regla_id, dia, r.actividad_nombre])
   const [res] = await db.query(SQL_ALTA_TAREAS, [filas])
   const creadas = Number(res?.affectedRows || 0)
 

@@ -22,6 +22,10 @@
 //  6. Que la paginación del historial tenga tope: es lo que el frontend recorre
 //     para armar el Excel, y sin tope una exportación de un año se trae la
 //     tabla entera en una sola respuesta.
+//  7. Que el detalle por actividad agrupe por el nombre COPIADO en la tarea y
+//     no por el del catálogo. Leyéndolo del catálogo, renombrar una actividad
+//     renombra su histórico de cumplimiento, incluidas las NO_HECHA de meses
+//     ya cerrados.
 
 jest.mock('../../config/db', () => ({ query: jest.fn(), getConnection: jest.fn() }))
 
@@ -72,8 +76,17 @@ const PRIMERO    = '2026-11-01'
  * por el GROUP BY y por los alias, no por el nombre de la tabla: las dos
  * consultas de `cumplimiento` agrupan `h360_lab_tarea` y enrutar por tabla las
  * confundiría. `pasos` guarda el orden real de todo lo que pasó.
+ *
+ * La de actividades es la excepción: se enruta por su cadena de JOIN —es la
+ * única que va de `h360_lab_tarea` a `h360_lab_regla`— y no por su GROUP BY,
+ * que nombra la columna del nombre y cambió al pasar a la copia que guarda la
+ * tarea. Enrutada por el GROUP BY caía en el conteo del historial, que también
+ * trae `COUNT(*) AS total`, y devolvía un total donde se esperaban filas.
  */
 const pasos = []
+
+/** La única consulta que va de la tarea a la regla: el detalle por actividad. */
+const RUTA_ACTIVIDADES = /FROM h360_lab_tarea t\s+JOIN h360_lab_regla/i
 
 function prepararPool({
   estados = [],
@@ -88,7 +101,7 @@ function prepararPool({
   db.query.mockImplementation(async (sql, params) => {
     const s = String(sql)
     if (/AS veces/i.test(s))                 { pasos.push({ paso: 'eventos',      sql: s, params }); return [eventos] }
-    if (/GROUP BY a\.nombre/i.test(s))       { pasos.push({ paso: 'actividades',  sql: s, params }); return [actividades] }
+    if (RUTA_ACTIVIDADES.test(s))            { pasos.push({ paso: 'actividades',  sql: s, params }); return [actividades] }
     if (/GROUP BY t\.estado/i.test(s))       { pasos.push({ paso: 'estados',      sql: s, params }); return [estados] }
     if (/GROUP BY t\.cerrada_por/i.test(s))  { pasos.push({ paso: 'omitidas',     sql: s, params }); return [omitidasPorPersona] }
     if (/GROUP BY g\.registrado_por/i.test(s)) { pasos.push({ paso: 'personas',   sql: s, params }); return [personas] }
@@ -289,6 +302,121 @@ describe('cumplimiento — el porcentaje', () => {
 
     expect(res.cuerpo.programadas.total).toBe(10)
     expect(res.cuerpo.programadas.porcentaje).toBe(70)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// El nombre del histórico: renombrar no reescribe el pasado
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Pool con ESTADO para el detalle por actividad: guarda las tareas con el
+ * nombre que copiaron al generarse y un catálogo que se puede renombrar
+ * después, y resuelve la consulta como la resolvería MySQL.
+ *
+ * No presupone de dónde sale el nombre: LEE DE LA CONSULTA qué expresión usa
+ * como `AS actividad` y la resuelve contra la fila de la tarea (`t.x`) o contra
+ * el catálogo vigente (`a.x`), que es justamente lo que hace el JOIN. Así la
+ * afirmación es sobre el comportamiento del informe y no sobre una expresión
+ * regular aplicada al SQL: si el informe lee el catálogo, devuelve el nombre
+ * nuevo y la prueba falla; si lee la copia, devuelve el que regía.
+ */
+function poolConCatalogo({ catalogo = {}, reglas = {}, tareas = [] } = {}) {
+  const resolver = (expresion, tarea) => {
+    const [tabla, columna] = String(expresion).split('.')
+    if (tabla === 't') return tarea[columna]
+    if (tabla === 'a') return catalogo[reglas[tarea.regla_id]]?.[columna]
+    return undefined
+  }
+
+  db.query.mockImplementation(async (sql, params) => {
+    const s = String(sql)
+
+    if (RUTA_ACTIVIDADES.test(s)) {
+      pasos.push({ paso: 'actividades', sql: s, params })
+      const exprNombre = /([a-z]\.[a-z_]+)\s+AS actividad\b/i.exec(s)?.[1]
+      const exprBloque = /([a-z]\.[a-z_]+)\s+AS bloque\b/i.exec(s)?.[1]
+      const grupos = new Map()
+      for (const t of tareas) {
+        const actividad = resolver(exprNombre, t)
+        const bloque    = resolver(exprBloque, t)
+        const clave = `${actividad}\u0000${bloque}\u0000${t.estado}`
+        const fila = grupos.get(clave)
+        if (fila) { fila.total++; continue }
+        grupos.set(clave, { actividad, bloque, estado: t.estado, total: 1 })
+      }
+      return [[...grupos.values()]]
+    }
+
+    if (/GROUP BY t\.estado/i.test(s)) {
+      pasos.push({ paso: 'estados', sql: s, params })
+      const porEstado = new Map()
+      for (const t of tareas) porEstado.set(t.estado, (porEstado.get(t.estado) || 0) + 1)
+      return [[...porEstado].map(([estado, total]) => ({ estado, total }))]
+    }
+
+    pasos.push({ paso: 'otra', sql: s, params })
+    return [[]]
+  })
+}
+
+const OCTUBRE = { desde: '2026-10-01', hasta: '2026-10-31' }
+
+describe('cumplimiento — el nombre que regía cuando se generó la tarea', () => {
+  // El caso que motivó la columna: la tarea de octubre quedó NO_HECHA cuando la
+  // actividad se llamaba «Mangueras». En noviembre alguien la renombró en el
+  // catálogo. El informe de octubre tiene que seguir diciendo «Mangueras»: es
+  // lo que decía el papel que se firmó, y un informe sanitario de un mes
+  // cerrado no se reescribe porque hoy se cambió un nombre.
+  test('renombrar la actividad NO renombra el histórico de cumplimiento', async () => {
+    poolConCatalogo({
+      catalogo: { 7: { nombre: 'Mangueras de aspiración', bloque: 'LABORATORIO' } },
+      reglas:   { 70: 7 },
+      tareas: [
+        { regla_id: 70, fecha: '2026-10-15', estado: 'NO_HECHA', actividad_nombre: 'Mangueras' },
+      ],
+    })
+
+    const { res, next } = await llamar(ctrl.cumplimiento, reqFalso({ query: OCTUBRE }))
+
+    expect(next).not.toHaveBeenCalled()
+    expect(res.cuerpo.por_actividad).toHaveLength(1)
+    expect(res.cuerpo.por_actividad[0]).toMatchObject({
+      actividad: 'Mangueras', bloque: 'LABORATORIO', total: 1, no_hechas: 1,
+    })
+  })
+
+  // Y las dos épocas no se funden: lo que pasó con el nombre viejo y lo que
+  // pasó con el nuevo son dos filas. Fundirlas escondería que hubo un cambio.
+  test('lo de antes y lo de después del cambio quedan en filas separadas', async () => {
+    poolConCatalogo({
+      catalogo: { 7: { nombre: 'Mangueras de aspiración', bloque: 'LABORATORIO' } },
+      reglas:   { 70: 7 },
+      tareas: [
+        { regla_id: 70, fecha: '2026-10-15', estado: 'NO_HECHA', actividad_nombre: 'Mangueras' },
+        { regla_id: 70, fecha: '2026-10-30', estado: 'HECHA',
+          actividad_nombre: 'Mangueras de aspiración' },
+      ],
+    })
+
+    const { res } = await llamar(ctrl.cumplimiento, reqFalso({ query: OCTUBRE }))
+
+    const filas = res.cuerpo.por_actividad.slice()
+      .sort((a, b) => String(a.actividad).localeCompare(String(b.actividad), 'es'))
+    expect(filas.map(f => f.actividad)).toEqual(['Mangueras', 'Mangueras de aspiración'])
+    expect(filas[0]).toMatchObject({ no_hechas: 1, hechas: 0 })
+    expect(filas[1]).toMatchObject({ no_hechas: 0, hechas: 1 })
+    // El total oficial sale de la tarea sola y no se parte: sigue siendo 2.
+    expect(res.cuerpo.programadas.total).toBe(2)
+  })
+
+  test('el nombre sale de la copia de la tarea, no del catálogo', async () => {
+    await llamar(ctrl.cumplimiento, reqFalso())
+
+    const sql = sqlDe('actividades')
+    expect(sql).toMatch(/t\.actividad_nombre\s+AS actividad\b/i)
+    expect(sql).toMatch(/GROUP BY t\.actividad_nombre/i)
+    expect(sql).not.toMatch(/a\.nombre\s+AS actividad\b/i)
   })
 })
 

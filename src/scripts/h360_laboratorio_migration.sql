@@ -38,6 +38,16 @@
 -- tablas en cualquier orden.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- El archivo está en UTF-8 y 11 de las 23 actividades llevan tildes. El cliente
+-- `mysql` NO siempre se conecta en utf8mb4: con el locale en C/POSIX —el caso de
+-- un contenedor y de más de un servidor— `character_set_client` resuelve a
+-- latin1 y los bytes de «Desinfección» entran con doble codificación
+-- («DesinfecciÃ³n»). Verificado en la réplica: sin esta línea, HEX(nombre)
+-- devuelve C383C2B3 donde el archivo tiene C3B3. Importa más desde que
+-- `h360_lab_tarea` COPIA el nombre: el mojibake del catálogo se puede corregir
+-- con un UPDATE, pero una vez copiado al histórico queda ahí.
+SET NAMES utf8mb4;
+
 -- ── Los laboratorios ───────────────────────────────────────────────────────
 --
 -- Multi-laboratorio desde el día uno, no como refactor futuro: con un solo
@@ -132,18 +142,31 @@ CREATE TABLE IF NOT EXISTS h360_lab_regla (
 --
 -- POR_EVENTO no genera filas acá: no tiene día. Va directo a h360_lab_registro
 -- con tarea_id NULL.
+--
+-- `actividad_nombre` es COPIA del catálogo, por la misma razón que en
+-- `h360_lab_registro`: el informe de cumplimiento agrupa por el nombre, y
+-- leyéndolo del catálogo con un JOIN, renombrar una actividad en abril
+-- renombraría su histórico de marzo, incluidas las NO_HECHA de meses ya
+-- cerrados. La tarea es un hecho fechado, no una vista del catálogo.
+--
+-- NOT NULL a propósito: el nombre sale de un JOIN contra `h360_lab_actividad`
+-- por una FK NOT NULL, así que nunca puede faltar, y una fila sin nombre no
+-- rompería una actividad sino el INSERT del día entero —se insertan todas en
+-- uno solo— dejando el laboratorio sin tablero. Mejor que falle acá que que
+-- entre un nombre vacío al informe.
 CREATE TABLE IF NOT EXISTS h360_lab_tarea (
-  id             INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  laboratorio_id INT UNSIGNED NOT NULL,
-  regla_id       INT UNSIGNED NOT NULL,
-  fecha          DATE NOT NULL COMMENT 'El día en que se esperaba',
-  estado         ENUM('PENDIENTE','HECHA','OMITIDA','NO_HECHA') NOT NULL DEFAULT 'PENDIENTE',
-  registro_id    INT UNSIGNED NULL,
-  motivo_omision VARCHAR(200) NULL,
-  cerrada_por    VARCHAR(50)  NULL,
-  cerrada_at     TIMESTAMP    NULL,
-  created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id               INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  laboratorio_id   INT UNSIGNED NOT NULL,
+  regla_id         INT UNSIGNED NOT NULL,
+  actividad_nombre VARCHAR(120) NOT NULL COMMENT 'Copia: la actividad puede renombrarse',
+  fecha            DATE NOT NULL COMMENT 'El día en que se esperaba',
+  estado           ENUM('PENDIENTE','HECHA','OMITIDA','NO_HECHA') NOT NULL DEFAULT 'PENDIENTE',
+  registro_id      INT UNSIGNED NULL,
+  motivo_omision   VARCHAR(200) NULL,
+  cerrada_por      VARCHAR(50)  NULL,
+  cerrada_at       TIMESTAMP    NULL,
+  created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_lab_tarea (laboratorio_id, regla_id, fecha),
   KEY idx_lab_tarea_dia (laboratorio_id, fecha, estado),
   KEY idx_lab_tarea_abierta (regla_id, estado),

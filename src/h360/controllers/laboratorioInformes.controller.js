@@ -172,25 +172,36 @@ const SQL_ESTADOS_CIERRE = `
 /**
  * El mismo conteo abierto por actividad.
  *
- * El nombre sale del CATÁLOGO (`a.nombre`) y no de una copia, porque
- * `h360_lab_tarea` no copia nada: no tiene columna de nombre. Consecuencia a la
- * vista: renombrar una actividad RENOMBRA su histórico en este informe. El
- * nombre inmutable de lo que de verdad se ejecutó vive en
- * `h360_lab_registro.actividad_nombre`, que es lo que devuelve `historial`.
+ * El nombre sale de `t.actividad_nombre`, que es la COPIA que la tarea guardó
+ * el día en que se generó, y NO de `a.nombre` del catálogo. Con el catálogo,
+ * renombrar una actividad renombraba su histórico en este informe: las
+ * NO_HECHA de un mes ya cerrado y firmado pasaban a nombrar una actividad que
+ * en ese mes no existía. Es la misma copia que hacen
+ * `h360_lab_registro.actividad_nombre` (lo que devuelve `historial`) y los
+ * demás campos que el registro copia de la regla.
+ *
+ * Consecuencia buscada: una actividad renombrada a mitad del período sale en
+ * DOS filas, una por cada nombre que rigió. Fundirlas escondería que hubo un
+ * cambio, y el total oficial —`SQL_ESTADOS`, sin JOIN— sigue cuadrando contra
+ * la suma de las dos.
+ *
+ * El JOIN se queda, pero solo por `a.bloque`: ese sí es el agrupador vigente
+ * con el que se lee la pantalla y la tarea no lo copia. Mover una actividad de
+ * bloque sí reagrupa el histórico; es un cambio de clasificación, no del hecho.
  */
 const SQL_ACTIVIDADES = `
-  SELECT a.nombre AS actividad,
-         a.bloque AS bloque,
-         t.estado AS estado,
-         COUNT(*) AS total
+  SELECT t.actividad_nombre AS actividad,
+         a.bloque           AS bloque,
+         t.estado           AS estado,
+         COUNT(*)           AS total
     FROM h360_lab_tarea t
     JOIN h360_lab_regla r     ON r.id = t.regla_id
     JOIN h360_lab_actividad a ON a.id = r.actividad_id
    WHERE t.fecha BETWEEN ? AND ?`
 
 const SQL_ACTIVIDADES_CIERRE = `
-   GROUP BY a.nombre, a.bloque, t.estado
-   ORDER BY ${ordenBloque('a.bloque')}, a.nombre`
+   GROUP BY t.actividad_nombre, a.bloque, t.estado
+   ORDER BY ${ordenBloque('a.bloque')}, t.actividad_nombre`
 
 /**
  * Las POR_EVENTO ejecutadas en el período, CONTADAS, nunca con porcentaje.
