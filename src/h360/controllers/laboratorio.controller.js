@@ -508,8 +508,14 @@ async function actualizarRegla(req, res, next) {
  *
  * `fecha_esperada` es `DATE_FORMAT(t.fecha, ...)`: la columna se llama `fecha`,
  * y sin el formateo saldría como objeto y Express la serializaría en UTC.
- * `dias_atraso` no existe como columna: es el DATEDIFF contra el «hoy» de
- * Bogotá.
+ * `dias_atraso` no existe como columna: es el DATEDIFF contra LA FECHA
+ * CONSULTADA, no contra hoy. El tablero describe el día que se está mirando: si
+ * midiera contra hoy, una tarea del 20 que se hizo a tiempo ese día aparecería
+ * con cinco días de atraso al consultarla el 25, y el tablero del 20 diría que
+ * el laboratorio estaba atrasado cuando estaba al día. El atraso REAL de lo ya
+ * ejecutado vive en `h360_lab_registro.dias_atraso`, se calcula contra la fecha
+ * esperada al registrar y no se recalcula nunca. En el caso por defecto —la
+ * fecha consultada es hoy— los dos valores coinciden.
  *
  * Usa `idx_lab_tarea_dia (laboratorio_id, fecha, estado)`.
  */
@@ -622,7 +628,9 @@ async function tablero(req, res, next) {
     await cerrarDiariasVencidas(hoy)
     await generarDia(laboratorio.id, hoy)
 
-    const [tareas] = await db.query(SQL_TAREAS_DEL_DIA, [hoy, laboratorio.id, fecha, fecha])
+    // El primer parámetro es el del DATEDIFF: la FECHA CONSULTADA, no `hoy`.
+    // Mirar el tablero del 20 tiene que contar el atraso que había el 20.
+    const [tareas] = await db.query(SQL_TAREAS_DEL_DIA, [fecha, laboratorio.id, fecha, fecha])
     const [eventos] = await db.query(SQL_POR_EVENTO, [fecha, laboratorio.id])
 
     res.json({

@@ -206,11 +206,27 @@ describe('tablero — las fechas', () => {
     expect(sql).not.toMatch(/SELECT[\s\S]*?\bt\.fecha\s+AS/i)
   })
 
-  test('el atraso se mide contra el «hoy» de Bogotá', async () => {
+  // En el caso por defecto la fecha consultada ES hoy, así que el parámetro del
+  // DATEDIFF es el mismo. La prueba sigue acá para fijar que lo recibe.
+  test('por defecto el atraso se mide contra hoy, que es el día consultado', async () => {
     await llamar(ctrl.tablero, reqFalso())
 
     const consulta = pasos.find(p => p.paso === 'tareas')
     expect(consulta.params[0]).toBe(HOY)
+  })
+
+  // El atraso del TABLERO describe el día que se está mirando, no el de hoy. Si
+  // se midiera contra hoy, una tarea del 20 que se hizo a tiempo ese día
+  // aparecería con `dias_atraso: 5` al consultarla el 25, y el tablero del 20
+  // diría que el laboratorio estaba cinco días atrasado cuando estaba al día.
+  // El atraso REAL de lo ya ejecutado vive en `h360_lab_registro.dias_atraso`,
+  // que se calcula contra la fecha esperada y no se recalcula nunca.
+  test('el atraso se mide contra la fecha consultada y no contra hoy', async () => {
+    await llamar(ctrl.tablero, reqFalso({ query: { fecha: '2026-11-20' } }))
+
+    const consulta = pasos.find(p => p.paso === 'tareas')
+    expect(consulta.params[0]).toBe('2026-11-20')
+    expect(consulta.params).not.toContain(HOY)
   })
 
   test('una fecha que no existe se rechaza con 400 y no dispara nada', async () => {
