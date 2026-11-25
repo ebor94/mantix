@@ -8,9 +8,12 @@
  * Los errores llevan `code` y los responde svErrorHandler.
  */
 const { Op, QueryTypes, fn, col } = require('sequelize');
-const { sequelize, SvUsuario, SvPresupuesto, SvProducto } = require('../models');
+const { sequelize, SvUsuario, SvPresupuesto, SvProducto, SvArea } = require('../models');
 const { ROLES } = require('../config/constants');
 const { areaIdsAccesibles, grupoIdsAccesibles } = require('../utils/acceso');
+const { adUsuariosPorIdentidad } = require('./usuariosAd.service');
+const excel = require('./presupuestosExcel.service');
+const { MAX_FILAS, VALOR_MAXIMO } = require('../validations/presupuestos.validation');
 
 const GRUPO_PAP_ID = 3;
 const ROLES_POR_GRUPO = [ROLES.SUPERVISOR, ROLES.COORDINADOR_PREVISION];
@@ -91,7 +94,7 @@ async function realizadoDelMes(areaId, anio, mes) {
 
 function buscarUsuarios(where) {
   return SvUsuario.findAll({
-    attributes: ['usr_id', 'usr_nombre', 'usr_apellido', 'usr_grupo_id', 'usr_activo'],
+    attributes: ['usr_id', 'usr_nombre', 'usr_apellido', 'usr_grupo_id', 'usr_activo', 'usr_id_identidad'],
     where,
     include: [
       { association: 'rol', attributes: [] },
@@ -184,4 +187,122 @@ async function consultar({ user, areaId, anio, mes }) {
   };
 }
 
-module.exports = { alcance, puedeCargar, categoriasDe, asesoresCargables, valoresDelMes, consultar };
+// ─── Carga: plantilla, revisión y guardado ───
+
+function exigirCarga(user, areaId) {
+  if (!puedeCargar(user, areaId)) throw error('FORBIDDEN', 'No puedes cargar el presupuesto de esta área');
+}
+
+// Categorías del área y asesores a quienes puede cargar quien pide.
+async function contextoDeCarga(user, areaId) {
+  exigirCarga(user, areaId);
+  const categorias = await categoriasDe(areaId);
+  if (!categorias.length) throw error('VALIDATION_ERROR', 'Esta área no maneja presupuesto por categorías');
+  return { categorias, asesores: await asesoresCargables(user, areaId) };
+}
+
+const porGrupoYNombre = (a, b) => {
+  const g = (a.grupo?.grupo_nombre ?? '\uffff').localeCompare(b.grupo?.grupo_nombre ?? '\uffff', 'es');
+  return g || nombreDe(a).localeCompare(nombreDe(b), 'es');
+};
+
+/** Libro del mes: con lo cargado o, si no hay nada, con lo del mes anterior. */
+async function plantilla({ user, areaId, anio, mes }) {
+  const { categorias, asesores } = await contextoDeCarga(user, areaId);
+  const ids = asesores.map((a) => a.usr_id);
+  let valores = await valoresDelMes(areaId, anio, mes, ids);
+  if (!valores.size) {
+    const [anioPrevio, mesPrevio] = mes === 1 ? [anio - 1, 12] : [anio, mes - 1];
+    valores = await valoresDelMes(areaId, anioPrevio, mesPrevio, ids);
+  }
+  const area = await SvArea.findByPk(areaId, { attributes: ['area_nombre'] });
+  const areaNombre = area?.area_nombre || 'area';
+  const redes = await adUsuariosPorIdentidad(asesores.map((a) => a.usr_id_identidad));
+
+  const filas = [...asesores].sort(porGrupoYNombre).map((a) => ({
+    usr_id: a.usr_id,
+    usuario_red: redes.get(a.usr_id_identidad) || '',
+    nombre: nombreDe(a),
+    valores: Object.fromEntries(categorias.map((c) => [c, valores.get(llave(a.usr_id, c)) || 0]))
+  }));
+  const buffer = await excel.escribir({
+    titulo: `Presupuesto ${areaNombre} — ${excel.nombreMes(mes)} ${anio}`, areaId, anio, mes, categorias, filas
+  });
+  return { buffer, nombre: excel.nombreArchivo({ areaNombre, anio, mes }) };
+}
+
+/** Lee el archivo y dice qué cambiaría. No guarda nada. */
+async function revisar({ user, areaId, anio, mes, buffer }) {
+  const { categorias, asesores } = await contextoDeCarga(user, areaId);
+  let leido;
+  try {
+    leido = await excel.leer(buffer, {
+      areaId, anio, mes, categorias,
+      asesores: asesores.map((a) => ({ usr_id: a.usr_id, nombre: nombreDe(a) }))
+    });
+  } catch (e) {
+    // Un error del libro entero se informa como los demás: sin fila ni columna.
+    if (e.code !== 'VALIDATION_ERROR') throw e;
+    return { filas: [], cambios: [], errores: [{ fila: null, columna: null, mensaje: e.message }] };
+  }
+  const { filas, errores } = leido;
+  if (errores.length) return { filas: [], cambios: [], errores };
+
+  const guardado = await valoresDelMes(areaId, anio, mes, filas.map((f) => f.usr_id));
+  const cambios = [];
+  for (const f of filas) {
+    for (const categoria of categorias) {
+      const antes = guardado.get(llave(f.usr_id, categoria)) || 0;
+      const despues = f.valores[categoria];
+      if (antes !== despues) cambios.push({ usr_id: f.usr_id, nombre: f.nombre, categoria, antes, despues });
+    }
+  }
+  return { filas, cambios, errores };
+}
+
+const enteroValido = (v) => Number.isInteger(v) && v >= 0 && v <= VALOR_MAXIMO;
+
+/** Guarda en una sola transacción. Valida de nuevo: no se fía de lo que dijo revisar. */
+async function guardar({ user, areaId, anio, mes, filas }) {
+  const { categorias, asesores } = await contextoDeCarga(user, areaId);
+  if (!Array.isArray(filas) || !filas.length) throw error('VALIDATION_ERROR', 'No hay valores para guardar');
+  if (filas.length > MAX_FILAS) throw error('VALIDATION_ERROR', `Son demasiadas filas (máximo ${MAX_FILAS})`);
+  const permitidos = new Set(asesores.map((a) => Number(a.usr_id)));
+
+  const vistos = new Set();
+  const registros = [];
+  const ahora = new Date();
+  for (const f of filas) {
+    const usrId = Number(f?.usr_id);
+    if (!permitidos.has(usrId)) throw error('FORBIDDEN', 'Hay asesores fuera de tu alcance o que ya no están activos');
+    if (vistos.has(usrId)) throw error('VALIDATION_ERROR', 'Un asesor está repetido');
+    vistos.add(usrId);
+    const entradas = Object.entries(f.valores || {});
+    if (!entradas.length) throw error('VALIDATION_ERROR', 'Una fila no trae valores');
+    for (const [categoria, valor] of entradas) {
+      if (!categorias.includes(categoria)) throw error('VALIDATION_ERROR', 'Hay una categoría que no es del catálogo');
+      if (!enteroValido(valor)) throw error('VALIDATION_ERROR', `Los valores son enteros de 0 a ${VALOR_MAXIMO.toLocaleString('es-CO')}`);
+      registros.push({
+        pre_usr_id: usrId, pre_area_id: areaId, pre_anio: anio, pre_mes: mes, pre_categoria: categoria,
+        pre_valor: valor, pre_created_by: user.usr_id, pre_updated_by: user.usr_id, pre_updated_at: ahora
+      });
+    }
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    await SvPresupuesto.bulkCreate(registros, {
+      updateOnDuplicate: ['pre_valor', 'pre_updated_by', 'pre_updated_at'], transaction: t
+    });
+    await t.commit();
+  } catch (e) {
+    try { await t.rollback(); } catch { /* el error que importa es el original */ }
+    throw e;
+  }
+  return { guardados: vistos.size, cambios: registros.length };
+}
+
+module.exports = {
+  alcance, puedeCargar, categoriasDe, asesoresCargables, valoresDelMes, consultar,
+  plantilla, revisar, guardar, ROLES_QUE_CARGAN
+};
