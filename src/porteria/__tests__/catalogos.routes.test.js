@@ -50,6 +50,21 @@ test('búsqueda vacía se pasa como undefined', async () => {
   expect(prueba.deps.h360.buscarAsistencias).toHaveBeenCalledWith(undefined);
 });
 
+test('asistencias para traslado usa la búsqueda de traslados', async () => {
+  const prueba = crearAppPrueba();
+  prueba.deps.h360.buscarAsistenciasEnTraslado.mockResolvedValue([{ id: 30 }]);
+  const r = await get('/asistencias?para=TRASLADO&q=%20luis%20', prueba);
+  expect(r.body.data).toEqual([{ id: 30 }]);
+  expect(prueba.deps.h360.buscarAsistenciasEnTraslado).toHaveBeenCalledWith('luis');
+  expect(prueba.deps.h360.buscarAsistencias).not.toHaveBeenCalled();
+});
+
+test('asistencias con un "para" desconocido → 400', async () => {
+  const r = await get('/asistencias?para=OTRA');
+  expect(r.status).toBe(400);
+  expect(r.body).toMatchObject({ error: 'POR-CAT-004', motivo: 'VALIDACION' });
+});
+
 test('búsqueda de más de 50 caracteres → 400', async () => {
   const r = await get(`/asistencias?q=${'a'.repeat(51)}`);
   expect(r.status).toBe(400);

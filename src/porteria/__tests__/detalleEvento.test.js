@@ -13,6 +13,8 @@ const MOTIVOS = {
     aplica_propio: true, aplica_proveedor_asistencia: false, aplica_proveedor: false, aplica_ingreso: true, aplica_salida: true },
   4: { id: 4, codigo: 'OTRO', nombre: 'Otro', tipo_referencia: 'TEXTO', referencia_obligatoria: true, activo: true,
     aplica_propio: false, aplica_proveedor_asistencia: true, aplica_proveedor: true, aplica_ingreso: true, aplica_salida: true },
+  6: { id: 6, codigo: 'TRASLADO_SERES_QUERIDOS', nombre: 'Traslado de seres queridos', tipo_referencia: 'TRASLADO', referencia_obligatoria: true, activo: true,
+    aplica_propio: true, aplica_proveedor_asistencia: true, aplica_proveedor: false, aplica_ingreso: true, aplica_salida: true },
   5: { id: 5, codigo: 'VIEJO', nombre: 'Viejo', tipo_referencia: 'NINGUNA', referencia_obligatoria: false, activo: false,
     aplica_propio: true, aplica_proveedor_asistencia: true, aplica_proveedor: true, aplica_ingreso: true, aplica_salida: true },
 };
@@ -20,6 +22,8 @@ const MOTIVOS = {
 function resolutor({ listaCompleta = true } = {}) {
   const h360 = {
     obtenerAsistenciaVigente: jest.fn(async (id) => (id === 10 ? { id: 10, codigo: 'H360-10', nombre_ser_querido: 'María', contrato: 'C-1', estado: 'NUEVO' } : null)),
+    obtenerAsistenciaEnTraslado: jest.fn(async (id) => (id === 30 ? { id: 30, codigo: 'H360-30', nombre_ser_querido: 'Luis', contrato: 'C-3', estado: 'SALA' } : null)),
+    obtenerSede: jest.fn(async (id) => (id === 2 ? { id: 2, codigo: 'S2', nombre: 'Sede Norte', ciudad: 'Cúcuta' } : null)),
     obtenerExequiaVigente: jest.fn(async (id) => (id === 20 ? { id: 20, tipo: 'Misa', fecha: '2026-10-30', hora: '10:00', asistencia_codigo: 'H360-10', nombre_ser_querido: 'María' } : null)),
   };
   const conductores = { buscar: jest.fn(async (u) => ({ conductor: u === 'jperez' ? { usuario: 'jperez', nombre: 'Juan Pérez' } : null, listaCompleta })) };
@@ -40,6 +44,14 @@ describe('leerEntradaRegistro', () => {
         statusCode: 400, motivo: 'VALIDACION', message: 'Clave de registro inválida',
       });
     }
+  });
+
+  test('destino del traslado: sede como entero y texto recortado', () => {
+    expect(leerEntradaRegistro(valida)).toMatchObject({ destino_sede_id: null, destino_texto: null });
+    expect(leerEntradaRegistro({ ...valida, destino_sede_id: '2', destino_texto: '  Ocaña ' })).toMatchObject({ destino_sede_id: 2, destino_texto: 'Ocaña' });
+    expect(errorSync(() => leerEntradaRegistro({ ...valida, destino_texto: 'x'.repeat(151) }))).toMatchObject({ statusCode: 400 });
+    expect(errorSync(() => leerEntradaRegistro({ ...valida, destino_sede_id: 'x' }))).toMatchObject({ statusCode: 400 });
+    expect(leerCambiosCorreccion({ destino_texto: 'Ocaña' })).toEqual({ destino_texto: 'Ocaña' });
   });
 
   test('normaliza placa y números, booleanos por defecto en false', () => {
@@ -138,6 +150,30 @@ describe('resolver', () => {
     expect(columnas).toMatchObject({
       asistencia_id: 10, exequia_id: null, referencia_texto: null,
       referencia_snapshot: { tipo: 'ASISTENCIA', codigo: 'H360-10', nombre_ser_querido: 'María', contrato: 'C-1' },
+    });
+  });
+
+  test('traslado: asistencia en encofrado, encuentro o sala y destino obligatorio', async () => {
+    const { r, h360 } = resolutor();
+    expect(await errorDe(() => r.resolver(propio({ motivo_id: 6, destino_sede_id: 2 })))).toMatchObject({ statusCode: 422, message: 'Selecciona la asistencia' });
+    expect(await errorDe(() => r.resolver(propio({ motivo_id: 6, asistencia_id: 10, destino_sede_id: 2 })))).toMatchObject({
+      statusCode: 422, message: 'La asistencia no está en encofrado, encuentro ni velación',
+    });
+    expect(await errorDe(() => r.resolver(propio({ motivo_id: 6, asistencia_id: 30 })))).toMatchObject({ statusCode: 422, message: 'Elige el destino' });
+    expect(await errorDe(() => r.resolver(propio({ motivo_id: 6, asistencia_id: 30, destino_sede_id: 9 })))).toMatchObject({
+      statusCode: 422, message: 'La sede de destino no existe',
+    });
+    const conSede = await r.resolver(propio({ motivo_id: 6, asistencia_id: 30, destino_sede_id: 2, destino_texto: 'ignorado', referencia_texto: 'x' }));
+    expect(h360.obtenerAsistenciaEnTraslado).toHaveBeenCalledWith(30);
+    expect(conSede.columnas).toMatchObject({
+      asistencia_id: 30, exequia_id: null, referencia_texto: null,
+      referencia_snapshot: { tipo: 'TRASLADO', codigo: 'H360-30', nombre_ser_querido: 'Luis', contrato: 'C-3', destino_sede_id: 2, destino: 'Sede Norte' },
+    });
+    const conTexto = await r.resolver({ tipo: 'PROVEEDOR_ASISTENCIA', sentido: 'INGRESO', datos: {
+      motivo_id: 6, asistencia_id: 30, destino_texto: 'Cementerio Central', empresa: 'Funeraria X', conductor_nombre: 'Ana', conductor_documento: '1',
+    } });
+    expect(conTexto.columnas.referencia_snapshot).toEqual({
+      tipo: 'TRASLADO', codigo: 'H360-30', nombre_ser_querido: 'Luis', contrato: 'C-3', destino_sede_id: null, destino: 'Cementerio Central',
     });
   });
 

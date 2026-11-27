@@ -16,7 +16,12 @@ function crearRouterCatalogos({ autenticar, h360, conductores, motivos }) {
   ruta('/sedes', 'POR-CAT-001', () => h360.listarSedes());
   ruta('/vehiculos-propios', 'POR-CAT-002', (req) => h360.buscarVehiculosPropios(textoOpcional(req.query.q)));
   ruta('/conductores', 'POR-CAT-003', () => conductores.listar());
-  ruta('/asistencias', 'POR-CAT-004', (req) => h360.buscarAsistencias(textoOpcional(req.query.q)));
+  ruta('/asistencias', 'POR-CAT-004', (req) => {
+    const para = textoOpcional(req.query.para);
+    if (para && para !== 'TRASLADO') throw new PorteriaError(400, 'VALIDACION', 'Búsqueda de asistencias inválida');
+    const q = textoOpcional(req.query.q);
+    return para === 'TRASLADO' ? h360.buscarAsistenciasEnTraslado(q) : h360.buscarAsistencias(q);
+  });
   ruta('/exequias', 'POR-CAT-005', (req) => h360.buscarExequias({
     q: textoOpcional(req.query.q), placa: textoOpcional(req.query.placa),
   }));

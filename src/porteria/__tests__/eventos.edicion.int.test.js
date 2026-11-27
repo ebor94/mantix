@@ -27,8 +27,9 @@ beforeAll(async () => {
   for (const t of ['por_eventos', 'por_estado_vehiculo', 'por_vehiculos_externos']) await conn.query(`DELETE FROM ${t} WHERE placa LIKE 'E6%'`);
   for (const t of ['asistencias', 'vehiculos', 'sedes']) await conn.query(`DELETE FROM ${t} WHERE id BETWEEN 2600 AND 2699`);
   await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2601, 'E6', 'E6', 'Cúcuta', 1)");
-  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2601, 'E6P001', 'F', 'F', 'CARROZA', 1), (2602, 'E6P002', 'F', 'F', 'CARROZA', 1), (2603, 'E6P003', 'F', 'F', 'CARROZA', 1), (2604, 'E6P004', 'F', 'F', 'CARROZA', 1)");
-  await conn.query("INSERT INTO asistencias (id, codigo, nombre_ser_querido, contrato, estado) VALUES (2601, 'H360-E6-2601', 'Luis', 'C-6', 'NUEVO')");
+  await conn.query("INSERT INTO vehiculos (id, placa, marca, modelo, tipo, activo) VALUES (2601, 'E6P001', 'F', 'F', 'CARROZA', 1), (2602, 'E6P002', 'F', 'F', 'CARROZA', 1), (2603, 'E6P003', 'F', 'F', 'CARROZA', 1), (2604, 'E6P004', 'F', 'F', 'CARROZA', 1), (2605, 'E6P005', 'F', 'F', 'CARROZA', 1)");
+  await conn.query("INSERT INTO asistencias (id, codigo, nombre_ser_querido, contrato, estado) VALUES (2601, 'H360-E6-2601', 'Luis', 'C-6', 'NUEVO'), (2602, 'H360-E6-2602', 'Marta', 'C-7', 'SALA')");
+  await conn.query("INSERT INTO sedes (id, codigo, nombre, ciudad, activo) VALUES (2602, 'E6N', 'Sede E6 Norte', 'Cúcuta', 1)");
   const [motivos] = await conn.query('SELECT id, codigo FROM por_motivos');
   for (const { id, codigo } of motivos) m[codigo] = id;
   const conductores = { buscar: async (u) => ({ conductor: u === 'jperez' ? { usuario: 'jperez', nombre: 'Juan Pérez' } : null, listaCompleta: true }) };
@@ -49,6 +50,22 @@ beforeAll(async () => {
 afterAll(async () => {
   await bd.cerrar();
   await conn.end();
+});
+
+describe('traslado de seres queridos', () => {
+  test('registra con sede de destino, conserva el destino al corregir otro dato y lo cambia a texto', async () => {
+    const r = await eventos.registrar(salidaPropia('E6P005', {
+      motivo_id: m.TRASLADO_SERES_QUERIDOS, asistencia_id: 2602, destino_sede_id: 2602,
+    }), guarda1);
+    expect(r).toMatchObject({ asistencia_id: 2602, referencia: { tipo: 'TRASLADO', codigo: 'H360-E6-2602', destino_sede_id: 2602, destino: 'Sede E6 Norte' } });
+    const km = await eventos.corregir(r.id, { kilometraje: 55 }, guarda1);
+    expect(km).toMatchObject({ kilometraje: 55, referencia: { destino_sede_id: 2602, destino: 'Sede E6 Norte' } });
+    const otro = await eventos.corregir(r.id, { asistencia_id: 2602, destino_sede_id: null, destino_texto: 'Cementerio Central' }, guarda1);
+    expect(otro.referencia).toMatchObject({ tipo: 'TRASLADO', destino_sede_id: null, destino: 'Cementerio Central' });
+    expect(await errorDe(eventos.corregir(r.id, { asistencia_id: 2601 }, guarda1))).toMatchObject({
+      statusCode: 422, message: 'La asistencia no está en encofrado, encuentro ni velación',
+    });
+  });
 });
 
 describe('corregir', () => {

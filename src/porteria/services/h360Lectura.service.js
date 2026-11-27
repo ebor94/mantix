@@ -6,6 +6,8 @@ const { patronContiene } = require('../utils/texto');
 
 const LIMITE = 30;
 const ESTADOS_ASISTENCIA = ['NUEVO', 'ASISTENCIA'];
+// Traslado de seres queridos: ya encofrados, en el encuentro con la familia o en velación (SALA).
+const ESTADOS_TRASLADO = ['ENCOFRADO', 'ENCUENTRO', 'SALA'];
 const ESTADOS_EXEQUIA_TERMINALES = ['REALIZADA', 'CANCELADA'];
 
 const COLUMNAS_SEDE = 'id, codigo, nombre, ciudad';
@@ -33,6 +35,20 @@ function crearH360Lectura(bd) {
     return filas;
   };
   const primera = async (sql, params) => (await consultar(sql, params))[0] || null;
+
+  function buscarAsistenciasEn(q, estados) {
+    const filtro = q ? 'AND (codigo LIKE ? OR nombre_ser_querido LIKE ? OR contrato LIKE ?)' : '';
+    const patron = patronContiene(q ?? '');
+    return consultar(
+      `SELECT ${COLUMNAS_ASISTENCIA} FROM asistencias WHERE estado IN (?) ${filtro}
+        ORDER BY created_at DESC, id DESC LIMIT ${LIMITE}`,
+      q ? [estados, patron, patron, patron] : [estados],
+    );
+  }
+
+  const obtenerAsistenciaEn = (id, estados) => primera(
+    `SELECT ${COLUMNAS_ASISTENCIA} FROM asistencias WHERE id = ? AND estado IN (?)`, [id, estados],
+  );
 
   return {
     listarSedes: () => consultar(`SELECT ${COLUMNAS_SEDE} FROM sedes WHERE activo = 1 ORDER BY nombre`),
@@ -66,19 +82,10 @@ function crearH360Lectura(bd) {
       ));
     },
 
-    buscarAsistencias(q) {
-      const filtro = q ? 'AND (codigo LIKE ? OR nombre_ser_querido LIKE ? OR contrato LIKE ?)' : '';
-      const patron = patronContiene(q ?? '');
-      return consultar(
-        `SELECT ${COLUMNAS_ASISTENCIA} FROM asistencias WHERE estado IN (?) ${filtro}
-          ORDER BY created_at DESC, id DESC LIMIT ${LIMITE}`,
-        q ? [ESTADOS_ASISTENCIA, patron, patron, patron] : [ESTADOS_ASISTENCIA],
-      );
-    },
-
-    obtenerAsistenciaVigente: (id) => primera(
-      `SELECT ${COLUMNAS_ASISTENCIA} FROM asistencias WHERE id = ? AND estado IN (?)`, [id, ESTADOS_ASISTENCIA],
-    ),
+    buscarAsistencias: (q) => buscarAsistenciasEn(q, ESTADOS_ASISTENCIA),
+    obtenerAsistenciaVigente: (id) => obtenerAsistenciaEn(id, ESTADOS_ASISTENCIA),
+    buscarAsistenciasEnTraslado: (q) => buscarAsistenciasEn(q, ESTADOS_TRASLADO),
+    obtenerAsistenciaEnTraslado: (id) => obtenerAsistenciaEn(id, ESTADOS_TRASLADO),
 
     async buscarExequias({ q, placa } = {}) {
       const placaNormalizada = (placa && normalizarPlaca(placa)) || null;
@@ -107,4 +114,4 @@ function crearH360Lectura(bd) {
   };
 }
 
-module.exports = { crearH360Lectura, ESTADOS_ASISTENCIA, ESTADOS_EXEQUIA_TERMINALES };
+module.exports = { crearH360Lectura, ESTADOS_ASISTENCIA, ESTADOS_TRASLADO, ESTADOS_EXEQUIA_TERMINALES };

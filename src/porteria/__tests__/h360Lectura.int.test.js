@@ -24,7 +24,11 @@ beforeAll(async () => {
   await conn.query(`INSERT INTO asistencias (id, codigo, nombre_ser_querido, contrato, estado, created_at) VALUES
     (1101, 'H360-2026-1101', 'María Gómez', 'C-77', 'NUEVO', '2026-10-30 08:00:00'),
     (1102, 'H360-2026-1102', 'Pedro Ruiz', 'C-78', 'ASISTENCIA', '2026-10-30 09:00:00'),
-    (1103, 'H360-2026-1103', 'Ana Cerrada', 'C-79', 'CERRADO', '2026-10-30 10:00:00')`);
+    (1103, 'H360-2026-1103', 'Ana Cerrada', 'C-79', 'CERRADO', '2026-10-30 10:00:00'),
+    (1104, 'H360-2026-1104', 'Rosa Encofrada', 'T-01', 'ENCOFRADO', '2026-10-30 11:00:00'),
+    (1105, 'H360-2026-1105', 'Jorge Encuentro', 'T-02', 'ENCUENTRO', '2026-10-30 12:00:00'),
+    (1106, 'H360-2026-1106', 'Elena Sala', 'T-03', 'SALA', '2026-10-30 13:00:00'),
+    (1107, 'H360-2026-1107', 'Raúl Preservación', 'T-04', 'PRESERVACION', '2026-10-30 14:00:00')`);
   await conn.query(`INSERT INTO exequias (id, asistencia_id, tipo, fecha, hora, lugar, vehiculo_id, estado) VALUES
     (1101, 1101, 'Misa', CURDATE(), '10:00:00', 'Parroquia A', 1102, 'PROGRAMADA'),
     (1102, 1102, 'Cremación', CURDATE() + INTERVAL 1 DAY, '08:00:00', 'Crematorio', 1101, 'PENDIENTE_VEHICULO'),
@@ -71,6 +75,15 @@ test('asistencias: solo NUEVO y ASISTENCIA, recientes primero', async () => {
   expect(propios(await h360.buscarAsistencias('H360-2026-11')).map((a) => a.id)).toEqual([1102, 1101]);
   expect(await h360.obtenerAsistenciaVigente(1103)).toBeNull();
   expect(await h360.obtenerAsistenciaVigente(1101)).toMatchObject({ codigo: 'H360-2026-1101', estado: 'NUEVO' });
+});
+
+test('asistencias en traslado: solo ENCOFRADO, ENCUENTRO y SALA, recientes primero', async () => {
+  expect(propios(await h360.buscarAsistenciasEnTraslado('T-0')).map((a) => a.id)).toEqual([1106, 1105, 1104]);
+  expect(propios(await h360.buscarAsistenciasEnTraslado('elena')).map((a) => a.id)).toEqual([1106]);
+  expect(propios(await h360.buscarAsistenciasEnTraslado()).map((a) => a.id)).toEqual([1106, 1105, 1104]);
+  expect(await h360.obtenerAsistenciaEnTraslado(1107)).toBeNull();
+  expect(await h360.obtenerAsistenciaEnTraslado(1101)).toBeNull();
+  expect(await h360.obtenerAsistenciaEnTraslado(1105)).toMatchObject({ codigo: 'H360-2026-1105', estado: 'ENCUENTRO' });
 });
 
 test('exequias: no terminales entre ayer y mañana, primero las de la placa', async () => {

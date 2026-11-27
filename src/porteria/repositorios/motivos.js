@@ -119,5 +119,5 @@ module.exports = {
   actualizarMotivo,
   eliminarMotivo,
   enUso,
-  TIPOS_REFERENCIA: ['NINGUNA', 'ASISTENCIA', 'EXEQUIA', 'TEXTO'],
+  TIPOS_REFERENCIA: ['NINGUNA', 'ASISTENCIA', 'EXEQUIA', 'TEXTO', 'TRASLADO'],
 };

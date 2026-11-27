@@ -9,15 +9,39 @@ test('las migraciones quedan registradas y un segundo intento no aplica nada', a
   const [filas] = await conn.query('SELECT nombre FROM por_migraciones ORDER BY nombre');
   expect(filas.map((f) => f.nombre)).toEqual([
     '001_esquema.sql', '002_seed_motivos.sql', '003_vista_movimientos.sql', '004_estado_provisional.sql', '005_siembra_y_otra_sede.sql', '006_sede_sembrada.sql', '007_admin_e_idempotencia.sql',
+    '008_traslado_seres_queridos.sql',
   ]);
   expect(await aplicarMigraciones(conn)).toEqual([]);
+});
+
+test('008 agrega el motivo de traslado de seres queridos para propios y proveedores de asistencias', async () => {
+  const [[m]] = await conn.query(
+    `SELECT nombre, aplica_propio, aplica_proveedor_asistencia, aplica_proveedor, aplica_ingreso, aplica_salida,
+            tipo_referencia, referencia_obligatoria, activo
+       FROM por_motivos WHERE codigo = 'TRASLADO_SERES_QUERIDOS'`,
+  );
+  expect(m).toEqual({
+    nombre: 'Traslado de seres queridos', aplica_propio: 1, aplica_proveedor_asistencia: 1, aplica_proveedor: 0,
+    aplica_ingreso: 1, aplica_salida: 1, tipo_referencia: 'TRASLADO', referencia_obligatoria: 1, activo: 1,
+  });
+});
+
+test('la vista expone el destino del traslado', async () => {
+  const [[motivo]] = await conn.query("SELECT id FROM por_motivos WHERE codigo = 'TRASLADO_SERES_QUERIDOS'");
+  await conn.query(
+    `INSERT INTO por_eventos (sede_id, sentido, tipo_vehiculo, placa, conductor_nombre, motivo_id, asistencia_id,
+                              referencia_snapshot, registrado_at, registrado_por)
+     VALUES (902, 'SALIDA', 'PROPIO', 'TRA902', 'Juan', ?, 30, ?, '2026-10-30 08:00:00', 'guarda1')`,
+    [motivo.id, JSON.stringify({ tipo: 'TRASLADO', codigo: 'H360-30', destino_sede_id: null, destino: 'Cementerio Central' })]);
+  const [[fila]] = await conn.query("SELECT referencia_codigo, destino FROM v_por_movimientos WHERE placa = 'TRA902'");
+  expect(fila).toEqual({ referencia_codigo: 'H360-30', destino: 'Cementerio Central' });
 });
 
 test('el seed crea los 12 motivos con su configuración', async () => {
   const [motivos] = await conn.query(
     `SELECT codigo, aplica_propio, aplica_proveedor_asistencia, aplica_proveedor,
             tipo_referencia, referencia_obligatoria
-       FROM por_motivos ORDER BY orden`,
+       FROM por_motivos WHERE updated_by = 'seed' AND codigo <> 'TRASLADO_SERES_QUERIDOS' ORDER BY orden`,
   );
   expect(motivos).toHaveLength(12);
   const porCodigo = Object.fromEntries(motivos.map((m) => [m.codigo, m]));

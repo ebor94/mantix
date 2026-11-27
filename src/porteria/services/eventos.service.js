@@ -149,10 +149,15 @@ function crearServicioEventos({ bd, h360, conductores, motivos, vehiculosExterno
     return evento;
   }
 
+  /** El destino de un traslado vive en su snapshot; se expone como los campos con que se corrige. */
+  const destinoDe = (ref) => (ref && ref.tipo === 'TRASLADO'
+    ? { destino_sede_id: ref.destino_sede_id ?? null, destino_texto: ref.destino_sede_id ? null : ref.destino ?? null }
+    : { destino_sede_id: null, destino_texto: null });
+
   /** Lo que se corrige de un evento, tal como está guardado. */
   const datosDe = (e) => ({
     motivo_id: e.motivo_id, asistencia_id: e.asistencia_id, exequia_id: e.exequia_id, referencia_texto: e.referencia_texto,
-    referencia_snapshot: e.referencia, conductor_usuario: e.conductor_usuario, conductor_nombre: e.conductor_nombre,
+    referencia_snapshot: e.referencia, ...destinoDe(e.referencia), conductor_usuario: e.conductor_usuario, conductor_nombre: e.conductor_nombre,
     conductor_documento: e.conductor_documento, conductor_otro: e.conductor_otro, empresa: e.empresa,
     kilometraje: e.kilometraje, observaciones: e.observaciones,
   });

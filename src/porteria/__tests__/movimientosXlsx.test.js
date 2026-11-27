@@ -6,7 +6,7 @@ const { escribirMovimientosXlsx } = require('../services/movimientosXlsx');
 const fila = (cambios = {}) => ({
   id: 1, fecha: '2026-10-20 09:30', sede_nombre: 'Norte', sentido: 'INGRESO', tipo_vehiculo: 'PROPIO', placa: 'ABC123',
   vehiculo_marca: 'Ford', vehiculo_modelo: 'Transit', empresa: null, conductor_nombre: 'Juan', conductor_otro: false,
-  motivo_nombre: 'Tanqueo', referencia_codigo: null, referencia_texto: null, kilometraje: 1042, duracion_min: 90, km_recorridos: 42,
+  motivo_nombre: 'Tanqueo', referencia_codigo: null, referencia_texto: null, destino: null, kilometraje: 1042, duracion_min: 90, km_recorridos: 42,
   inconsistente: false, inconsistencia_tipo: null, observaciones: null, registrado_por: 'guarda1', ...cambios,
 });
 
@@ -26,18 +26,25 @@ test('hoja Movimientos con encabezados y valores legibles', async () => {
   expect(libro.worksheets.map((h) => h.name)).toEqual(['Movimientos', 'Inconsistencias']);
   const hoja = libro.getWorksheet('Movimientos');
   expect(valores(hoja, 1)).toEqual([
-    'Fecha', 'Sede', 'Sentido', 'Tipo', 'Placa', 'Vehículo', 'Empresa', 'Conductor', 'Motivo', 'Referencia',
+    'Fecha', 'Sede', 'Sentido', 'Tipo', 'Placa', 'Vehículo', 'Empresa', 'Conductor', 'Motivo', 'Referencia', 'Destino',
     'Kilometraje', 'Duración del viaje (min)', 'Km recorridos', 'Inconsistente', 'Observaciones', 'Registrado por',
   ]);
   expect(hoja.getRow(2).getCell(1).value).toBe('2026-10-20 09:30');
   expect(hoja.getRow(2).getCell(3).value).toBe('Ingreso');
   expect(hoja.getRow(2).getCell(4).value).toBe('Propio');
   expect(hoja.getRow(2).getCell(6).value).toBe('Ford Transit');
-  expect(hoja.getRow(2).getCell(12).value).toBe(90);
+  expect(hoja.getRow(2).getCell(13).value).toBe(90);
   expect(hoja.getRow(3).getCell(4).value).toBe('Proveedor');
   expect(hoja.getRow(3).getCell(8).value).toBe('Juan (otro)');
   expect(hoja.getRow(3).getCell(10).value).toBe('Factura 9');
   expect(hoja.rowCount).toBe(3);
+});
+
+test('el traslado muestra su destino', async () => {
+  const libro = await generar([fila({ motivo_nombre: 'Traslado de seres queridos', referencia_codigo: 'H360-30', destino: 'Sede Norte' })]);
+  const hoja = libro.getWorksheet('Movimientos');
+  expect(hoja.getRow(2).getCell(10).value).toBe('H360-30');
+  expect(hoja.getRow(2).getCell(11).value).toBe('Sede Norte');
 });
 
 test('hoja Inconsistencias solo con las inconsistentes', async () => {
@@ -46,7 +53,7 @@ test('hoja Inconsistencias solo con las inconsistentes', async () => {
   expect(valores(hoja, 1)).toEqual(['Fecha', 'Sede', 'Placa', 'Sentido', 'Tipo de inconsistencia', 'Observaciones', 'Registrado por']);
   expect(valores(hoja, 2)).toEqual(['2026-10-20 09:30', 'Norte', 'ABC123', 'Ingreso', 'Salida por otra sede', 'Salió por Sur', 'guarda1']);
   expect(hoja.rowCount).toBe(2);
-  expect(libro.getWorksheet('Movimientos').getRow(3).getCell(14).value).toBe('Sí');
+  expect(libro.getWorksheet('Movimientos').getRow(3).getCell(15).value).toBe('Sí');
 });
 
 test('sin filas genera solo los encabezados', async () => {

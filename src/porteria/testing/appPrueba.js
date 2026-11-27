@@ -20,6 +20,7 @@ function crearAppPrueba(deps = {}) {
       obtenerSede: jest.fn(async () => null),
       buscarVehiculosPropios: jest.fn(async () => []),
       buscarAsistencias: jest.fn(async () => []),
+      buscarAsistenciasEnTraslado: jest.fn(async () => []),
       buscarExequias: jest.fn(async () => []),
       obtenerVehiculoPropioPorPlaca: jest.fn(async () => null),
     },

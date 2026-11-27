@@ -28,7 +28,7 @@ components:
         aplica_proveedor: { type: boolean }
         aplica_ingreso: { type: boolean }
         aplica_salida: { type: boolean }
-        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO] }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO, TRASLADO] }
         referencia_obligatoria: { type: boolean }
         orden: { type: integer, minimum: 0, maximum: 9999 }
         activo: { type: boolean }
@@ -47,7 +47,7 @@ components:
         aplica_proveedor: { type: boolean, default: false }
         aplica_ingreso: { type: boolean, default: true }
         aplica_salida: { type: boolean, default: true }
-        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO], default: NINGUNA }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO, TRASLADO], default: NINGUNA }
         referencia_obligatoria: { type: boolean, default: false, description: No puede ser true con tipo_referencia NINGUNA }
         orden: { type: integer, minimum: 0, maximum: 9999, default: 0 }
         activo: { type: boolean, default: true }
@@ -64,7 +64,7 @@ components:
         aplica_proveedor: { type: boolean }
         aplica_ingreso: { type: boolean }
         aplica_salida: { type: boolean }
-        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO] }
+        tipo_referencia: { type: string, enum: [NINGUNA, ASISTENCIA, EXEQUIA, TEXTO, TRASLADO] }
         referencia_obligatoria: { type: boolean }
         orden: { type: integer, minimum: 0, maximum: 9999 }
         activo: { type: boolean }
@@ -77,6 +77,8 @@ components:
         asistencia_id: { type: integer, minimum: 1, nullable: true }
         exequia_id: { type: integer, minimum: 1, nullable: true }
         referencia_texto: { type: string, maxLength: 255, nullable: true }
+        destino_sede_id: { type: integer, minimum: 1, nullable: true, description: 'Motivo TRASLADO: sede de destino (tiene prioridad sobre destino_texto)' }
+        destino_texto: { type: string, maxLength: 150, nullable: true, description: 'Motivo TRASLADO: destino escrito cuando no es una sede' }
         conductor_usuario: { type: string, maxLength: 100, nullable: true }
         conductor_nombre: { type: string, maxLength: 150, nullable: true }
         conductor_documento: { type: string, maxLength: 30, nullable: true }
@@ -146,7 +148,7 @@ paths:
   /api/porteria/v1/catalogos/conductores:
     get: { tags: [Portería], summary: POR-CAT-003 · Conductores (grupos del AD), responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/asistencias:
-    get: { tags: [Portería], summary: POR-CAT-004 · Buscar asistencias abiertas, parameters: [{ $ref: '#/components/parameters/Q' }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
+    get: { tags: [Portería], summary: POR-CAT-004 · Buscar asistencias abiertas (NUEVO, ASISTENCIA) o, con para=TRASLADO, en ENCOFRADO, ENCUENTRO o SALA, parameters: [{ $ref: '#/components/parameters/Q' }, { name: para, in: query, required: false, schema: { type: string, enum: [TRASLADO] } }], responses: { '401': { $ref: '#/components/responses/NoAutenticado' }, '200': { $ref: '#/components/responses/Ok' } } }
   /api/porteria/v1/catalogos/exequias:
     get:
       tags: [Portería]
@@ -182,6 +184,8 @@ paths:
                 asistencia_id: { type: integer }
                 exequia_id: { type: integer }
                 referencia_texto: { type: string }
+                destino_sede_id: { type: integer }
+                destino_texto: { type: string }
                 conductor_usuario: { type: string }
                 conductor_otro: { type: boolean }
                 conductor_nombre: { type: string }

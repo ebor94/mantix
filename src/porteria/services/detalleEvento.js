@@ -7,7 +7,7 @@ const { aplica } = require('../repositorios/motivos');
 
 const SENTIDOS = ['INGRESO', 'SALIDA'];
 const TIPOS = ['PROPIO', 'PROVEEDOR_ASISTENCIA', 'PROVEEDOR'];
-const CAMPOS_REFERENCIA = ['motivo_id', 'asistencia_id', 'exequia_id', 'referencia_texto'];
+const CAMPOS_REFERENCIA = ['motivo_id', 'asistencia_id', 'exequia_id', 'referencia_texto', 'destino_sede_id', 'destino_texto'];
 const CAMPOS_CONDUCTOR = ['conductor_usuario', 'conductor_nombre', 'conductor_documento', 'conductor_otro', 'empresa'];
 const CAMPOS_CORREGIBLES = [...CAMPOS_REFERENCIA, ...CAMPOS_CONDUCTOR, 'kilometraje', 'observaciones'];
 
@@ -46,6 +46,8 @@ function leerDetalle(body) {
     asistencia_id: entero(body.asistencia_id, 'asistencia'),
     exequia_id: entero(body.exequia_id, 'exequia'),
     referencia_texto: texto(body.referencia_texto, 255, 'referencia'),
+    destino_sede_id: entero(body.destino_sede_id, 'sede de destino'),
+    destino_texto: texto(body.destino_texto, 150, 'destino'),
     conductor_usuario: texto(body.conductor_usuario, 100, 'conductor'),
     conductor_nombre: texto(body.conductor_nombre, 150, 'nombre del conductor'),
     conductor_documento: texto(body.conductor_documento, 30, 'documento del conductor'),
@@ -130,12 +132,39 @@ function crearResolutorDetalle({ h360, conductores, motivos }) {
           },
         };
       }
+      case 'TRASLADO': {
+        if (!datos.asistencia_id) {
+          if (motivo.referencia_obligatoria) throw regla('Selecciona la asistencia');
+          return SIN_REFERENCIA;
+        }
+        const a = await h360.obtenerAsistenciaEnTraslado(datos.asistencia_id);
+        if (!a) throw regla('La asistencia no está en encofrado, encuentro ni velación');
+        return {
+          ...SIN_REFERENCIA,
+          asistencia_id: a.id,
+          referencia_snapshot: {
+            tipo: 'TRASLADO', codigo: a.codigo, nombre_ser_querido: a.nombre_ser_querido, contrato: a.contrato,
+            ...await resolverDestino(datos),
+          },
+        };
+      }
       case 'TEXTO':
         if (!datos.referencia_texto && motivo.referencia_obligatoria) throw regla('Escribe la referencia');
         return { ...SIN_REFERENCIA, referencia_texto: datos.referencia_texto };
       default:
         return SIN_REFERENCIA;
     }
+  }
+
+  /** Destino del traslado: una sede activa o, si no es ninguna, el texto que escribió el guarda. */
+  async function resolverDestino(datos) {
+    if (datos.destino_sede_id) {
+      const sede = await h360.obtenerSede(datos.destino_sede_id);
+      if (!sede) throw regla('La sede de destino no existe');
+      return { destino_sede_id: sede.id, destino: sede.nombre };
+    }
+    if (!datos.destino_texto) throw regla('Elige el destino');
+    return { destino_sede_id: null, destino: datos.destino_texto };
   }
 
   async function resolverConductor(tipo, datos) {

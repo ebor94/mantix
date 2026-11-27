@@ -19,12 +19,12 @@ afterAll(async () => {
 
 test('filtra por tipo de vehículo y sentido, en orden', async () => {
   expect(codigos(await motivos.listarActivos({ tipoVehiculo: 'PROPIO', sentido: 'INGRESO' }))).toEqual([
-    'SERES_QUERIDOS', 'EXEQUIAS', 'TRASLADOS', 'RECOGIDA_COFRES', 'EQUIPOS_VELACION', 'TANQUEO', 'LAVADO', 'MANTENIMIENTO',
+    'SERES_QUERIDOS', 'EXEQUIAS', 'TRASLADOS', 'TRASLADO_SERES_QUERIDOS', 'RECOGIDA_COFRES', 'EQUIPOS_VELACION', 'TANQUEO', 'LAVADO', 'MANTENIMIENTO',
   ]);
   expect(codigos(await motivos.listarActivos({ tipoVehiculo: 'PROVEEDOR' })))
     .toEqual(['ENTREGA_MERCANCIA', 'MANTENIMIENTO_SERVICIO', 'OTRO']);
   expect(codigos(await motivos.listarActivos({ tipoVehiculo: 'PROVEEDOR_ASISTENCIA', sentido: 'SALIDA' })))
-    .toEqual(['SERES_QUERIDOS_TERCERIZADA', 'OTRO']);
+    .toEqual(['TRASLADO_SERES_QUERIDOS', 'SERES_QUERIDOS_TERCERIZADA', 'OTRO']);
 });
 
 test('devuelve la referencia que exige cada motivo', async () => {

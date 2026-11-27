@@ -7,7 +7,7 @@ const { condicionesListado } = require('../repositorios/eventos');
 const LIMITE_FILAS = 50000;
 const COLUMNAS = `v.id, DATE_FORMAT(v.registrado_at, '%Y-%m-%d %H:%i') AS fecha, v.sede_nombre, v.sentido, v.tipo_vehiculo,
   v.placa, v.vehiculo_marca, v.vehiculo_modelo, v.empresa, v.conductor_nombre, v.conductor_otro, v.motivo_nombre,
-  v.referencia_codigo, v.referencia_texto, v.kilometraje, v.duracion_min, v.km_recorridos, v.inconsistente,
+  v.referencia_codigo, v.referencia_texto, v.destino, v.kilometraje, v.duracion_min, v.km_recorridos, v.inconsistente,
   v.inconsistencia_tipo, e.observaciones, v.registrado_por`;
 const DESDE = 'FROM v_por_movimientos v JOIN por_eventos e ON e.id = v.id';
 
