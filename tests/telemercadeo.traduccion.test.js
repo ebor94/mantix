@@ -138,6 +138,33 @@ describe('traducirFila', () => {
     expect(plan.persona.nombre).toHaveLength(100);
     expect(plan.notaInicial).toBeNull();
   });
+
+  describe('próxima gestión vacía', () => {
+    const HOY = '2026-11-28';
+    const plan = (extra) => T.traducirFila(fila({ proxima: null, ...extra }), { archivo: ARCHIVO, hoy: HOY });
+    it('en una hoja futura toma la fecha de la hoja', () => {
+      const p = plan({ fechaHoja: '2026-11-30' });
+      expect([p.estado, p.proxima, p.avisos]).toEqual(['INTERESADO', '2026-11-30', []]);
+    });
+    it('en la hoja de hoy toma la fecha de hoy', () => {
+      expect(plan({ fechaHoja: HOY }).proxima).toBe(HOY);
+    });
+    it('en una hoja pasada queda sin próxima gestión y con el aviso', () => {
+      const p = plan({ fechaHoja: '2026-11-20' });
+      expect([p.estado, p.proxima, p.avisos]).toEqual(['INTERESADO', null, ['interesado sin próxima gestión']]);
+    });
+    it('con N en una hoja de agenda queda Contactado con la fecha de la hoja', () => {
+      const p = plan({ interes: 'N', fechaHoja: '2026-11-30' });
+      expect([p.estado, p.proxima]).toEqual(['CONTACTADO', '2026-11-30']);
+    });
+    it('con N en una hoja pasada sigue Descartado', () => {
+      const p = plan({ interes: 'N', fechaHoja: '2026-11-20' });
+      expect([p.estado, p.proxima]).toEqual(['DESCARTADO', null]);
+    });
+    it('si PROXIMA GESTION trae fecha, manda esa', () => {
+      expect(plan({ proxima: '2026-12-05', fechaHoja: '2026-11-30' }).proxima).toBe('2026-12-05');
+    });
+  });
 });
 
 describe('códigos de catálogo', () => {

@@ -94,7 +94,9 @@ function comentarioGestion({ hora, comentario, archivo, hoja, fila }) {
 
 function traducirFila(fila, { archivo, hoy }) {
   const avisos = [];
-  const estado = estadoDe(fila.interes, fila.proxima);
+  // Hoja de agenda (hoy o futura) sin PROXIMA GESTION: la próxima es el día de la hoja.
+  const proxima = fila.proxima ?? (fila.fechaHoja && fila.fechaHoja >= hoy ? fila.fechaHoja : null);
+  const estado = estadoDe(fila.interes, proxima);
   avisos.push(...estado.avisos);
   const fp = fuenteYPunto(fila.punto);
   if (fp.aviso) avisos.push(fp.aviso);
