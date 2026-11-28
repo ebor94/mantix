@@ -9,7 +9,7 @@ const fila = (extra = {}) => ({
 });
 
 describe('productosDeTexto', () => {
-  // Los 18 textos reales del libro de Carmen y dos casos más.
+  // Los 18 textos reales del libro de Carmen y tres casos más.
   it.each([
     ['Columbario', ['PRE-CLM']],
     ['Prorroga', ['PRE-PRR']],
