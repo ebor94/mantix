@@ -88,3 +88,48 @@ it.each([
   expect(C.cargar).not.toHaveBeenCalled();
   expect(R.escribirReporte).not.toHaveBeenCalled();
 });
+
+describe('hojas sin cargar', () => {
+  const HOJA = { hoja: 'LUNES', fila: null, tipo: 'error', mensaje: 'no se pudo saber la fecha de la hoja' };
+
+  it('las lista después de Leídos', async () => {
+    leerLibro.mockResolvedValue({ filas: [], incidencias: [HOJA] });
+    await expect(correr(['--archivo', libro, '--asesor', 'x'])).resolves.toBe(0);
+    expect(log).toHaveBeenCalledWith('Leídos: 2 · Se crearían: 1 · Omitidos: 1 · Errores: 0 · Avisos: 0');
+    expect(log).toHaveBeenCalledWith('Hojas sin cargar: 1');
+    expect(log).toHaveBeenCalledWith('  · LUNES: no se pudo saber la fecha de la hoja');
+    const lineas = log.mock.calls.map((c) => c[0]);
+    expect(lineas.indexOf('Hojas sin cargar: 1')).toBe(lineas.findIndex((l) => l.startsWith('Leídos:')) + 1);
+  });
+
+  it('no las menciona si solo hay avisos sin fila', async () => {
+    await correr(['--archivo', libro, '--asesor', 'x']);
+    expect(log.mock.calls.map((c) => c[0]).join('\n')).not.toContain('Hojas sin cargar');
+  });
+});
+
+describe('fallos al cargar o guardar', () => {
+  const AVISO_REPETIR = 'Puede que una parte ya se haya cargado. Volver a correr con --aplicar es seguro: omite los clientes ya creados y cierra la lista.';
+
+  it('si cargar falla con --aplicar, termina en 1 y avisa que volver a correr es seguro', async () => {
+    C.cargar.mockRejectedValue(new Error('se cayó la conexión'));
+    await expect(correr(['--archivo', libro, '--asesor', 'x', '--aplicar'])).resolves.toBe(1);
+    expect(error).toHaveBeenCalledWith('\nERROR: se cayó la conexión');
+    expect(error).toHaveBeenCalledWith(AVISO_REPETIR);
+  });
+
+  it('si cargar falla en simulación, no dice que haya algo cargado', async () => {
+    C.cargar.mockRejectedValue(new Error('se cayó la conexión'));
+    await expect(correr(['--archivo', libro, '--asesor', 'x'])).resolves.toBe(1);
+    expect(error).toHaveBeenCalledWith('\nERROR: se cayó la conexión');
+    expect(error).not.toHaveBeenCalledWith(AVISO_REPETIR);
+  });
+
+  it('si el reporte no se guarda, el resumen ya salió y el error lo dice', async () => {
+    R.escribirReporte.mockRejectedValue(new Error('disco lleno'));
+    await expect(correr(['--archivo', libro, '--asesor', 'x'])).resolves.toBe(1);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^Leídos:/));
+    expect(error).toHaveBeenCalledWith('\nERROR: no se pudo guardar el reporte: disco lleno');
+    expect(error).not.toHaveBeenCalledWith(AVISO_REPETIR);
+  });
+});
