@@ -118,6 +118,19 @@ describe('leerLibro', () => {
     ]);
   });
 
+  it('con la misma fecha gana la fila de más abajo', async () => {
+    const wb = new ExcelJS.Workbook();
+    hojaPlantilla(wb, '28 DE NOVIEMBRE', [
+      { nombre: 'Ana', tel: '3001234567', comentario: 'arriba', s: 'x' },
+      { nombre: 'Ana', tel: '3001234567', comentario: 'abajo', s: 'x' }
+    ]);
+    const { filas } = await leerLibro(await enBuffer(wb), LIBRO);
+    expect(filas.map((f) => [f.fila, f.comentario, f.descarte])).toEqual([
+      [6, 'arriba', { resultado: 'omitido', detalle: 'reemplazada por 28 DE NOVIEMBRE fila 7' }],
+      [7, 'abajo', null]
+    ]);
+  });
+
   it('lee fórmulas por su resultado, la próxima gestión en texto y las marcas de interés', async () => {
     const wb = new ExcelJS.Workbook();
     hojaPlantilla(wb, '28 DE NOVIEMBRE', [
