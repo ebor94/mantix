@@ -202,11 +202,34 @@ describe('cargar', () => {
   });
 
   it('reutiliza la persona que ya existe sin cambiarle datos', async () => {
-    M.SvPersona.findOne.mockResolvedValue({ persona_id: 301 });
+    M.SvPersona.findOne.mockResolvedValue({ persona_id: 301, persona_nombre: 'Ana', persona_apellido: 'Pérez' });
     const { resultados } = await correr([fila()], true);
-    expect(resultados[0]).toMatchObject({ resultado: 'se crea', detalle: 'persona existente' });
+    expect(resultados[0]).toMatchObject({ resultado: 'se crea', detalle: 'persona existente: Ana Pérez' });
     expect(M.SvPersona.create).not.toHaveBeenCalled();
     expect(M.SvProspecto.create.mock.calls[0][0].prosp_persona_id).toBe(301);
+  });
+
+  it('si la persona existente tiene otro nombre, lo dice y deja el nombre del Excel en la gestión', async () => {
+    M.SvPersona.findOne.mockResolvedValue({ persona_id: 301, persona_nombre: 'Juan', persona_apellido: 'López' });
+    const { resultados } = await correr([fila()], true);
+    expect(resultados[0]).toMatchObject({ resultado: 'se crea', detalle: 'persona existente: Juan López' });
+    expect(M.SvPersona.findOne).toHaveBeenCalledWith(expect.objectContaining({ attributes: ['persona_id', 'persona_nombre', 'persona_apellido'] }));
+    const comentario = M.SvGestion.create.mock.calls[0][0].gest_comentario;
+    expect(comentario.endsWith('\nNombre en el Excel: Ana Pérez')).toBe(true);
+    expect(resultados[0].plan.gestion.comentario).toBe(comentario);
+  });
+
+  it('si el nombre es el mismo con otras tildes y mayúsculas, no agrega la línea', async () => {
+    M.SvPersona.findOne.mockResolvedValue({ persona_id: 301, persona_nombre: 'ana perez', persona_apellido: null });
+    const { resultados } = await correr([fila()], true);
+    expect(resultados[0]).toMatchObject({ resultado: 'se crea', detalle: 'persona existente: ana perez' });
+    expect(M.SvGestion.create.mock.calls[0][0].gest_comentario).not.toContain('Nombre en el Excel');
+  });
+
+  it('en simulación con persona existente también muestra el nombre de GenFlow', async () => {
+    M.SvPersona.findOne.mockResolvedValue({ persona_id: 301, persona_nombre: 'Juan', persona_apellido: 'López' });
+    const { resultados } = await correr([fila()], false);
+    expect(resultados[0]).toMatchObject({ resultado: 'se crearía', detalle: 'persona existente: Juan López' });
   });
 
   it('si un cliente falla, se deshace solo ese y la carga sigue', async () => {

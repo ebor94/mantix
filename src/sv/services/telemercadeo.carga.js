@@ -2,14 +2,16 @@
  * sv/services/telemercadeo.carga.js
  * Escribe en GenFlow los clientes de un libro de telemercadeo: una lista por libro y,
  * por cliente, persona + prospecto + productos + gestión en su propia transacción.
- * Sin aplicar solo consulta. Escribe directo con los modelos (no tienen hooks) para que
- * la carga no dispare avisos ni webhooks de los servicios de GenFlow.
+ * Sin aplicar solo consulta. Escribe directo con los modelos (no tienen hooks de creación:
+ * SvGestion solo tiene beforeUpdate y beforeDestroy) para que la carga no dispare avisos
+ * ni webhooks de los servicios de GenFlow.
  */
 const { Op } = require('sequelize');
 const M = require('../models');
 const { OrgIdentidad } = require('../../identity/models');
 const { normalizarAdUsuario } = require('../../identity/services/vinculoAd.service');
 const T = require('./telemercadeo.traduccion');
+const { plano } = require('./telemercadeo.lector');
 
 class MigracionError extends Error {}
 
@@ -195,13 +197,23 @@ async function cargar({ filas, asesora, catalogos, archivo, hoy, aplicar }) {
     const plan = T.traducirFila(fila, { archivo, hoy });
     for (const mensaje of plan.avisos) avisos.push({ hoja: fila.hoja, fila: fila.fila, tipo: 'aviso', mensaje });
 
-    const persona = await M.SvPersona.findOne({ where: { persona_telefono_norm: plan.persona.telefono }, attributes: ['persona_id'] });
+    const persona = await M.SvPersona.findOne({
+      where: { persona_telefono_norm: plan.persona.telefono },
+      attributes: ['persona_id', 'persona_nombre', 'persona_apellido']
+    });
     const omision = persona ? await motivoOmision(persona.persona_id, asesora.area_id, lista) : null;
     if (omision) {
       resultados.push({ fila, plan, resultado: 'omitido', detalle: omision });
       continue;
     }
-    const detalle = persona ? 'persona existente' : 'persona nueva';
+    let detalle = 'persona nueva';
+    if (persona) {
+      const nombreGenflow = `${persona.persona_nombre} ${persona.persona_apellido ?? ''}`.trim();
+      detalle = `persona existente: ${nombreGenflow}`;
+      if (fila.nombre && plano(fila.nombre) !== plano(nombreGenflow)) {
+        plan.gestion.comentario += `\nNombre en el Excel: ${fila.nombre}`;
+      }
+    }
     if (!aplicar) {
       resultados.push({ fila, plan, resultado: 'se crearía', detalle });
       continue;
