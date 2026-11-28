@@ -4,6 +4,7 @@
  * pasa con cada cliente) e Incidencias. Tiene datos personales: vive solo junto al
  * libro, fuera de www y del repositorio, y se borra con él.
  */
+const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
 
@@ -58,6 +59,7 @@ async function escribirReporte(ruta, { resultados, incidencias, catalogos }) {
   const inc = hoja(wb, 'Incidencias', COLUMNAS_INCIDENCIAS);
   for (const i of incidencias) inc.addRow(i);
   await wb.xlsx.writeFile(ruta);
+  fs.chmodSync(ruta, 0o600); // tiene datos personales: solo para el usuario
 }
 
 module.exports = { rutaReporte, escribirReporte };

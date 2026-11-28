@@ -47,4 +47,10 @@ describe('escribirReporte', () => {
     expect(incidencias.getRow(1).values.slice(1)).toEqual(['Hoja', 'Fila', 'Tipo', 'Mensaje']);
     expect(incidencias.getRow(2).values.slice(1)).toEqual(['28 DE NOVIEMBRE', undefined, 'aviso', 'falta la columna HORA']);
   });
+
+  it('deja el archivo solo para el usuario (permiso 600)', async () => {
+    const ruta = path.join(dir, 'p.xlsx');
+    await escribirReporte(ruta, { resultados: [], incidencias: [], catalogos: { productos: new Map() } });
+    expect(fs.statSync(ruta).mode & 0o777).toBe(0o600);
+  });
 });
