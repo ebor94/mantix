@@ -27,10 +27,13 @@ const mockEspia = nombre => jest.fn((req, res) => res.status(200).json({ handler
 // `tableroPublico` va en la lista aunque no sea una ruta de este router: lo
 // monta routes/index.js (fuera de verifyToken) y este archivo carga ese index.
 // Sin el espía, router.get recibiría undefined y la suite ni arranca.
+// Cada manejador que monte el router tiene que estar en esta lista: si falta,
+// `router.get` recibe undefined, lanza al cargar el archivo y la suite entera
+// no arranca con un error que no señala a esta línea.
 const mockNombresCtrl = ['listarActividades', 'crearActividad', 'actualizarActividad',
   'listarReglas', 'crearRegla', 'actualizarRegla', 'sembrarVehiculo', 'tablero',
-  'actualizarProgramacion', 'registrar', 'listarRegistros', 'pendientes',
-  'tableroPublico']
+  'actualizarProgramacion', 'registrar', 'listarRegistros', 'informeFlota',
+  'pendientes', 'tableroPublico']
 const mockNombresAut = ['solicitar', 'validar', 'listarAutorizaciones']
 
 jest.mock('../../controllers/desinfecciones.controller', () =>
@@ -168,6 +171,7 @@ describe('el resto del módulo exige JWT', () => {
     ['patch', '/api/h360/desinfecciones/programacion/1'],
     ['post',  '/api/h360/desinfecciones/registro'],
     ['get',   '/api/h360/desinfecciones/registros'],
+    ['get',   '/api/h360/desinfecciones/informes/flota'],
     ['get',   '/api/h360/desinfecciones/pendientes'],
     ['get',   '/api/h360/desinfecciones/evidencia/7'],
     ['get',   '/api/h360/desinfecciones/autorizaciones'],
@@ -246,6 +250,26 @@ describe('compuertas de rol', () => {
       expect(res.body.handler).toBe('ctrl.registrar')
       expect(evid.subidaEvidencia).toHaveBeenCalled()
     })
+
+  // El panel con las cifras de la flota es más estrecho que el tablero, y el
+  // 403 ES la restricción: el frontend no pinta el panel cuando la llamada
+  // falla y no repite ninguna lista de roles para decidirlo.
+  test.each(['asistente_tanatologo', 'asistente', 'asesor', 'supervisora', 'contabilidad'])(
+    'el rol %s no ve las cifras de la flota', async (rol) => {
+      const res = await (await pedir())
+        .get('/api/h360/desinfecciones/informes/flota').set('Authorization', `Bearer ${token(rol)}`)
+
+      expect(res.status).toBe(403)
+      expect(ctrl.informeFlota).not.toHaveBeenCalled()
+    })
+
+  test.each(['coordinador', 'admin'])('el rol %s sí ve las cifras de la flota', async (rol) => {
+    const res = await (await pedir())
+      .get('/api/h360/desinfecciones/informes/flota').set('Authorization', `Bearer ${token(rol)}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.handler).toBe('ctrl.informeFlota')
+  })
 
   // El historial de excepciones es rastro de auditoría.
   test.each(['asistente_tanatologo', 'asesor', 'supervisora'])(

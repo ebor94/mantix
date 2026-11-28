@@ -851,7 +851,22 @@ async function registrar(req, res, next) {
 // Historial
 // ═══════════════════════════════════════════════════════════════════════════
 
-// GET /desinfecciones/registros  ?vehiculo_id=&desde=&hasta=&actividad=
+/**
+ * GET /desinfecciones/registros
+ *   ?vehiculo_id=&desde=&hasta=&actividad=&tipo_vehiculo=&limite=&offset=
+ *
+ * Devuelve `{ filas, total, resumen }` y NO un arreglo pelado: el informe de
+ * vehículos necesita saber cuántas filas hay en todo el filtro para paginar y
+ * para exportar. `total` sale de un COUNT con EL MISMO `WHERE` y SIN `LIMIT`:
+ * si llevara el límite, el total sería el tamaño de la página, el usuario
+ * nunca llegaría a la página 2 y la exportación se cortaría en la primera
+ * página sin que nada falle.
+ *
+ * `resumen` también se calcula sobre TODO el conjunto filtrado, con los mismos
+ * filtros y sin `LIMIT`, para que las cifras de arriba no puedan contradecir
+ * la tabla de abajo: un resumen de la página diría «1 registro» encima de una
+ * tabla que dice 8.
+ */
 async function listarRegistros(req, res, next) {
   try {
     const q = req.query || {}
@@ -880,14 +895,182 @@ async function listarRegistros(req, res, next) {
       filtros.push('reg.actividad_nombre LIKE ?')
       params.push(`%${texto(q.actividad, 80)}%`)
     }
+    // Filtra por el tipo del vehículo de hoy (`v.tipo`), no por una copia en el
+    // registro: el registro no la guarda.
+    if (q.tipo_vehiculo !== undefined && q.tipo_vehiculo !== '') {
+      const tipo = texto(q.tipo_vehiculo, 20).toUpperCase()
+      if (!TIPOS_VEHICULO.includes(tipo))
+        return res.status(400).json({
+          mensaje: `El tipo de vehículo debe ser uno de: ${TIPOS_VEHICULO.join(', ')}`,
+          campo: 'tipo_vehiculo',
+        })
+      filtros.push('v.tipo = ?'); params.push(tipo)
+    }
+
+    // Tope de 200 por página: es lo que ya aguantaba el endpoint y lo que pide
+    // la exportación, que junta páginas de 200 hasta completar el total.
+    let limite = 50
+    if (q.limite !== undefined && q.limite !== '') {
+      limite = Number(q.limite)
+      if (!Number.isInteger(limite) || limite < 1 || limite > 200)
+        return res.status(400).json({
+          mensaje: 'limite debe ser un entero entre 1 y 200', campo: 'limite',
+        })
+    }
+    let offset = 0
+    if (q.offset !== undefined && q.offset !== '') {
+      offset = Number(q.offset)
+      if (!Number.isInteger(offset) || offset < 0)
+        return res.status(400).json({
+          mensaje: 'offset debe ser un entero mayor o igual a 0', campo: 'offset',
+        })
+    }
 
     const where = filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''
-    const [rows] = await db.query(
+
+    const [[conteo]] = await db.query(
+      `SELECT COUNT(*) AS total
+         FROM h360_desinf_registro reg
+         LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
+       ${where}`, params)
+
+    // Los agregados del resumen, en una sola consulta con los mismos filtros y
+    // sin LIMIT. Las dos fechas se formatean en SQL con DATE_FORMAT: el pool no
+    // fija `dateStrings`, así que un MIN/MAX pelado vuelve como objeto `Date` y
+    // Express lo serializa en UTC — Colombia vería el día anterior.
+    //
+    // `MIN`/`MAX` sobre un conjunto vacío devuelven NULL y `DATE_FORMAT(NULL,…)`
+    // también, así que el caso «filtro sin resultados» sale solo: ceros y las
+    // dos fechas en null.
+    //
+    // `[[agg]]` y no `[[{ registros }]]`: si la consulta devuelve cero filas,
+    // desestructurar un objeto de `undefined` lanza un TypeError que se va por
+    // `next(err)` sin que se vea la causa.
+    const [[agg]] = await db.query(
+      `SELECT COUNT(*)                                      AS registros,
+              COALESCE(SUM(reg.dias_atraso <= 0 OR reg.dias_atraso IS NULL), 0) AS a_tiempo,
+              COALESCE(SUM(reg.dias_atraso > 0), 0)         AS con_atraso,
+              COALESCE(MAX(reg.dias_atraso), 0)             AS atraso_maximo,
+              COALESCE(SUM(reg.tipo_registro = 'ORDEN_SERVICIO'), 0) AS con_orden_servicio,
+              COALESCE(SUM(reg.tipo_registro = 'EVIDENCIA'), 0)      AS con_evidencia,
+              COUNT(DISTINCT reg.vehiculo_id)               AS vehiculos_distintos,
+              COUNT(DISTINCT reg.registrado_por)            AS personas_distintas,
+              DATE_FORMAT(MIN(reg.fecha_ejecucion), '%Y-%m-%d') AS primera_ejecucion,
+              DATE_FORMAT(MAX(reg.fecha_ejecucion), '%Y-%m-%d') AS ultima_ejecucion
+         FROM h360_desinf_registro reg
+         LEFT JOIN vehiculos v ON v.id = reg.vehiculo_id
+       ${where}`, params)
+
+    // El LIMIT/OFFSET va interpolado, con los dos valores ya validados como
+    // entero más arriba. Con marcadores también funcionaría: el pool es un
+    // `createPool` de mysql2/promise y acá se usa `pool.query`, o sea
+    // protocolo de texto, donde los números se serializan como números —
+    // `laboratorioInformes.controller.js` corre `LIMIT ? OFFSET ?` en
+    // producción. Las dos formas son seguras; esta es la excepción en el repo.
+    const [filas] = await db.query(
       `${SELECT_REGISTRO}
        ${where}
        ORDER BY reg.fecha_ejecucion DESC, reg.id DESC
-       LIMIT 200`, params)
-    res.json(rows)
+       LIMIT ${limite} OFFSET ${offset}`, params)
+
+    // Con `Number()` en todos los agregados: mysql2 entrega `SUM`/`COUNT` como
+    // texto o `Decimal` según el driver, y la pantalla los suma.
+    //
+    // `dias_atraso` admite NULL —un registro de una programación que nunca
+    // tuvo fecha no tiene contra qué compararse— y por eso `a_tiempo` cuenta
+    // `<= 0 OR IS NULL`: así `a_tiempo + con_atraso` siempre da `registros`.
+    // Un registro sin fecha programada cuenta como a tiempo porque no hay
+    // atraso que demostrar, y el detalle queda en la columna de la tabla.
+    const resumen = {
+      registros:           Number(agg?.registros ?? 0),
+      a_tiempo:            Number(agg?.a_tiempo ?? 0),
+      con_atraso:          Number(agg?.con_atraso ?? 0),
+      atraso_maximo:       Number(agg?.atraso_maximo ?? 0),
+      con_orden_servicio:  Number(agg?.con_orden_servicio ?? 0),
+      con_evidencia:       Number(agg?.con_evidencia ?? 0),
+      vehiculos_distintos: Number(agg?.vehiculos_distintos ?? 0),
+      personas_distintas:  Number(agg?.personas_distintas ?? 0),
+      primera_ejecucion:   agg?.primera_ejecucion ?? null,
+      ultima_ejecucion:    agg?.ultima_ejecucion ?? null,
+    }
+
+    res.json({ filas, total: Number(conteo?.total ?? 0), resumen })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /desinfecciones/informes/flota
+ *
+ * Las cifras del estado de la programación AHORA, no del período que el
+ * usuario tenga filtrado en la pantalla. Van en su propio endpoint y no dentro
+ * del tablero porque el tablero responde un arreglo pelado que la vista
+ * desplegada ya consume (`tablero.value = data || []`), así que agregarle
+ * claves lo rompe; y porque el rol que ve estas cifras es más estrecho.
+ * Tampoco se toca `SELECT_PROGRAMACION`: la comparten cuatro llamadas, dos de
+ * ellas de escritura.
+ *
+ * El «hoy» lo pone el servidor con relojBogota() y no CURDATE(): la zona del
+ * motor de base de datos no es necesariamente la del negocio.
+ */
+async function informeFlota(req, res, next) {
+  try {
+    const { dia: hoy } = relojBogota()
+
+    // LAS CUATRO CIFRAS SON UNA PARTICIÓN: cada fila de la programación cae en
+    // exactamente una, y las cuatro suman `total`. No es un detalle estético —
+    // nadie mira cuatro números juntos sin sumarlos, y una versión anterior de
+    // esta consulta no sumaba: una fila PENDIENTE con fecha futura no caía en
+    // ninguna, y una PROGRAMADA sin fecha caía en dos. Con los datos de hoy
+    // daba 54 de casualidad, porque toda PENDIENTE está sin fecha y toda
+    // PROGRAMADA con fecha. Esa casualidad la mantiene
+    // `actualizarProgramacion`, que deriva el estado de la fecha; un arreglo a
+    // mano en la base la rompe y el panel dejaría de cuadrar sin avisar.
+    //
+    // El orden de los casos es el que los hace excluyentes: NO_APLICA primero,
+    // después sin fecha, después vencida, y al día es el resto. La decisión no
+    // se delega a `estado`, salvo para respetar un VENCIDA explícito: el
+    // barrido nocturno lo pone, pero entre que la fecha pasa y el barrido corre
+    // hay una ventana en la que la columna miente, y la cifra no puede heredar
+    // esa mentira.
+    const [[t]] = await db.query(
+      `SELECT
+         COUNT(*) AS total,
+         COALESCE(SUM(p.estado = 'NO_APLICA'), 0) AS no_aplica,
+         COALESCE(SUM(p.estado <> 'NO_APLICA'
+                      AND p.fecha_prox IS NULL), 0) AS sin_fecha,
+         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
+                      AND (p.fecha_prox < ? OR p.estado = 'VENCIDA')), 0) AS vencida,
+         COALESCE(SUM(p.estado <> 'NO_APLICA' AND p.fecha_prox IS NOT NULL
+                      AND p.fecha_prox >= ? AND p.estado <> 'VENCIDA'), 0) AS al_dia
+       FROM h360_desinf_programacion p`, [hoy, hoy])
+
+    // Solo los que bajó este módulo: `inactivo_origen` existe para no contar
+    // como propio el vehículo que alguien inactivó a mano por un choque o un
+    // mantenimiento.
+    const [[fila]] = await db.query(
+      `SELECT COUNT(*) AS inactivos FROM vehiculos
+        WHERE activo = 0 AND inactivo_origen = 'DESINFECCION'`)
+    const inactivos = Number(fila?.inactivos ?? 0)
+
+    // `t?.campo ?? 0` y no `const [[{ programada }]]`: con cero filas,
+    // desestructurar un objeto de `undefined` lanza un TypeError que se va por
+    // `next(err)` y el 500 llega sin que se vea la causa. `Number()` porque
+    // mysql2 entrega `SUM`/`COUNT` como texto o `Decimal` según el driver y el
+    // panel los suma.
+    res.json({
+      fecha: hoy,
+      totales: {
+        // `al_dia` y no `programada`: la cifra es «tiene fecha y todavía no
+        // llegó», que no es lo mismo que `estado = 'PROGRAMADA'`. Con el
+        // nombre viejo, el próximo lector creería que espeja la columna.
+        total:     Number(t?.total ?? 0),
+        al_dia:    Number(t?.al_dia ?? 0),
+        vencida:   Number(t?.vencida ?? 0),
+        sin_fecha: Number(t?.sin_fecha ?? 0),
+        no_aplica: Number(t?.no_aplica ?? 0),
+        vehiculos_inactivos_por_desinfeccion: inactivos,
+      },
+    })
   } catch (err) { next(err) }
 }
 
@@ -1017,6 +1200,7 @@ module.exports = {
   actualizarProgramacion,
   registrar,
   listarRegistros,
+  informeFlota,
   pendientes,
   tableroPublico,
   // Expuestos para las pruebas y para quien tenga que calcular lo mismo.
